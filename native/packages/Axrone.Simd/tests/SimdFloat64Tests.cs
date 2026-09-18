@@ -286,4 +286,160 @@ public class SimdFloat64Tests
             dst[i].Should().BeApproximately(Math.Log(src[i]), Math.Max(Tolerance, Math.Abs(Math.Log(src[i])) * RelativeTolerance),
                 $"at index {i}: log({src[i]})");
     }
+
+    // ── IEEE 754 Edge Cases ─────────────────────────────────────────────
+
+    [Fact]
+    public void VectorExp_NaN_PropagatesNaN()
+    {
+        double[] src = [double.NaN, 1.0, 2.0, 3.0];
+        double[] dst = new double[4];
+
+        SimdFloat64.VectorExp(src, dst);
+
+        double.IsNaN(dst[0]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void VectorExp_PositiveInfinity_ReturnsPositiveInfinity()
+    {
+        double[] src = [double.PositiveInfinity, 1.0, 2.0, 3.0];
+        double[] dst = new double[4];
+
+        SimdFloat64.VectorExp(src, dst);
+
+        dst[0].Should().Be(double.PositiveInfinity);
+    }
+
+    [Fact]
+    public void VectorExp_NegativeInfinity_ReturnsZero()
+    {
+        double[] src = [double.NegativeInfinity, 1.0, 2.0, 3.0];
+        double[] dst = new double[4];
+
+        SimdFloat64.VectorExp(src, dst);
+
+        dst[0].Should().Be(0.0);
+    }
+
+    [Fact]
+    public void VectorLog_NaN_PropagatesNaN()
+    {
+        double[] src = [double.NaN, 1.0, 2.0, 3.0];
+        double[] dst = new double[4];
+
+        SimdFloat64.VectorLog(src, dst);
+
+        double.IsNaN(dst[0]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void VectorLog_PositiveInfinity_ReturnsPositiveInfinity()
+    {
+        double[] src = [double.PositiveInfinity, 1.0, 2.0, 3.0];
+        double[] dst = new double[4];
+
+        SimdFloat64.VectorLog(src, dst);
+
+        dst[0].Should().Be(double.PositiveInfinity);
+    }
+
+    // ── VectorSigmoid ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void VectorSigmoid_ProducesCorrectResult(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i - size / 2) * 0.5;
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorSigmoid(src, dst);
+
+        for (int i = 0; i < size; i++)
+        {
+            double expected = 1.0 / (1.0 + Math.Exp(-src[i]));
+            dst[i].Should().BeApproximately(expected, Tolerance);
+        }
+    }
+
+    // ── VectorTanh ───────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void VectorTanh_ProducesCorrectResult(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i - size / 2) * 0.3;
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorTanh(src, dst);
+
+        for (int i = 0; i < size; i++)
+            dst[i].Should().BeApproximately(Math.Tanh(src[i]), Tolerance);
+    }
+
+    // ── VectorPow ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void VectorPow_ProducesCorrectResult(int size)
+    {
+        double[] b = new double[size];
+        double[] e = new double[size];
+        for (int i = 0; i < size; i++)
+        {
+            b[i] = (i + 1) * 0.5;
+            e[i] = (i % 3) + 1.0;
+        }
+        double[] dst = new double[size];
+
+        SimdFloat64.VectorPow(b, e, dst);
+
+        for (int i = 0; i < size; i++)
+            dst[i].Should().BeApproximately(Math.Pow(b[i], e[i]), Math.Max(Tolerance, Math.Abs(Math.Pow(b[i], e[i])) * RelativeTolerance));
+    }
+
+    // ── Softmax ──────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void Softmax_OutputSumsToOne(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i - size / 2) * 0.5;
+        double[] dst = new double[size];
+
+        SimdFloat64.Softmax(src, dst);
+
+        double sum = dst.Sum();
+        sum.Should().BeApproximately(1.0, Tolerance);
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void Softmax_AllOutputsPositive(int size)
+    {
+        double[] src = new double[size];
+        for (int i = 0; i < size; i++)
+            src[i] = (i - size / 2) * 0.5;
+        double[] dst = new double[size];
+
+        SimdFloat64.Softmax(src, dst);
+
+        dst.Should().OnlyContain(v => v > 0.0);
+    }
 }
