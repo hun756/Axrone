@@ -176,4 +176,46 @@ public static class ThrowHelper
     {
         throw new ArgumentOutOfRangeException("Gather/Scatter index is outside the bounds of the source or destination span.");
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCapacity(nuint capacity)
+    {
+        throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be an integral power of two >= 2.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDoubleCommit()
+    {
+        throw new InvalidOperationException("Batch memory reservation has already been committed.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowLifecycleTerminated()
+    {
+        throw new InvalidOperationException("Operation failed: Memory arena is completing, drained, or faulted.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidMarker()
+    {
+        throw new InvalidOperationException("Specified marker is invalid or out of sequence.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNoReservation()
+    {
+        throw new InvalidOperationException("No reservation exists to advance.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidAdvance()
+    {
+        throw new ArgumentOutOfRangeException("count", "Advance count exceeds reservation size.");
+    }
 }
