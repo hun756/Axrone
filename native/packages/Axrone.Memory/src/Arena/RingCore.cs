@@ -83,6 +83,18 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal void DrainCommitRead(ulong sequence, int count)
+    {
+        if (ZeroOnRecycle)
+        {
+            ZeroRingRange((nuint)sequence, (nuint)count);
+        }
+
+        SpinWaitCommitTail((long)sequence, count);
+        WriteSignal.Signal();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private void SpinWaitCommitHead(long sequence, int count)
     {
         int spinCount = 0;

@@ -91,30 +91,23 @@ public sealed class RingStreamer<T, TBackoff> : IAsyncStreamable<T>
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            _core.Lifecycle.ThrowIfTerminated();
 
             if (_core.HeadCommitted.Value > _core.TailCommitted.Value)
             {
-                _core.Lifecycle.AcquireLease();
-                try
+                long tail = _core.TailReserved.Value;
+                if (tail < _core.HeadCommitted.Value)
                 {
-                    long tail = _core.TailReserved.Value;
-                    if (tail < _core.HeadCommitted.Value)
+                    if (_core.TailReserved.CompareExchange(tail + 1, tail))
                     {
-                        if (_core.TailReserved.CompareExchange(tail + 1, tail))
-                        {
-                            nuint mask = _core.Capacity.Mask;
-                            nuint index = (nuint)tail & mask;
-                            T item;
-                            unsafe { item = *(_core.Storage.BasePointer + index); }
-                            _core.CommitRead((ulong)tail, 1);
-                            yield return item;
-                            continue;
-                        }
+                        nuint mask = _core.Capacity.Mask;
+                        nuint index = (nuint)tail & mask;
+                        T item;
+                        unsafe { item = *(_core.Storage.BasePointer + index); }
+                        _core.DrainCommitRead((ulong)tail, 1);
+                        yield return item;
+                        continue;
                     }
-                }
-                finally
-                {
-                    _core.Lifecycle.ReleaseLease();
                 }
             }
 
