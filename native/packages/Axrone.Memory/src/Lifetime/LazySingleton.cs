@@ -138,7 +138,7 @@ public sealed class LazySingleton<T> : ISingleton<T>, IDisposable, IAsyncDisposa
         {
             if (targetToDispose is IAsyncDisposable asyncDisposable)
             {
-                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+                Task.Run(() => asyncDisposable.DisposeAsync().AsTask()).GetAwaiter().GetResult();
             }
             else if (targetToDispose is IDisposable disposable)
             {

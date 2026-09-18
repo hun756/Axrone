@@ -1248,6 +1248,7 @@ public static unsafe class SimdInt32
         if (source.Length > destination.Length) ThrowHelper.ThrowDestinationTooSmall();
         nuint count = (nuint)indices.Length;
         if (count == 0) return;
+        if (count > (nuint)source.Length) ThrowHelper.ThrowIndexOutOfRange();
         int dstLen = destination.Length;
         ref int src = ref MemoryMarshal.GetReference(source);
         ref int idx = ref MemoryMarshal.GetReference(indices);
