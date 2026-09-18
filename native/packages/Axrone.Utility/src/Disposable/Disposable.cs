@@ -109,7 +109,6 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
     public void Add(IDisposable disposable)
     {
         ArgumentNullException.ThrowIfNull(disposable);
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         _disposables.Push(disposable);
         if (Volatile.Read(ref _disposed) != 0)
         {
@@ -126,6 +125,7 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
                     _disposables.Push(popped);
                 }
             }
+            ObjectDisposedException.ThrowIf(true, this);
         }
     }
 
