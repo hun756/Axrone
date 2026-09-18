@@ -170,7 +170,7 @@ public class MpmcRingBufferTests
     [Fact]
     public void Enqueue_WithTimeout_ReturnsFailureOnTimeout()
     {
-        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 2, WaitStrategy = new BusySpinWaitStrategy() });
+        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 2 });
         buffer.TryEnqueue(1);
         buffer.TryEnqueue(2);
         var result = buffer.Enqueue(3, TimeSpan.FromMilliseconds(10));
@@ -180,7 +180,7 @@ public class MpmcRingBufferTests
     [Fact]
     public void Dequeue_WithTimeout_ReturnsFailureOnTimeout()
     {
-        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 16, WaitStrategy = new BusySpinWaitStrategy() });
+        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 16 });
         var result = buffer.Dequeue(TimeSpan.FromMilliseconds(10));
         result.IsFailure.Should().BeTrue();
     }
@@ -300,41 +300,6 @@ public class ConcurrencyRingBufferTests
         foreach (var ct in consumerTasks) await ct;
 
         totalConsumed.Count.Should().Be(producers * itemsPerProducer);
-    }
-}
-
-public class WaitStrategyTests
-{
-    [Fact]
-    public void BusySpin_CanBeReset()
-    {
-        var strategy = new BusySpinWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void Yield_CanBeReset()
-    {
-        var strategy = new YieldWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void SpinWait_CanBeReset()
-    {
-        var strategy = new SpinWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void Adaptive_ProgressesThroughPhases()
-    {
-        var strategy = new AdaptiveWaitStrategy();
-        strategy.Reset();
-        for (int i = 0; i < 60; i++) strategy.Wait();
     }
 }
 
