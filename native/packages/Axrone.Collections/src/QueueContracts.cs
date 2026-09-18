@@ -51,17 +51,6 @@ public interface IBatchQueue<T> : IBatchEnqueue<T>, IBatchDequeue<T>, IBoundedQu
 }
 
 /// <summary>
-/// Static-abstract policy abstraction defining backoff progression on hardware contention.
-/// Eliminates vtables and virtual dispatch overhead via static generic specialization.
-/// </summary>
-public interface IBackoffPolicy
-{
-    static abstract void Initialize(out int state);
-    static abstract void Advance(ref int state);
-    static abstract void Reset(ref int state);
-}
-
-/// <summary>
 /// Zero-allocation visitor contract allowing stack-only ref structs to consume individual elements.
 /// </summary>
 public interface ISlotConsumer<T, TState> where TState : allows ref struct

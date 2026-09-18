@@ -6,4 +6,6 @@ global using System.Runtime.CompilerServices;
 global using System.Runtime.InteropServices;
 global using System.Threading;
 global using Axrone.Utility;
+global using Axrone.Utility.Backoff;
+global using Axrone.Utility.Backoff.SpinPolicies;
 global using Axrone.Utility.Internal;

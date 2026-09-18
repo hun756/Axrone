@@ -14,7 +14,7 @@ using Axrone.Utility.Disposable;
 /// <typeparam name="T">The type of items managed by the queue.</typeparam>
 /// <typeparam name="TBackoff">Static backoff strategy configuring contention mechanics.</typeparam>
 public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly BufferCapacity _capacity;
     private readonly BoundedSlotStorage<T> _storage;
