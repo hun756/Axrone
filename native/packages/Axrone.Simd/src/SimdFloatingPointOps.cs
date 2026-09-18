@@ -14,6 +14,21 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         return (T)(object)BitConverter.Int64BitsToDouble(-1L);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAnyNonZero(Vector<T> v)
+    {
+        T dot = Vector.Dot(v, v);
+        if (typeof(T) == typeof(float)) return (float)(object)dot != 0f;
+        return (double)(object)dot != 0.0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static nuint ToNuint(T value)
+    {
+        if (typeof(T) == typeof(float)) return (nuint)(int)(float)(object)value;
+        return (nuint)(int)(double)(object)value;
+    }
+
     // ── Arithmetic ──────────────────────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -980,6 +995,20 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return -1;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vThreshold = new Vector<T>(threshold);
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.GreaterThan(Vector.LoadUnsafe(in src, i), vThreshold);
+                if (IsAnyNonZero(mask))
+                {
+                    for (nuint j = i; j < i + step; ++j)
+                        if (Unsafe.Add(ref src, (nint)j) > threshold) return (int)j;
+                }
+            }
+        }
         for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) > threshold) return (int)i;
         return -1;
     }
@@ -991,7 +1020,19 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return 0;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint count = 0;
-        for (nuint i = 0; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) > threshold) ++count;
+        nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vThreshold = new Vector<T>(threshold);
+            Vector<T> one = Vector<T>.One, zero = Vector<T>.Zero;
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.GreaterThan(Vector.LoadUnsafe(in src, i), vThreshold);
+                count += ToNuint(Vector.Sum(Vector.ConditionalSelect(mask, one, zero)));
+            }
+        }
+        for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) > threshold) ++count;
         return count;
     }
 
@@ -1022,6 +1063,20 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return -1;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vThreshold = new Vector<T>(threshold);
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.LessThan(Vector.LoadUnsafe(in src, i), vThreshold);
+                if (IsAnyNonZero(mask))
+                {
+                    for (nuint j = i; j < i + step; ++j)
+                        if (Unsafe.Add(ref src, (nint)j) < threshold) return (int)j;
+                }
+            }
+        }
         for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) < threshold) return (int)i;
         return -1;
     }
@@ -1033,7 +1088,19 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return 0;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint count = 0;
-        for (nuint i = 0; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) < threshold) ++count;
+        nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vThreshold = new Vector<T>(threshold);
+            Vector<T> one = Vector<T>.One, zero = Vector<T>.Zero;
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.LessThan(Vector.LoadUnsafe(in src, i), vThreshold);
+                count += ToNuint(Vector.Sum(Vector.ConditionalSelect(mask, one, zero)));
+            }
+        }
+        for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) < threshold) ++count;
         return count;
     }
 
@@ -1064,6 +1131,20 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return -1;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vValue = new Vector<T>(value);
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.Equals(Vector.LoadUnsafe(in src, i), vValue);
+                if (IsAnyNonZero(mask))
+                {
+                    for (nuint j = i; j < i + step; ++j)
+                        if (Unsafe.Add(ref src, (nint)j) == value) return (int)j;
+                }
+            }
+        }
         for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) == value) return (int)i;
         return -1;
     }
@@ -1075,7 +1156,19 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         if (length == 0) return 0;
         ref T src = ref MemoryMarshal.GetReference(source);
         nuint count = 0;
-        for (nuint i = 0; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) == value) ++count;
+        nuint i = 0;
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        {
+            var vValue = new Vector<T>(value);
+            Vector<T> one = Vector<T>.One, zero = Vector<T>.Zero;
+            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
+            for (; i < limit; i += step)
+            {
+                Vector<T> mask = Vector.Equals(Vector.LoadUnsafe(in src, i), vValue);
+                count += ToNuint(Vector.Sum(Vector.ConditionalSelect(mask, one, zero)));
+            }
+        }
+        for (; i < length; ++i) if (Unsafe.Add(ref src, (nint)i) == value) ++count;
         return count;
     }
 
