@@ -1,6 +1,6 @@
 namespace Axrone.Memory.Arena;
 
-public sealed unsafe class RingConsumer<T, TBackoff> : IArenaConsumer<T>
+public sealed class RingConsumer<T, TBackoff> : IArenaConsumer<T>
     where T : unmanaged
     where TBackoff : struct, IBackoffPolicy
 {
@@ -30,7 +30,7 @@ public sealed unsafe class RingConsumer<T, TBackoff> : IArenaConsumer<T>
                 if (_core.TailReserved.CompareExchange(currentTail + 1, currentTail))
                 {
                     nuint index = (nuint)currentTail & mask;
-                    item = *(_core.Storage.BasePointer + index);
+                    unsafe { item = *(_core.Storage.BasePointer + index); }
 
                     _core.CommitRead((ulong)currentTail, 1);
                     committed = true;

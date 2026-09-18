@@ -1,6 +1,6 @@
 namespace Axrone.Memory.Arena;
 
-public sealed unsafe class RingProducer<T, TBackoff> : IArenaProducer<T>
+public sealed class RingProducer<T, TBackoff> : IArenaProducer<T>
     where T : unmanaged
     where TBackoff : struct, IBackoffPolicy
 {
@@ -29,7 +29,7 @@ public sealed unsafe class RingProducer<T, TBackoff> : IArenaProducer<T>
                 if (_core.HeadReserved.CompareExchange(currentHead + 1, currentHead))
                 {
                     nuint index = (nuint)currentHead & mask;
-                    *(_core.Storage.BasePointer + index) = item;
+                    unsafe { *(_core.Storage.BasePointer + index) = item; }
 
                     _core.CommitWrite((ulong)currentHead, 1);
                     committed = true;
