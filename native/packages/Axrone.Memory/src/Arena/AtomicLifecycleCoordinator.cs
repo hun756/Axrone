@@ -13,6 +13,7 @@ internal sealed class AtomicLifecycleCoordinator
     private const int StateFaulted = 2;
     private const int StateDrained = 3;
     private const int StateDisposed = 4;
+    private const long LeaseMask = 0xFFFFFFFF;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AcquireLease()
@@ -21,7 +22,7 @@ internal sealed class AtomicLifecycleCoordinator
         {
             long current = Volatile.Read(ref _stateAndLeases);
             int state = (int)(current >> 32);
-            uint leases = (uint)(current & 0xFFFFFFFF);
+            uint leases = (uint)(current & LeaseMask);
 
             if (state == StateFaulted)
             {
@@ -49,7 +50,7 @@ internal sealed class AtomicLifecycleCoordinator
         {
             long current = Volatile.Read(ref _stateAndLeases);
             int state = (int)(current >> 32);
-            uint leases = (uint)(current & 0xFFFFFFFF);
+            uint leases = (uint)(current & LeaseMask);
 
             if (leases == 0)
             {
@@ -76,7 +77,7 @@ internal sealed class AtomicLifecycleCoordinator
         {
             long current = Volatile.Read(ref _stateAndLeases);
             int state = (int)(current >> 32);
-            uint leases = (uint)(current & 0xFFFFFFFF);
+            uint leases = (uint)(current & LeaseMask);
 
             if (state >= StateCompleting)
             {
@@ -112,7 +113,7 @@ internal sealed class AtomicLifecycleCoordinator
         {
             long current = Volatile.Read(ref _stateAndLeases);
             int state = (int)(current >> 32);
-            uint leases = (uint)(current & 0xFFFFFFFF);
+            uint leases = (uint)(current & LeaseMask);
 
             if (state is StateDrained or StateDisposed)
             {
@@ -133,7 +134,7 @@ internal sealed class AtomicLifecycleCoordinator
         while (true)
         {
             long current = Volatile.Read(ref _stateAndLeases);
-            uint leases = (uint)(current & 0xFFFFFFFF);
+            uint leases = (uint)(current & LeaseMask);
             long updated = ((long)StateDisposed << 32) | leases;
 
             if (Interlocked.CompareExchange(ref _stateAndLeases, updated, current) == current)
@@ -155,7 +156,7 @@ internal sealed class AtomicLifecycleCoordinator
     public bool IsActive => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) == StateActive;
     public bool IsCompleted => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) >= StateCompleting;
     public bool IsFaulted => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) == StateFaulted;
-    public uint ActiveLeaseCount => (uint)(Volatile.Read(ref _stateAndLeases) & 0xFFFFFFFF);
+    public uint ActiveLeaseCount => (uint)(Volatile.Read(ref _stateAndLeases) & LeaseMask);
     public Exception? TerminalException => Volatile.Read(ref _terminalFault)?.SourceException;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

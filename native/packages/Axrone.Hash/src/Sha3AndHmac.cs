@@ -14,19 +14,19 @@ public sealed class Sha3_256Accumulator : IHashAccumulator<Sha3_256Accumulator, 
 
     public Digest256 GetDigest(bool reset = false)
     {
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[Digest256.ByteCount];
         if (reset) _hash.GetHashAndReset(buffer); else _hash.GetCurrentHash(buffer);
         return new Digest256(buffer);
     }
 
     public bool TryGetDigest(Span<byte> destination, out int bytesWritten, bool reset = false)
     {
-        if (destination.Length < 32) { bytesWritten = 0; return false; }
+        if (destination.Length < Digest256.ByteCount) { bytesWritten = 0; return false; }
         if (reset) return _hash.TryGetHashAndReset(destination, out bytesWritten);
         return _hash.TryGetCurrentHash(destination, out bytesWritten);
     }
 
-    public void Reset() { Span<byte> dump = stackalloc byte[32]; _hash.TryGetHashAndReset(dump, out _); }
+    public void Reset() { Span<byte> dump = stackalloc byte[Digest256.ByteCount]; _hash.TryGetHashAndReset(dump, out _); }
     public void Dispose() => _hash?.Dispose();
 }
 
@@ -38,7 +38,7 @@ public sealed class Sha3_256Algorithm : IIncrementalHashAlgorithm<Sha3_256Algori
     public static Digest256 Hash(ReadOnlySpan<byte> source)
     {
         if (!SHA3_256.IsSupported) throw new PlatformNotSupportedException("SHA3-256 is not supported on this platform.");
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[Digest256.ByteCount];
         SHA3_256.HashData(source, buffer);
         return new Digest256(buffer);
     }
@@ -64,19 +64,19 @@ public sealed class Sha3_512Accumulator : IHashAccumulator<Sha3_512Accumulator, 
 
     public Digest512 GetDigest(bool reset = false)
     {
-        Span<byte> buffer = stackalloc byte[64];
+        Span<byte> buffer = stackalloc byte[Digest512.ByteCount];
         if (reset) _hash.GetHashAndReset(buffer); else _hash.GetCurrentHash(buffer);
         return new Digest512(buffer);
     }
 
     public bool TryGetDigest(Span<byte> destination, out int bytesWritten, bool reset = false)
     {
-        if (destination.Length < 64) { bytesWritten = 0; return false; }
+        if (destination.Length < Digest512.ByteCount) { bytesWritten = 0; return false; }
         if (reset) return _hash.TryGetHashAndReset(destination, out bytesWritten);
         return _hash.TryGetCurrentHash(destination, out bytesWritten);
     }
 
-    public void Reset() { Span<byte> dump = stackalloc byte[64]; _hash.TryGetHashAndReset(dump, out _); }
+    public void Reset() { Span<byte> dump = stackalloc byte[Digest512.ByteCount]; _hash.TryGetHashAndReset(dump, out _); }
     public void Dispose() => _hash?.Dispose();
 }
 
@@ -88,7 +88,7 @@ public sealed class Sha3_512Algorithm : IIncrementalHashAlgorithm<Sha3_512Algori
     public static Digest512 Hash(ReadOnlySpan<byte> source)
     {
         if (!SHA3_512.IsSupported) throw new PlatformNotSupportedException("SHA3-512 is not supported on this platform.");
-        Span<byte> buffer = stackalloc byte[64];
+        Span<byte> buffer = stackalloc byte[Digest512.ByteCount];
         SHA3_512.HashData(source, buffer);
         return new Digest512(buffer);
     }
@@ -106,7 +106,7 @@ public sealed class HmacSha256Algorithm : IKeyedHashAlgorithm<HmacSha256Algorith
 
     public static Digest256 Hash(ReadOnlySpan<byte> key, ReadOnlySpan<byte> source)
     {
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[Digest256.ByteCount];
         HMACSHA256.HashData(key, source, buffer);
         return new Digest256(buffer);
     }
@@ -121,7 +121,7 @@ public sealed class HmacSha512Algorithm : IKeyedHashAlgorithm<HmacSha512Algorith
 
     public static Digest512 Hash(ReadOnlySpan<byte> key, ReadOnlySpan<byte> source)
     {
-        Span<byte> buffer = stackalloc byte[64];
+        Span<byte> buffer = stackalloc byte[Digest512.ByteCount];
         HMACSHA512.HashData(key, source, buffer);
         return new Digest512(buffer);
     }
