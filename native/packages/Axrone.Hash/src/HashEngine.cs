@@ -6,7 +6,7 @@ public static class HashEngine
         Stream stream,
         CancellationToken cancellationToken = default)
         where TAlgo : IIncrementalHashAlgorithm<TAlgo, TState, TDigest>
-        where TState : struct, IHashAccumulator<TState, TDigest>
+        where TState : IHashAccumulator<TState, TDigest>
         where TDigest : unmanaged, IHashDigest<TDigest>
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -44,7 +44,7 @@ public static class HashEngine
 
     private sealed class Adapter<TAlgo, TState, TDigest> : IHasher
         where TAlgo : IIncrementalHashAlgorithm<TAlgo, TState, TDigest>
-        where TState : struct, IHashAccumulator<TState, TDigest>
+        where TState : IHashAccumulator<TState, TDigest>
         where TDigest : unmanaged, IHashDigest<TDigest>
     {
         private TState _accumulator;

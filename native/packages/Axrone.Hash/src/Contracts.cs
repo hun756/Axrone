@@ -34,7 +34,7 @@ public interface IHashDigest<TSelf> :
 }
 
 public interface IHashAccumulator<TSelf, TDigest> : IDisposable
-    where TSelf : struct, IHashAccumulator<TSelf, TDigest>
+    where TSelf : IHashAccumulator<TSelf, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
 {
     void Append(ReadOnlySpan<byte> source);
@@ -63,7 +63,7 @@ public interface IKeyedHashAlgorithm<TSelf, TDigest>
 
 public interface IIncrementalHashAlgorithm<TSelf, TState, TDigest> : IHashAlgorithm<TSelf, TDigest>
     where TSelf : IIncrementalHashAlgorithm<TSelf, TState, TDigest>
-    where TState : struct, IHashAccumulator<TState, TDigest>
+    where TState : IHashAccumulator<TState, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
 {
     static abstract TState CreateAccumulator();

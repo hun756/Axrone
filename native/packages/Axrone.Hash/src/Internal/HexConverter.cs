@@ -113,7 +113,7 @@ internal static class Utf8EncodingHelper
     public static void AppendUtf8<TAccumulator, TDigest>(
         ref TAccumulator accumulator,
         ReadOnlySpan<char> source)
-        where TAccumulator : struct, IHashAccumulator<TAccumulator, TDigest>
+        where TAccumulator : IHashAccumulator<TAccumulator, TDigest>
         where TDigest : unmanaged, IHashDigest<TDigest>
     {
         if (source.IsEmpty) return;

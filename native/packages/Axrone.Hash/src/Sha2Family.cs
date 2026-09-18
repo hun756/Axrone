@@ -1,6 +1,6 @@
 namespace Axrone.Hash;
 
-public struct Sha256Accumulator : IHashAccumulator<Sha256Accumulator, Digest256>
+public sealed class Sha256Accumulator : IHashAccumulator<Sha256Accumulator, Digest256>
 {
     private IncrementalHash _hash;
 
@@ -41,7 +41,7 @@ public sealed class Sha256Algorithm : IIncrementalHashAlgorithm<Sha256Algorithm,
     public static void Hash(ReadOnlySpan<byte> source, Span<byte> destination) => SHA256.HashData(source, destination);
 }
 
-public struct Sha384Accumulator : IHashAccumulator<Sha384Accumulator, Digest384>
+public sealed class Sha384Accumulator : IHashAccumulator<Sha384Accumulator, Digest384>
 {
     private IncrementalHash _hash;
 
@@ -82,7 +82,7 @@ public sealed class Sha384Algorithm : IIncrementalHashAlgorithm<Sha384Algorithm,
     public static void Hash(ReadOnlySpan<byte> source, Span<byte> destination) => SHA384.HashData(source, destination);
 }
 
-public struct Sha512Accumulator : IHashAccumulator<Sha512Accumulator, Digest512>
+public sealed class Sha512Accumulator : IHashAccumulator<Sha512Accumulator, Digest512>
 {
     private IncrementalHash _hash;
 

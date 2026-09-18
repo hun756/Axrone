@@ -1,6 +1,6 @@
 namespace Axrone.Hash;
 
-public struct Sha3_256Accumulator : IHashAccumulator<Sha3_256Accumulator, Digest256>
+public sealed class Sha3_256Accumulator : IHashAccumulator<Sha3_256Accumulator, Digest256>
 {
     private IncrementalHash _hash;
 
@@ -50,7 +50,7 @@ public sealed class Sha3_256Algorithm : IIncrementalHashAlgorithm<Sha3_256Algori
     }
 }
 
-public struct Sha3_512Accumulator : IHashAccumulator<Sha3_512Accumulator, Digest512>
+public sealed class Sha3_512Accumulator : IHashAccumulator<Sha3_512Accumulator, Digest512>
 {
     private IncrementalHash _hash;
 
