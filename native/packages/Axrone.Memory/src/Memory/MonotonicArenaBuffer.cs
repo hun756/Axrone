@@ -68,6 +68,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
 
         if (genBefore == genAfter && offset <= Volatile.Read(ref _currentSegmentCapacity))
         {
+            Thread.MemoryBarrier();
             return _currentSegmentBase + (offset - alignedAllocationSize);
         }
 
