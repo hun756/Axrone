@@ -133,17 +133,22 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+        List<Exception>? exceptions = null;
         while (_disposables.TryPop(out var disposable))
         {
             try { disposable.Dispose(); }
-            catch (Exception) { }
+            catch (Exception ex) { exceptions ??= []; exceptions.Add(ex); }
         }
+#pragma warning disable CA1065 // Intentionally surface dispose failures rather than silently losing them
+        if (exceptions is not null) throw new AggregateException(exceptions);
+#pragma warning restore CA1065
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+        List<Exception>? exceptions = null;
         while (_disposables.TryPop(out var disposable))
         {
             try
@@ -153,7 +158,8 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
                 else
                     disposable.Dispose();
             }
-            catch (Exception) { }
+            catch (Exception ex) { exceptions ??= []; exceptions.Add(ex); }
         }
+        if (exceptions is not null) throw new AggregateException(exceptions);
     }
 }
