@@ -115,7 +115,7 @@ public static class Singleton<T> where T : class
         {
             if (targetToDispose is IAsyncDisposable asyncDisposable)
             {
-                asyncDisposable.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+                Task.Run(() => asyncDisposable.DisposeAsync().AsTask()).GetAwaiter().GetResult();
             }
             else if (targetToDispose is IDisposable disposable)
             {
