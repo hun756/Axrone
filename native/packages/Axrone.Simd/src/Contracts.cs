@@ -23,6 +23,7 @@ public readonly record struct ScanResult
     public static ScanResult Overflow(nuint count) => new(OperationStatus.DestinationTooSmall, count);
 }
 
+/// <summary>Element-wise arithmetic transformations on floating-point vectors.</summary>
 public interface IVectorTransformer<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     void TransformLinear(ReadOnlySpan<T> source, T multiplier, T offset, Span<T> destination);
@@ -40,6 +41,7 @@ public interface IVectorTransformer<T> where T : struct, IBinaryFloatingPointIee
     void ElementWiseMin(ReadOnlySpan<T> left, ReadOnlySpan<T> right, Span<T> destination);
 }
 
+/// <summary>Reduction operations that collapse a vector to a single scalar value.</summary>
 public interface IVectorReducer<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     T ComputeSum(ReadOnlySpan<T> source);
@@ -55,6 +57,7 @@ public interface IVectorReducer<T> where T : struct, IBinaryFloatingPointIeee754
     T ComputeLinfNorm(ReadOnlySpan<T> source);
 }
 
+/// <summary>Search and filter operations on floating-point vectors.</summary>
 public interface IVectorScanner<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     int FindFirstGreaterThan(ReadOnlySpan<T> source, T threshold);
@@ -70,6 +73,7 @@ public interface IVectorScanner<T> where T : struct, IBinaryFloatingPointIeee754
     nuint ComputeArgMax(ReadOnlySpan<T> source);
 }
 
+/// <summary>Mask-based comparison and conditional selection on floating-point vectors.</summary>
 public interface IVectorMaskOps<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     void Select(ReadOnlySpan<T> condition, ReadOnlySpan<T> trueValues, ReadOnlySpan<T> falseValues, Span<T> destination);
@@ -82,18 +86,21 @@ public interface IVectorMaskOps<T> where T : struct, IBinaryFloatingPointIeee754
     void CompareNotEqual(ReadOnlySpan<T> left, ReadOnlySpan<T> right, Span<T> destination);
 }
 
+/// <summary>Fill operations for initializing vector spans.</summary>
 public interface IVectorFillOps<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     void Fill(Span<T> destination, T value);
     void FillLinear(Span<T> destination, T start, T step);
 }
 
+/// <summary>Gather and scatter operations for non-contiguous vector access.</summary>
 public interface IVectorGatherOps<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     void Gather(ReadOnlySpan<T> source, ReadOnlySpan<int> indices, Span<T> destination);
     void Scatter(ReadOnlySpan<T> source, ReadOnlySpan<int> indices, Span<T> destination);
 }
 
+/// <summary>Transcendental and non-linear math operations on floating-point vectors.</summary>
 public interface IVectorMathOps<T> where T : struct, IBinaryFloatingPointIeee754<T>
 {
     void VectorExp(ReadOnlySpan<T> source, Span<T> destination);

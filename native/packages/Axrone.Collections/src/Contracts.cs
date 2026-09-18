@@ -2,6 +2,7 @@ using Axrone.Utility.Result;
 
 namespace Axrone.Collections;
 
+/// <summary>Produces items into a bounded buffer with blocking and timeout support.</summary>
 public interface IProducer<T>
 {
     int Capacity { get; }
@@ -13,6 +14,7 @@ public interface IProducer<T>
     int EnqueueRange(ReadOnlySpan<T> source);
 }
 
+/// <summary>Consumes items from a bounded buffer with blocking and timeout support.</summary>
 public interface IConsumer<T>
 {
     int Capacity { get; }
@@ -25,6 +27,7 @@ public interface IConsumer<T>
     int DrainTo(Span<T> destination);
 }
 
+/// <summary>Fixed-capacity ring buffer supporting concurrent production and consumption.</summary>
 public interface IRingBuffer<T> : IProducer<T>, IConsumer<T>, IDisposable
 {
     bool IsDisposed { get; }

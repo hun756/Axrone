@@ -1,5 +1,6 @@
 namespace Axrone.Memory;
 
+/// <summary>Allocates and frees managed memory blocks with optional lifetime tracking.</summary>
 public interface IBlockAllocator<T>
 {
     Memory<T> Allocate(int elementCount, out object? lifetimeToken);
@@ -7,6 +8,7 @@ public interface IBlockAllocator<T>
     long ComputeByteSize(int elementCount);
 }
 
+/// <summary>Token representing a leased buffer segment from a pooled buffer.</summary>
 public interface IPooledBufferToken<T>
 {
     Memory<T> Memory { get; }
@@ -15,6 +17,7 @@ public interface IPooledBufferToken<T>
     void Return(uint leaseId);
 }
 
+/// <summary>Recycles pooled buffer slots back to their owning bucket.</summary>
 public interface IPoolBucketRegistry<T>
 {
     void Recycle(int bucketIndex, PooledBufferSlot<T> slot);
