@@ -570,16 +570,19 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static void VectorRSqrtScalar(ReadOnlySpan<T> source, Span<T> destination)
     {
-        nuint length = (nuint)source.Length;
-        ref T src = ref MemoryMarshal.GetReference(source);
-        ref T dst = ref MemoryMarshal.GetReference(destination);
-        for (nuint i = 0; i < length; ++i)
+        if (typeof(T) == typeof(float))
         {
-            T value = Unsafe.Add(ref src, (nint)i);
-            T sqrt = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Sqrt((float)(object)value!)
-                : (T)(object)Math.Sqrt((double)(object)value!);
-            Unsafe.Add(ref dst, (nint)i) = T.One / sqrt;
+            var fSrc = MemoryMarshal.Cast<T, float>(source);
+            var fDst = MemoryMarshal.Cast<T, float>(destination);
+            for (int i = 0; i < fSrc.Length; i++)
+                fDst[i] = 1f / MathF.Sqrt(fSrc[i]);
+        }
+        else
+        {
+            var dSrc = MemoryMarshal.Cast<T, double>(source);
+            var dDst = MemoryMarshal.Cast<T, double>(destination);
+            for (int i = 0; i < dSrc.Length; i++)
+                dDst[i] = 1.0 / Math.Sqrt(dSrc[i]);
         }
     }
 
@@ -1596,22 +1599,30 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         T scale0, scale1;
         if (dot < T.CreateChecked(0.9995))
         {
-            T theta = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Acos((float)(object)dot!)
-                : (T)(object)Math.Acos((double)(object)dot!);
-            T sinTheta = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Sin((float)(object)theta!)
-                : (T)(object)Math.Sin((double)(object)theta!);
-            T oneMinusTTheta = (T.One - t) * theta;
-            T tTheta = t * theta;
-            T sin0 = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Sin((float)(object)oneMinusTTheta!)
-                : (T)(object)Math.Sin((double)(object)oneMinusTTheta!);
-            T sin1 = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Sin((float)(object)tTheta!)
-                : (T)(object)Math.Sin((double)(object)tTheta!);
-            scale0 = sin0 / sinTheta;
-            scale1 = sin1 / sinTheta;
+            if (typeof(T) == typeof(float))
+            {
+                float fDot = (float)(object)dot!;
+                float fTheta = MathF.Acos(fDot);
+                float fSinTheta = MathF.Sin(fTheta);
+                float fOneMinusT = (1f - (float)(object)t!) * fTheta;
+                float fT = (float)(object)t! * fTheta;
+                float fSin0 = MathF.Sin(fOneMinusT);
+                float fSin1 = MathF.Sin(fT);
+                scale0 = (T)(object)(fSin0 / fSinTheta);
+                scale1 = (T)(object)(fSin1 / fSinTheta);
+            }
+            else
+            {
+                double dDot = (double)(object)dot!;
+                double dTheta = Math.Acos(dDot);
+                double dSinTheta = Math.Sin(dTheta);
+                double dOneMinusT = (1.0 - (double)(object)t!) * dTheta;
+                double dT = (double)(object)t! * dTheta;
+                double dSin0 = Math.Sin(dOneMinusT);
+                double dSin1 = Math.Sin(dT);
+                scale0 = (T)(object)(dSin0 / dSinTheta);
+                scale1 = (T)(object)(dSin1 / dSinTheta);
+            }
         }
         else
         {
