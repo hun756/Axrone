@@ -134,6 +134,10 @@ public static unsafe partial class SimdFloat64
     private const double Ln2Hi = 0.6931471803691238166;  // high part of ln2: n * Ln2Hi is exact
     private const double Ln2Lo = 1.9082149292705877e-10; // ln2 - Ln2Hi
     private const double ExpClamp = 709.0;               // keeps 2^n in normal range at the lower end
+    private const long DoubleExponentBias = 1023;         // IEEE 754 double-precision exponent bias
+    private const long DoubleSubnormalOffset = 1077;      // DoubleExponentBias + 54 for subnormal correction
+    private const int DoubleMantissaBits = 52;            // IEEE 754 double-precision mantissa width
+    private const double DoubleSubnormalScale = 5.551115123125783e-17; // 2^-54
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector512<double> ExpKernel512(Vector512<double> x)
@@ -158,13 +162,14 @@ public static unsafe partial class SimdFloat64
         p = p * r + Vector512.Create(1.0);
         p = p * r + Vector512.Create(1.0);
         // 2^n via exponent-field write; biased <= 0 means the result is subnormal (musl-style split)
-        Vector512<long> biased = n + Vector512.Create(1023L);
+        Vector512<long> biased = n + Vector512.Create(DoubleExponentBias);
         Vector512<long> subMask = Vector512.LessThanOrEqual(biased, Vector512<long>.Zero);
-        Vector512<long> expVal = Vector512.ConditionalSelect(subMask, n + Vector512.Create(1077L), biased);
-        Vector512<double> pow2 = Vector512.ShiftLeft(expVal, 52).AsDouble()
-            * Vector512.ConditionalSelect(subMask.AsDouble(), Vector512.Create(5.551115123125783e-17), Vector512<double>.One);
+        Vector512<long> expVal = Vector512.ConditionalSelect(subMask, n + Vector512.Create(DoubleSubnormalOffset), biased);
+        Vector512<double> pow2 = Vector512.ShiftLeft(expVal, DoubleMantissaBits).AsDouble()
+            * Vector512.ConditionalSelect(subMask.AsDouble(), Vector512.Create(DoubleSubnormalScale), Vector512<double>.One);
         Vector512<double> result = pow2 * p;
         result = Vector512.ConditionalSelect(Vector512.Equals(x, Vector512.Create(double.NegativeInfinity)), Vector512<double>.Zero, result);
+        result = Vector512.ConditionalSelect(Vector512.Equals(x, Vector512.Create(double.PositiveInfinity)), Vector512.Create(double.PositiveInfinity), result);
         return Vector512.ConditionalSelect(Vector512.Equals(x, x), result, x);
     }
 
@@ -190,13 +195,14 @@ public static unsafe partial class SimdFloat64
         p = p * r + Vector256.Create(0.5);
         p = p * r + Vector256.Create(1.0);
         p = p * r + Vector256.Create(1.0);
-        Vector256<long> biased = n + Vector256.Create(1023L);
+        Vector256<long> biased = n + Vector256.Create(DoubleExponentBias);
         Vector256<long> subMask = Vector256.LessThanOrEqual(biased, Vector256<long>.Zero);
-        Vector256<long> expVal = Vector256.ConditionalSelect(subMask, n + Vector256.Create(1077L), biased);
-        Vector256<double> pow2 = Vector256.ShiftLeft(expVal, 52).AsDouble()
-            * Vector256.ConditionalSelect(subMask.AsDouble(), Vector256.Create(5.551115123125783e-17), Vector256<double>.One);
+        Vector256<long> expVal = Vector256.ConditionalSelect(subMask, n + Vector256.Create(DoubleSubnormalOffset), biased);
+        Vector256<double> pow2 = Vector256.ShiftLeft(expVal, DoubleMantissaBits).AsDouble()
+            * Vector256.ConditionalSelect(subMask.AsDouble(), Vector256.Create(DoubleSubnormalScale), Vector256<double>.One);
         Vector256<double> result = pow2 * p;
         result = Vector256.ConditionalSelect(Vector256.Equals(x, Vector256.Create(double.NegativeInfinity)), Vector256<double>.Zero, result);
+        result = Vector256.ConditionalSelect(Vector256.Equals(x, Vector256.Create(double.PositiveInfinity)), Vector256.Create(double.PositiveInfinity), result);
         return Vector256.ConditionalSelect(Vector256.Equals(x, x), result, x);
     }
 
@@ -222,13 +228,14 @@ public static unsafe partial class SimdFloat64
         p = p * r + Vector128.Create(0.5);
         p = p * r + Vector128.Create(1.0);
         p = p * r + Vector128.Create(1.0);
-        Vector128<long> biased = n + Vector128.Create(1023L);
+        Vector128<long> biased = n + Vector128.Create(DoubleExponentBias);
         Vector128<long> subMask = Vector128.LessThanOrEqual(biased, Vector128<long>.Zero);
-        Vector128<long> expVal = Vector128.ConditionalSelect(subMask, n + Vector128.Create(1077L), biased);
-        Vector128<double> pow2 = Vector128.ShiftLeft(expVal, 52).AsDouble()
-            * Vector128.ConditionalSelect(subMask.AsDouble(), Vector128.Create(5.551115123125783e-17), Vector128<double>.One);
+        Vector128<long> expVal = Vector128.ConditionalSelect(subMask, n + Vector128.Create(DoubleSubnormalOffset), biased);
+        Vector128<double> pow2 = Vector128.ShiftLeft(expVal, DoubleMantissaBits).AsDouble()
+            * Vector128.ConditionalSelect(subMask.AsDouble(), Vector128.Create(DoubleSubnormalScale), Vector128<double>.One);
         Vector128<double> result = pow2 * p;
         result = Vector128.ConditionalSelect(Vector128.Equals(x, Vector128.Create(double.NegativeInfinity)), Vector128<double>.Zero, result);
+        result = Vector128.ConditionalSelect(Vector128.Equals(x, Vector128.Create(double.PositiveInfinity)), Vector128.Create(double.PositiveInfinity), result);
         return Vector128.ConditionalSelect(Vector128.Equals(x, x), result, x);
     }
 
@@ -255,10 +262,10 @@ public static unsafe partial class SimdFloat64
         p = p * r + 0.5;
         p = p * r + 1.0;
         p = p * r + 1.0;
-        long biased = n + 1023;
+        long biased = n + DoubleExponentBias;
         double pow2 = biased > 0
-            ? BitConverter.Int64BitsToDouble(biased << 52)
-            : BitConverter.Int64BitsToDouble((n + 1077) << 52) * 5.551115123125783e-17;
+            ? BitConverter.Int64BitsToDouble(biased << DoubleMantissaBits)
+            : BitConverter.Int64BitsToDouble((n + DoubleSubnormalOffset) << DoubleMantissaBits) * DoubleSubnormalScale;
         return pow2 * p;
     }
 
@@ -306,7 +313,7 @@ public static unsafe partial class SimdFloat64
         Vector512<long> subMask = Vector512.Equals(expField, Vector512<long>.Zero);
         Vector512<double> xs = Vector512.ConditionalSelect(subMask.AsDouble(), x * Vector512.Create(DenormScale), x);
         Vector512<long> bits2 = xs.AsInt64();
-        Vector512<long> e = ((bits2 & Vector512.Create(ExpMask)) >> 52) - Vector512.Create(1023L)
+        Vector512<long> e = ((bits2 & Vector512.Create(ExpMask)) >> DoubleMantissaBits) - Vector512.Create(DoubleExponentBias)
             - Vector512.ConditionalSelect(subMask, Vector512.Create(54L), Vector512<long>.Zero);
         Vector512<double> m = (bits2 & Vector512.Create(MantMask) | Vector512.Create(ExpBias)).AsDouble();
         Vector512<double> ge = Vector512.GreaterThanOrEqual(m, Vector512.Create(Sqrt2));
@@ -347,7 +354,7 @@ public static unsafe partial class SimdFloat64
         Vector256<long> subMask = Vector256.Equals(expField, Vector256<long>.Zero);
         Vector256<double> xs = Vector256.ConditionalSelect(subMask.AsDouble(), x * Vector256.Create(DenormScale), x);
         Vector256<long> bits2 = xs.AsInt64();
-        Vector256<long> e = ((bits2 & Vector256.Create(ExpMask)) >> 52) - Vector256.Create(1023L)
+        Vector256<long> e = ((bits2 & Vector256.Create(ExpMask)) >> DoubleMantissaBits) - Vector256.Create(DoubleExponentBias)
             - Vector256.ConditionalSelect(subMask, Vector256.Create(54L), Vector256<long>.Zero);
         Vector256<double> m = (bits2 & Vector256.Create(MantMask) | Vector256.Create(ExpBias)).AsDouble();
         Vector256<double> ge = Vector256.GreaterThanOrEqual(m, Vector256.Create(Sqrt2));
@@ -388,7 +395,7 @@ public static unsafe partial class SimdFloat64
         Vector128<long> subMask = Vector128.Equals(expField, Vector128.Create<long>(0));
         Vector128<double> xs = Vector128.ConditionalSelect(subMask.AsDouble(), x * Vector128.Create(DenormScale), x);
         Vector128<long> bits2 = xs.AsInt64();
-        Vector128<long> e = ((bits2 & Vector128.Create(ExpMask)) >> 52) - Vector128.Create(1023L)
+        Vector128<long> e = ((bits2 & Vector128.Create(ExpMask)) >> DoubleMantissaBits) - Vector128.Create(DoubleExponentBias)
             - Vector128.ConditionalSelect(subMask, Vector128.Create(54L), Vector128<long>.Zero);
         Vector128<double> m = (bits2 & Vector128.Create(MantMask) | Vector128.Create(ExpBias)).AsDouble();
         Vector128<double> ge = Vector128.GreaterThanOrEqual(m, Vector128.Create(Sqrt2));
@@ -454,8 +461,8 @@ public static unsafe partial class SimdFloat64
         if (x == 0.0) return double.NegativeInfinity;
         long bits = BitConverter.DoubleToInt64Bits(x);
         if ((bits & ExpMask) == ExpMask) return x;
-        long e = ((bits & ExpMask) >> 52) - 1023;
-        if ((bits & ExpMask) == 0) { x *= DenormScale; bits = BitConverter.DoubleToInt64Bits(x); e = ((bits & ExpMask) >> 52) - 1023 - 54; }
+        long e = ((bits & ExpMask) >> DoubleMantissaBits) - DoubleExponentBias;
+        if ((bits & ExpMask) == 0) { x *= DenormScale; bits = BitConverter.DoubleToInt64Bits(x); e = ((bits & ExpMask) >> DoubleMantissaBits) - DoubleSubnormalOffset; }
         double m = BitConverter.Int64BitsToDouble((bits & MantMask) | ExpBias);
         if (m >= Sqrt2) { m *= 0.5; e += 1; }
         double f = m - 1.0;
@@ -585,7 +592,7 @@ public static unsafe partial class SimdFloat64
                 Vector512<double> b = Vector512.LoadUnsafe(in bRef, i);
                 Vector512<double> e = Vector512.LoadUnsafe(in eRef, i);
                 Vector512<double> result = ExpKernel512(e * LogKernel512(b));
-                Vector512<double> negBase = Vector512.LessThan(b, Vector512<double>.Zero);
+                Vector512<double> negBase = Vector512.LessThanOrEqual(b, Vector512<double>.Zero);
                 if (negBase != Vector512<double>.Zero)
                 {
                     for (nuint j = 0; j < step; j++)
@@ -607,7 +614,7 @@ public static unsafe partial class SimdFloat64
                 Vector256<double> b = Vector256.LoadUnsafe(in bRef, i);
                 Vector256<double> e = Vector256.LoadUnsafe(in eRef, i);
                 Vector256<double> result = ExpKernel256(e * LogKernel256(b));
-                Vector256<double> negBase = Vector256.LessThan(b, Vector256<double>.Zero);
+                Vector256<double> negBase = Vector256.LessThanOrEqual(b, Vector256<double>.Zero);
                 if (negBase != Vector256<double>.Zero)
                 {
                     for (nuint j = 0; j < step; j++)
@@ -629,7 +636,7 @@ public static unsafe partial class SimdFloat64
                 Vector128<double> b = Vector128.LoadUnsafe(in bRef, i);
                 Vector128<double> e = Vector128.LoadUnsafe(in eRef, i);
                 Vector128<double> result = ExpKernel128(e * LogKernel128(b));
-                Vector128<double> negBase = Vector128.LessThan(b, Vector128<double>.Zero);
+                Vector128<double> negBase = Vector128.LessThanOrEqual(b, Vector128<double>.Zero);
                 if (negBase != Vector128<double>.Zero)
                 {
                     for (nuint j = 0; j < step; j++)
