@@ -13,7 +13,8 @@ internal struct PaddedRingPosition
     public long DequeuePosition;
 }
 
-public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
+public sealed class MpmcRingBuffer<T, TBackoff> : IRingBuffer<T>
+    where TBackoff : struct, ISpinBackoff
 {
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct Slot
@@ -24,10 +25,10 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
     private sealed class ProducerEndpoint : IProducer<T>
     {
-        private readonly MpmcRingBuffer<T> _buffer;
+        private readonly MpmcRingBuffer<T, TBackoff> _buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ProducerEndpoint(MpmcRingBuffer<T> buffer) => _buffer = buffer;
+        public ProducerEndpoint(MpmcRingBuffer<T, TBackoff> buffer) => _buffer = buffer;
 
         public int Capacity => _buffer.Capacity;
         public int Count => _buffer.Count;
@@ -50,10 +51,10 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
     private sealed class ConsumerEndpoint : IConsumer<T>
     {
-        private readonly MpmcRingBuffer<T> _buffer;
+        private readonly MpmcRingBuffer<T, TBackoff> _buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ConsumerEndpoint(MpmcRingBuffer<T> buffer) => _buffer = buffer;
+        public ConsumerEndpoint(MpmcRingBuffer<T, TBackoff> buffer) => _buffer = buffer;
 
         public int Capacity => _buffer.Capacity;
         public int Count => _buffer.Count;
@@ -139,9 +140,8 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     {
         get
         {
-            const int MaxRetries = 1000;
-            SpinWait spinner = new();
-            for (int attempt = 0; attempt < MaxRetries; attempt++)
+            TBackoff.Initialize(out int backoffState);
+            for (int attempt = 0; attempt < 1000; attempt++)
             {
                 long headBefore = Volatile.Read(ref _positions.DequeuePosition);
                 long tail = Volatile.Read(ref _positions.EnqueuePosition);
@@ -155,7 +155,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
                     return (int)diff;
                 }
 
-                spinner.SpinOnce();
+                TBackoff.Advance(ref backoffState);
             }
 
             long finalHead = Volatile.Read(ref _positions.DequeuePosition);
@@ -219,7 +219,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
         if (timeout == TimeSpan.Zero) return Result.Failure(s_bufferFull);
 
         long startTimestamp = Stopwatch.GetTimestamp();
-        SpinWait spinner = new();
+        TBackoff.Initialize(out int backoffState);
 
         while (true)
         {
@@ -229,7 +229,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
                 return Result.Failure(s_bufferTimeout);
 
-            spinner.SpinOnce();
+            TBackoff.Advance(ref backoffState);
             if (TryEnqueue(item)) return Result.Success();
         }
     }
@@ -241,13 +241,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         if (TryEnqueue(item)) return;
 
-        SpinWait spinner = new();
+        TBackoff.Initialize(out int backoffState);
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            spinner.SpinOnce();
+            TBackoff.Advance(ref backoffState);
             if (TryEnqueue(item)) return;
         }
     }
@@ -283,7 +283,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             return Result<T>.Failure(s_bufferEmpty);
 
         long startTimestamp = Stopwatch.GetTimestamp();
-        SpinWait spinner = new();
+        TBackoff.Initialize(out int backoffState);
 
         while (true)
         {
@@ -293,7 +293,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
             if (timeout != Timeout.InfiniteTimeSpan && Stopwatch.GetElapsedTime(startTimestamp) >= timeout)
                 return Result<T>.Failure(s_bufferTimeout);
 
-            spinner.SpinOnce();
+            TBackoff.Advance(ref backoffState);
             if (TryDequeue(out T? item))
                 return Result<T>.Success(item);
         }
@@ -306,13 +306,13 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
 
         if (TryDequeue(out T? immediateItem)) return immediateItem;
 
-        SpinWait spinner = new();
+        TBackoff.Initialize(out int backoffState);
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            spinner.SpinOnce();
+            TBackoff.Advance(ref backoffState);
             if (TryDequeue(out T? item)) return item;
         }
     }
@@ -401,7 +401,7 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowObjectDisposed() =>
-        throw new ObjectDisposedException(typeof(MpmcRingBuffer<T>).FullName);
+        throw new ObjectDisposedException(typeof(MpmcRingBuffer<T, TBackoff>).FullName);
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -412,4 +412,123 @@ public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowCapacityTooLarge(int capacity) =>
         throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Requested capacity exceeds maximum allocatable power-of-two size.");
+}
+
+/// <summary>
+/// Default production-ready ring buffer specializing with <see cref="AdaptiveSpinBackoff"/>.
+/// Provides a simplified API surface without requiring a backoff type parameter.
+/// </summary>
+public sealed class MpmcRingBuffer<T> : IRingBuffer<T>
+{
+    private readonly MpmcRingBuffer<T, AdaptiveSpinBackoff> _inner;
+
+    private sealed class ProducerEndpoint : IProducer<T>
+    {
+        private readonly MpmcRingBuffer<T, AdaptiveSpinBackoff> _inner;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ProducerEndpoint(MpmcRingBuffer<T, AdaptiveSpinBackoff> inner) => _inner = inner;
+
+        public int Capacity => _inner.Capacity;
+        public int Count => _inner.Count;
+        public bool IsFull => _inner.IsFull;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryEnqueue(in T item) => _inner.TryEnqueue(item);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Result Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
+            => _inner.Enqueue(item, timeout, cancellationToken);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Enqueue(in T item, CancellationToken cancellationToken = default)
+            => _inner.Enqueue(item, cancellationToken);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int EnqueueRange(ReadOnlySpan<T> source) => _inner.EnqueueRange(source);
+    }
+
+    private sealed class ConsumerEndpoint : IConsumer<T>
+    {
+        private readonly MpmcRingBuffer<T, AdaptiveSpinBackoff> _inner;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ConsumerEndpoint(MpmcRingBuffer<T, AdaptiveSpinBackoff> inner) => _inner = inner;
+
+        public int Capacity => _inner.Capacity;
+        public int Count => _inner.Count;
+        public bool IsEmpty => _inner.IsEmpty;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryDequeue([MaybeNullWhen(false)] out T item) => _inner.TryDequeue(out item);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Result<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
+            => _inner.Dequeue(timeout, cancellationToken);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public T Dequeue(CancellationToken cancellationToken = default)
+            => _inner.Dequeue(cancellationToken);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int DequeueRange(Span<T> destination) => _inner.DequeueRange(destination);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int DrainTo(Span<T> destination) => _inner.DrainTo(destination);
+    }
+
+    private readonly ProducerEndpoint _producerEndpoint;
+    private readonly ConsumerEndpoint _consumerEndpoint;
+
+    public MpmcRingBuffer(int capacity)
+    {
+        _inner = new MpmcRingBuffer<T, AdaptiveSpinBackoff>(capacity);
+        _producerEndpoint = new ProducerEndpoint(_inner);
+        _consumerEndpoint = new ConsumerEndpoint(_inner);
+    }
+
+    public MpmcRingBuffer(RingBufferOptions options)
+    {
+        _inner = new MpmcRingBuffer<T, AdaptiveSpinBackoff>(options);
+        _producerEndpoint = new ProducerEndpoint(_inner);
+        _consumerEndpoint = new ConsumerEndpoint(_inner);
+    }
+
+    public int Capacity => _inner.Capacity;
+    public int Count => _inner.Count;
+    public bool IsEmpty => _inner.IsEmpty;
+    public bool IsFull => _inner.IsFull;
+    public bool IsDisposed => _inner.IsDisposed;
+    public IProducer<T> Producer => _producerEndpoint;
+    public IConsumer<T> Consumer => _consumerEndpoint;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryEnqueue(in T item) => _inner.TryEnqueue(item);
+
+    public Result Enqueue(in T item, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => _inner.Enqueue(item, timeout, cancellationToken);
+
+    public void Enqueue(in T item, CancellationToken cancellationToken = default)
+        => _inner.Enqueue(item, cancellationToken);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int EnqueueRange(ReadOnlySpan<T> source) => _inner.EnqueueRange(source);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryDequeue([MaybeNullWhen(false)] out T item) => _inner.TryDequeue(out item);
+
+    public Result<T> Dequeue(TimeSpan timeout, CancellationToken cancellationToken = default)
+        => _inner.Dequeue(timeout, cancellationToken);
+
+    public T Dequeue(CancellationToken cancellationToken = default)
+        => _inner.Dequeue(cancellationToken);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int DequeueRange(Span<T> destination) => _inner.DequeueRange(destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int DrainTo(Span<T> destination) => _inner.DrainTo(destination);
+
+    public void Clear() => _inner.Clear();
+    public void Dispose() => _inner.Dispose();
 }
