@@ -2,7 +2,7 @@ namespace Axrone.Memory.Arena;
 
 public sealed unsafe class RingBatchCoordinator<T, TBackoff> : IBatchReservable<T>
     where T : unmanaged
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly RingCore<T, TBackoff> _core;
 

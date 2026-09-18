@@ -2,7 +2,7 @@ namespace Axrone.Memory.Arena;
 
 public sealed class RingAdminEndpoint<T, TBackoff> : IAdministrativeEndpoint
     where T : unmanaged
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly RingCore<T, TBackoff> _core;
 

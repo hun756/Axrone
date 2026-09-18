@@ -5,11 +5,11 @@ namespace Axrone.Memory.Tests.Arena;
 
 public class ArenaMemoryRingTests : IDisposable
 {
-    private readonly ArenaMemoryRing<int, ProgressiveBackoff> _ring;
+    private readonly ArenaMemoryRing<int, ProgressiveSpinBackoff> _ring;
 
     public ArenaMemoryRingTests()
     {
-        _ring = new ArenaMemoryRing<int, ProgressiveBackoff>(new BufferCapacity(16));
+        _ring = new ArenaMemoryRing<int, ProgressiveSpinBackoff>(new BufferCapacity(16));
     }
 
     [Fact]

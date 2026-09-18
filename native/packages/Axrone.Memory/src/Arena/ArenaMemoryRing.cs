@@ -4,7 +4,7 @@ namespace Axrone.Memory.Arena;
 
 public sealed class ArenaMemoryRing<T, TBackoff> : IDisposable
     where T : unmanaged
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly RingCore<T, TBackoff> _core;
     private readonly RingProducer<T, TBackoff> _producer;

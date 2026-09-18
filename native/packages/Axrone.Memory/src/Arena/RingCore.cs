@@ -4,7 +4,7 @@ namespace Axrone.Memory.Arena;
 
 internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>, IDisposable
     where T : unmanaged
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     public readonly BufferCapacity Capacity;
     public readonly bool ZeroOnRecycle;
@@ -102,7 +102,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
 
         while (HeadCommitted.CompareExchange(sequence + count, sequence) == false)
         {
-            TBackoff.Step(ref spinCount);
+            TBackoff.Advance(ref spinCount);
 
             if ((spinCount & 0x3FF) == 0 && spinCount > 0)
             {
@@ -129,7 +129,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
 
         while (TailCommitted.CompareExchange(sequence + count, sequence) == false)
         {
-            TBackoff.Step(ref spinCount);
+            TBackoff.Advance(ref spinCount);
 
             if ((spinCount & 0x3FF) == 0 && spinCount > 0)
             {

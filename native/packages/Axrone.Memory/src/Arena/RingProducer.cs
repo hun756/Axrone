@@ -2,7 +2,7 @@ namespace Axrone.Memory.Arena;
 
 public sealed class RingProducer<T, TBackoff> : IArenaProducer<T>
     where T : unmanaged
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly RingCore<T, TBackoff> _core;
 
@@ -56,7 +56,7 @@ public sealed class RingProducer<T, TBackoff> : IArenaProducer<T>
             cancellationToken.ThrowIfCancellationRequested();
             _core.Lifecycle.ThrowIfTerminated();
 
-            TBackoff.Step(ref spinCount);
+            TBackoff.Advance(ref spinCount);
             contention++;
         }
 
