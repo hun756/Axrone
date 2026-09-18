@@ -593,27 +593,39 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref T dst = ref MemoryMarshal.GetReference(destination);
 
         T maxVal = ComputeMax(ref src, length);
-        T sum = T.Zero;
-        for (nuint i = 0; i < length; ++i)
+
+        if (typeof(T) == typeof(float))
         {
-            T val = Unsafe.Add(ref src, (nint)i) - maxVal;
-            T e = typeof(T) == typeof(float)
-                ? (T)(object)MathF.Exp((float)(object)val!)
-                : (T)(object)Math.Exp((double)(object)val!);
-            Unsafe.Add(ref dst, (nint)i) = e;
-            sum += e;
+            var fSrc = MemoryMarshal.Cast<T, float>(source);
+            var fDst = MemoryMarshal.Cast<T, float>(destination);
+            float fMax = (float)(object)maxVal!;
+            float sum = 0f;
+            for (int i = 0; i < fSrc.Length; i++)
+            {
+                float e = MathF.Exp(fSrc[i] - fMax);
+                fDst[i] = e;
+                sum += e;
+            }
+            float invSum = 1f / sum;
+            for (int i = 0; i < fDst.Length; i++)
+                fDst[i] *= invSum;
         }
-        T invSum = T.One / sum;
-        nuint i2 = 0;
-        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<T>.Count)
+        else
         {
-            Vector<T> vInv = Vector.Create(invSum);
-            nuint step = (nuint)Vector<T>.Count, limit = length - step + 1;
-            for (; i2 < limit; i2 += step)
-                (Vector.LoadUnsafe(in dst, i2) * vInv).StoreUnsafe(ref dst, i2);
+            var dSrc = MemoryMarshal.Cast<T, double>(source);
+            var dDst = MemoryMarshal.Cast<T, double>(destination);
+            double dMax = (double)(object)maxVal!;
+            double sum = 0.0;
+            for (int i = 0; i < dSrc.Length; i++)
+            {
+                double e = Math.Exp(dSrc[i] - dMax);
+                dDst[i] = e;
+                sum += e;
+            }
+            double invSum = 1.0 / sum;
+            for (int i = 0; i < dDst.Length; i++)
+                dDst[i] *= invSum;
         }
-        for (; i2 < length; ++i2)
-            Unsafe.Add(ref dst, (nint)i2) = Unsafe.Add(ref dst, (nint)i2) * invSum;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
