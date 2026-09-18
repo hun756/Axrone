@@ -9,7 +9,7 @@ public class ArenaMemoryRingTests : IDisposable
 
     public ArenaMemoryRingTests()
     {
-        _ring = new ArenaMemoryRing<int, ProgressiveSpinBackoff>(new BufferCapacity(16));
+        _ring = new ArenaMemoryRing<int, ProgressiveSpinBackoff>(new ArenaCapacity(16));
     }
 
     [Fact]

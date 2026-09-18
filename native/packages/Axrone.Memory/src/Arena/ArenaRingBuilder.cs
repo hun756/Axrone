@@ -64,7 +64,7 @@ public sealed class ArenaRingBuilder<T> where T : unmanaged
     public ArenaMemoryRing<T, TBackoff> Build<TBackoff>()
         where TBackoff : struct, ISpinBackoff
     {
-        BufferCapacity capacity = new(_capacity);
+        ArenaCapacity capacity = new(_capacity);
         return new ArenaMemoryRing<T, TBackoff>(
             capacity,
             _topology,

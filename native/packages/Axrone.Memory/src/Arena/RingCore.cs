@@ -6,7 +6,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     where T : unmanaged
     where TBackoff : struct, ISpinBackoff
 {
-    public readonly BufferCapacity Capacity;
+    public readonly ArenaCapacity Capacity;
     public readonly bool ZeroOnRecycle;
     public readonly IArenaStorageBlock<T> Storage;
     public readonly ArenaTelemetryEngine Telemetry;
@@ -23,7 +23,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     private int _disposed;
 
     public RingCore(
-        BufferCapacity capacity,
+        ArenaCapacity capacity,
         MemoryTopology topology,
         Alignment alignment,
         bool zeroOnRecycle,

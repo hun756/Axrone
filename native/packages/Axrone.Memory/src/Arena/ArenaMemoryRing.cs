@@ -14,7 +14,7 @@ public sealed class ArenaMemoryRing<T, TBackoff> : IDisposable
     private readonly RingBatchCoordinator<T, TBackoff> _batch;
 
     public ArenaMemoryRing(
-        BufferCapacity capacity,
+        ArenaCapacity capacity,
         MemoryTopology topology = MemoryTopology.NativeAligned,
         Alignment alignment = default,
         bool zeroOnRecycle = false,
