@@ -674,11 +674,10 @@ public static unsafe partial class SimdFloat32
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Span<byte> PackFloatToHalf(ReadOnlySpan<float> source)
+    public static void PackFloatToHalf(ReadOnlySpan<float> source, Span<byte> destination)
     {
-        nuint length = (nuint)source.Length;
-        byte[] result = GC.AllocateUninitializedArray<byte>((int)length * 2);
-        ref ushort dst = ref Unsafe.As<byte, ushort>(ref MemoryMarshal.GetArrayDataReference(result));
+        nuint length = (nuint)Math.Min(source.Length, destination.Length / 2);
+        ref ushort dst = ref Unsafe.As<byte, ushort>(ref MemoryMarshal.GetReference(destination));
         ref float src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
         if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
@@ -722,6 +721,5 @@ public static unsafe partial class SimdFloat32
             }
             Unsafe.Add(ref dst, (nint)i) = h;
         }
-        return result;
     }
 }
