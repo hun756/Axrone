@@ -52,10 +52,29 @@ public class PipelineTelemetryTests
         first.Status.Should().Be(FrameBudgetStatus.BudgetExceeded);
         var snapshot = pipeline.GetSnapshot();
         snapshot.PendingItems.Should().Be(first.RemainingCount);
+        snapshot.TotalItems.Should().Be(200);
+        snapshot.ProcessedItems.Should().Be(first.ProcessedCount);
+        (snapshot.ProcessedItems + snapshot.PendingItems).Should().Be(200);
         snapshot.HasRemainingWork.Should().BeTrue();
         snapshot.CalibratedStride.Should().BeInRange(
             TimeSlicedPipeline<int>.MinStride, TimeSlicedPipeline<int>.MaxStride);
         snapshot.DroppedItems.Should().Be(0);
+        snapshot.ProgressPercentage.Should().BeInRange(0d, 100d);
+        snapshot.ItemsPerSecond.Should().BeGreaterThan(0d);
+        snapshot.RemainingEstimatedSeconds.Should().BeGreaterThanOrEqualTo(0d);
+    }
+
+    [Fact]
+    public void GetSnapshot_Idle_ReportsZeroRates()
+    {
+        using var pipeline = TimeSlicedPipeline.Create<int>(4).Build();
+
+        var snapshot = pipeline.GetSnapshot();
+
+        snapshot.TotalItems.Should().Be(0);
+        snapshot.ProgressPercentage.Should().Be(0d);
+        snapshot.ItemsPerSecond.Should().Be(0d);
+        snapshot.RemainingEstimatedSeconds.Should().Be(-1d);
     }
 
     [Fact]

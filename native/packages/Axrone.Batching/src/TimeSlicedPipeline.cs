@@ -253,12 +253,20 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     }
 
     /// <summary>Takes an atomic inspection snapshot.</summary>
-    public PipelineSnapshot GetSnapshot() => new(
-        Capacity,
-        _hasActive ? _active.Items.Length - _cursor : 0,
-        Volatile.Read(ref _stride),
-        Interlocked.Read(ref _droppedItems),
-        HasRemainingWork);
+    public PipelineSnapshot GetSnapshot()
+    {
+        var total = _hasActive ? _active.Items.Length : 0;
+        var processed = _hasActive ? _cursor : 0;
+        return new PipelineSnapshot(
+            Capacity,
+            total,
+            processed,
+            total - processed,
+            Volatile.Read(ref _stride),
+            _smoothedTicksPerItem,
+            Interlocked.Read(ref _droppedItems),
+            HasRemainingWork);
+    }
 
     /// <summary>Releases telemetry. Idempotent and race-free.</summary>
     public void Dispose()
