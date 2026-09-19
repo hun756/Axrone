@@ -102,7 +102,8 @@ public sealed class TripleBuffer<T> where T : unmanaged
     /// <returns>Consumer view and its generation; empty when nothing was published.</returns>
     /// <remarks>
     /// Freshness is decided by generation, not by slot index: a repeated acquire with no new publish
-    /// keeps returning the same read slot instead of bouncing back to the recycled clean slot.
+    /// keeps returning the same read slot instead of bouncing back to the recycled clean slot. The
+    /// view is mutable because batch kernels transform in place.
     /// </remarks>
     public TripleBufferSnapshot<T> Acquire()
     {
@@ -116,7 +117,7 @@ public sealed class TripleBuffer<T> where T : unmanaged
 
         var count = Volatile.Read(ref _counts[_readIndex]);
         var generation = Volatile.Read(ref _generations[_readIndex]);
-        return new TripleBufferSnapshot<T>(new ReadOnlyMemory<T>(_slots[_readIndex], 0, count), generation);
+        return new TripleBufferSnapshot<T>(new Memory<T>(_slots[_readIndex], 0, count), generation);
     }
 
     /// <summary>Whether a snapshot is still the latest view of its slot.</summary>
@@ -140,14 +141,14 @@ public sealed class TripleBuffer<T> where T : unmanaged
 /// </remarks>
 public readonly struct TripleBufferSnapshot<T> where T : unmanaged
 {
-    /// <summary>Items visible at acquire time.</summary>
-    public ReadOnlyMemory<T> Items { get; }
+    /// <summary>Items visible at acquire time; mutable because kernels transform in place.</summary>
+    public Memory<T> Items { get; }
 
     /// <summary>Generation the snapshot was taken at.</summary>
     public long Generation { get; }
 
     /// <summary>Creates a snapshot.</summary>
-    public TripleBufferSnapshot(ReadOnlyMemory<T> items, long generation)
+    public TripleBufferSnapshot(Memory<T> items, long generation)
     {
         Items = items;
         Generation = generation;
