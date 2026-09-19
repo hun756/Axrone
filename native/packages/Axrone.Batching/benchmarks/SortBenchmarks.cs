@@ -59,18 +59,6 @@ public class SortBenchmarks
     public void BclArraySort() => Array.Sort(_workingInts);
 
     [Benchmark]
-    public void Introsort()
-    {
-        unsafe
-        {
-            fixed (int* data = _workingInts)
-            {
-                new NativeBatch<int>(data, Length).Sort(new Ascending());
-            }
-        }
-    }
-
-    [Benchmark]
     public void StableMergeSort()
     {
         unsafe

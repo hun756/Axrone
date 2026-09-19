@@ -165,46 +165,6 @@ public class NativeBatchStableSortTests
         }
     }
 
-    [Fact]
-    public void StableSort_IsStableWhereIntrosortIsNot()
-    {
-        // Guards against the two sorts silently converging on the same unstable behaviour.
-        const int count = 64;
-        var data = new Payload[count];
-        for (var i = 0; i < count; i++)
-        {
-            data[i] = new Payload { Key = i % 8, Ordinal = i };
-        }
-
-        var stable = (Payload[])data.Clone();
-        var unstable = (Payload[])data.Clone();
-        var scratch = new Payload[count];
-
-        unsafe
-        {
-            fixed (Payload* pointer = stable)
-            fixed (Payload* scratchPointer = scratch)
-            {
-                new NativeBatch<Payload>(pointer, count).StableSort(new Span<Payload>(scratchPointer, count), new ByKey());
-            }
-
-            fixed (Payload* pointer = unstable)
-            {
-                new NativeBatch<Payload>(pointer, count).Sort(new ByKey());
-            }
-        }
-
-        // Both must produce the same key sequence; only the stable one constrains tie order.
-        stable.Select(payload => payload.Key).Should().BeInAscendingOrder();
-        unstable.Select(payload => payload.Key).Should().BeInAscendingOrder();
-
-        foreach (var group in stable.GroupBy(payload => payload.Key))
-        {
-            group.Select(payload => payload.Ordinal).Should().BeInAscendingOrder(
-                $"stable sort must preserve submission order within key {group.Key}");
-        }
-    }
-
     // ── scratch validation ──────────────────────────────────────────────
 
     [Fact]

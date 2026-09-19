@@ -5,7 +5,7 @@ namespace Axrone.Batching;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Unlike <see cref="Sort{TComparer}"/> this preserves the relative order of elements that compare
+/// Unlike <c>Span&lt;T&gt;.Sort</c> and <see cref="RadixSort"/>, this preserves the relative order of elements that compare
 /// equal, which render ordering depends on: transparents sorted by depth must keep submission
 /// order within a tie.
 /// </para>
