@@ -1,7 +1,7 @@
 import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
-import type { WidgetController } from '../widget';
-import { asStringOrNull, asRecord, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
+import type { WidgetController, WidgetControllerContext } from '../widget';
+import { asString, asStringOrNull, asRecord, isPointInside, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
 
 /**
  * Declarative button-feedback controller for `.ui.json` authored buttons.
@@ -21,12 +21,18 @@ import { asStringOrNull, asRecord, isValidImageSource, toImageSource, extractSou
  *     states:     { normal: '<theme.accentColor>', hover: '<theme.accentHoverColor>', ... },
  *     transition: 'color' | 'opacity' | 'tint' | 'sprite' | 'none',
  *     tints:      { normal: '#ffffffff', hover: '#cccccccc', ... },
- *     sprites:    { normal: { kind:'texture', resourceId:'btn_normal.png', ... }, ... }
+ *     sprites:    { normal: { kind:'texture', resourceId:'btn_normal.png', ... }, ... },
+ *     onPress:    'myButtonPressed',  // controller-event name emitted on press
  *   }
  *
  * `tints` is read only when transition is `'tint'`.
  * `sprites` is read only when transition is `'sprite'`.
  * Both fall back gracefully when the widget has no image configured.
+ *
+ * Press semantics (Cocos `clickEvents` parity): pointer down inside followed
+ * by pointer up inside emits `onPress`; releasing outside cancels. Focused
+ * buttons also emit on Enter/Space. Subscribe with
+ * `runtime.onControllerEvent(buttonWidget, name, handler)`.
  */
 export const BUTTON_FEEDBACK_CONTROLLER_TYPE = 'button-feedback';
 
@@ -47,6 +53,8 @@ export interface ButtonFeedbackProps {
 	readonly transition?: ButtonTransitionMode;
 	readonly tints?: Partial<Record<ButtonVisualState, string>>;
 	readonly sprites?: Partial<Record<ButtonVisualState, ButtonImageSourceInput>>;
+	/** Controller-event name emitted on press; subscribe via `onControllerEvent`. */
+	readonly onPress?: string;
 }
 
 interface ButtonFeedbackState {
@@ -63,8 +71,96 @@ export const BUTTON_STATE_OPACITY: Readonly<Record<ButtonVisualState, number>> =
 	disabled: 0.45,
 });
 
-const resolveVisualState = (state: ButtonFeedbackState): ButtonVisualState =>
-	state.pressed ? 'pressed' : state.hovered ? 'hover' : 'normal';
+type ButtonContext = WidgetControllerContext<
+	Record<string, unknown>,
+	ButtonFeedbackState,
+	UIRuntime
+>;
+
+const resolveVisualState = (state: ButtonFeedbackState, disabled: boolean): ButtonVisualState => {
+	if (disabled) return 'disabled';
+	return state.pressed ? 'pressed' : state.hovered ? 'hover' : 'normal';
+};
+
+/** Emits the authored `onPress` controller event with pointer/widget geometry. */
+const emitPress = (context: ButtonContext, pointerX: number, pointerY: number): void => {
+	const props = context.props as ButtonFeedbackProps;
+	const name = asString(props.onPress);
+	if (!name) return;
+	const widget = context.widget as WidgetId;
+	const box = context.runtime.getLayoutBox(widget);
+	context.runtime.emitControllerEvent(widget, name, {
+		x: box.x,
+		y: box.y,
+		pointerX,
+		pointerY,
+	});
+};
+
+/** Shared visual application for input/mount/update paths (see below). */
+const applyFeedback = (context: ButtonContext): void => {
+	const props = context.props as ButtonFeedbackProps;
+	const state = context.state;
+	const widget = context.widget as WidgetId;
+	const disabled = !context.runtime.isWidgetEnabled(widget);
+	const visualState = resolveVisualState(state, disabled);
+	const transition: ButtonTransitionMode = props.transition ?? 'color';
+
+	if (transition === 'none') {
+		return;
+	}
+
+	if (transition === 'tint') {
+		const tints = asRecord(props.tints);
+		const tintValue = asStringOrNull(tints[visualState]);
+		context.runtime.updateWidget(widget, {
+			image: { tint: tintValue ?? '#ffffffff' } as Partial<WidgetImageInput>,
+		});
+		if (disabled) {
+			context.runtime.updateWidget(widget, {
+				style: { opacity: BUTTON_STATE_OPACITY.disabled },
+			});
+		}
+		return;
+	}
+
+	if (transition === 'sprite') {
+		const sprites = asRecord(props.sprites);
+		const stateEntry = sprites[visualState] as Record<string, unknown> | undefined;
+		const sourceInput = stateEntry ? extractSourceInput(stateEntry) : null;
+		const source = sourceInput ? toImageSource(sourceInput) : state.originalSource;
+		if (isValidImageSource(source)) {
+			context.runtime.updateWidget(widget, {
+				image: { source } as Partial<WidgetImageInput>,
+			});
+		}
+		if (disabled) {
+			context.runtime.updateWidget(widget, {
+				style: { opacity: BUTTON_STATE_OPACITY.disabled },
+			});
+		}
+		return;
+	}
+
+	const states = asRecord(props.states);
+	const stylePatch: Record<string, unknown> = {};
+	if (transition === 'opacity') {
+		const normalColor = asStringOrNull(states.normal);
+		if (normalColor) {
+			stylePatch.background = normalColor;
+		}
+		stylePatch.opacity = BUTTON_STATE_OPACITY[visualState];
+	} else {
+		const stateColor = asStringOrNull(states[visualState]);
+		if (stateColor) {
+			stylePatch.background = stateColor;
+			stylePatch.opacity = 1;
+		} else {
+			stylePatch.opacity = BUTTON_STATE_OPACITY[visualState];
+		}
+	}
+	context.runtime.updateWidget(widget, { style: stylePatch });
+};
 
 /**
  * Visual feedback for interactive buttons. Supports five transition modes:
@@ -88,25 +184,68 @@ export const buttonFeedbackController: WidgetController<
 	type: BUTTON_FEEDBACK_CONTROLLER_TYPE,
 	createState: () => ({ pressed: false, hovered: false, originalSource: null }),
 	mount: (context) => {
-		const imageInput = context.runtime.getWidgetImageInput(context.widget);
-		context.state.originalSource = imageInput?.source ?? null;
+		const typed = context as ButtonContext;
+		const imageInput = typed.runtime.getWidgetImageInput(typed.widget as WidgetId);
+		typed.state.originalSource = imageInput?.source ?? null;
+		// Paint the authored/disabled initial state once bindings are ready.
+		applyFeedback(typed);
+	},
+	update: (context, previousProps) => {
+		const typed = context as ButtonContext;
+		const props = typed.props as ButtonFeedbackProps;
+		const previous = previousProps as ButtonFeedbackProps;
+
+		// The diff guard also terminates the self-induced pass: feedback writes
+		// touch style/image inputs, never controller props.
+		if (
+			props.states !== previous.states ||
+			props.transition !== previous.transition ||
+			props.tints !== previous.tints ||
+			props.sprites !== previous.sprites ||
+			props.onPress !== previous.onPress
+		) {
+			applyFeedback(typed);
+		}
 	},
 	input: (event, context) => {
-		if (event.type !== 'pointer') {
+		const typed = context as ButtonContext;
+		const state = typed.state;
+		if (!state) {
 			return false;
 		}
-		const state = context.state;
-		if (!state) {
+
+		// Focused buttons fire on Enter/Space like the imperative handle.
+		if (event.type === 'key') {
+			if (event.phase === 'down' && (event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+				const box = typed.runtime.getLayoutBox(typed.widget as WidgetId);
+				emitPress(typed, box.x + box.width / 2, box.y + box.height / 2);
+				return true;
+			}
+			return false;
+		}
+
+		if (event.type !== 'pointer') {
 			return false;
 		}
 		switch (event.phase) {
 			case 'down':
 				state.pressed = true;
 				break;
-			case 'up':
+			case 'up': {
+				const wasPressed = state.pressed;
 				state.pressed = false;
 				state.hovered = true;
-				break;
+				applyFeedback(typed);
+				// Cocos press semantics: down-inside + up-inside fires,
+				// releasing outside cancels silently.
+				if (
+					wasPressed &&
+					isPointInside(typed.runtime, typed.widget as WidgetId, event.x, event.y)
+				) {
+					emitPress(typed, event.x, event.y);
+				}
+				return true;
+			}
 			case 'enter':
 				state.hovered = true;
 				break;
@@ -118,61 +257,7 @@ export const buttonFeedbackController: WidgetController<
 				return false;
 		}
 
-		const props = context.props as ButtonFeedbackProps;
-		const visualState = resolveVisualState(state);
-		const transition: ButtonTransitionMode = props.transition ?? 'color';
-		const handled = event.phase === 'down' || event.phase === 'up';
-
-		if (transition === 'none') {
-			return handled;
-		}
-
-		if (transition === 'tint') {
-			const tints = asRecord(props.tints);
-			const tintValue = asStringOrNull(tints[visualState]);
-			if (tintValue) {
-				context.runtime.updateWidget(context.widget as WidgetId, {
-					image: { tint: tintValue } as Partial<WidgetImageInput>,
-				});
-			} else {
-				context.runtime.updateWidget(context.widget as WidgetId, {
-					image: { tint: '#ffffffff' } as Partial<WidgetImageInput>,
-				});
-			}
-			return handled;
-		}
-
-		if (transition === 'sprite') {
-			const sprites = asRecord(props.sprites);
-			const stateEntry = sprites[visualState] as Record<string, unknown> | undefined;
-			const sourceInput = stateEntry ? extractSourceInput(stateEntry) : null;
-			const source = sourceInput ? toImageSource(sourceInput) : state.originalSource;
-			if (isValidImageSource(source)) {
-				context.runtime.updateWidget(context.widget as WidgetId, {
-					image: { source } as Partial<WidgetImageInput>,
-				});
-			}
-			return handled;
-		}
-
-		const states = asRecord(props.states);
-		const stylePatch: Record<string, unknown> = {};
-		if (transition === 'opacity') {
-			const normalColor = asStringOrNull(states.normal);
-			if (normalColor) {
-				stylePatch.background = normalColor;
-			}
-			stylePatch.opacity = BUTTON_STATE_OPACITY[visualState];
-		} else {
-			const stateColor = asStringOrNull(states[visualState]);
-			if (stateColor) {
-				stylePatch.background = stateColor;
-				stylePatch.opacity = 1;
-			} else {
-				stylePatch.opacity = BUTTON_STATE_OPACITY[visualState];
-			}
-		}
-		context.runtime.updateWidget(context.widget as WidgetId, { style: stylePatch });
-		return handled;
+		applyFeedback(typed);
+		return event.phase === 'down' || event.phase === 'up';
 	},
 };
