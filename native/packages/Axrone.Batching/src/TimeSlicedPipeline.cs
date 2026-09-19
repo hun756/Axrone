@@ -36,6 +36,7 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     public const double SmoothingFactor = 0.15;
 
     private readonly TripleBuffer<T> _buffer;
+    private readonly BatchStride _strideBounds;
     private TripleBufferSnapshot<T> _active;
     private bool _hasActive;
     private int _cursor;
@@ -56,8 +57,18 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     /// <param name="capacity">Elements per buffer slot; must be positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is not positive.</exception>
     public TimeSlicedPipeline(int capacity)
+        : this(capacity, BatchStride.Default)
+    {
+    }
+
+    /// <summary>Creates a pipeline with stride bounds.</summary>
+    /// <param name="capacity">Elements per buffer slot; must be positive.</param>
+    /// <param name="stride">Calibrator stride bounds.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is not positive.</exception>
+    public TimeSlicedPipeline(int capacity, BatchStride stride)
     {
         _buffer = new TripleBuffer<T>(capacity);
+        _strideBounds = stride;
         _active = default;
         _hasActive = false;
         _cursor = 0;
@@ -247,6 +258,6 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
             : (_smoothedTicksPerItem * (1d - SmoothingFactor)) + (sample * SmoothingFactor);
 
         var targetTicks = (double)Stopwatch.Frequency / TargetSliceFrequencyDivisor;
-        _stride = BatchStride.Default.Clamp((int)(targetTicks / _smoothedTicksPerItem));
+        _stride = _strideBounds.Clamp((int)(targetTicks / _smoothedTicksPerItem));
     }
 }
