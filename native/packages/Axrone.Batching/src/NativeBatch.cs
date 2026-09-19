@@ -21,7 +21,7 @@ namespace Axrone.Batching;
 /// copying the value never copies an element.
 /// </para>
 /// </remarks>
-public readonly unsafe struct NativeBatch<T>
+public readonly unsafe partial struct NativeBatch<T>
     where T : unmanaged
 {
     private readonly T* _data;
