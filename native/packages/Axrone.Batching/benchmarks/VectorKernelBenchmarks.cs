@@ -65,7 +65,7 @@ public class VectorKernelBenchmarks
     public void QuaternionMultiplyVectorised() =>
         SimdBatchKernels.QuaternionMultiply(_left4, _right4, _scratchQuat);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void DotScalar()
     {
         for (var i = 0; i < Count; i++)
@@ -78,7 +78,7 @@ public class VectorKernelBenchmarks
     public void DotVectorised() =>
         SimdBatchKernels.BatchDot3(_left3, _right3, _scratchDot);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void CrossScalar()
     {
         for (var i = 0; i < Count; i++)
@@ -91,7 +91,7 @@ public class VectorKernelBenchmarks
     public void CrossVectorised() =>
         SimdBatchKernels.BatchCross3(_left3, _right3, _scratch3);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void NormalizeScalar()
     {
         for (var i = 0; i < Count; i++)

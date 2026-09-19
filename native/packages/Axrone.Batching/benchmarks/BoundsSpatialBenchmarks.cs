@@ -85,7 +85,7 @@ public class BoundsSpatialBenchmarks
     public void TransformAabbVectorised() =>
         SimdBatchKernels.TransformAabb(_boxes, _scratchBoxes, _matrix);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void TransformSpheresScalar()
     {
         const float maxScale = 1.5f;
@@ -100,7 +100,7 @@ public class BoundsSpatialBenchmarks
     public void TransformSpheresVectorised() =>
         SimdBatchKernels.TransformBoundingSpheres(_spheres, _scratchSpheres, _matrix, 1.5f);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void MortonEncodeScalar()
     {
         for (var i = 0; i < Count; i++)
@@ -123,7 +123,7 @@ public class BoundsSpatialBenchmarks
     public void MortonEncodeVectorised() =>
         SimdBatchKernels.MortonEncode3D(_x, _y, _z, _scratchMorton);
 
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public void ScanNonFiniteScalar()
     {
         var found = 0;
