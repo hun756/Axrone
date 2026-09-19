@@ -34,12 +34,16 @@ public sealed partial class TimeSlicedPipeline<T>
     {
         if (error is not null)
         {
+            var previous = Volatile.Read(ref _lifecycle);
             Volatile.Write(ref _fault, ExceptionDispatchInfo.Capture(error));
             Volatile.Write(ref _lifecycle, LifecycleFaulted);
+            BatchingEventSource.Log.FaultOccurred(error.GetType().Name, error.Message);
+            BatchingEventSource.Log.StateTransition(previous, LifecycleFaulted);
         }
         else if (Volatile.Read(ref _lifecycle) == LifecycleActive)
         {
             Volatile.Write(ref _lifecycle, LifecycleCompleting);
+            BatchingEventSource.Log.StateTransition(LifecycleActive, LifecycleCompleting);
         }
     }
 

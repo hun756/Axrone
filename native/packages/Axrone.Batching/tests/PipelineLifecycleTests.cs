@@ -84,6 +84,12 @@ public class PipelineLifecycleTests
     }
 
     [Fact]
+    public void EventSource_IsAvailable()
+    {
+        BatchingEventSource.Log.Should().NotBeNull();
+    }
+
+    [Fact]
     public void Drain_Empty_ReturnsImmediately()
     {
         using var pipeline = TimeSlicedPipeline.Create<int>(4).Build();

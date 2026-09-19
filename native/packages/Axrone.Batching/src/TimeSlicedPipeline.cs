@@ -294,6 +294,7 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
             var abandoned = _active.Items.Length - _cursor;
             Interlocked.Add(ref _droppedItems, abandoned);
             _telemetry.RecordDropped(abandoned);
+            BatchingEventSource.Log.StaleSnapshotDropped(abandoned);
             _hasActive = false;
             _cursor = 0;
         }
