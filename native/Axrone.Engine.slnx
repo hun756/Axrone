@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/packages/">
+    <Project Path="packages/Axrone.Batching/Axrone.Batching.csproj" />
+    <Project Path="packages/Axrone.Batching/tests/Axrone.Batching.Tests.csproj" />
     <Project Path="packages/Axrone.Collections/Axrone.Collections.csproj" />
     <Project Path="packages/Axrone.Collections/tests/Axrone.Collections.Tests.csproj" />
     <Project Path="packages/Axrone.Hash/Axrone.Hash.csproj" />
