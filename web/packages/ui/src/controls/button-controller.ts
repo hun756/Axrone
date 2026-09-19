@@ -35,19 +35,11 @@ export type ButtonVisualState = 'normal' | 'hover' | 'pressed' | 'disabled';
 
 export type ButtonTransitionMode = 'color' | 'opacity' | 'tint' | 'sprite' | 'none';
 
-/**
- * Inline image-source descriptor for per-state sprite swapping.
- * Mirrors `UIImageSource` without requiring an import-time dependency on the
- * full widget type — keeps the props contract self-contained in JSON.
- * @deprecated Use ImageSourceInput from internals instead.
- */
-export type ButtonImageSourceInput = ImageSourceInput;
-
 export interface ButtonFeedbackProps {
 	readonly states?: Partial<Record<ButtonVisualState, string>>;
 	readonly transition?: ButtonTransitionMode;
 	readonly tints?: Partial<Record<ButtonVisualState, string>>;
-	readonly sprites?: Partial<Record<ButtonVisualState, ButtonImageSourceInput>>;
+	readonly sprites?: Partial<Record<ButtonVisualState, ImageSourceInput>>;
 	readonly onPress?: string;
 }
 

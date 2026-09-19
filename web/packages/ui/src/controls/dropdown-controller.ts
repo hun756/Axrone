@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { asString, asNumber, setWidgetVisible } from './internals';
+import { asString, asNumber, setWidgetVisible, asArray, asFiniteNumber, asColorString } from './internals';
 
 export const DROPDOWN_SELECT_CONTROLLER_TYPE = 'dropdown-select';
 
@@ -43,15 +43,6 @@ type DropdownContext = WidgetControllerContext<
     DropdownControllerState,
     UIRuntime
 >;
-
-const asArray = (value: unknown): readonly string[] =>
-    Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
-
-const asFiniteNumber = (value: unknown): number | null =>
-    typeof value === 'number' && Number.isFinite(value) ? value : null;
-
-const asColorString = (value: unknown): string | null =>
-    typeof value === 'string' && value.trim() !== '' ? value : null;
 
 /**
  * Pushes the currently selected option label onto the trigger text widget.
