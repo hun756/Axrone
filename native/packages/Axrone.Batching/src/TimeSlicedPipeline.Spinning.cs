@@ -44,6 +44,52 @@ public sealed partial class TimeSlicedPipeline<T>
     }
 
     /// <summary>
+    /// Spins until the active batch drains or the retry policy gives up.
+    /// </summary>
+    /// <typeparam name="TKernel">Kernel type, held by ref so the call devirtualizes.</typeparam>
+    /// <typeparam name="TBackoff">Backoff policy for pacing between overruns.</typeparam>
+    /// <param name="kernel">Batch kernel.</param>
+    /// <param name="retry">Bounds overrun attempts and stand-downs.</param>
+    /// <param name="cancellationToken">Stops the spin.</param>
+    /// <returns>Overrun slices tolerated before stopping with work remaining.</returns>
+    public int ExecuteSpinning<TKernel, TBackoff>(
+        ref TKernel kernel, SliceRetryPolicy retry, CancellationToken cancellationToken = default)
+        where TKernel : struct, IBatchKernel<T>
+        where TBackoff : struct, ISpinBackoff
+    {
+        TBackoff.Initialize(out var backoff);
+        var overruns = 0;
+        var rngState = (ulong)Stopwatch.GetTimestamp() | 0x9E3779B97F4A7C15UL;
+        do
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = ExecuteSlice(ref kernel, new FrameBudget(SpinSliceMilliseconds));
+            if (result.Status != FrameBudgetStatus.BudgetExceeded)
+            {
+                TBackoff.Reset(ref backoff);
+            }
+            else if (retry.ShouldRetry(++overruns))
+            {
+                var standDownMs = retry.DelayTicks(overruns, ref rngState) * 1000d / Stopwatch.Frequency;
+                if (standDownMs >= 1d)
+                {
+                    Thread.Sleep((int)Math.Min(standDownMs, 50d));
+                }
+                else
+                {
+                    TBackoff.Advance(ref backoff);
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+        while (HasRemainingWork);
+        return overruns;
+    }
+
+    /// <summary>
     /// Spins until the active batch drains through an element kernel or cancellation fires.
     /// </summary>
     /// <typeparam name="TKernel">Kernel type, held by ref so the call devirtualizes.</typeparam>
