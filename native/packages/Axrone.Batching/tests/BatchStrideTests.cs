@@ -38,4 +38,23 @@ public class BatchStrideTests
         new BatchStride(16, 1024).Should().Be(BatchStride.Default);
         (new BatchStride(16, 64) == BatchStride.Default).Should().BeFalse();
     }
+
+    [Fact]
+    public void Presets_AreOrderedAndInsideDefault()
+    {
+        BatchStride.LowLatency.Min.Should().Be(BatchStride.Default.Min);
+        BatchStride.LowLatency.Max.Should().BeLessThan(BatchStride.Default.Max);
+        BatchStride.Throughput.Min.Should().BeGreaterThan(BatchStride.Default.Min);
+        BatchStride.Throughput.Max.Should().Be(BatchStride.Default.Max);
+    }
+
+    [Fact]
+    public void PresetPipeline_ServesWork()
+    {
+        using var pipeline = TimeSlicedPipeline.Create<int>(64)
+            .WithStride(BatchStride.LowLatency)
+            .Build();
+
+        pipeline.Capacity.Should().Be(64);
+    }
 }

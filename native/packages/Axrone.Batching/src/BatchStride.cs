@@ -24,6 +24,18 @@ public readonly record struct BatchStride
     /// <summary>House tuning.</summary>
     public static BatchStride Default => new(DefaultMin, DefaultMax);
 
+    /// <summary>
+    /// Low-latency tuning: narrow ceiling so a slice never holds the frame hostage.
+    /// </summary>
+    /// <remarks>Ceiling 128 keeps the worst single chunk under ~125µs for kernels at or below the
+    /// measured per-item costs; see the pipeline calibrator.</remarks>
+    public static BatchStride LowLatency => new(DefaultMin, 128);
+
+    /// <summary>
+    /// Throughput tuning: raised floor so large batches amortize per-chunk clock reads.
+    /// </summary>
+    public static BatchStride Throughput => new(64, DefaultMax);
+
     /// <summary>Creates bounds.</summary>
     /// <param name="min">Smallest chunk; must be positive and at most <paramref name="max"/>.</param>
     /// <param name="max">Largest chunk.</param>
