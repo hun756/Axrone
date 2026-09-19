@@ -20,6 +20,7 @@ public sealed class TimeSlicedPipelineBuilder<T> where T : unmanaged
 {
     private int _capacity;
     private BatchStride _stride = BatchStride.Default;
+    private string _meterName = "Axrone.Batching";
 
     internal TimeSlicedPipelineBuilder(int capacity) => _capacity = capacity;
 
@@ -39,6 +40,14 @@ public sealed class TimeSlicedPipelineBuilder<T> where T : unmanaged
         return this;
     }
 
+    /// <summary>Sets the telemetry meter name.</summary>
+    /// <param name="meterName">OpenTelemetry meter name.</param>
+    public TimeSlicedPipelineBuilder<T> WithTelemetry(string meterName)
+    {
+        _meterName = meterName;
+        return this;
+    }
+
     /// <summary>Builds the pipeline.</summary>
-    public TimeSlicedPipeline<T> Build() => new(_capacity, _stride);
+    public TimeSlicedPipeline<T> Build() => new(_capacity, _stride, _meterName);
 }

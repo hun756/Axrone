@@ -17,7 +17,7 @@ namespace Axrone.Batching;
 /// out of the snapshot instead of holding a batch across frames.
 /// </para>
 /// </remarks>
-public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSlicer<T>
+public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSlicer<T>, IDisposable
     where T : unmanaged
 {
     /// <summary>Smallest chunk the calibrator may select.</summary>
@@ -37,6 +37,8 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
 
     private readonly TripleBuffer<T> _buffer;
     private readonly BatchStride _strideBounds;
+    private readonly BatchingTelemetry _telemetry;
+    private int _disposed;
     private TripleBufferSnapshot<T> _active;
     private bool _hasActive;
     private int _cursor;
@@ -66,9 +68,20 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     /// <param name="stride">Calibrator stride bounds.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is not positive.</exception>
     public TimeSlicedPipeline(int capacity, BatchStride stride)
+        : this(capacity, stride, "Axrone.Batching")
+    {
+    }
+
+    /// <summary>Creates a pipeline with stride bounds and telemetry.</summary>
+    /// <param name="capacity">Elements per buffer slot; must be positive.</param>
+    /// <param name="stride">Calibrator stride bounds.</param>
+    /// <param name="meterName">OpenTelemetry meter name.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is not positive.</exception>
+    public TimeSlicedPipeline(int capacity, BatchStride stride, string meterName)
     {
         _buffer = new TripleBuffer<T>(capacity);
         _strideBounds = stride;
+        _telemetry = new BatchingTelemetry(meterName);
         _active = default;
         _hasActive = false;
         _cursor = 0;
@@ -143,14 +156,16 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
             processed += chunk;
         }
 
+        var elapsed = budget.ElapsedMilliseconds;
+        _telemetry.RecordSlice(processed, elapsed);
         if (_cursor < length)
         {
-            return SliceResult.BudgetExceeded(processed, length - _cursor, budget.ElapsedMilliseconds);
+            return SliceResult.BudgetExceeded(processed, length - _cursor, elapsed);
         }
 
         _hasActive = false;
         _cursor = 0;
-        return SliceResult.Completed(processed, budget.ElapsedMilliseconds);
+        return SliceResult.Completed(processed, elapsed);
     }
 
     /// <summary>
@@ -215,14 +230,34 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
             processed += chunk;
         }
 
+        var elementElapsed = budget.ElapsedMilliseconds;
+        _telemetry.RecordSlice(processed, elementElapsed);
         if (_cursor < length)
         {
-            return SliceResult.BudgetExceeded(processed, length - _cursor, budget.ElapsedMilliseconds);
+            return SliceResult.BudgetExceeded(processed, length - _cursor, elementElapsed);
         }
 
         _hasActive = false;
         _cursor = 0;
-        return SliceResult.Completed(processed, budget.ElapsedMilliseconds);
+        return SliceResult.Completed(processed, elementElapsed);
+    }
+
+    /// <summary>Takes an atomic inspection snapshot.</summary>
+    public PipelineSnapshot GetSnapshot() => new(
+        Capacity,
+        _hasActive ? _active.Items.Length - _cursor : 0,
+        Volatile.Read(ref _stride),
+        Interlocked.Read(ref _droppedItems),
+        HasRemainingWork);
+
+    /// <summary>Releases telemetry. Idempotent and race-free.</summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _telemetry.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 
     private bool EnsureActive()
@@ -234,7 +269,9 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
                 return _cursor < _active.Items.Length;
             }
 
-            Interlocked.Add(ref _droppedItems, _active.Items.Length - _cursor);
+            var abandoned = _active.Items.Length - _cursor;
+            Interlocked.Add(ref _droppedItems, abandoned);
+            _telemetry.RecordDropped(abandoned);
             _hasActive = false;
             _cursor = 0;
         }
