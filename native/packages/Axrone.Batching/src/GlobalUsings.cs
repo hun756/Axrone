@@ -1,4 +1,5 @@
 global using System;
+global using System.Buffers;
 global using System.Diagnostics;
 global using System.Diagnostics.Metrics;
 global using System.Numerics;
