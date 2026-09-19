@@ -15,8 +15,8 @@
   </PropertyGroup>
 
   <PropertyGroup Label="SuppressedRules">
-    <!-- CA1716: Identifier matches reserved keyword — 'batch' kernels name parameters after their domain role -->
-    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — lightweight result struct, equality not needed -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
