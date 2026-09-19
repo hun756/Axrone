@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { asString, asNumber, asBoolean } from './internals';
+import { asString, asNumber, asBoolean, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -106,7 +106,7 @@ const applyVisuals = (context: EditBoxContext): void => {
         const placeholderWidget = runtime.getBoundWidget(placeholderKey);
         if (placeholderWidget !== null) {
             const showPlaceholder = state.value.length === 0;
-            runtime.updateWidget(placeholderWidget, { enabled: showPlaceholder });
+            setWidgetVisible(runtime, placeholderWidget, showPlaceholder);
             if (showPlaceholder) {
                 const placeholderText = asString(props.placeholder);
                 runtime.updateWidget(placeholderWidget, {
