@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { isPointInside, asString, asNumber, setWidgetVisible } from './internals';
+import { hitTestBoundWidget, asString, asNumber, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -123,7 +123,7 @@ const hitTestTab = (context: TabContext, x: number, y: number): number => {
     for (let i = 0; i < count; i++) {
         const tabKey = resolveTabKey(props, i);
         const tab = runtime.getBoundWidget(tabKey);
-        if (tab !== null && isPointInside(runtime, tab, x, y)) {
+        if (tab !== null && hitTestBoundWidget(runtime, tab, x, y)) {
             return i;
         }
     }

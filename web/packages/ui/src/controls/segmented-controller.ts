@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { isPointInside, asString, asNumber } from './internals';
+import { hitTestBoundWidget, asString, asNumber } from './internals';
 
 /**
  * Declarative segmented-control controller for `.ui.json` authored tab selectors.
@@ -94,7 +94,7 @@ const hitTestSegment = (context: SegmentedContext, x: number, y: number): number
     for (let i = 0; i < count; i++) {
         const segmentKey = resolveSegmentKey(props, i);
         const segment = runtime.getBoundWidget(segmentKey);
-        if (segment !== null && isPointInside(runtime, segment, x, y)) {
+        if (segment !== null && hitTestBoundWidget(runtime, segment, x, y)) {
             return i;
         }
     }

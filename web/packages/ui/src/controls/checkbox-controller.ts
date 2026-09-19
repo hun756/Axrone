@@ -50,14 +50,6 @@ export type CheckboxVisualState = 'normal' | 'hover' | 'checked' | 'disabled';
 export type CheckboxMarkStyle = 'check' | 'cross' | 'dot' | 'dash';
 export type CheckboxTransitionMode = 'color' | 'tint' | 'sprite';
 
-/**
- * Inline image-source descriptor for per-state sprite swapping on checkbox
- * children. Mirrors `UIImageSource` without requiring consumers to import
- * the full widget type.
- * @deprecated Use ImageSourceInput from internals instead.
- */
-export type CheckboxImageSourceInput = ImageSourceInput;
-
 export interface CheckboxControllerProps {
     readonly isOn?: boolean;
     readonly indeterminate?: boolean;
@@ -70,8 +62,8 @@ export interface CheckboxControllerProps {
     readonly zoomScale?: number;
     readonly boxTints?: Partial<Record<CheckboxVisualState, string>>;
     readonly markTints?: Partial<Record<CheckboxVisualState, string>>;
-    readonly boxSprites?: Partial<Record<CheckboxVisualState, CheckboxImageSourceInput>>;
-    readonly markSprites?: Partial<Record<CheckboxVisualState, CheckboxImageSourceInput>>;
+    readonly boxSprites?: Partial<Record<CheckboxVisualState, ImageSourceInput>>;
+    readonly markSprites?: Partial<Record<CheckboxVisualState, ImageSourceInput>>;
     readonly markStyle?: CheckboxMarkStyle;
     readonly markColor?: string;
     readonly markSize?: number;

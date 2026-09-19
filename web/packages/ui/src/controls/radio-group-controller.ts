@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { isPointInside, asString, asNumber, setWidgetVisible } from './internals';
+import { hitTestBoundWidget, asString, asNumber, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -112,7 +112,7 @@ const hitTestItem = (context: RadioGroupContext, x: number, y: number): number =
     for (let i = 0; i < count; i++) {
         const circleKey = resolveCircleKey(props, i);
         const circle = runtime.getBoundWidget(circleKey);
-        if (circle !== null && isPointInside(runtime, circle, x, y)) {
+        if (circle !== null && hitTestBoundWidget(runtime, circle, x, y)) {
             return i;
         }
     }
