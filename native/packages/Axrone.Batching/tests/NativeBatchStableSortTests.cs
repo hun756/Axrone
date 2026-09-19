@@ -8,7 +8,7 @@ public class NativeBatchStableSortTests
 {
     private struct Ascending : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => left.CompareTo(right);
+        public readonly int Compare(int left, int right) => left.CompareTo(right);
     }
 
     /// <summary>Sorts by <see cref="Key"/> only, so ties are interchangeable by value but not by order.</summary>
@@ -20,7 +20,7 @@ public class NativeBatchStableSortTests
 
     private struct ByKey : IBatchComparer<Payload>
     {
-        public readonly int Compare(in Payload left, in Payload right) => left.Key.CompareTo(right.Key);
+        public readonly int Compare(Payload left, Payload right) => left.Key.CompareTo(right.Key);
     }
 
     private static unsafe void StableSortWith(int[] data, int length)

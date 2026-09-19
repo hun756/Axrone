@@ -55,12 +55,12 @@ public class ContractsTests
 
     private struct DescendingComparer : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => right.CompareTo(left);
+        public readonly int Compare(int left, int right) => right.CompareTo(left);
     }
 
     private struct AscendingComparer : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => left.CompareTo(right);
+        public readonly int Compare(int left, int right) => left.CompareTo(right);
     }
 
     // ── IBatchKernel ────────────────────────────────────────────────────
@@ -196,8 +196,8 @@ public class ContractsTests
         {
             foreach (var right in samples)
             {
-                Math.Sign(ascending.Compare(in left, in right))
-                    .Should().Be(-Math.Sign(ascending.Compare(in right, in left)),
+                Math.Sign(ascending.Compare(left, right))
+                    .Should().Be(-Math.Sign(ascending.Compare(right, left)),
                         $"comparing {left} and {right}");
             }
         }
@@ -210,9 +210,9 @@ public class ContractsTests
 
         int a = 1, b = 2, c = 3;
 
-        ascending.Compare(in a, in b).Should().BeLessThan(0);
-        ascending.Compare(in b, in c).Should().BeLessThan(0);
-        ascending.Compare(in a, in c).Should().BeLessThan(0);
+        ascending.Compare(a, b).Should().BeLessThan(0);
+        ascending.Compare(b, c).Should().BeLessThan(0);
+        ascending.Compare(a, c).Should().BeLessThan(0);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class ContractsTests
         var ascending = new AscendingComparer();
         int a = 5, b = 5;
 
-        ascending.Compare(in a, in b).Should().Be(0);
+        ascending.Compare(a, b).Should().Be(0);
     }
 
     [Fact]
@@ -230,12 +230,12 @@ public class ContractsTests
         var descending = new DescendingComparer();
         int[] data = [3, 1, 4, 1, 5, 9, 2, 6];
         int[] expected = (int[])data.Clone();
-        Array.Sort(expected, (left, right) => descending.Compare(in left, in right));
+        Array.Sort(expected, (left, right) => descending.Compare(left, right));
 
         for (var i = 1; i < expected.Length; i++)
         {
             // Sanity: the ordering Array.Sort produced is non-increasing under our comparer.
-            descending.Compare(in expected[i - 1], in expected[i]).Should().BeLessThanOrEqualTo(0);
+            descending.Compare(expected[i - 1], expected[i]).Should().BeLessThanOrEqualTo(0);
         }
 
         expected.Should().Equal(9, 6, 5, 4, 3, 2, 1, 1);

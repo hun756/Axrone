@@ -85,7 +85,7 @@ public readonly unsafe partial struct NativeBatch<T>
         var store = low - 1;
         for (var probe = low; probe < high; probe++)
         {
-            if (comparer.Compare(in _data[probe], in pivot) <= 0)
+            if (comparer.Compare(_data[probe], pivot) <= 0)
             {
                 store++;
                 Swap(store, probe);
@@ -99,17 +99,17 @@ public readonly unsafe partial struct NativeBatch<T>
     private void MedianOfThree<TComparer>(int low, int mid, int high, TComparer comparer)
         where TComparer : struct, IBatchComparer<T>
     {
-        if (comparer.Compare(in _data[low], in _data[mid]) > 0)
+        if (comparer.Compare(_data[low], _data[mid]) > 0)
         {
             Swap(low, mid);
         }
 
-        if (comparer.Compare(in _data[low], in _data[high]) > 0)
+        if (comparer.Compare(_data[low], _data[high]) > 0)
         {
             Swap(low, high);
         }
 
-        if (comparer.Compare(in _data[mid], in _data[high]) > 0)
+        if (comparer.Compare(_data[mid], _data[high]) > 0)
         {
             Swap(mid, high);
         }
@@ -125,7 +125,7 @@ public readonly unsafe partial struct NativeBatch<T>
             var key = _data[probe];
             var shift = probe - 1;
 
-            while (shift >= low && comparer.Compare(in _data[shift], in key) > 0)
+            while (shift >= low && comparer.Compare(_data[shift], key) > 0)
             {
                 _data[shift + 1] = _data[shift];
                 shift--;
@@ -161,12 +161,12 @@ public readonly unsafe partial struct NativeBatch<T>
             var left = (node << 1) + 1;
             var right = (node << 1) + 2;
 
-            if (left < count && comparer.Compare(in _data[low + left], in _data[low + largest]) > 0)
+            if (left < count && comparer.Compare(_data[low + left], _data[low + largest]) > 0)
             {
                 largest = left;
             }
 
-            if (right < count && comparer.Compare(in _data[low + right], in _data[low + largest]) > 0)
+            if (right < count && comparer.Compare(_data[low + right], _data[low + largest]) > 0)
             {
                 largest = right;
             }

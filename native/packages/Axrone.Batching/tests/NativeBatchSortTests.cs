@@ -9,12 +9,12 @@ public class NativeBatchSortTests
 {
     private struct Ascending : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => left.CompareTo(right);
+        public readonly int Compare(int left, int right) => left.CompareTo(right);
     }
 
     private struct Descending : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => right.CompareTo(left);
+        public readonly int Compare(int left, int right) => right.CompareTo(left);
     }
 
     /// <summary>Sorts by <see cref="Key"/> only, so ties are genuinely interchangeable.</summary>
@@ -26,7 +26,7 @@ public class NativeBatchSortTests
 
     private struct ByKey : IBatchComparer<Payload>
     {
-        public readonly int Compare(in Payload left, in Payload right) => left.Key.CompareTo(right.Key);
+        public readonly int Compare(Payload left, Payload right) => left.Key.CompareTo(right.Key);
     }
 
     private static void SortWith(int[] data, int length, int[] scratch)

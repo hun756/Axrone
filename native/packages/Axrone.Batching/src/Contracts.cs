@@ -86,5 +86,5 @@ public interface IBatchComparer<T> where T : unmanaged
     /// <param name="left">The first element.</param>
     /// <param name="right">The second element.</param>
     /// <returns>A value less than, equal to, or greater than zero when <paramref name="left"/> sorts before, alongside, or after <paramref name="right"/>.</returns>
-    int Compare(in T left, in T right);
+    int Compare(T left, T right);
 }

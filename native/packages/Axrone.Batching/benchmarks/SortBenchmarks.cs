@@ -16,7 +16,7 @@ public class SortBenchmarks
 {
     private readonly struct Ascending : IBatchComparer<int>
     {
-        public readonly int Compare(in int left, in int right) => left.CompareTo(right);
+        public readonly int Compare(int left, int right) => left.CompareTo(right);
     }
 
     [Params(64, 1024, 16384, 262144)]

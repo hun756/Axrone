@@ -108,7 +108,7 @@ public readonly unsafe partial struct NativeBatch<T>
 
         while (left < middle && right < high)
         {
-            if (comparer.Compare(in source[left], in source[right]) <= 0)
+            if (comparer.Compare(source[left], source[right]) <= 0)
             {
                 destination[write++] = source[left++];
             }
