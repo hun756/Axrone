@@ -256,6 +256,40 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
         return SliceResult.Completed(processed, elementElapsed);
     }
 
+    /// <summary>
+    /// Drains the active batch through a visitor without a kernel or budget.
+    /// </summary>
+    /// <typeparam name="TVisitor">Visitor type, passed by value so the call devirtualizes.</typeparam>
+    /// <typeparam name="TState">Visitor state; may be a stack-only type.</typeparam>
+    /// <param name="visitor">Visitor receiving the remaining items.</param>
+    /// <param name="state">Visitor state.</param>
+    /// <returns>Items visited; zero when there was no active remainder.</returns>
+    /// <remarks>
+    /// For fire-and-forget consumption (sums, filters, telemetry taps) where slicing a kernel
+    /// per chunk would only add clock reads. Honors termination like the slice paths.
+    /// </remarks>
+    public int Drain<TVisitor, TState>(ref TVisitor visitor, ref TState state)
+        where TVisitor : struct, IBatchVisitor<T, TState>
+        where TState : allows ref struct
+    {
+        var start = Stopwatch.GetTimestamp();
+        ThrowIfTerminated();
+        if (!EnsureActive())
+        {
+            return 0;
+        }
+
+        var remainder = _active.Items.Span.Slice(_cursor);
+        visitor.Visit(remainder, ref state);
+
+        var visited = remainder.Length;
+        _telemetry.RecordSlice(visited, (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency);
+
+        _hasActive = false;
+        _cursor = 0;
+        return visited;
+    }
+
     /// <summary>Takes an atomic inspection snapshot.</summary>
     public PipelineSnapshot GetSnapshot()
     {
