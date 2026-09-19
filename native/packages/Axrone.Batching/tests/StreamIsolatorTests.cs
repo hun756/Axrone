@@ -15,6 +15,12 @@ public class StreamIsolatorTests
         public bool Evaluate(in int item) => item > 0;
     }
 
+    private readonly struct EvenKeepNegativePoison : IBatchFatePredicate<int>
+    {
+        public BatchItemFate Classify(in int item) =>
+            item < 0 ? BatchItemFate.Poison : (item & 1) == 0 ? BatchItemFate.Keep : BatchItemFate.Skip;
+    }
+
     private readonly struct AllFinite : IBatchValidator<float>
     {
         public bool Validate(ReadOnlySpan<float> batch)
@@ -132,5 +138,43 @@ public class StreamIsolatorTests
     {
         NativeBisectionIsolator.FindPoisonRanges<float, AllFinite>([], new int[2], new AllFinite())
             .Should().Be(0);
+    }
+
+    [Fact]
+    public void ClassifyCompact_SeparatesKeepSkipPoison()
+    {
+        var source = new int[] { 2, 3, -1, 4, -5, 7, 8 };
+
+        var result = NativeStreamCompactor.ClassifyCompact<int, EvenKeepNegativePoison>(
+            source, new int[7], new int[7], new EvenKeepNegativePoison());
+
+        result.KeptCount.Should().Be(3);
+        result.PoisonCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ClassifyCompact_PreservesOrderAndIndices()
+    {
+        var source = new int[] { 2, 3, -1, 4 };
+        var kept = new int[4];
+        var poison = new int[4];
+
+        NativeStreamCompactor.ClassifyCompact<int, EvenKeepNegativePoison>(
+            source, kept, poison, new EvenKeepNegativePoison());
+
+        kept[..2].Should().Equal(2, 4);
+        poison[..1].Should().Equal(2);
+    }
+
+    [Fact]
+    public void ClassifyCompact_ShortDestinations_Truncate()
+    {
+        var source = new int[] { 2, 4, -1, -2, 6 };
+
+        var result = NativeStreamCompactor.ClassifyCompact<int, EvenKeepNegativePoison>(
+            source, new int[1], new int[1], new EvenKeepNegativePoison());
+
+        result.KeptCount.Should().Be(1);
+        result.PoisonCount.Should().Be(1);
     }
 }

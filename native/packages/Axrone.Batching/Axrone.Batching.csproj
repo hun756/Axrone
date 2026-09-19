@@ -17,6 +17,8 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1815: Struct Equals/GetHashCode — lightweight result struct, equality not needed -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory in hot-path structs -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

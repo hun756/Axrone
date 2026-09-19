@@ -62,6 +62,42 @@ public static class NativeStreamCompactor
     }
 
     /// <summary>
+    /// Classifies elements three ways: kept elements copy to <paramref name="kept"/>, poison
+    /// indices land in <paramref name="poisonIndices"/>, skipped elements vanish.
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <typeparam name="TPredicate">Predicate type, passed by value so the call devirtualizes.</typeparam>
+    /// <param name="source">Elements to classify.</param>
+    /// <param name="kept">Receives kept elements in source order.</param>
+    /// <param name="poisonIndices">Receives source indices of poison elements, ascending.</param>
+    /// <param name="predicate">Classification; must be pure.</param>
+    /// <returns>Kept and poison counts; each truncates at its own destination length.</returns>
+    public static FateCompactionResult ClassifyCompact<T, TPredicate>(
+        ReadOnlySpan<T> source, Span<T> kept, Span<int> poisonIndices, TPredicate predicate)
+        where T : unmanaged
+        where TPredicate : struct, IBatchFatePredicate<T>
+    {
+        var keptCount = 0;
+        var poisonCount = 0;
+        for (var i = 0; i < source.Length; i++)
+        {
+            switch (predicate.Classify(in source[i]))
+            {
+                case BatchItemFate.Keep when keptCount < kept.Length:
+                    kept[keptCount++] = source[i];
+                    break;
+                case BatchItemFate.Poison when poisonCount < poisonIndices.Length:
+                    poisonIndices[poisonCount++] = i;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return new FateCompactionResult(keptCount, poisonCount);
+    }
+
+    /// <summary>
     /// Moves passing elements to the front of <paramref name="batch"/>, preserving order.
     /// </summary>
     /// <typeparam name="T">Element type.</typeparam>
