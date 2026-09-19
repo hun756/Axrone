@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { isPointInside, asString, asNumber } from './internals';
+import { isPointInside, asString, asNumber, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -82,7 +82,7 @@ const applyVisuals = (context: RadioGroupContext): boolean => {
         const dotKey = resolveDotKey(props, i);
         const dot = runtime.getBoundWidget(dotKey);
         if (dot !== null) {
-            runtime.updateWidget(dot, { enabled: isSelected });
+            setWidgetVisible(runtime, dot, isSelected);
             applied = true;
         }
 

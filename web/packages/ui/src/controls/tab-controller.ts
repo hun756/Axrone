@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { isPointInside, asString, asNumber } from './internals';
+import { isPointInside, asString, asNumber, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -103,9 +103,7 @@ const applyVisuals = (context: TabContext): boolean => {
         const panelKey = resolvePanelKey(props, i);
         const panel = runtime.getBoundWidget(panelKey);
         if (panel !== null) {
-            runtime.updateWidget(panel, {
-                enabled: isActive,
-            });
+            setWidgetVisible(runtime, panel, isActive);
             applied = true;
         }
     }
