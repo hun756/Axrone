@@ -22,11 +22,7 @@ public readonly unsafe partial struct NativeBatch<T>
     /// </summary>
     /// <typeparam name="TComparer">Comparer type, passed by value so the call devirtualizes.</typeparam>
     /// <param name="comparer">Total order to sort by.</param>
-    /// <remarks>
-    /// Runs in O(n log n) worst case. The depth budget is what makes that bound hold: plain
-    /// quicksort degrades to O(n²) time and O(n) stack on adversarial input, and a batch sorted
-    /// every frame can absolutely be fed adversarial input.
-    /// </remarks>
+    /// <remarks>O(n log n) worst case; the depth budget is what prevents quicksort's O(n²) fallback.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Sort<TComparer>(TComparer comparer)
         where TComparer : struct, IBatchComparer<T>

@@ -6,19 +6,14 @@ namespace Axrone.Batching;
 /// <typeparam name="T">Element type. Unmanaged so a batch can address native memory directly.</typeparam>
 /// <remarks>
 /// <para>
-/// This exists because <see cref="Span{T}"/> cannot be stored in a heap object: a pipeline that
-/// picks up a batch in one frame and keeps chewing through it in the next needs a field that
-/// outlives the span it came from. <c>NativeBatch&lt;T&gt;</c> is that — a span-shaped view with a
-/// lifetime the caller controls.
+/// <see cref="Span{T}"/> cannot be stored in a heap object, but a pipeline that picks up a batch in
+/// one frame and keeps working through it in the next needs a field that outlives the span it came
+/// from. This is that: a span-shaped view with a lifetime the caller controls.
 /// </para>
 /// <para>
-/// It borrows, never owns. Nothing here allocates or frees; whoever produced the batch keeps it
-/// alive for as long as any copy of it is in use. Handing a batch to
-/// <see cref="IBatchKernel{T}"/> or a sort is safe, holding one across a buffer rotation is not.
-/// </para>
-/// <para>
-/// The struct is deliberately copied by value: a sliced or offset batch is a distinct range, and
-/// copying the value never copies an element.
+/// It borrows, never owns. Nothing here allocates or frees, and whoever produced the batch must
+/// keep it alive for as long as any copy is in use — handing a batch to a kernel is safe, holding
+/// one across a buffer rotation is not.
 /// </para>
 /// </remarks>
 public readonly unsafe partial struct NativeBatch<T>

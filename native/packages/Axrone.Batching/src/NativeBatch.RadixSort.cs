@@ -3,6 +3,9 @@ namespace Axrone.Batching;
 /// <summary>
 /// LSD radix sort over 32-bit keys: four 8-bit passes, O(n) each.
 /// </summary>
+/// <remarks>
+/// Passes ping-pong between batch and scratch, so the sorted run lands back in the caller's array.
+/// </remarks>
 public readonly unsafe partial struct NativeBatch<T>
     where T : unmanaged
 {
@@ -89,8 +92,7 @@ public readonly unsafe partial struct NativeBatch<T>
     {
         var count = keys.Length;
 
-        // keys.Length was taken as authoritative and that many payloads written into a possibly
-        // shorter values buffer.
+        // A shorter values batch must be rejected before any scatter.
         if (values.Length != count)
         {
             ThrowHelper.ThrowMismatchedSpans();

@@ -6,13 +6,12 @@ namespace Axrone.Batching;
 /// <remarks>
 /// <para>
 /// Unlike <see cref="Sort{TComparer}"/> this preserves the relative order of elements that compare
-/// equal, which is what render-order and priority queues actually need: sorting transparents by
-/// depth has to keep submission order within a depth tie, or surfaces flicker between frames.
+/// equal, which render ordering depends on: transparents sorted by depth must keep submission
+/// order within a tie.
 /// </para>
 /// <para>
-/// The O(n) scratch is a parameter rather than an allocation on purpose. A batch sorted every
-/// frame should draw its temp storage from a pool that is already warm; allocating one per call
-/// made the sort the most expensive thing in its own loop.
+/// The O(n) scratch is a parameter rather than an allocation so a batch sorted every frame draws
+/// its temp storage from a pool that is already warm.
 /// </para>
 /// </remarks>
 public readonly unsafe partial struct NativeBatch<T>
@@ -98,10 +97,7 @@ public readonly unsafe partial struct NativeBatch<T>
     /// <summary>
     /// Merges <c>[low, middle)</c> with <c>[middle, high)</c> into <c>destination[low..high]</c>.
     /// </summary>
-    /// <remarks>
-    /// Taking from the left run on a tie is the entire stability guarantee — do not flip it to
-    /// <c>&lt;</c> without also renaming this method.
-    /// </remarks>
+    /// <remarks>Taking from the left run on a tie is what makes the merge stable.</remarks>
     private static void MergeRuns<TComparer>(
         T* source, T* destination, int low, int middle, int high, TComparer comparer)
         where TComparer : struct, IBatchComparer<T>
