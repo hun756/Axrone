@@ -17,7 +17,7 @@ namespace Axrone.Batching;
 /// out of the snapshot instead of holding a batch across frames.
 /// </para>
 /// </remarks>
-public sealed class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSlicer<T>
+public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSlicer<T>
     where T : unmanaged
 {
     /// <summary>Smallest chunk the calibrator may select.</summary>
