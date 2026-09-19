@@ -1,4 +1,5 @@
 import { createGameLoop } from '@axrone/game-loop';
+import { getCheckboxChecked } from '@axrone/ui';
 import { describe, expect, it, vi } from 'vitest';
 import type { GlyphAtlasEntry, GlyphAtlasPageSnapshot, TextLayoutResult, UIAsset, UIFrame, UIFrameMetrics, WidgetId } from '@axrone/ui/types';
 import { UIHost, createLazySceneUIWidgetRef } from '@axrone/scene-runtime/scene-facade';
@@ -39,6 +40,100 @@ const createSceneTarget = () => {
         loop,
     };
 };
+
+/** Checkbox asset (160x24 at inset 20,20) for end-to-end input-path tests. */
+const createCheckboxAsset = (): UIAsset => ({
+    id: 'ui.checkbox',
+    name: 'Checkbox',
+    version: 1,
+    canvas: {
+        referenceWidth: 320,
+        referenceHeight: 180,
+        scaleMode: 'fill',
+        matchBias: 0.5,
+    },
+    bindings: {
+        root: 'root',
+        checkbox: 'checkbox',
+        'checkbox-box': 'checkbox-box',
+        'checkbox-mark': 'checkbox-mark',
+        'checkbox-label': 'checkbox-label',
+    },
+    root: {
+        role: 'root',
+        key: 'root',
+        enabled: true,
+        interactive: false,
+        layout: { display: 'overlay', width: '100%', height: '100%' },
+        children: [
+            {
+                role: 'custom:checkbox',
+                key: 'checkbox',
+                enabled: true,
+                interactive: true,
+                controller: 'checkbox-toggle',
+                props: {
+                    boxKey: 'checkbox-box',
+                    markKey: 'checkbox-mark',
+                    labelKey: 'checkbox-label',
+                    isOn: false,
+                },
+                layout: {
+                    display: 'overlay',
+                    position: 'absolute',
+                    inset: { left: 20, top: 20 },
+                    width: 160,
+                    height: 24,
+                },
+                children: [
+                    {
+                        role: 'custom:checkbox-box',
+                        key: 'checkbox-box',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 0, top: 0 },
+                            width: 20,
+                            height: 20,
+                        },
+                        style: { background: '#334155ff', radius: 4 },
+                        children: [
+                            {
+                                role: 'custom:checkbox-mark',
+                                key: 'checkbox-mark',
+                                enabled: false,
+                                interactive: false,
+                                layout: {
+                                    position: 'absolute',
+                                    anchor: { x: 0.5, y: 0.5, pivotX: 0.5, pivotY: 0.5 },
+                                    width: 12,
+                                    height: 12,
+                                },
+                                style: { background: '#00000000' },
+                                children: [],
+                            },
+                        ],
+                    },
+                    {
+                        role: 'text',
+                        key: 'checkbox-label',
+                        enabled: true,
+                        interactive: false,
+                        layout: {
+                            position: 'absolute',
+                            inset: { left: 28, top: 2 },
+                            width: 120,
+                            height: 20,
+                        },
+                        text: { value: 'Option', size: 12 },
+                        children: [],
+                    },
+                ],
+            },
+        ],
+    } as never,
+});
 
 /** HUD asset with one interactive button filling the top-left 100x100. */
 const createHostAsset = (): UIAsset => ({
@@ -1538,6 +1633,112 @@ describe('scene-host UIHost binding', () => {
 
         target.emit('pointerdown', { clientX: fbX, clientY: fbY });
         expect(centerHandler).toHaveBeenCalledTimes(1);
+
+        handle!.dispose();
+    });
+
+    it('toggles a checkbox through the full DOM-to-runtime input path', () => {
+        // End-to-end proof for exported builds: DOM pointer events on the
+        // container must drive a real checkbox-toggle controller (the exact
+        // symptom from the field: preview worked, build clicks did nothing).
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.checkbox', receiveInput: true });
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createCheckboxAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+        handle!.render(320, 180);
+
+        const runtime = handle!.runtime;
+        const widget = runtime.getBoundWidget('checkbox')!;
+        expect(getCheckboxChecked(runtime, widget)).toBe(false);
+
+        const point = {
+            clientX: 30,
+            clientY: 30,
+            pointerId: 1,
+            button: 0,
+            buttons: 1,
+            deltaX: 0,
+            deltaY: 0,
+            altKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+            metaKey: false,
+        };
+        target.emit('pointerdown', point);
+        target.emit('pointerup', { ...point, buttons: 0 });
+        expect(getCheckboxChecked(runtime, widget)).toBe(true);
+
+        target.emit('pointerdown', point);
+        target.emit('pointerup', { ...point, buttons: 0 });
+        expect(getCheckboxChecked(runtime, widget)).toBe(false);
+
+        handle!.dispose();
+    });
+
+    it('still hits widgets after the container moves (no stale rect cache)', () => {
+        // The old wiring cached getBoundingClientRect() on first use: any
+        // layout shift afterwards (status bar, canvas resize) silently offset
+        // every click in exported builds.
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.checkbox', receiveInput: true });
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createCheckboxAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+        handle!.render(320, 180);
+
+        const runtime = handle!.runtime;
+        const widget = runtime.getBoundWidget('checkbox')!;
+        target.emit('pointermove', {
+            clientX: 30, clientY: 30, pointerId: 1, button: 0, buttons: 0,
+            deltaX: 0, deltaY: 0, altKey: false, ctrlKey: false, shiftKey: false, metaKey: false,
+        });
+
+        // Container shifts down 100px: the same buffer point is now at client (30, 130).
+        target.getBoundingClientRect = () => ({ left: 0, top: 100, width: 320, height: 180 });
+        const point = {
+            clientX: 30, clientY: 130, pointerId: 1, button: 0, buttons: 1,
+            deltaX: 0, deltaY: 0, altKey: false, ctrlKey: false, shiftKey: false, metaKey: false,
+        };
+        target.emit('pointerdown', point);
+        target.emit('pointerup', { ...point, buttons: 0 });
+        expect(getCheckboxChecked(runtime, widget)).toBe(true);
+
+        handle!.dispose();
+    });
+
+    it('treats pointercancel as pointerup so touch taps never stick', () => {
+        const scene = createSceneTarget();
+        const target = createInputTarget();
+        const host = new UIHost({ assetId: 'ui.checkbox', receiveInput: true });
+        const handle = bindUIHostToScene({
+            scene,
+            host,
+            resolveAsset: () => createCheckboxAsset(),
+            input: { target },
+        });
+        expect(handle).not.toBeNull();
+        handle!.render(320, 180);
+
+        const runtime = handle!.runtime;
+        const widget = runtime.getBoundWidget('checkbox')!;
+        const point = {
+            clientX: 30, clientY: 30, pointerId: 1, button: 0, buttons: 1,
+            deltaX: 0, deltaY: 0, altKey: false, ctrlKey: false, shiftKey: false, metaKey: false,
+        };
+        target.emit('pointerdown', point);
+        target.emit('pointercancel', point);
+        expect(getCheckboxChecked(runtime, widget)).toBe(true);
 
         handle!.dispose();
     });
