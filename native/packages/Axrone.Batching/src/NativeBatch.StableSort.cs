@@ -45,7 +45,7 @@ public readonly unsafe partial struct NativeBatch<T>
 
         fixed (T* scratchPointer = scratch)
         {
-            if (Intersects(scratchPointer, scratch.Length))
+            if (Overlaps(scratchPointer, scratch.Length))
             {
                 ThrowHelper.ThrowArgumentException(
                     "StableSort scratch must not overlap the batch being sorted.");
@@ -133,24 +133,5 @@ public readonly unsafe partial struct NativeBatch<T>
         {
             destination[write++] = source[right++];
         }
-    }
-
-    /// <summary>
-    /// Rejects a scratch range that intersects the batch, which would let a merge read a slot it is
-    /// concurrently overwriting and silently produce a scrambled order.
-    /// </summary>
-    private bool Intersects(T* other, int otherLength)
-    {
-        if (_length == 0 || otherLength == 0)
-        {
-            return false;
-        }
-
-        var selfStart = (nint)_data;
-        var selfEnd = selfStart + ((nint)(uint)_length * sizeof(T));
-        var otherStart = (nint)other;
-        var otherEnd = otherStart + ((nint)(uint)otherLength * sizeof(T));
-
-        return otherStart < selfEnd && selfStart < otherEnd;
     }
 }

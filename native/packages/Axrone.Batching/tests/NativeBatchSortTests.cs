@@ -29,32 +29,6 @@ public class NativeBatchSortTests
         public readonly int Compare(in Payload left, in Payload right) => left.Key.CompareTo(right.Key);
     }
 
-    /// <summary>
-    /// Deterministic xorshift for reproducible property-test inputs. Deliberately not
-    /// <see cref="Random"/>: these tests need a stable sequence, not a security-grade source, and
-    /// a local generator keeps CA5394 from firing on a rule that has nothing to do with them.
-    /// </summary>
-    private struct SeededRng
-    {
-        private const ulong DefaultSeed = 0x9E3779B97F4A7C15UL;
-
-        private ulong _state;
-
-        public SeededRng(ulong seed) => _state = seed == 0 ? DefaultSeed : seed;
-
-        public int Next(int exclusiveMax) => Next(0, exclusiveMax);
-
-        public int Next(int minInclusive, int maxExclusive)
-        {
-            _state ^= _state << 13;
-            _state ^= _state >> 7;
-            _state ^= _state << 17;
-
-            var range = (ulong)(maxExclusive - minInclusive);
-            return (int)(_state % range) + minInclusive;
-        }
-    }
-
     private static void SortWith(int[] data, int length, int[] scratch)
     {
         Array.Copy(data, scratch, length);

@@ -319,23 +319,4 @@ public class NativeBatchStableSortTests
 
         afterFirst.Should().Equal(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
     }
-
-    /// <summary>Seeded xorshift, shared shape with the introsort tests.</summary>
-    private struct SeededRng
-    {
-        private const ulong DefaultSeed = 0x9E3779B97F4A7C15UL;
-
-        private ulong _state;
-
-        public SeededRng(ulong seed) => _state = seed == 0 ? DefaultSeed : seed;
-
-        public int Next(int minInclusive, int maxExclusive)
-        {
-            _state ^= _state << 13;
-            _state ^= _state >> 7;
-            _state ^= _state << 17;
-
-            return (int)(_state % (ulong)(maxExclusive - minInclusive)) + minInclusive;
-        }
-    }
 }

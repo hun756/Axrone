@@ -135,4 +135,38 @@ public readonly unsafe partial struct NativeBatch<T>
     /// <param name="value">Value to write.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly void Fill(T value) => Span.Fill(value);
+
+    /// <summary>
+    /// Address of the first element. Internal on purpose — callers outside this assembly go
+    /// through <see cref="Span"/>, which carries the bounds with the pointer.
+    /// </summary>
+    internal readonly T* DataPointer
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _data;
+    }
+
+    /// <summary>
+    /// Whether this batch's byte range intersects <c>[other, other + otherLength)</c>.
+    /// </summary>
+    /// <param name="other">First element of the other range.</param>
+    /// <param name="otherLength">Element count of the other range.</param>
+    /// <remarks>
+    /// Ranges are compared in bytes using pointer-sized arithmetic, so a long batch cannot wrap its
+    /// way past the comparison and look disjoint when it is not.
+    /// </remarks>
+    internal readonly bool Overlaps(T* other, int otherLength)
+    {
+        if (_length == 0 || otherLength == 0)
+        {
+            return false;
+        }
+
+        var selfStart = (nuint)_data;
+        var selfEnd = selfStart + ((nuint)(uint)_length * (nuint)sizeof(T));
+        var otherStart = (nuint)other;
+        var otherEnd = otherStart + ((nuint)(uint)otherLength * (nuint)sizeof(T));
+
+        return otherStart < selfEnd && selfStart < otherEnd;
+    }
 }
