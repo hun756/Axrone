@@ -478,24 +478,6 @@ const applyVisuals = (context: CheckboxContext): boolean => {
     return boxReached || markReached || labelReached || (!boxKey && !markKey && !labelKey);
 };
 
-/**
- * Applies the zoom-scale press effect to the root widget.
- * Uses opacity reduction as a visual proxy for scale since the UI
- * animation system supports opacity interpolation.
- */
-const applyZoomScale = (context: CheckboxContext, pressed: boolean): void => {
-    const props = context.props as CheckboxControllerProps;
-    const zoomScale = asNumber(props.zoomScale, NaN);
-    if (!Number.isFinite(zoomScale) || zoomScale >= 1) {
-        return;
-    }
-    // Map zoomScale (e.g. 0.9) to opacity reduction (e.g. 0.9 opacity).
-    const opacity = pressed ? zoomScale : 1;
-    context.runtime.updateWidget(context.widget, {
-        style: { opacity },
-    });
-};
-
 export const checkboxToggleController: WidgetController<
     typeof CHECKBOX_TOGGLE_CONTROLLER_TYPE,
     Record<string, unknown>,
@@ -588,7 +570,6 @@ export const checkboxToggleController: WidgetController<
                 case 'down':
                     state.pressed = true;
                     applyVisuals(typed);
-                    applyZoomScale(typed, true);
                     return true;
                 case 'up': {
                     const wasPressed = state.pressed;
@@ -602,7 +583,6 @@ export const checkboxToggleController: WidgetController<
                         }
                     }
                     applyVisuals(typed);
-                    applyZoomScale(typed, false);
                     return true;
                 }
                 default:
