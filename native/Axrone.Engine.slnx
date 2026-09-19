@@ -13,4 +13,7 @@
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
     <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="packages/Axrone.Batching/benchmarks/Axrone.Batching.Benchmarks.csproj" />
+  </Folder>
 </Solution>
