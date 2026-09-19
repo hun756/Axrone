@@ -331,6 +331,17 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
     }
 
     /**
+     * Returns whether the widget is enabled. Lets controllers render disabled
+     * visuals (input dispatch already skips disabled widgets, but nothing
+     * repaints them unless a controller does).
+     */
+    isWidgetEnabled(widget: WidgetId): boolean {
+        this.ensureActive();
+        const index = this.requireWidget(widget);
+        return this.records[index]!.enabled;
+    }
+
+    /**
      * Returns a clone of the widget's current image input, or null when the
      * widget has no image. Lets controllers read the authored image source
      * (e.g. to restore it after a per-state sprite swap).
