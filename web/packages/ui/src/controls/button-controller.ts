@@ -22,17 +22,12 @@ import { asString, asStringOrNull, asRecord, isPointInside, isValidImageSource, 
  *     transition: 'color' | 'opacity' | 'tint' | 'sprite' | 'none',
  *     tints:      { normal: '#ffffffff', hover: '#cccccccc', ... },
  *     sprites:    { normal: { kind:'texture', resourceId:'btn_normal.png', ... }, ... },
- *     onPress:    'myButtonPressed',  // controller-event name emitted on press
+ *     onPress:    'myButtonPressed',
  *   }
  *
  * `tints` is read only when transition is `'tint'`.
  * `sprites` is read only when transition is `'sprite'`.
  * Both fall back gracefully when the widget has no image configured.
- *
- * Press semantics (Cocos `clickEvents` parity): pointer down inside followed
- * by pointer up inside emits `onPress`; releasing outside cancels. Focused
- * buttons also emit on Enter/Space. Subscribe with
- * `runtime.onControllerEvent(buttonWidget, name, handler)`.
  */
 export const BUTTON_FEEDBACK_CONTROLLER_TYPE = 'button-feedback';
 
@@ -53,7 +48,6 @@ export interface ButtonFeedbackProps {
 	readonly transition?: ButtonTransitionMode;
 	readonly tints?: Partial<Record<ButtonVisualState, string>>;
 	readonly sprites?: Partial<Record<ButtonVisualState, ButtonImageSourceInput>>;
-	/** Controller-event name emitted on press; subscribe via `onControllerEvent`. */
 	readonly onPress?: string;
 }
 
@@ -82,7 +76,6 @@ const resolveVisualState = (state: ButtonFeedbackState, disabled: boolean): Butt
 	return state.pressed ? 'pressed' : state.hovered ? 'hover' : 'normal';
 };
 
-/** Emits the authored `onPress` controller event with pointer/widget geometry. */
 const emitPress = (context: ButtonContext, pointerX: number, pointerY: number): void => {
 	const props = context.props as ButtonFeedbackProps;
 	const name = asString(props.onPress);
@@ -97,7 +90,6 @@ const emitPress = (context: ButtonContext, pointerX: number, pointerY: number): 
 	});
 };
 
-/** Shared visual application for input/mount/update paths (see below). */
 const applyFeedback = (context: ButtonContext): void => {
 	const props = context.props as ButtonFeedbackProps;
 	const state = context.state;
@@ -187,7 +179,6 @@ export const buttonFeedbackController: WidgetController<
 		const typed = context as ButtonContext;
 		const imageInput = typed.runtime.getWidgetImageInput(typed.widget as WidgetId);
 		typed.state.originalSource = imageInput?.source ?? null;
-		// Paint the authored/disabled initial state once bindings are ready.
 		applyFeedback(typed);
 	},
 	update: (context, previousProps) => {
@@ -195,8 +186,6 @@ export const buttonFeedbackController: WidgetController<
 		const props = typed.props as ButtonFeedbackProps;
 		const previous = previousProps as ButtonFeedbackProps;
 
-		// The diff guard also terminates the self-induced pass: feedback writes
-		// touch style/image inputs, never controller props.
 		if (
 			props.states !== previous.states ||
 			props.transition !== previous.transition ||
@@ -214,7 +203,6 @@ export const buttonFeedbackController: WidgetController<
 			return false;
 		}
 
-		// Focused buttons fire on Enter/Space like the imperative handle.
 		if (event.type === 'key') {
 			if (event.phase === 'down' && (event.key === 'Enter' || event.key === ' ') && !event.repeat) {
 				const box = typed.runtime.getLayoutBox(typed.widget as WidgetId);
@@ -236,8 +224,6 @@ export const buttonFeedbackController: WidgetController<
 				state.pressed = false;
 				state.hovered = true;
 				applyFeedback(typed);
-				// Cocos press semantics: down-inside + up-inside fires,
-				// releasing outside cancels silently.
 				if (
 					wasPressed &&
 					isPointInside(typed.runtime, typed.widget as WidgetId, event.x, event.y)

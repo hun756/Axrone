@@ -42,7 +42,6 @@ export interface DragEventPayload {
     readonly cancelled?: boolean;
 }
 
-/** Emitted by `button-feedback` on press (pointer down+up inside, or Enter/Space). */
 export interface PressEventPayload {
     /** Widget origin in reference pixels. */
     readonly x: number;

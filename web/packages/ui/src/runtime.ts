@@ -330,11 +330,6 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return (this.states[index] as TState | undefined) ?? null;
     }
 
-    /**
-     * Returns whether the widget is enabled. Lets controllers render disabled
-     * visuals (input dispatch already skips disabled widgets, but nothing
-     * repaints them unless a controller does).
-     */
     isWidgetEnabled(widget: WidgetId): boolean {
         this.ensureActive();
         const index = this.requireWidget(widget);

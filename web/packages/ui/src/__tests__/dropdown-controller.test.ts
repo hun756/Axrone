@@ -8,21 +8,6 @@ import { dropdownController } from '../controls/dropdown-controller';
 import { createTestFontAsset } from './test-font';
 import type { UIAsset, WidgetId } from '../types';
 
-/**
- * Regression suite for the preview dropdown ("always open, never selects").
- *
- * Covered bugs:
- *  1. The popup was hidden with `enabled: false` only. The render frame,
- *     layout measurement, and hit-testing ignore `enabled` (they track
- *     `style.visible`), so a closed dropdown stayed painted on screen.
- *  2. Item resolution used a box-equality heuristic that leaked nested
- *     children (the label text inside each option row) into the item list,
- *     so hovering row N selected option N+1.
- *  3. Assets without an `itemContainerKey` binding (every document authored
- *     by the UI Editor before the items container existed) never resolved
- *     items at all, making selection impossible.
- */
-
 const textBlock = (value: string, size = 14) => ({
     value,
     family: AXRONE_DEFAULT_UI_FONT_FAMILY,
@@ -57,7 +42,6 @@ const itemRow = (rootKey: string, index: number, label: string) => ({
     ],
 });
 
-/** Modern asset shape: popup holds an explicit items container, all flow layout. */
 const buildModernDropdownAsset = (): UIAsset =>
     ({
         id: 'test-drp-modern',
@@ -206,7 +190,6 @@ const buildModernDropdownAsset = (): UIAsset =>
         },
     }) as unknown as UIAsset;
 
-/** Legacy asset shape: items live directly under an absolute popup, no items container. */
 const buildLegacyDropdownAsset = (): UIAsset => {
     const asset = buildModernDropdownAsset();
     const root = asset.root as unknown as Record<string, unknown>;
@@ -272,7 +255,6 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         const trigger = runtime.getBoundWidget('drp-1-trigger')!;
         const item1 = runtime.getBoundWidget('drp-1-item-1')!;
 
-        // Open via pointer down on the trigger.
         runtime.dispatchInput(pointerAtCenter(runtime, trigger, 'down'));
         let texts = frameTexts(runtime);
         expect(texts).toContain('Option 2');
@@ -281,7 +263,6 @@ describe('dropdown-select controller (preview open/close/select)', () => {
             true,
         );
 
-        // Hover the second row: nested label texts must not shift the mapping.
         runtime.dispatchInput(pointerAtCenter(runtime, item1, 'move'));
         runtime.dispatchInput(pointerAtCenter(runtime, item1, 'up'));
 
@@ -301,19 +282,16 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         const item0 = runtime.getBoundWidget('drp-1-item-0')!;
         const item1 = runtime.getBoundWidget('drp-1-item-1')!;
 
-        // Appearance props land on the authored children.
         runtime.commit();
         expect(runtime.getLayoutBox(trigger).height).toBeCloseTo(36, 5);
 
         runtime.dispatchInput(pointerAtCenter(runtime, trigger, 'down'));
         runtime.commit();
-        // Hidden widgets skip layout, so item geometry is only valid once open.
         expect(runtime.getLayoutBox(item0).height).toBeCloseTo(32, 5);
 
         runtime.dispatchInput(pointerAtCenter(runtime, item1, 'move'));
         runtime.commit();
 
-        // Hovered row uses hoverColor (#ff0000ff); selected row uses selectedColor.
         expect(runtime.getWidgetStyleInput(item1)?.background).toBe('#ff0000ff');
         expect(runtime.getWidgetStyleInput(item0)?.background).toBe('#00ff00ff');
     });
@@ -325,7 +303,6 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         const trigger = runtime.getBoundWidget('drp-1-trigger')!;
         const item0 = runtime.getBoundWidget('drp-1-item-0')!;
 
-        // Closed legacy popup stays hidden too.
         expect(frameTexts(runtime)).not.toContain('Option 2');
 
         runtime.dispatchInput(pointerAtCenter(runtime, trigger, 'down'));
@@ -344,13 +321,9 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         const items = runtime.getBoundWidget('drp-1-items')!;
         const staleItem = runtime.getBoundWidget('drp-1-item-1')!;
 
-        // Open once so the item list gets cached, then close it again.
         runtime.dispatchInput(pointerAtCenter(runtime, trigger, 'down'));
         runtime.dispatchInput(pointerAtCenter(runtime, trigger, 'down'));
 
-        // Swap the middle row (item + label = 2 widgets) for fresh widgets:
-        // same subtree size, different identities. A length-only cache would
-        // keep serving the destroyed ids and crash on getLayoutBox.
         runtime.removeWidget(staleItem);
         const replacement = runtime.createWidget({
             role: 'custom:dropdown-item',
@@ -371,7 +344,6 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         runtime.dispatchInput(pointerAtCenter(runtime, replacement, 'move'));
         runtime.dispatchInput(pointerAtCenter(runtime, replacement, 'up'));
 
-        // The replacement was appended last, so it is now option index 2.
         expect(getDropdownSelectedIndex(runtime, dropdown)).toBe(2);
     });
 
@@ -382,7 +354,6 @@ describe('dropdown-select controller (preview open/close/select)', () => {
 
         runtime.updateWidget(dropdown, { props: { selectedIndex: 2 } });
         expect(getDropdownSelectedIndex(runtime, dropdown)).toBe(2);
-        // Trigger label shows the third option; the popup stays closed.
         const texts = frameTexts(runtime);
         expect(texts.filter((t) => t === 'Option 3')).toHaveLength(1);
     });

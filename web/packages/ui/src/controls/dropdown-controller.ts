@@ -4,42 +4,6 @@ import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
 import { asString, asNumber, setWidgetVisible } from './internals';
 
-/**
- * Declarative dropdown-select controller for `.ui.json` authored dropdowns.
- *
- * The authored widget acts as the interaction surface and its `props` name the
- * child widgets that visualise the selection and popup list:
- *
- *   props: {
- *     options,              // display labels for each option
- *     selectedIndex,        // currently selected index (0-based)
- *     triggerContainerKey,  // named binding -> trigger box (field height/radius/border, state tint)
- *     triggerKey,           // named binding -> text widget showing current selection
- *     popupKey,             // named binding -> popup panel widget (toggled visible/hidden)
- *     itemContainerKey,     // named binding -> container holding item widgets
- *     chevronKey,           // named binding -> chevron indicator (tinted when open)
- *     placeholder,          // text when no selection
- *     fieldHeight,          // trigger box height in px
- *     cornerRadius,         // trigger box corner radius in px
- *     borderWidth,          // trigger box border width in px
- *     arrowSize,            // chevron glyph size in px
- *     arrowColor,           // chevron color when closed
- *     itemHeight,           // option row height in px
- *     hoverColor,           // option row highlight while hovered
- *     selectedColor,        // option row highlight for the current selection
- *     panelRadius,          // popup panel corner radius in px
- *     states,               // { normal, open } trigger background tints
- *   }
- *
- * Child widgets are resolved through the asset's binding table, so the authored
- * keys are the contract; the controller never assumes a tree shape.
- *
- * Visibility contract: the popup is hidden with *both* `enabled: false` and
- * `style.visible: false`. `enabled` alone does not remove a widget from the
- * render frame, layout measurement, or hit-testing (`isVisible` only tracks
- * `style.visible`), so pushing only `enabled` leaves the popup permanently
- * painted on screen.
- */
 export const DROPDOWN_SELECT_CONTROLLER_TYPE = 'dropdown-select';
 
 export type DropdownVisualState = 'normal' | 'hover' | 'open' | 'disabled';
@@ -69,11 +33,8 @@ export interface DropdownControllerState {
     selectedIndex: number;
     isOpen: boolean;
     hoveredIndex: number;
-    /** Cached container widget resolved from itemContainerKey (or popupKey fallback). */
     cachedContainer: WidgetId | null;
-    /** Cached top-level item widgets inside the container. */
     cachedItems: WidgetId[];
-    /** Subtree size the cache was built from; guards against option add/remove. */
     cachedSubtreeSize: number;
 }
 
@@ -86,11 +47,9 @@ type DropdownContext = WidgetControllerContext<
 const asArray = (value: unknown): readonly string[] =>
     Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 
-/** Finite number or null when the prop is absent/invalid (absent = keep authored). */
 const asFiniteNumber = (value: unknown): number | null =>
     typeof value === 'number' && Number.isFinite(value) ? value : null;
 
-/** Non-empty color string or null when the prop is absent (absent = keep authored). */
 const asColorString = (value: unknown): string | null =>
     typeof value === 'string' && value.trim() !== '' ? value : null;
 
@@ -121,7 +80,6 @@ const applySelection = (context: DropdownContext): void => {
     });
 };
 
-/** Shows or hides the popup panel widget based on the current open state. */
 const applyPopupVisibility = (context: DropdownContext): void => {
     const props = context.props as DropdownControllerProps;
     const runtime = context.runtime;
@@ -133,18 +91,9 @@ const applyPopupVisibility = (context: DropdownContext): void => {
     const popup = runtime.getBoundWidget(popupKey);
     if (popup === null) return;
 
-    // Both flags are required: `enabled` gates input dispatch while only
-    // `style.visible` removes the popup from the render frame, layout
-    // measurement, and hit-testing. Pushing `enabled` alone leaves the popup
-    // permanently painted on screen (the "always open" preview bug).
     setWidgetVisible(runtime, popup, state.isOpen);
 };
 
-/**
- * Resolves the widget that owns the option rows: the `itemContainerKey`
- * binding when it resolves, otherwise the popup panel itself (legacy assets
- * authored before the items container existed).
- */
 const resolveItemsContainer = (context: DropdownContext): WidgetId | null => {
     const props = context.props as DropdownControllerProps;
     const runtime = context.runtime;
@@ -159,16 +108,6 @@ const resolveItemsContainer = (context: DropdownContext): WidgetId | null => {
     return runtime.getBoundWidget(popupKey);
 };
 
-/**
- * Resolves and caches the top-level item widgets inside the items container.
- *
- * Items are the outermost widgets of the container subtree: any candidate
- * strictly nested inside another candidate (e.g. a label text inside its
- * option row) is excluded. The old box-equality heuristic leaked those
- * nested children into the list and broke hover-to-option mapping.
- * Results are cached in state; the cache is rebuilt when the container
- * changes or the subtree grows/shrinks (options added or removed).
- */
 const resolveItems = (context: DropdownContext): readonly WidgetId[] => {
     const runtime = context.runtime;
     const state = context.state;
@@ -177,9 +116,6 @@ const resolveItems = (context: DropdownContext): readonly WidgetId[] => {
     if (container === null) return [];
 
     const subtree = runtime.collectSubtreeWidgetIds(container);
-    // Return the cached list when nothing structural changed. The membership
-    // probe covers same-size swaps (an item removed and another added): the
-    // length matches but the cached ids are stale (possibly destroyed).
     if (
         state.cachedContainer === container &&
         state.cachedSubtreeSize === subtree.length &&
@@ -200,8 +136,6 @@ const resolveItems = (context: DropdownContext): readonly WidgetId[] => {
 
     const containerBox = runtime.getLayoutBox(container);
     if (containerBox.width <= 0 || containerBox.height <= 0) {
-        // Layout has not run yet (all boxes are zero); resolving now would
-        // cache garbage, so report empty and let the next pass rebuild.
         return [];
     }
 
@@ -248,11 +182,6 @@ const resolveItems = (context: DropdownContext): readonly WidgetId[] => {
     return items;
 };
 
-/**
- * Updates item background colours to reflect hover and selection.
- * The hovered row uses `hoverColor`; the current selection uses
- * `selectedColor` when it is not hovered; all other rows are transparent.
- */
 const applyHoverHighlight = (context: DropdownContext): void => {
     const props = context.props as DropdownControllerProps;
     const runtime = context.runtime;
@@ -273,7 +202,6 @@ const applyHoverHighlight = (context: DropdownContext): void => {
     }
 };
 
-/** Updates the chevron indicator to reflect open/closed state and arrow props. */
 const applyChevron = (context: DropdownContext): void => {
     const props = context.props as DropdownControllerProps;
     const runtime = context.runtime;
@@ -296,11 +224,6 @@ const applyChevron = (context: DropdownContext): void => {
     runtime.updateWidget(chevron, patch);
 };
 
-/**
- * Pushes authored appearance props onto the trigger box and popup panel.
- * Every prop is optional: absent props leave the authored child styles
- * untouched, so legacy assets without appearance props render unchanged.
- */
 const applyAppearance = (context: DropdownContext): void => {
     const props = context.props as DropdownControllerProps;
     const runtime = context.runtime;

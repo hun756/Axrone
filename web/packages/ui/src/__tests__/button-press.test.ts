@@ -4,13 +4,6 @@ import { buttonFeedbackController } from '../controls/button-controller';
 import { createTestFontAsset } from './test-font';
 import type { UIAsset, WidgetId } from '../types';
 
-/**
- * Cocos `clickEvents` parity for the declarative `button-feedback`
- * controller: down-inside + up-inside emits the authored `onPress`
- * controller event, outside release cancels, disabled buttons stay silent
- * and render the disabled state.
- */
-
 const buildButtonAsset = (enabled: boolean): UIAsset =>
     ({
         id: 'test-btn-press',
