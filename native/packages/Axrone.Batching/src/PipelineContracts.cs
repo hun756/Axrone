@@ -17,6 +17,11 @@ public interface IBatchProducer<T> where T : unmanaged
     /// <returns>Elements accepted; may be fewer than requested when full.</returns>
     int WriteRange(ReadOnlySpan<T> items);
 
+    /// <summary>Appends items with params ergonomics; zero heap allocation.</summary>
+    /// <param name="items">Items to append.</param>
+    /// <returns>Elements accepted; may be fewer than requested when full.</returns>
+    int Write(params ReadOnlySpan<T> items);
+
     /// <summary>Publishes the producer slot.</summary>
     void SwapProducer();
 }

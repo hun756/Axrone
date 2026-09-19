@@ -97,6 +97,10 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     /// <returns>Elements accepted; zero when full or terminated.</returns>
     public int WriteRange(ReadOnlySpan<T> items) => IsActive() ? _buffer.WriteRange(items) : 0;
 
+    /// <summary>Appends items with params ergonomics; zero heap allocation.</summary>
+    /// <returns>Elements accepted; zero when full or terminated.</returns>
+    public int Write(params ReadOnlySpan<T> items) => IsActive() ? _buffer.Write(items) : 0;
+
     /// <summary>Publishes the producer slot. No-op once terminated.</summary>
     public void SwapProducer()
     {

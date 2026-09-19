@@ -84,6 +84,11 @@ public sealed class TripleBuffer<T> where T : unmanaged
         return take;
     }
 
+    /// <summary>Appends items to the producer slot with params ergonomics.</summary>
+    /// <param name="items">Items to append.</param>
+    /// <returns>Elements accepted; may be fewer than requested when full.</returns>
+    public int Write(params ReadOnlySpan<T> items) => WriteRange(items);
+
     /// <summary>Publishes the producer slot and takes the next clean one.</summary>
     /// <remarks>
     /// The generation is bumped before the handoff exchange, so a consumer that observes the new

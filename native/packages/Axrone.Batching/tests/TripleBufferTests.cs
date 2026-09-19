@@ -91,6 +91,16 @@ public class TripleBufferTests
     }
 
     [Fact]
+    public void Write_ParamsSpan_AppendsItems()
+    {
+        var buffer = new TripleBuffer<int>(4);
+
+        buffer.Write(10, 20, 30).Should().Be(3);
+        buffer.SwapProducer();
+        buffer.Acquire().Items.ToArray().Should().Equal(10, 20, 30);
+    }
+
+    [Fact]
     public void SwapProducer_ClearsNextWriteSlot()
     {
         var buffer = new TripleBuffer<int>(2);
