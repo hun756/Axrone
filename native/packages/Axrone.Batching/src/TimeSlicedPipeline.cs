@@ -90,13 +90,21 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     }
 
     /// <summary>Appends one item to the producer slot.</summary>
-    public bool TryWrite(in T item) => _buffer.TryWrite(in item);
+    /// <returns><see langword="false"/> when full or the pipeline is terminated (backpressure, not an error).</returns>
+    public bool TryWrite(in T item) => IsActive() && _buffer.TryWrite(in item);
 
     /// <summary>Appends items to the producer slot.</summary>
-    public int WriteRange(ReadOnlySpan<T> items) => _buffer.WriteRange(items);
+    /// <returns>Elements accepted; zero when full or terminated.</returns>
+    public int WriteRange(ReadOnlySpan<T> items) => IsActive() ? _buffer.WriteRange(items) : 0;
 
-    /// <summary>Publishes the producer slot.</summary>
-    public void SwapProducer() => _buffer.SwapProducer();
+    /// <summary>Publishes the producer slot. No-op once terminated.</summary>
+    public void SwapProducer()
+    {
+        if (IsActive())
+        {
+            _buffer.SwapProducer();
+        }
+    }
 
     /// <summary>
     /// Runs <paramref name="kernel"/> over the active batch within <paramref name="budget"/>.
@@ -108,6 +116,7 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     public SliceResult ExecuteSlice<TKernel>(ref TKernel kernel, in FrameBudget budget)
         where TKernel : struct, IBatchKernel<T>
     {
+        ThrowIfTerminated();
         if (!EnsureActive())
         {
             return SliceResult.Empty(budget.ElapsedMilliseconds);
@@ -178,6 +187,7 @@ public sealed partial class TimeSlicedPipeline<T> : IBatchProducer<T>, IBatchSli
     public SliceResult ExecuteElements<TKernel>(ref TKernel kernel, in FrameBudget budget)
         where TKernel : struct, IElementKernel<T>
     {
+        ThrowIfTerminated();
         if (!EnsureActive())
         {
             return SliceResult.Empty(budget.ElapsedMilliseconds);
