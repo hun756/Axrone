@@ -90,68 +90,22 @@ public static unsafe partial class SimdBatchKernels
     /// <returns>Indices written. When the return equals <paramref name="destination"/>.Length and the
     /// source was not exhausted, the scan truncated.</returns>
     /// <remarks>
-    /// The 8-wide fast path skips fully-finite blocks with one <c>|v| &lt; +inf</c> compare and only
-    /// drops to scalar confirmation for blocks that fail it.
+    /// Deliberately scalar: the 8-wide block-skip version measured ~1.3-1.6x slower
+    /// (see <c>BoundsSpatialBenchmarks</c>). The per-block <c>GetElement</c> inspection plus the
+    /// scalar confirmation pass cost more than the compare saves, and the JIT already
+    /// auto-vectorizes this loop.
     /// </remarks>
     public static int ScanNonFinite(ReadOnlySpan<float> source, Span<int> destination)
     {
-        var count = (nuint)source.Length;
-        if (count == 0 || destination.IsEmpty)
+        var found = 0;
+        for (var i = 0; i < source.Length && found < destination.Length; i++)
         {
-            return 0;
-        }
-
-        ref float sourceBase = ref MemoryMarshal.GetReference(source);
-        ref int targetBase = ref MemoryMarshal.GetReference(destination);
-        var capacity = (nuint)destination.Length;
-        var found = nuint.Zero;
-        nuint index = 0;
-
-        if (Vector256.IsHardwareAccelerated && count >= 8)
-        {
-            var infinity = Vector256.Create(float.PositiveInfinity);
-            nuint step = 8, limit = count - step + 1;
-            for (; index < limit && found < capacity; index += step)
+            if (!float.IsFinite(source[i]))
             {
-                var values = Vector256.LoadUnsafe(ref sourceBase, index);
-                var finite = Vector256.LessThan(Vector256.Abs(values), infinity);
-
-                var clean = true;
-                for (var lane = 0; lane < 8; lane++)
-                {
-                    if (finite.GetElement(lane) == 0f)
-                    {
-                        clean = false;
-                        break;
-                    }
-                }
-
-                if (clean)
-                {
-                    continue;
-                }
-
-                for (var lane = 0; lane < 8 && found < capacity; lane++)
-                {
-                    var value = Unsafe.Add(ref sourceBase, index + (nuint)lane);
-                    if (float.IsNaN(value) || float.IsInfinity(value))
-                    {
-                        Unsafe.Add(ref targetBase, found) = (int)(index + (nuint)lane);
-                        found++;
-                    }
-                }
+                destination[found++] = i;
             }
         }
 
-        for (; index < count && found < capacity; index++)
-        {
-            if (!float.IsFinite(Unsafe.Add(ref sourceBase, index)))
-            {
-                Unsafe.Add(ref targetBase, found) = (int)index;
-                found++;
-            }
-        }
-
-        return (int)found;
+        return found;
     }
 }
