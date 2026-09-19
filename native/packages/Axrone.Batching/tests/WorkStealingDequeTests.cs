@@ -59,6 +59,35 @@ public class WorkStealingDequeTests
         deque.TryPush(2).Should().BeTrue();
 
         deque.TryPush(3).Should().BeFalse();
+        deque.DroppedItems.Should().Be(0);
+    }
+
+    [Fact]
+    public void Push_RejectPolicy_NeverDrops()
+    {
+        var deque = new WorkStealingDeque<int>(2);
+        deque.TryPush(1);
+        deque.TryPush(2);
+
+        deque.TryPush<RejectNewEvictionPolicy>(3).Should().BeFalse();
+        deque.Count.Should().Be(2);
+    }
+
+    [Fact]
+    public void Push_DropOldestPolicy_EvictsOldest()
+    {
+        var deque = new WorkStealingDeque<int>(4);
+        deque.TryPush(1);
+        deque.TryPush(2);
+        deque.TryPush(3);
+        deque.TryPush(4);
+
+        deque.TryPush<DropOldestEvictionPolicy>(5).Should().BeTrue();
+        deque.DroppedItems.Should().Be(1);
+        deque.Count.Should().Be(4);
+
+        deque.TrySteal(out var oldest).Should().BeTrue();
+        oldest.Should().Be(2);
     }
 
     [Fact]

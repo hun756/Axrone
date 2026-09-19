@@ -14,8 +14,9 @@ namespace Axrone.Batching;
 /// <para>
 /// Fixed capacity, like the bounded queues in <c>Axrone.Collections</c>: <see cref="TryPush"/>
 /// reports <see langword="false"/> when full and the scheduler sizes the deque or spills elsewhere.
-/// Silently dropping the item inside this type would hide job loss; returning it keeps the decision
-/// with the caller that knows the overflow policy.
+/// The policy overload makes the other choice explicit — <see cref="DropOldestEvictionPolicy"/>
+/// drops the oldest item and counts it in <see cref="DroppedItems"/> — so overflow is never a
+/// silent default.
 /// </para>
 /// </remarks>
 public sealed class WorkStealingDeque<T>
@@ -25,6 +26,7 @@ public sealed class WorkStealingDeque<T>
 
     private long _top;
     private long _bottom;
+    private long _dropped;
 
     /// <summary>Elements the deque holds.</summary>
     public int Capacity => _buffer.Length;
@@ -41,6 +43,9 @@ public sealed class WorkStealingDeque<T>
 
     /// <summary>Whether the deque looks empty; may shift under concurrent steal.</summary>
     public bool IsEmpty => Volatile.Read(ref _bottom) <= Volatile.Read(ref _top);
+
+    /// <summary>Items dropped by drop-oldest pushes so far.</summary>
+    public long DroppedItems => Volatile.Read(ref _dropped);
 
     /// <summary>Creates a deque.</summary>
     /// <param name="capacityPowerOfTwo">Slot count; must be a power of two, at least 2.</param>
@@ -59,13 +64,31 @@ public sealed class WorkStealingDeque<T>
     /// <summary>Pushes an item (owner only).</summary>
     /// <param name="item">Item to push.</param>
     /// <returns><see langword="false"/> when full.</returns>
-    public bool TryPush(T item)
+    public bool TryPush(T item) => TryPush<RejectNewEvictionPolicy>(item);
+
+    /// <summary>Pushes an item with an overflow policy (owner only).</summary>
+    /// <typeparam name="TPolicy">Eviction policy, monomorphized at the call site.</typeparam>
+    /// <param name="item">Item to push.</param>
+    /// <returns>
+    /// <see langword="true"/> when the item landed. With <see cref="RejectNewEvictionPolicy"/>
+    /// <see langword="false"/> means full and nothing moved; with
+    /// <see cref="DropOldestEvictionPolicy"/> the oldest item was dropped to make room.
+    /// </returns>
+    public bool TryPush<TPolicy>(T item)
+        where TPolicy : struct, IBatchEvictionPolicy
     {
         var bottom = Volatile.Read(ref _bottom);
         var top = Volatile.Read(ref _top);
         if (bottom - top >= _buffer.Length)
         {
-            return false;
+            if (!TPolicy.DropOldest)
+            {
+                return false;
+            }
+
+            Interlocked.Increment(ref _top);
+            TPolicy.OnDropped(ref _dropped, 1);
+            bottom = Volatile.Read(ref _bottom);
         }
 
         _buffer[bottom & _mask] = item;
