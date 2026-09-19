@@ -23,3 +23,4 @@ export * from './controls/toggle-controller';
 export * from './controls/radio-group-controller';
 export * from './controls/segmented-controller';
 export * from './controls/tab-controller';
+export * from './controls/event-trigger-controller';
