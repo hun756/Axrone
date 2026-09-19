@@ -64,7 +64,7 @@ public static unsafe partial class SimdBatchKernels
     /// <exception cref="ArgumentException"><paramref name="velocities"/> is shorter than <paramref name="positions"/>.</exception>
     /// <remarks>
     /// Both spans are contiguous in component order, so this needs no AoS-to-SoA transpose and runs
-    /// as a flat vector pass over <c>count * 3</c> floats.
+    /// as a flat vector pass over <c>count * 3</c> floats, cascading 256 → 128 → scalar.
     /// </remarks>
     public static void IntegrateVelocity(Span<Vector3> positions, ReadOnlySpan<Vector3> velocities, float deltaTime)
     {
@@ -83,7 +83,9 @@ public static unsafe partial class SimdBatchKernels
         ref float velocityBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector3, float>(velocities));
         nuint index = 0;
 
-        if (Vector256.IsHardwareAccelerated && scalarCount >= (nuint)Vector256<float>.Count)
+        // No 512-bit tier by measurement: contiguous 512-bit passes clocked ~2x slower than 256-bit
+        // on the AVX-512 test machine (frequency downclock archetype); see GeometryKernelBenchmarks.
+        if (Vector256.IsHardwareAccelerated && scalarCount - index >= (nuint)Vector256<float>.Count)
         {
             var step = (nuint)Vector256<float>.Count;
             var dt = Vector256.Create(deltaTime);
@@ -95,7 +97,8 @@ public static unsafe partial class SimdBatchKernels
                 Vector256.Add(position, Vector256.Multiply(velocity, dt)).StoreUnsafe(ref positionBase, index);
             }
         }
-        else if (Vector128.IsHardwareAccelerated && scalarCount >= (nuint)Vector128<float>.Count)
+
+        if (Vector128.IsHardwareAccelerated && scalarCount - index >= (nuint)Vector128<float>.Count)
         {
             var step = (nuint)Vector128<float>.Count;
             var dt = Vector128.Create(deltaTime);

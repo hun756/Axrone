@@ -59,7 +59,9 @@ public static unsafe partial class SimdBatchKernels
         ref float targetBase = ref MemoryMarshal.GetReference(destination);
         nuint index = 0;
 
-        if (Vector256.IsHardwareAccelerated && count >= 8)
+        // No 512-bit tier: it measured identical to 256-bit here while carrying the same
+        // downclock risk that regressed IntegrateVelocity ~2x; see GeometryKernelBenchmarks.
+        if (Vector256.IsHardwareAccelerated && count - index >= 8)
         {
             nuint step = 8, limit = count - step + 1;
             for (; index < limit; index += step)
@@ -101,6 +103,39 @@ public static unsafe partial class SimdBatchKernels
                 Vector256.Add(
                     Vector256.Add(Vector256.Multiply(ax, bx), Vector256.Multiply(ay, by)),
                     Vector256.Multiply(az, bz)).StoreUnsafe(ref targetBase, index);
+            }
+        }
+
+        if (Vector128.IsHardwareAccelerated && count - index >= 4)
+        {
+            nuint step = 4, limit = count - step + 1;
+            for (; index < limit; index += step)
+            {
+                var offset = index * 3;
+
+                var ax = Vector128.Create(
+                    Unsafe.Add(ref leftBase, offset), Unsafe.Add(ref leftBase, offset + 3),
+                    Unsafe.Add(ref leftBase, offset + 6), Unsafe.Add(ref leftBase, offset + 9));
+                var ay = Vector128.Create(
+                    Unsafe.Add(ref leftBase, offset + 1), Unsafe.Add(ref leftBase, offset + 4),
+                    Unsafe.Add(ref leftBase, offset + 7), Unsafe.Add(ref leftBase, offset + 10));
+                var az = Vector128.Create(
+                    Unsafe.Add(ref leftBase, offset + 2), Unsafe.Add(ref leftBase, offset + 5),
+                    Unsafe.Add(ref leftBase, offset + 8), Unsafe.Add(ref leftBase, offset + 11));
+
+                var bx = Vector128.Create(
+                    Unsafe.Add(ref rightBase, offset), Unsafe.Add(ref rightBase, offset + 3),
+                    Unsafe.Add(ref rightBase, offset + 6), Unsafe.Add(ref rightBase, offset + 9));
+                var by = Vector128.Create(
+                    Unsafe.Add(ref rightBase, offset + 1), Unsafe.Add(ref rightBase, offset + 4),
+                    Unsafe.Add(ref rightBase, offset + 7), Unsafe.Add(ref rightBase, offset + 10));
+                var bz = Vector128.Create(
+                    Unsafe.Add(ref rightBase, offset + 2), Unsafe.Add(ref rightBase, offset + 5),
+                    Unsafe.Add(ref rightBase, offset + 8), Unsafe.Add(ref rightBase, offset + 11));
+
+                Vector128.Add(
+                    Vector128.Add(Vector128.Multiply(ax, bx), Vector128.Multiply(ay, by)),
+                    Vector128.Multiply(az, bz)).StoreUnsafe(ref targetBase, index);
             }
         }
 
