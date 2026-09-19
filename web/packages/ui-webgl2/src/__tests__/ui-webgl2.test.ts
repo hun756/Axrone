@@ -173,6 +173,7 @@ const createMetrics = (): UIFrameMetrics => ({
     customCommandCount: 1,
     imageCommandCount: 0,
     textCommandCount: 1,
+    strokeCommandCount: 0,
     glyphCount: 1,
     layoutPasses: 1,
 });
