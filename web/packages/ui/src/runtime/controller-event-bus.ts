@@ -16,6 +16,7 @@ export const ControllerEvent = {
     DragStart: 'dragStart',
     DragEnd: 'dragEnd',
     Drop: 'drop',
+    Press: 'press',
 } as const;
 
 export type ControllerEventName = (typeof ControllerEvent)[keyof typeof ControllerEvent];
@@ -28,6 +29,7 @@ export interface ControllerEventMap {
     [ControllerEvent.DragStart]: DragEventPayload;
     [ControllerEvent.DragEnd]: DragEventPayload;
     [ControllerEvent.Drop]: DragEventPayload;
+    [ControllerEvent.Press]: PressEventPayload;
     /** Extension events with dynamic authored names. */
     [eventName: string]: unknown;
 }
@@ -38,6 +40,16 @@ export interface DragEventPayload {
     readonly pointerX?: number;
     readonly pointerY?: number;
     readonly cancelled?: boolean;
+}
+
+/** Emitted by `button-feedback` on press (pointer down+up inside, or Enter/Space). */
+export interface PressEventPayload {
+    /** Widget origin in reference pixels. */
+    readonly x: number;
+    readonly y: number;
+    /** Pointer location for pointer presses; widget center for keyboard presses. */
+    readonly pointerX: number;
+    readonly pointerY: number;
 }
 
 export type ControllerEventHandler<K extends keyof ControllerEventMap = keyof ControllerEventMap> =
