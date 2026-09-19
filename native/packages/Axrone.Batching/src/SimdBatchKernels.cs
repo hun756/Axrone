@@ -9,7 +9,7 @@ namespace Axrone.Batching;
 /// a caller-owned destination, so a kernel can target a slot handed over from a pool without an
 /// intermediate copy.
 /// </remarks>
-public static unsafe class SimdBatchKernels
+public static unsafe partial class SimdBatchKernels
 {
     /// <summary>
     /// Transforms positions by <paramref name="matrix"/>, ignoring the perspective row.
