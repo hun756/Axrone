@@ -246,6 +246,6 @@ public sealed class TimeSlicedPipeline<T> where T : unmanaged
             : (_smoothedTicksPerItem * (1d - SmoothingFactor)) + (sample * SmoothingFactor);
 
         var targetTicks = (double)Stopwatch.Frequency / TargetSliceFrequencyDivisor;
-        _stride = Math.Clamp((int)(targetTicks / _smoothedTicksPerItem), MinStride, MaxStride);
+        _stride = BatchStride.Default.Clamp((int)(targetTicks / _smoothedTicksPerItem));
     }
 }
