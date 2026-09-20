@@ -1,5 +1,7 @@
 namespace Axrone.Utility.Internal;
 
+using Axrone.Utility.Builders;
+
 public static class ThrowHelper
 {
     private const int MaxBatchCapacity = 0x3FFFFFFF;
@@ -224,5 +226,12 @@ public static class ThrowHelper
     public static void ThrowInvalidAdvance()
     {
         throw new ArgumentOutOfRangeException("count", "Advance count exceeds reservation size.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBuilderFailed(in BuilderDiagnostic diagnostic)
+    {
+        throw new InvalidOperationException($"Build failed [{diagnostic.Code}]: {diagnostic.Message}");
     }
 }
