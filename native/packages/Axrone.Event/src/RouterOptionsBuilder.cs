@@ -31,6 +31,13 @@ public sealed class RouterOptionsBuilder
         return this;
     }
 
+    /// <summary>Sets retained failures; oldest drop first when full; 1..1048576.</summary>
+    public RouterOptionsBuilder WithDeadLetterCapacity(int capacity)
+    {
+        State.DeadLetterCapacity = capacity;
+        return this;
+    }
+
     /// <inheritdoc/>
     public override void Reset() => State = RouterOptionsState.Default;
 

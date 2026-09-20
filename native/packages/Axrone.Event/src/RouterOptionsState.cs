@@ -17,14 +17,16 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
     {
         Capacity = 65536,
         DispatchBatchSize = 256,
+        DeadLetterCapacity = 1024,
     };
 
     public int Capacity { get; set; }
     public int DispatchBatchSize { get; set; }
+    public int DeadLetterCapacity { get; set; }
 
     /// <inheritdoc/>
     public static RouterOptions Materialize(in RouterOptionsState state) =>
-        new(state.Capacity, state.DispatchBatchSize);
+        new(state.Capacity, state.DispatchBatchSize, state.DeadLetterCapacity);
 
     /// <inheritdoc/>
     public static bool TryValidate(in RouterOptionsState state, out BuilderDiagnostic diagnostic)
@@ -41,19 +43,27 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
             return false;
         }
 
+        if (state.DeadLetterCapacity is < 1 or > 1048576)
+        {
+            diagnostic = BuilderDiagnostic.Fail(BuilderStatusCode.ValidationFailed, "DeadLetterCapacity must be between 1 and 1048576.");
+            return false;
+        }
+
         diagnostic = BuilderDiagnostic.Ok;
         return true;
     }
 
     /// <inheritdoc/>
     public bool Equals(RouterOptionsState other) =>
-        Capacity == other.Capacity && DispatchBatchSize == other.DispatchBatchSize;
+        Capacity == other.Capacity &&
+        DispatchBatchSize == other.DispatchBatchSize &&
+        DeadLetterCapacity == other.DeadLetterCapacity;
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is RouterOptionsState other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Capacity, DispatchBatchSize);
+    public override int GetHashCode() => HashCode.Combine(Capacity, DispatchBatchSize, DeadLetterCapacity);
 
     public static bool operator ==(RouterOptionsState left, RouterOptionsState right) => left.Equals(right);
 

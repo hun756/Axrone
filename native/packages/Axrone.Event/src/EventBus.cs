@@ -15,7 +15,7 @@ public sealed class EventBus : IEventBus, IDisposable, IAsyncDisposable
     /// <summary>Creates a bus; every per-type router gets the same transport capacity.</summary>
     /// <param name="capacityPerRouter">Ring capacity per event type; must be a power of two.</param>
     public EventBus(int capacityPerRouter = 65536)
-        : this(new RouterOptions(capacityPerRouter, RouterOptions.Default.DispatchBatchSize))
+        : this(RouterOptions.Default with { Capacity = capacityPerRouter })
     {
     }
 

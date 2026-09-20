@@ -91,7 +91,7 @@ public class RouterOptionsBuilderTests
     [Fact]
     public void Router_RejectsZeroBatchSize()
     {
-        var act = () => new EventRouter<int>(new RouterOptions(64, 0));
+        var act = () => new EventRouter<int>(new RouterOptions(64, 0, 16));
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -103,5 +103,37 @@ public class RouterOptionsBuilderTests
         using var bus = new EventBus(options);
 
         bus.Router<int>().TryPublish(3).Should().BeTrue();
+    }
+
+    [Fact]
+    public void DeadLetterCapacity_Validation()
+    {
+        var builder = new RouterOptionsBuilder().WithDeadLetterCapacity(0);
+
+        builder.TryBuild(out _, out BuilderDiagnostic diagnostic).Should().BeFalse();
+        diagnostic.Message.Should().Contain("DeadLetterCapacity");
+    }
+
+    [Fact]
+    public void DeadLetterBound_DropsOldestFirst()
+    {
+        var options = new RouterOptionsBuilder()
+            .WithCapacity(64)
+            .WithDeadLetterCapacity(4)
+            .Build();
+        using var router = new EventRouter<int>(options);
+        using var bad = router.Subscribe((_, _) => throw new InvalidOperationException("poison"));
+
+        for (int i = 0; i < 6; i++)
+        {
+            router.Publish(i);
+        }
+
+        SpinWait.SpinUntil(() => router.DroppedDeadLetters == 2, TimeSpan.FromSeconds(15)).Should().BeTrue();
+        router.DeadLetterCount.Should().Be(4);
+
+        var dead = router.DrainDeadLetters();
+        dead.Select(e => e.Envelope.Payload).Should().Equal(2, 3, 4, 5);
+        router.DroppedDeadLetters.Should().Be(2);
     }
 }

@@ -32,11 +32,16 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
     private int _state;
     private long _sequence;
     private long _droppedItems;
+    private long _droppedDeadLetters;
+    private readonly int _deadLetterCapacity;
     private ExceptionDispatchInfo? _fault;
     private int _disposed;
 
     /// <summary>Items dequeued with no active subscriber.</summary>
     public long DroppedItems => Interlocked.Read(ref _droppedItems);
+
+    /// <summary>Dead letters discarded because the bound was full (oldest first).</summary>
+    public long DroppedDeadLetters => Interlocked.Read(ref _droppedDeadLetters);
 
     /// <summary>Envelopes waiting in transport.</summary>
     public int QueuedCount => _queue.Count;
@@ -49,7 +54,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
     /// <summary>Creates a router with the given transport capacity (power of two).</summary>
     public EventRouter(int capacity = 65536)
-        : this(new RouterOptions(capacity, RouterOptions.Default.DispatchBatchSize))
+        : this(RouterOptions.Default with { Capacity = capacity })
     {
     }
 
@@ -61,6 +66,12 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
             ThrowHelper.ThrowArgumentOutOfRange(nameof(options), "DispatchBatchSize must be positive.");
         }
 
+        if (options.DeadLetterCapacity < 1)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(options), "DeadLetterCapacity must be positive.");
+        }
+
+        _deadLetterCapacity = options.DeadLetterCapacity;
         _dispatchBuffer = new EventEnvelope<TEvent>[options.DispatchBatchSize];
         _queue = new VyukovBoundedBatchQueue<EventEnvelope<TEvent>>(new BufferCapacity((uint)options.Capacity));
         CancellationToken token = _cts.Token;
@@ -356,7 +367,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    _deadLetters.Enqueue(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.HandlerException, ex));
+                    AddDeadLetter(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.HandlerException, ex));
                     NotifyConsumptionError(in envelope, ex);
                 }
             }
@@ -379,7 +390,22 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
         catch (Exception interceptorFault)
         {
-            _deadLetters.Enqueue(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.DispatchFailure, interceptorFault));
+            AddDeadLetter(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.DispatchFailure, interceptorFault));
         }
+    }
+
+    /// <summary>
+    /// Retains a dead letter; when the bound is full the oldest entry is discarded first and
+    /// counted. Count checks are approximate under concurrency; retention never exceeds the
+    /// bound by more than the number of racing producers.
+    /// </summary>
+    private void AddDeadLetter(in DeadLetterEntry<TEvent> entry)
+    {
+        if (_deadLetters.Count >= _deadLetterCapacity && _deadLetters.TryDequeue(out _))
+        {
+            Interlocked.Increment(ref _droppedDeadLetters);
+        }
+
+        _deadLetters.Enqueue(entry);
     }
 }
