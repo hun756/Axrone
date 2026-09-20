@@ -12,6 +12,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
     private ManualResetValueTaskSourceCore<int> _core;
     private CancellationTokenRegistration _registration;
     private SpinLockStackPool<AsyncBatchWaiter<T>>? _pool;
+    private AsyncBatchQueueCoordinator<T>? _coordinator;
 
     public AsyncBatchWaiter<T>? Next { get; set; }
 
@@ -21,6 +22,12 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
 
     public short Version => _core.Version;
 
+    internal AsyncBatchQueueCoordinator<T>? Coordinator
+    {
+        get => _coordinator;
+        set => _coordinator = value;
+    }
+
     public AsyncBatchWaiter()
     {
         _core.RunContinuationsAsynchronously = true;
@@ -29,6 +36,8 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void OnRented(SpinLockStackPool<AsyncBatchWaiter<T>> pool, bool isEnqueue)
     {
+        _registration.Dispose();
+        _registration = default;
         _core.Reset();
         _pool = pool;
         IsEnqueue = isEnqueue;
@@ -45,7 +54,7 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
             _registration = ct.UnsafeRegister(static (state, token) =>
             {
                 var self = (AsyncBatchWaiter<T>)state!;
-                self._core.SetException(new OperationCanceledException(token));
+                self._coordinator?.TryCancelBatchWaiter(self, token);
             }, this);
         }
     }
@@ -53,14 +62,12 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Complete(int result)
     {
-        _registration.Dispose();
         _core.SetResult(result);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Fail(Exception exception)
     {
-        _registration.Dispose();
         _core.SetException(exception);
     }
 
@@ -73,6 +80,8 @@ internal sealed class AsyncBatchWaiter<T> : IValueTaskSource<int>, IPooledWaiter
         }
         finally
         {
+            _registration.Dispose();
+            _registration = default;
             _pool?.Return(this);
         }
     }
@@ -94,6 +103,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     private ManualResetValueTaskSourceCore<T> _core;
     private CancellationTokenRegistration _registration;
     private SpinLockStackPool<AsyncItemWaiter<T>>? _pool;
+    private AsyncBatchQueueCoordinator<T>? _coordinator;
 
     public AsyncItemWaiter<T>? Next { get; set; }
 
@@ -101,6 +111,12 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     internal bool IsEnqueue;
 
     public short Version => _core.Version;
+
+    internal AsyncBatchQueueCoordinator<T>? Coordinator
+    {
+        get => _coordinator;
+        set => _coordinator = value;
+    }
 
     public AsyncItemWaiter()
     {
@@ -110,6 +126,8 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void OnRented(SpinLockStackPool<AsyncItemWaiter<T>> pool, bool isEnqueue)
     {
+        _registration.Dispose();
+        _registration = default;
         _core.Reset();
         _pool = pool;
         IsEnqueue = isEnqueue;
@@ -125,7 +143,7 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
             _registration = ct.UnsafeRegister(static (state, token) =>
             {
                 var self = (AsyncItemWaiter<T>)state!;
-                self._core.SetException(new OperationCanceledException(token));
+                self._coordinator?.TryCancelItemWaiter(self, token);
             }, this);
         }
     }
@@ -133,14 +151,12 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Complete(T result)
     {
-        _registration.Dispose();
         _core.SetResult(result);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Fail(Exception exception)
     {
-        _registration.Dispose();
         _core.SetException(exception);
     }
 
@@ -153,6 +169,8 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
         }
         finally
         {
+            _registration.Dispose();
+            _registration = default;
             _pool?.Return(this);
         }
     }
@@ -165,6 +183,8 @@ internal sealed class AsyncItemWaiter<T> : IValueTaskSource<T>, IValueTaskSource
         }
         finally
         {
+            _registration.Dispose();
+            _registration = default;
             _pool?.Return(this);
         }
     }
@@ -194,73 +214,241 @@ internal sealed class AsyncBatchQueueCoordinator<T>
     private AsyncItemWaiter<T>? _itemDeqHead, _itemDeqTail;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncBatchWaiter<T> RentBatchWaiter(bool isEnqueue) => _batchPool.Rent(isEnqueue);
+    public AsyncBatchWaiter<T> RentBatchWaiter(bool isEnqueue)
+    {
+        AsyncBatchWaiter<T> node = _batchPool.Rent(isEnqueue);
+        node.Coordinator = this;
+        return node;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncItemWaiter<T> RentItemWaiter(bool isEnqueue) => _itemPool.Rent(isEnqueue);
+    public AsyncItemWaiter<T> RentItemWaiter(bool isEnqueue)
+    {
+        AsyncItemWaiter<T> node = _itemPool.Rent(isEnqueue);
+        node.Coordinator = this;
+        return node;
+    }
 
-    public void RegisterBatchEnqueue(AsyncBatchWaiter<T> node)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ReleaseBatchWaiter(AsyncBatchWaiter<T> node) => _batchPool.Return(node);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ReleaseItemWaiter(AsyncItemWaiter<T> node) => _itemPool.Return(node);
+
+    /// <summary>
+    /// Atomically re-checks transport and links the waiter only when still empty. Closes the
+    /// lost-wakeup window between the fast-path attempt and registration: a signal fired in that
+    /// window either lands before the re-check (items taken here) or after the link (waiter
+    /// detached by the signal), never in between.
+    /// </summary>
+    /// <returns>Items taken synchronously (waiter released); zero when the waiter was linked.</returns>
+    public int RegisterOrTakeBatchEnqueue<TQueue>(TQueue queue, ReadOnlyMemory<T> items, AsyncBatchWaiter<T> node)
+        where TQueue : IBatchEnqueue<T>
     {
         using (_syncLock.EnterScope())
         {
-            if (_batchEnqTail == null)
+            int taken = queue.TryEnqueueBatch(items.Span);
+            if (taken > 0)
             {
-                _batchEnqHead = _batchEnqTail = node;
+                ReleaseBatchWaiter(node);
+                return taken;
             }
-            else
-            {
-                _batchEnqTail.Next = node;
-                _batchEnqTail = node;
-            }
+
+            LinkBatch(ref _batchEnqHead, ref _batchEnqTail, node);
+            return 0;
         }
     }
 
-    public void RegisterBatchDequeue(AsyncBatchWaiter<T> node)
+    /// <summary>Dequeue variant of <see cref="RegisterOrTakeBatchEnqueue{TQueue}(TQueue, ReadOnlyMemory{T}, AsyncBatchWaiter{T})"/>.</summary>
+    /// <returns>Items taken synchronously (waiter released); zero when the waiter was linked.</returns>
+    public int RegisterOrTakeBatchDequeue<TQueue>(TQueue queue, Memory<T> destination, AsyncBatchWaiter<T> node)
+        where TQueue : IBatchDequeue<T>
     {
         using (_syncLock.EnterScope())
         {
-            if (_batchDeqTail == null)
+            int taken = queue.TryDequeueBatch(destination.Span);
+            if (taken > 0)
             {
-                _batchDeqHead = _batchDeqTail = node;
+                ReleaseBatchWaiter(node);
+                return taken;
             }
-            else
-            {
-                _batchDeqTail.Next = node;
-                _batchDeqTail = node;
-            }
+
+            LinkBatch(ref _batchDeqHead, ref _batchDeqTail, node);
+            return 0;
         }
     }
 
-    public void RegisterItemEnqueue(AsyncItemWaiter<T> node)
+    /// <summary>
+    /// Item variant of <see cref="RegisterOrTakeBatchEnqueue{TQueue}(TQueue, ReadOnlyMemory{T}, AsyncBatchWaiter{T})"/>.
+    /// </summary>
+    /// <returns>True when the item was taken synchronously (waiter released).</returns>
+    public bool RegisterOrTakeItemEnqueue<TQueue>(TQueue queue, AsyncItemWaiter<T> node)
+        where TQueue : IBatchEnqueue<T>
     {
         using (_syncLock.EnterScope())
         {
-            if (_itemEnqTail == null)
+            if (queue.TryEnqueue(node.Item))
             {
-                _itemEnqHead = _itemEnqTail = node;
+                ReleaseItemWaiter(node);
+                return true;
             }
-            else
-            {
-                _itemEnqTail.Next = node;
-                _itemEnqTail = node;
-            }
+
+            LinkItem(ref _itemEnqHead, ref _itemEnqTail, node);
+            return false;
         }
     }
 
-    public void RegisterItemDequeue(AsyncItemWaiter<T> node)
+    /// <summary>
+    /// Item variant of <see cref="RegisterOrTakeBatchDequeue{TQueue}(TQueue, Memory{T}, AsyncBatchWaiter{T})"/>.
+    /// </summary>
+    /// <returns>True when an item was taken synchronously (waiter released).</returns>
+    public bool RegisterOrTakeItemDequeue<TQueue>(TQueue queue, AsyncItemWaiter<T> node, out T? item)
+        where TQueue : IBatchDequeue<T>
     {
         using (_syncLock.EnterScope())
         {
-            if (_itemDeqTail == null)
+            if (queue.TryDequeue(out T? taken) && taken is not null)
             {
-                _itemDeqHead = _itemDeqTail = node;
+                item = taken;
+                ReleaseItemWaiter(node);
+                return true;
             }
-            else
-            {
-                _itemDeqTail.Next = node;
-                _itemDeqTail = node;
-            }
+
+            item = default!;
+            LinkItem(ref _itemDeqHead, ref _itemDeqTail, node);
+            return false;
         }
+    }
+
+    /// <summary>
+    /// Cancels a waiter by unlinking it under the same lock the signal and dispose paths detach
+    /// with: exactly one side wins, so the core completes exactly once. A waiter already
+    /// detached is owned by the signal/dispose path and left alone.
+    /// </summary>
+    /// <returns>True when this call unlinked and completed the waiter.</returns>
+    public bool TryCancelBatchWaiter(AsyncBatchWaiter<T> node, CancellationToken token)
+    {
+        using (_syncLock.EnterScope())
+        {
+            if (UnlinkBatch(ref _batchEnqHead, ref _batchEnqTail, node) ||
+                UnlinkBatch(ref _batchDeqHead, ref _batchDeqTail, node))
+            {
+                node.Fail(new OperationCanceledException(token));
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <inheritdoc cref="TryCancelBatchWaiter(AsyncBatchWaiter{T}, CancellationToken)"/>
+    public bool TryCancelItemWaiter(AsyncItemWaiter<T> node, CancellationToken token)
+    {
+        using (_syncLock.EnterScope())
+        {
+            if (UnlinkItem(ref _itemEnqHead, ref _itemEnqTail, node) ||
+                UnlinkItem(ref _itemDeqHead, ref _itemDeqTail, node))
+            {
+                node.Fail(new OperationCanceledException(token));
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    private static void LinkBatch(ref AsyncBatchWaiter<T>? head, ref AsyncBatchWaiter<T>? tail, AsyncBatchWaiter<T> node)
+    {
+        node.Next = null;
+        if (tail == null)
+        {
+            head = tail = node;
+        }
+        else
+        {
+            tail.Next = node;
+            tail = node;
+        }
+    }
+
+    private static void LinkItem(ref AsyncItemWaiter<T>? head, ref AsyncItemWaiter<T>? tail, AsyncItemWaiter<T> node)
+    {
+        node.Next = null;
+        if (tail == null)
+        {
+            head = tail = node;
+        }
+        else
+        {
+            tail.Next = node;
+            tail = node;
+        }
+    }
+
+    private static bool UnlinkBatch(ref AsyncBatchWaiter<T>? head, ref AsyncBatchWaiter<T>? tail, AsyncBatchWaiter<T> node)
+    {
+        AsyncBatchWaiter<T>? current = head;
+        AsyncBatchWaiter<T>? previous = null;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, node))
+            {
+                if (previous == null)
+                {
+                    head = node.Next;
+                }
+                else
+                {
+                    previous.Next = node.Next;
+                }
+
+                if (ReferenceEquals(tail, node))
+                {
+                    tail = previous;
+                }
+
+                node.Next = null;
+                return true;
+            }
+
+            previous = current;
+            current = current.Next;
+        }
+
+        return false;
+    }
+
+    private static bool UnlinkItem(ref AsyncItemWaiter<T>? head, ref AsyncItemWaiter<T>? tail, AsyncItemWaiter<T> node)
+    {
+        AsyncItemWaiter<T>? current = head;
+        AsyncItemWaiter<T>? previous = null;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, node))
+            {
+                if (previous == null)
+                {
+                    head = node.Next;
+                }
+                else
+                {
+                    previous.Next = node.Next;
+                }
+
+                if (ReferenceEquals(tail, node))
+                {
+                    tail = previous;
+                }
+
+                node.Next = null;
+                return true;
+            }
+
+            previous = current;
+            current = current.Next;
+        }
+
+        return false;
     }
 
     public void SignalEnqueueWaiters<TQueue>(TQueue queue) where TQueue : IBatchEnqueue<T>
