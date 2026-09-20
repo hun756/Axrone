@@ -171,6 +171,8 @@ describe('DEFAULT_OPTIONS Constant', () => {
                 concurrencyLimit: userOptions.concurrencyLimit ?? DEFAULT_OPTIONS.concurrencyLimit,
                 bufferSize: userOptions.bufferSize ?? DEFAULT_OPTIONS.bufferSize,
                 gcIntervalMs: userOptions.gcIntervalMs ?? DEFAULT_OPTIONS.gcIntervalMs,
+                bufferOverflow: userOptions.bufferOverflow ?? DEFAULT_OPTIONS.bufferOverflow,
+                metrics: userOptions.metrics ?? DEFAULT_OPTIONS.metrics,
             };
         }
 
