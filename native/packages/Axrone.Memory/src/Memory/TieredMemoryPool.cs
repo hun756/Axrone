@@ -203,8 +203,20 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     {
         PerThreadPartitionCache<T> threadCache = PerThreadPartitionCache<T>.Instance;
 
-        if (threadCache.TryRetrieve(bucketIndex, out PooledBufferSlot<T>? cachedSlot))
+        // The thread cache is shared across pool instances while bucket indices are
+        // pool-relative: a slot cached by another pool must never serve this rent, or a
+        // smaller block leaks through MinimumBlockSize. Foreign slots are evicted (the
+        // partition only shrinks, so the loop terminates) and we fall through below.
+        while (threadCache.TryRetrieve(bucketIndex, out PooledBufferSlot<T>? cachedSlot))
         {
+            if (!ReferenceEquals(cachedSlot.Registry, this))
+            {
+                ref var evictCell = ref PoolCounterStore.Current.Cell;
+                evictCell.TotalAllocatedBytes -= _allocator.ComputeByteSize(cachedSlot.Capacity);
+                cachedSlot.FinalizeEviction();
+                continue;
+            }
+
             ref var cell = ref PoolCounterStore.Current.Cell;
             cell.Tier1Hits++;
             cell.ActiveAllocations++;

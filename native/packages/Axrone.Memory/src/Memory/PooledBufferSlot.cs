@@ -49,6 +49,9 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
         get => _slotCapacity;
     }
 
+    /// <summary>Owning pool; the thread cache is shared across instances, so rent must validate it.</summary>
+    internal IPoolBucketRegistry<T> Registry => _registry;
+
     public Memory<T> Memory
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
