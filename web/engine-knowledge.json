@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-13T20:58:18.019Z",
+  "generatedAt": "2026-09-19T20:48:48.505Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -8754,6 +8754,7 @@
         "DynamicFontGlyphRaster",
         "DynamicFontRuntimeFactory",
         "EDIT_BOX_CONTROLLER_TYPE",
+        "EVENT_TRIGGER_CONTROLLER_TYPE",
         "Easing",
         "EdgeInsets",
         "FocusMoveDirection",
@@ -8867,6 +8868,7 @@
         "ensureDefaultUIFont",
         "ensureFallbackUIFont",
         "ensureSystemUIFont",
+        "eventTriggerController",
         "getCheckboxChecked",
         "getDropdownSelectedIndex",
         "getEditBoxValue",
@@ -8875,6 +8877,7 @@
         "getSliderValue",
         "getTabSelectedIndex",
         "getToggleIsOn",
+        "isEventTriggerArmed",
         "isTooltipVisible",
         "isWidgetDragging",
         "mapViewportPointToCanvas",
@@ -8914,12 +8917,10 @@
         "Axis",
         "BrowserSystemFontFaceRuntimeOptions",
         "ButtonFeedbackProps",
-        "ButtonImageSourceInput",
         "ButtonTransitionMode",
         "ButtonVisualState",
         "CheckboxControllerProps",
         "CheckboxControllerState",
-        "CheckboxImageSourceInput",
         "CheckboxMarkStyle",
         "CheckboxTransitionMode",
         "CheckboxVisualState",
@@ -8936,6 +8937,7 @@
         "DragControllerState",
         "DropdownControllerProps",
         "DropdownControllerState",
+        "DropdownVisualState",
         "DynamicFontFaceAsset",
         "DynamicFontFaceRuntime",
         "DynamicFontGlyphRaster",
@@ -8947,6 +8949,9 @@
         "EdgeInsets",
         "EditBoxControllerProps",
         "EditBoxControllerState",
+        "EventTriggerControllerProps",
+        "EventTriggerControllerState",
+        "EventTriggerEventType",
         "FlexWrapMode",
         "FocusMoveDirection",
         "FontAssetSource",
@@ -9131,6 +9136,7 @@
             "DRAG_CONTROLLER_TYPE",
             "DROPDOWN_SELECT_CONTROLLER_TYPE",
             "EDIT_BOX_CONTROLLER_TYPE",
+            "EVENT_TRIGGER_CONTROLLER_TYPE",
             "Easing",
             "RADIO_GROUP_CONTROLLER_TYPE",
             "SEGMENTED_CONTROL_CONTROLLER_TYPE",
@@ -9165,6 +9171,7 @@
             "dropdownController",
             "editBoxController",
             "ensureFallbackUIFont",
+            "eventTriggerController",
             "getCheckboxChecked",
             "getDropdownSelectedIndex",
             "getEditBoxValue",
@@ -9173,6 +9180,7 @@
             "getSliderValue",
             "getTabSelectedIndex",
             "getToggleIsOn",
+            "isEventTriggerArmed",
             "isTooltipVisible",
             "isWidgetDragging",
             "radioGroupController",
@@ -9189,12 +9197,10 @@
           "typeExports": [
             "AnimationTarget",
             "ButtonFeedbackProps",
-            "ButtonImageSourceInput",
             "ButtonTransitionMode",
             "ButtonVisualState",
             "CheckboxControllerProps",
             "CheckboxControllerState",
-            "CheckboxImageSourceInput",
             "CheckboxMarkStyle",
             "CheckboxTransitionMode",
             "CheckboxVisualState",
@@ -9204,9 +9210,13 @@
             "DragControllerState",
             "DropdownControllerProps",
             "DropdownControllerState",
+            "DropdownVisualState",
             "EasingFunction",
             "EditBoxControllerProps",
             "EditBoxControllerState",
+            "EventTriggerControllerProps",
+            "EventTriggerControllerState",
+            "EventTriggerEventType",
             "PopupConfig",
             "PopupHandle",
             "PopupManager",
@@ -15138,11 +15148,6 @@
       "kind": "unknown"
     },
     {
-      "name": "ButtonImageSourceInput",
-      "package": "@axrone/ui",
-      "kind": "unknown"
-    },
-    {
       "name": "ButtonTransitionMode",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -15449,11 +15454,6 @@
     },
     {
       "name": "CheckboxControllerState",
-      "package": "@axrone/ui",
-      "kind": "unknown"
-    },
-    {
-      "name": "CheckboxImageSourceInput",
       "package": "@axrone/ui",
       "kind": "unknown"
     },
@@ -19138,6 +19138,11 @@
       "kind": "unknown"
     },
     {
+      "name": "DropdownVisualState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "Duration",
       "package": "@axrone/profiler",
       "kind": "unknown"
@@ -19513,6 +19518,11 @@
       "kind": "unknown"
     },
     {
+      "name": "EVENT_TRIGGER_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "EventBus",
       "package": "@axrone/ecs-runtime",
       "kind": "interface"
@@ -19601,6 +19611,26 @@
       "name": "EventTransformer",
       "package": "@axrone/event",
       "kind": "type"
+    },
+    {
+      "name": "eventTriggerController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "EventTriggerControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "EventTriggerControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "EventTriggerEventType",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "EventType",
@@ -25101,6 +25131,11 @@
       "name": "isEventEmitter",
       "package": "@axrone/event",
       "kind": "function"
+    },
+    {
+      "name": "isEventTriggerArmed",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "IsFiniteNumber",
@@ -43863,6 +43898,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "EVENT_TRIGGER_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const EVENT_TRIGGER_CONTROLLER_TYPE = \"event-trigger\";",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "EventEmitter",
       "kind": "class",
       "code": "declare class EventEmitter<T extends EventMap = EventMap> implements IEventEmitter<T> { constructor(options?: EventOptions); get maxListeners(): number; set maxListeners(value: number); resetMaxListeners(): void; offById(subscriptionId: symbol): boolean; emitBatch(events: ReadonlyArray<EventDispatc…",
@@ -43897,6 +43938,12 @@
       "kind": "class",
       "code": "declare class EventScheduler { constructor(options?: ISchedulerOptions); get activeCount(): number; get queuedCount(): number; get isAtCapacity(): boolean; get disposed(): boolean; drain(): Promise<void>; getStats(): ISchedulerStats; getTaskMetrics(taskId: TaskId): ITaskMetrics | null; getAllTaskMe…",
       "package": "@axrone/event"
+    },
+    {
+      "name": "eventTriggerController",
+      "kind": "const",
+      "code": "declare const eventTriggerController: WidgetController<typeof EVENT_TRIGGER_CONTROLLER_TYPE, Record<string, unknown>, EventTriggerControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "EventUtils",
@@ -45799,6 +45846,12 @@
       "kind": "function",
       "code": "declare function isEventEmitter(value: unknown): value is IEventEmitter;",
       "package": "@axrone/event"
+    },
+    {
+      "name": "isEventTriggerArmed",
+      "kind": "const",
+      "code": "declare const isEventTriggerArmed: (runtime: UIRuntime, widget: WidgetId) => boolean | null;",
+      "package": "@axrone/ui"
     },
     {
       "name": "isGameLoopScheduler",
