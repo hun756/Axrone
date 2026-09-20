@@ -19,6 +19,8 @@
     <NoWarn>$(NoWarn);CA1815</NoWarn>
     <!-- CA1028: Enum storage type — byte chosen for minimal memory in hot-path structs -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1000: Static members on generic types — required by IAggregateDefinition static abstracts on state structs -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

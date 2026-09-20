@@ -55,7 +55,37 @@ public class PipelineBuilderTests
         builder.TryBuild(out var pipeline, out BuilderDiagnostic diagnostic).Should().BeFalse();
         pipeline.Should().BeNull();
         diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
-        diagnostic.Message.Should().Contain("ArgumentOutOfRangeException");
+        diagnostic.Message.Should().Contain("Capacity must be positive");
+    }
+
+    [Fact]
+    public void State_ValidatesWithoutBuilder()
+    {
+        var state = PipelineState<int>.Default;
+        state.Capacity = -4;
+
+        PipelineState<int>.TryValidate(in state, out var diagnostic).Should().BeFalse();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
+    }
+
+    [Fact]
+    public void Fork_DivergesIndependently()
+    {
+        var original = TimeSlicedPipeline.Create<int>(8);
+        var fork = original.Fork().WithCapacity(64);
+
+        original.Build().Capacity.Should().Be(8);
+        fork.Build().Capacity.Should().Be(64);
+    }
+
+    [Fact]
+    public void Reset_ClearsToPristine()
+    {
+        var builder = TimeSlicedPipeline.Create<int>(8).WithStride(BatchStride.LowLatency);
+        builder.Reset();
+
+        builder.TryBuild(out _, out BuilderDiagnostic diagnostic).Should().BeFalse();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
     }
 
     [Fact]

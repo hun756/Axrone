@@ -1,6 +1,5 @@
 namespace Axrone.Batching;
 
-using System.Diagnostics.CodeAnalysis;
 using Axrone.Utility.Builders;
 
 /// <summary>Entry point for pipeline builders.</summary>
@@ -17,22 +16,27 @@ public static class TimeSlicedPipeline
         where T : unmanaged => new(capacity);
 }
 
-/// <summary>Fluent builder for <see cref="TimeSlicedPipeline{T}"/> instances.</summary>
+/// <summary>Fluent builder for <see cref="TimeSlicedPipeline{T}"/> instances over a mutable accumulator state.</summary>
 /// <typeparam name="T">Element type.</typeparam>
-public sealed class TimeSlicedPipelineBuilder<T> : BuilderBase<TimeSlicedPipelineBuilder<T>, TimeSlicedPipeline<T>>
+/// <remarks>
+/// Capacity is structurally required via the entry points, so the required mask is empty and
+/// domain validation is authoritative. Supports fork/reset for template workflows.
+/// </remarks>
+public sealed class TimeSlicedPipelineBuilder<T>
+    : AggregateBuilder<TimeSlicedPipelineBuilder<T>, PipelineState<T>, TimeSlicedPipeline<T>>
     where T : unmanaged
 {
-    private int _capacity;
-    private BatchStride _stride = BatchStride.Default;
-    private string _meterName = "Axrone.Batching";
-
-    internal TimeSlicedPipelineBuilder(int capacity) => _capacity = capacity;
+    internal TimeSlicedPipelineBuilder(int capacity)
+    {
+        State = PipelineState<T>.Default;
+        State.Capacity = capacity;
+    }
 
     /// <summary>Sets slot capacity.</summary>
     /// <param name="capacity">Elements per buffer slot.</param>
     public TimeSlicedPipelineBuilder<T> WithCapacity(int capacity)
     {
-        _capacity = capacity;
+        State.Capacity = capacity;
         return this;
     }
 
@@ -40,7 +44,7 @@ public sealed class TimeSlicedPipelineBuilder<T> : BuilderBase<TimeSlicedPipelin
     /// <param name="stride">Stride bounds.</param>
     public TimeSlicedPipelineBuilder<T> WithStride(BatchStride stride)
     {
-        _stride = stride;
+        State.Stride = stride;
         return this;
     }
 
@@ -48,17 +52,22 @@ public sealed class TimeSlicedPipelineBuilder<T> : BuilderBase<TimeSlicedPipelin
     /// <param name="meterName">OpenTelemetry meter name.</param>
     public TimeSlicedPipelineBuilder<T> WithTelemetry(string meterName)
     {
-        _meterName = meterName;
+        State.MeterName = meterName;
         return this;
     }
 
     /// <inheritdoc/>
     protected override TimeSlicedPipelineBuilder<T> Self => this;
 
-    /// <summary>Attempts to build, reporting the pipeline guard failure as a diagnostic.</summary>
-    public override bool TryBuild([MaybeNullWhen(false)] out TimeSlicedPipeline<T> result, out BuilderDiagnostic diagnostic) =>
-        TryCreate(Build, out result, out diagnostic);
+    /// <inheritdoc/>
+    protected override PropertyBitmask64 RequiredMask => PropertyBitmask64.None;
 
-    /// <summary>Builds the pipeline.</summary>
-    public override TimeSlicedPipeline<T> Build() => new(_capacity, _stride, _meterName);
+    /// <summary>Builds the pipeline; preserves the product's throw contract.</summary>
+    public override TimeSlicedPipeline<T> Build() => PipelineState<T>.Materialize(in State);
+
+    /// <inheritdoc/>
+    public override void Reset() => State = PipelineState<T>.Default;
+
+    /// <inheritdoc/>
+    public override TimeSlicedPipelineBuilder<T> Fork() => CopyTo(new TimeSlicedPipelineBuilder<T>(State.Capacity));
 }
