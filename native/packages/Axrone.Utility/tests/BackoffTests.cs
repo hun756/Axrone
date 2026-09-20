@@ -365,7 +365,40 @@ public class BackoffConfigurationBuilderTests
 
         builder.TryBuild(out _, out var diagnostic).Should().BeFalse();
         diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
-        diagnostic.Message.Should().Contain("ArgumentException");
+        diagnostic.Message.Should().Contain("MaxDuration cannot be less than MinDuration");
+    }
+
+    [Fact]
+    public void State_ValidatesWithoutBuilder()
+    {
+        var state = BackoffConfigurationState.Default with
+        {
+            Multiplier = 0.5,
+        };
+
+        BackoffConfigurationState.TryValidate(in state, out var diagnostic).Should().BeFalse();
+        diagnostic.Message.Should().Contain("Multiplier");
+    }
+
+    [Fact]
+    public void Fork_DivergesIndependently()
+    {
+        var original = new BackoffConfigurationBuilder().WithMultiplier(3.0);
+        var fork = original.Fork().WithMultiplier(4.0);
+
+        original.Build().Multiplier.Should().Be(3.0);
+        fork.Build().Multiplier.Should().Be(4.0);
+    }
+
+    [Fact]
+    public void Reset_RestoresDefaults()
+    {
+        var builder = new BackoffConfigurationBuilder().WithMultiplier(9.0);
+        builder.Reset();
+
+        var config = builder.Build();
+        config.Multiplier.Should().Be(2.0);
+        config.JitterRatio.Should().Be(0.25);
     }
 
     [Fact]

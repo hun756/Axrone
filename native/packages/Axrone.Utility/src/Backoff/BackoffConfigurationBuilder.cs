@@ -1,80 +1,80 @@
 namespace Axrone.Utility.Backoff;
 
-using System.Diagnostics.CodeAnalysis;
 using Axrone.Utility.Builders;
 
-public sealed class BackoffConfigurationBuilder : BuilderBase<BackoffConfigurationBuilder, BackoffConfiguration>
+/// <summary>
+/// Fluent builder for <see cref="BackoffConfiguration"/> over a mutable accumulator state.
+/// </summary>
+/// <remarks>
+/// Every field carries a working default, so nothing is "missing-able": the required mask is
+/// empty and domain validation is authoritative. Supports fork/reset for template workflows.
+/// </remarks>
+public sealed class BackoffConfigurationBuilder
+    : AggregateBuilder<BackoffConfigurationBuilder, BackoffConfigurationState, BackoffConfiguration>
 {
-    private BackoffDuration _minDuration = BackoffDuration.FromMicroseconds(50);
-    private BackoffDuration _maxDuration = BackoffDuration.FromMilliseconds(2000);
-    private BackoffDuration _stepIncrement = BackoffDuration.FromMilliseconds(5);
-    private uint _spinIterationsThreshold = 8;
-    private uint _yieldIterationsThreshold = 16;
-    private double _multiplier = 2.0;
-    private double _jitterRatio = 0.25;
-    private uint _maxRetryLimit = uint.MaxValue;
+    public BackoffConfigurationBuilder()
+    {
+        State = BackoffConfigurationState.Default;
+    }
+
+    protected override BackoffConfigurationBuilder Self => this;
+
+    protected override PropertyBitmask64 RequiredMask => PropertyBitmask64.None;
 
     public BackoffConfigurationBuilder WithMinDuration(BackoffDuration duration)
     {
-        _minDuration = duration;
+        State.MinDuration = duration;
         return this;
     }
 
     public BackoffConfigurationBuilder WithMaxDuration(BackoffDuration duration)
     {
-        _maxDuration = duration;
+        State.MaxDuration = duration;
         return this;
     }
 
     public BackoffConfigurationBuilder WithStepIncrement(BackoffDuration increment)
     {
-        _stepIncrement = increment;
+        State.StepIncrement = increment;
         return this;
     }
 
     public BackoffConfigurationBuilder WithSpinIterationsThreshold(uint threshold)
     {
-        _spinIterationsThreshold = threshold;
+        State.SpinIterationsThreshold = threshold;
         return this;
     }
 
     public BackoffConfigurationBuilder WithYieldIterationsThreshold(uint threshold)
     {
-        _yieldIterationsThreshold = threshold;
+        State.YieldIterationsThreshold = threshold;
         return this;
     }
 
     public BackoffConfigurationBuilder WithMultiplier(double multiplier)
     {
-        _multiplier = multiplier;
+        State.Multiplier = multiplier;
         return this;
     }
 
     public BackoffConfigurationBuilder WithJitterRatio(double jitterRatio)
     {
-        _jitterRatio = jitterRatio;
+        State.JitterRatio = jitterRatio;
         return this;
     }
 
     public BackoffConfigurationBuilder WithMaxRetryLimit(uint maxRetryLimit)
     {
-        _maxRetryLimit = maxRetryLimit;
+        State.MaxRetryLimit = maxRetryLimit;
         return this;
     }
 
-    protected override BackoffConfigurationBuilder Self => this;
+    /// <summary>Builds the configuration; preserves the product's throw contract.</summary>
+    public override BackoffConfiguration Build() => BackoffConfigurationState.Materialize(in State);
 
-    public override bool TryBuild([MaybeNullWhen(false)] out BackoffConfiguration result, out BuilderDiagnostic diagnostic) =>
-        TryCreate(Build, out result, out diagnostic);
+    /// <inheritdoc/>
+    public override void Reset() => State = BackoffConfigurationState.Default;
 
-    public override BackoffConfiguration Build() =>
-        new(
-            _minDuration,
-            _maxDuration,
-            _stepIncrement,
-            _spinIterationsThreshold,
-            _yieldIterationsThreshold,
-            _multiplier,
-            _jitterRatio,
-            _maxRetryLimit);
+    /// <inheritdoc/>
+    public override BackoffConfigurationBuilder Fork() => CopyTo(new BackoffConfigurationBuilder());
 }

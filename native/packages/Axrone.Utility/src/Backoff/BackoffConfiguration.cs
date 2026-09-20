@@ -1,5 +1,15 @@
 namespace Axrone.Utility.Backoff;
 
+/// <summary>Invariant rule violated by a backoff configuration; none when valid.</summary>
+internal enum BackoffInvariant : byte
+{
+    None = 0,
+    MaxLessThanMin = 1,
+    YieldLessThanSpin = 2,
+    MultiplierTooSmall = 3,
+    JitterOutOfRange = 4,
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 public readonly struct BackoffConfiguration : IEquatable<BackoffConfiguration>
 {
@@ -22,21 +32,22 @@ public readonly struct BackoffConfiguration : IEquatable<BackoffConfiguration>
         double jitterRatio,
         uint maxRetryLimit)
     {
-        if (maxDuration < minDuration)
+        switch (CheckInvariants(minDuration, maxDuration, spinIterationsThreshold, yieldIterationsThreshold, multiplier, jitterRatio))
         {
-            ThrowHelper.ThrowArgumentException("MaxDuration cannot be less than MinDuration.");
-        }
-        if (yieldIterationsThreshold < spinIterationsThreshold)
-        {
-            ThrowHelper.ThrowArgumentException("YieldIterationsThreshold cannot be less than SpinIterationsThreshold.");
-        }
-        if (multiplier < 1.0)
-        {
-            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(multiplier), "Multiplier must be greater than or equal to 1.0.");
-        }
-        if (jitterRatio is < 0.0 or > 1.0)
-        {
-            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(jitterRatio), "JitterRatio must be bounded between 0.0 and 1.0.");
+            case BackoffInvariant.None:
+                break;
+            case BackoffInvariant.MaxLessThanMin:
+                ThrowHelper.ThrowArgumentException("MaxDuration cannot be less than MinDuration.");
+                break;
+            case BackoffInvariant.YieldLessThanSpin:
+                ThrowHelper.ThrowArgumentException("YieldIterationsThreshold cannot be less than SpinIterationsThreshold.");
+                break;
+            case BackoffInvariant.MultiplierTooSmall:
+                ThrowHelper.ThrowArgumentOutOfRangeException(nameof(multiplier), "Multiplier must be greater than or equal to 1.0.");
+                break;
+            default:
+                ThrowHelper.ThrowArgumentOutOfRangeException(nameof(jitterRatio), "JitterRatio must be bounded between 0.0 and 1.0.");
+                break;
         }
 
         MinDuration = minDuration;
@@ -48,6 +59,45 @@ public readonly struct BackoffConfiguration : IEquatable<BackoffConfiguration>
         JitterRatio = jitterRatio;
         MaxRetryLimit = maxRetryLimit;
     }
+
+    /// <summary>Evaluates the invariant rule table; single source of truth for ctor and state validation.</summary>
+    internal static BackoffInvariant CheckInvariants(
+        BackoffDuration minDuration,
+        BackoffDuration maxDuration,
+        uint spinIterationsThreshold,
+        uint yieldIterationsThreshold,
+        double multiplier,
+        double jitterRatio)
+    {
+        if (maxDuration < minDuration)
+        {
+            return BackoffInvariant.MaxLessThanMin;
+        }
+        if (yieldIterationsThreshold < spinIterationsThreshold)
+        {
+            return BackoffInvariant.YieldLessThanSpin;
+        }
+        if (multiplier < 1.0)
+        {
+            return BackoffInvariant.MultiplierTooSmall;
+        }
+        if (jitterRatio is < 0.0 or > 1.0)
+        {
+            return BackoffInvariant.JitterOutOfRange;
+        }
+
+        return BackoffInvariant.None;
+    }
+
+    /// <summary>Human-readable description of a violated invariant.</summary>
+    internal static string DescribeViolation(BackoffInvariant violation) => violation switch
+    {
+        BackoffInvariant.MaxLessThanMin => "MaxDuration cannot be less than MinDuration.",
+        BackoffInvariant.YieldLessThanSpin => "YieldIterationsThreshold cannot be less than SpinIterationsThreshold.",
+        BackoffInvariant.MultiplierTooSmall => "Multiplier must be greater than or equal to 1.0.",
+        BackoffInvariant.JitterOutOfRange => "JitterRatio must be bounded between 0.0 and 1.0.",
+        _ => "Unknown invariant violation.",
+    };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(BackoffConfiguration other) =>
