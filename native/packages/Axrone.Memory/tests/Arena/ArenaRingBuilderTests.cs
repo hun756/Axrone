@@ -45,7 +45,43 @@ public class ArenaRingBuilderTests
         builder.TryBuild(out var ring, out BuilderDiagnostic diagnostic).Should().BeFalse();
         ring.Should().BeNull();
         diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
-        diagnostic.Message.Should().Contain("ArgumentOutOfRangeException");
+        diagnostic.Message.Should().Contain("power of two");
+    }
+
+    [Fact]
+    public void State_ValidatesWithoutBuilder()
+    {
+        var state = ArenaRingState<int>.Default;
+        state.Capacity = 24;
+
+        ArenaRingState<int>.TryValidate(in state, out var diagnostic).Should().BeFalse();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
+    }
+
+    [Fact]
+    public void Fork_DivergesIndependently()
+    {
+        var original = ArenaRingBuilder<int>.Create(32);
+        var fork = original.Fork();
+        fork.WithCapacity(64);
+
+        using var originalRing = original.Build();
+        using var forkRing = fork.Build();
+
+        originalRing.Capacity.Should().Be(32u);
+        forkRing.Capacity.Should().Be(64u);
+    }
+
+    [Fact]
+    public void Reset_RestoresDefaults()
+    {
+        var builder = ArenaRingBuilder<int>.Create(32)
+            .WithPinnedObjectHeapStorage()
+            .WithTelemetry("Custom", "x");
+        builder.Reset();
+
+        builder.TryBuild(out _, out BuilderDiagnostic diagnostic).Should().BeFalse();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
     }
 
     [Fact]

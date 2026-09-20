@@ -3,86 +3,94 @@ using Axrone.Utility.Builders;
 
 namespace Axrone.Memory.Arena;
 
-public sealed class ArenaRingBuilder<T> : BuilderBase<ArenaRingBuilder<T>, ArenaMemoryRing<T, ProgressiveSpinBackoff>>
+/// <summary>
+/// Fluent builder for <see cref="ArenaMemoryRing{T, TBackoff}"/> over a mutable accumulator state.
+/// </summary>
+/// <remarks>
+/// Capacity is structurally required via the entry points, so the required mask is empty and
+/// domain validation is authoritative. Supports fork/reset for template workflows.
+/// </remarks>
+public sealed class ArenaRingBuilder<T>
+    : AggregateBuilder<ArenaRingBuilder<T>, ArenaRingState<T>, ArenaMemoryRing<T, ProgressiveSpinBackoff>>
     where T : unmanaged
 {
-    private nuint _capacity;
-    private MemoryTopology _topology = MemoryTopology.NativeAligned;
-    private Alignment _alignment;
-    private bool _zeroOnRecycle;
-    private string _meterName = "Axrone.Memory.Arena";
-    private string _instanceName = "default";
-
     public ArenaRingBuilder(nuint capacity)
     {
-        _capacity = capacity;
+        State = ArenaRingState<T>.Default;
+        State.Capacity = capacity;
     }
 
     public static ArenaRingBuilder<T> Create(nuint capacity) => new(capacity);
 
+    protected override ArenaRingBuilder<T> Self => this;
+
+    protected override PropertyBitmask64 RequiredMask => PropertyBitmask64.None;
+
     public ArenaRingBuilder<T> WithCapacity(nuint capacity)
     {
-        _capacity = capacity;
+        State.Capacity = capacity;
         return this;
     }
 
     public ArenaRingBuilder<T> WithTopology(MemoryTopology topology)
     {
-        _topology = topology;
+        State.Topology = topology;
         return this;
     }
 
     public ArenaRingBuilder<T> WithNativeAlignedStorage()
     {
-        _topology = MemoryTopology.NativeAligned;
+        State.Topology = MemoryTopology.NativeAligned;
         return this;
     }
 
     public ArenaRingBuilder<T> WithPinnedObjectHeapStorage()
     {
-        _topology = MemoryTopology.PinnedObjectHeap;
+        State.Topology = MemoryTopology.PinnedObjectHeap;
         return this;
     }
 
     public ArenaRingBuilder<T> WithAlignment(Alignment alignment)
     {
-        _alignment = alignment;
+        State.Alignment = alignment;
         return this;
     }
 
     public ArenaRingBuilder<T> WithZeroOnRecycle(bool value = true)
     {
-        _zeroOnRecycle = value;
+        State.ZeroOnRecycle = value;
         return this;
     }
 
     public ArenaRingBuilder<T> WithTelemetry(string meterName, string instanceName = "default")
     {
-        _meterName = meterName;
-        _instanceName = instanceName;
+        State.MeterName = meterName;
+        State.InstanceName = instanceName;
         return this;
     }
 
+    /// <summary>Builds the ring with an explicit backoff policy.</summary>
     public ArenaMemoryRing<T, TBackoff> Build<TBackoff>()
         where TBackoff : struct, ISpinBackoff
     {
-        ArenaCapacity capacity = new(_capacity);
         return new ArenaMemoryRing<T, TBackoff>(
-            capacity,
-            _topology,
-            _alignment,
-            _zeroOnRecycle,
-            _meterName,
-            _instanceName);
+            new ArenaCapacity(State.Capacity),
+            State.Topology,
+            State.Alignment,
+            State.ZeroOnRecycle,
+            State.MeterName,
+            State.InstanceName);
     }
 
-    protected override ArenaRingBuilder<T> Self => this;
-
-    public override bool TryBuild([MaybeNullWhen(false)] out ArenaMemoryRing<T, ProgressiveSpinBackoff> result, out BuilderDiagnostic diagnostic) =>
-        TryCreate(Build, out result, out diagnostic);
-
+    /// <summary>Builds the ring; preserves the product's throw contract.</summary>
     public override ArenaMemoryRing<T, ProgressiveSpinBackoff> Build()
     {
         return Build<ProgressiveSpinBackoff>();
     }
+
+    /// <inheritdoc/>
+    public override void Reset() => State = ArenaRingState<T>.Default;
+
+    /// <inheritdoc/>
+    public override ArenaRingBuilder<T> Fork() => CopyTo(new ArenaRingBuilder<T>(State.Capacity));
 }

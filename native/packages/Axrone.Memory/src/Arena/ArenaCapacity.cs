@@ -8,12 +8,16 @@ public readonly record struct ArenaCapacity
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public ArenaCapacity(nuint value)
     {
-        if (value < 2 || !BitOperations.IsPow2(value))
+        if (!IsValid(value))
         {
             ThrowHelper.ThrowInvalidCapacity(value);
         }
         Value = value;
     }
+
+    /// <summary>Capacity rule table shared by the ctor and state validation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool IsValid(nuint value) => value >= 2 && BitOperations.IsPow2(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator nuint(ArenaCapacity capacity) => capacity.Value;
