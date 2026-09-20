@@ -164,9 +164,13 @@ public class VyukovQueueTests
         queue.TryEnqueue(99).Should().BeTrue();
         queue.TryEnqueue(100).Should().BeFalse();
 
-        Span<int> destination = stackalloc int[4];
+        Span<int> destination = stackalloc int[3];
         queue.TryDequeueBatch(destination).Should().Be(3);
-        destination[..3].ToArray().Should().Equal(1, 2, 3);
+        destination.ToArray().Should().Equal(1, 2, 3);
+
+        queue.TryDequeue(out int leftover).Should().BeTrue();
+        leftover.Should().Be(99);
+        queue.IsEmpty.Should().BeTrue();
     }
 
     [Fact]
