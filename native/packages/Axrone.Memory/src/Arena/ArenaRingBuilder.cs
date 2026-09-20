@@ -1,8 +1,10 @@
 using Axrone.Utility.Alignment;
+using Axrone.Utility.Builders;
 
 namespace Axrone.Memory.Arena;
 
-public sealed class ArenaRingBuilder<T> where T : unmanaged
+public sealed class ArenaRingBuilder<T> : BuilderBase<ArenaRingBuilder<T>, ArenaMemoryRing<T, ProgressiveSpinBackoff>>
+    where T : unmanaged
 {
     private nuint _capacity;
     private MemoryTopology _topology = MemoryTopology.NativeAligned;
@@ -74,7 +76,12 @@ public sealed class ArenaRingBuilder<T> where T : unmanaged
             _instanceName);
     }
 
-    public ArenaMemoryRing<T, ProgressiveSpinBackoff> Build()
+    protected override ArenaRingBuilder<T> Self => this;
+
+    public override bool TryBuild([MaybeNullWhen(false)] out ArenaMemoryRing<T, ProgressiveSpinBackoff> result, out BuilderDiagnostic diagnostic) =>
+        TryCreate(Build, out result, out diagnostic);
+
+    public override ArenaMemoryRing<T, ProgressiveSpinBackoff> Build()
     {
         return Build<ProgressiveSpinBackoff>();
     }

@@ -1,4 +1,5 @@
 using Axrone.Memory.Arena;
+using Axrone.Utility.Builders;
 
 namespace Axrone.Memory.Tests.Arena;
 
@@ -34,6 +35,25 @@ public class ArenaRingBuilderTests
         ring.Producer.TryWrite(42).Should().BeTrue();
         ring.Consumer.TryRead(out int result).Should().BeTrue();
         result.Should().Be(42);
+    }
+
+    [Fact]
+    public void TryBuild_NonPowerOfTwo_ReportsDiagnostic()
+    {
+        var builder = ArenaRingBuilder<int>.Create(3);
+
+        builder.TryBuild(out var ring, out BuilderDiagnostic diagnostic).Should().BeFalse();
+        ring.Should().BeNull();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
+        diagnostic.Message.Should().Contain("ArgumentOutOfRangeException");
+    }
+
+    [Fact]
+    public void Build_NonPowerOfTwo_PreservesThrowContract()
+    {
+        var act = () => ArenaRingBuilder<int>.Create(3).Build();
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
