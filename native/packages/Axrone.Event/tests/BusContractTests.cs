@@ -70,6 +70,18 @@ public class BusContractTests
             }
         }
 
+        public int PublishBatch<TEvent>(ReadOnlySpan<TEvent> items)
+        {
+            int count = 0;
+            for (int i = 0; i < items.Length; i++)
+            {
+                Publish(in items[i]);
+                count++;
+            }
+
+            return count;
+        }
+
         public IEventSubscription Subscribe<TEvent>(Action<EventEnvelope<TEvent>, CancellationToken> handler)
         {
             if (!_handlers.TryGetValue(typeof(TEvent), out var list))

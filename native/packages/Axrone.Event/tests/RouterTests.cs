@@ -215,4 +215,68 @@ public class RouterTests
 
         SpinWait.SpinUntil(() => Volatile.Read(ref count) == 1, TimeSpan.FromSeconds(5)).Should().BeTrue();
     }
+
+    [Fact]
+    public void PublishBatch_DeliversOrderedWithDenseSequences()
+    {
+        using var router = new EventRouter<int>(256);
+        var received = new List<EventEnvelope<int>>();
+        using var sub = router.Subscribe((envelope, _) =>
+        {
+            lock (received)
+            {
+                received.Add(envelope);
+            }
+        });
+
+        var batch = new int[100];
+        for (int i = 0; i < batch.Length; i++)
+        {
+            batch[i] = i;
+        }
+
+        router.PublishBatch(batch).Should().Be(100);
+
+        SpinWait.SpinUntil(() =>
+        {
+            lock (received)
+            {
+                return received.Count == 100;
+            }
+        }, TimeSpan.FromSeconds(15)).Should().BeTrue();
+
+        lock (received)
+        {
+            received.Select(e => e.Payload).Should().Equal(batch);
+            received.Select(e => e.Metadata.Sequence).Should().Equal(Enumerable.Range(1, 100).Select(i => (long)i));
+        }
+    }
+
+    [Fact]
+    public void TryPublishBatch_FiltersWithoutConsumingSlots()
+    {
+        using var router = new EventRouter<int>(256);
+        router.AddFilter(new FuncFilter<int>(envelope => envelope.Payload % 2 == 0));
+
+        var count = 0;
+        using var sub = router.Subscribe((_, _) => Interlocked.Increment(ref count));
+
+        var batch = new int[10];
+        for (int i = 0; i < batch.Length; i++)
+        {
+            batch[i] = i;
+        }
+
+        router.TryPublishBatch(batch).Should().Be(5);
+        SpinWait.SpinUntil(() => Volatile.Read(ref count) == 5, TimeSpan.FromSeconds(15)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void PublishBatch_Empty_ReturnsZero()
+    {
+        using var router = new EventRouter<int>(16);
+
+        router.PublishBatch(ReadOnlySpan<int>.Empty).Should().Be(0);
+        router.TryPublishBatch(ReadOnlySpan<int>.Empty).Should().Be(0);
+    }
 }

@@ -34,9 +34,9 @@ internal sealed class EventTelemetry : IDisposable
         _dispatchDurationMs = _meter.CreateHistogram<double>("events.dispatch.duration", "ms");
     }
 
-    /// <summary>Records one accepted publish.</summary>
+    /// <summary>Records accepted publishes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RecordPublished() => _published.Add(1);
+    public void RecordPublished(int count) => _published.Add(count);
 
     /// <summary>Records one dispatch batch.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

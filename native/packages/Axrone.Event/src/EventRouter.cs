@@ -165,6 +165,138 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
     /// <summary>Non-blocking envelope publish; preserves an existing stamp.</summary>
     public bool TryPublishEnvelope(in EventEnvelope<TEvent> envelope) => TryPublishCore(in envelope);
 
+    /// <summary>
+    /// Publishes a batch, spinning while the transport is full. Filters apply per item; accepted
+    /// items share one sequence-range reservation. Returns accepted items; throws once completed.
+    /// </summary>
+    public int PublishBatch(ReadOnlySpan<TEvent> items)
+    {
+        if (items.IsEmpty)
+        {
+            return 0;
+        }
+
+        ThrowIfFaulted();
+        if (Volatile.Read(ref _state) != StateRunning)
+        {
+            ThrowHelper.ThrowEngineTerminated();
+        }
+
+        EventEnvelope<TEvent>[] buffer = ArrayPool<EventEnvelope<TEvent>>.Shared.Rent(items.Length);
+        try
+        {
+            int accepted = FillBatch(items, buffer);
+            int offset = 0;
+            ProgressiveSpinBackoff.Initialize(out int backoff);
+            while (offset < accepted)
+            {
+                int enqueued = _queue.TryEnqueueBatch(buffer.AsSpan(offset, accepted - offset));
+                if (enqueued > 0)
+                {
+                    _telemetry.RecordPublished(enqueued);
+                    NotifyPublished(buffer.AsSpan(offset, enqueued));
+                    offset += enqueued;
+                    continue;
+                }
+
+                ThrowIfFaulted();
+                if (Volatile.Read(ref _state) != StateRunning)
+                {
+                    ThrowHelper.ThrowEngineTerminated();
+                }
+
+                ProgressiveSpinBackoff.Advance(ref backoff);
+            }
+
+            return accepted;
+        }
+        finally
+        {
+            ArrayPool<EventEnvelope<TEvent>>.Shared.Return(buffer, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// Non-blocking batch publish; single transport reservation. Returns enqueued items
+    /// (possibly partial when full); filtered items never consume slots.
+    /// </summary>
+    public int TryPublishBatch(ReadOnlySpan<TEvent> items)
+    {
+        if (items.IsEmpty)
+        {
+            return 0;
+        }
+
+        ThrowIfFaulted();
+        if (Volatile.Read(ref _state) != StateRunning)
+        {
+            return 0;
+        }
+
+        EventEnvelope<TEvent>[] buffer = ArrayPool<EventEnvelope<TEvent>>.Shared.Rent(items.Length);
+        try
+        {
+            int accepted = FillBatch(items, buffer);
+            int enqueued = _queue.TryEnqueueBatch(buffer.AsSpan(0, accepted));
+            if (enqueued > 0)
+            {
+                _telemetry.RecordPublished(enqueued);
+                NotifyPublished(buffer.AsSpan(0, enqueued));
+            }
+
+            return enqueued;
+        }
+        finally
+        {
+            ArrayPool<EventEnvelope<TEvent>>.Shared.Return(buffer, clearArray: true);
+        }
+    }
+
+    /// <summary>Filters, stamps, and observes publish intent; returns accepted items.</summary>
+    private int FillBatch(ReadOnlySpan<TEvent> items, EventEnvelope<TEvent>[] buffer)
+    {
+        int accepted = 0;
+        for (int i = 0; i < items.Length; i++)
+        {
+            EventEnvelope<TEvent> stamped = Stamp(in items[i]);
+
+            bool filtered = false;
+            foreach (IEventFilter<TEvent> filter in _filters)
+            {
+                if (!filter.ShouldProcess(in stamped))
+                {
+                    filtered = true;
+                    break;
+                }
+            }
+
+            if (filtered)
+            {
+                continue;
+            }
+
+            foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+            {
+                interceptor.OnPublishing(in stamped);
+            }
+
+            buffer[accepted++] = stamped;
+        }
+
+        return accepted;
+    }
+
+    private void NotifyPublished(ReadOnlySpan<EventEnvelope<TEvent>> enqueued)
+    {
+        foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+        {
+            for (int i = 0; i < enqueued.Length; i++)
+            {
+                interceptor.OnPublished(in enqueued[i]);
+            }
+        }
+    }
+
     /// <summary>Drains dead letters; the returned list is a cold-path allocation.</summary>
     public List<DeadLetterEntry<TEvent>> DrainDeadLetters()
     {
@@ -275,7 +407,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
             return false;
         }
 
-        _telemetry.RecordPublished();
+        _telemetry.RecordPublished(1);
 
         foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
         {

@@ -32,6 +32,9 @@ public sealed class EventBus : IEventBus, IDisposable, IAsyncDisposable
     public void PublishEnvelope<TEvent>(in EventEnvelope<TEvent> envelope) => Router<TEvent>().PublishEnvelope(in envelope);
 
     /// <inheritdoc/>
+    public int PublishBatch<TEvent>(ReadOnlySpan<TEvent> items) => Router<TEvent>().PublishBatch(items);
+
+    /// <inheritdoc/>
     public IEventSubscription Subscribe<TEvent>(Action<EventEnvelope<TEvent>, CancellationToken> handler) =>
         Router<TEvent>().Subscribe(handler);
 
