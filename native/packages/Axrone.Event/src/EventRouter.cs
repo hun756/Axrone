@@ -18,12 +18,10 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
     private const int StateTerminated = 2;
     private const int StateFaulted = 3;
 
-    private const int DispatchBatchSize = 256;
-
     private readonly VyukovBoundedBatchQueue<EventEnvelope<TEvent>> _queue;
     private readonly ConcurrentDictionary<Guid, EventSubscription<TEvent>> _subscriptions = new();
     private readonly ConcurrentQueue<DeadLetterEntry<TEvent>> _deadLetters = new();
-    private readonly EventEnvelope<TEvent>[] _dispatchBuffer = new EventEnvelope<TEvent>[DispatchBatchSize];
+    private readonly EventEnvelope<TEvent>[] _dispatchBuffer;
     private readonly Lock _gate = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _dispatchLoop;
@@ -51,8 +49,20 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
     /// <summary>Creates a router with the given transport capacity (power of two).</summary>
     public EventRouter(int capacity = 65536)
+        : this(new RouterOptions(capacity, RouterOptions.Default.DispatchBatchSize))
     {
-        _queue = new VyukovBoundedBatchQueue<EventEnvelope<TEvent>>(new BufferCapacity((uint)capacity));
+    }
+
+    /// <summary>Creates a router from options.</summary>
+    public EventRouter(RouterOptions options)
+    {
+        if (options.DispatchBatchSize < 1)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(options), "DispatchBatchSize must be positive.");
+        }
+
+        _dispatchBuffer = new EventEnvelope<TEvent>[options.DispatchBatchSize];
+        _queue = new VyukovBoundedBatchQueue<EventEnvelope<TEvent>>(new BufferCapacity((uint)options.Capacity));
         CancellationToken token = _cts.Token;
         _dispatchLoop = Task.Factory.StartNew(
             () => DispatchLoopAsync(token),

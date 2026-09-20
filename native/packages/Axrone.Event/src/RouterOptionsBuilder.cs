@@ -1,0 +1,39 @@
+namespace Axrone.Event;
+
+using Axrone.Utility.Builders;
+
+/// <summary>
+/// Fluent builder for <see cref="RouterOptions"/> over a mutable accumulator state.
+/// </summary>
+public sealed class RouterOptionsBuilder
+    : AggregateBuilder<RouterOptionsBuilder, RouterOptionsState, RouterOptions>
+{
+    public RouterOptionsBuilder()
+    {
+        State = RouterOptionsState.Default;
+    }
+
+    protected override RouterOptionsBuilder Self => this;
+
+    protected override PropertyBitmask64 RequiredMask => PropertyBitmask64.None;
+
+    /// <summary>Sets ring slots per event type; must be a power of two.</summary>
+    public RouterOptionsBuilder WithCapacity(int capacity)
+    {
+        State.Capacity = capacity;
+        return this;
+    }
+
+    /// <summary>Sets envelopes per dispatch iteration; 1..4096.</summary>
+    public RouterOptionsBuilder WithDispatchBatchSize(int batchSize)
+    {
+        State.DispatchBatchSize = batchSize;
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public override void Reset() => State = RouterOptionsState.Default;
+
+    /// <inheritdoc/>
+    public override RouterOptionsBuilder Fork() => CopyTo(new RouterOptionsBuilder());
+}

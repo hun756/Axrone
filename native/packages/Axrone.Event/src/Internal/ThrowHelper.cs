@@ -15,4 +15,11 @@ public static class ThrowHelper
     {
         throw new ObjectDisposedException(objectName);
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentOutOfRange(string paramName, string message)
+    {
+        throw new ArgumentOutOfRangeException(paramName, message);
+    }
 }
