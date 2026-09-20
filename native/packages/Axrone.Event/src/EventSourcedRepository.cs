@@ -16,19 +16,22 @@ public sealed class EventSourcedRepository<TAggregate, TId, TEvent> : IEventSour
     private readonly IEventStore<TId, TEvent> _eventStore;
     private readonly IEventBus _eventBus;
     private readonly ISnapshotStore<TAggregate, TId>? _snapshotStore;
+    private readonly EventUpgradePipeline<TEvent>? _upgrades;
     private readonly int _snapshotThreshold;
 
-    /// <summary>Creates a repository over the given store, bus, and optional snapshots.</summary>
+    /// <summary>Creates a repository over the given store, bus, optional snapshots, and optional upgraders.</summary>
     public EventSourcedRepository(
         IEventStore<TId, TEvent> eventStore,
         IEventBus eventBus,
         ISnapshotStore<TAggregate, TId>? snapshotStore = null,
-        int snapshotThreshold = 100)
+        int snapshotThreshold = 100,
+        EventUpgradePipeline<TEvent>? upgrades = null)
     {
         _eventStore = eventStore;
         _eventBus = eventBus;
         _snapshotStore = snapshotStore;
         _snapshotThreshold = snapshotThreshold;
+        _upgrades = upgrades;
     }
 
     /// <inheritdoc/>
@@ -56,19 +59,19 @@ public sealed class EventSourcedRepository<TAggregate, TId, TEvent> : IEventSour
 
         if (history.Count > 0)
         {
-            if (history is List<EventEnvelope<TEvent>> list)
+            if (_upgrades is null && history is List<EventEnvelope<TEvent>> list)
             {
                 aggregate.HydrateFromHistory(id, CollectionsMarshal.AsSpan(list));
             }
             else
             {
-                var copy = new EventEnvelope<TEvent>[history.Count];
+                var materialized = new EventEnvelope<TEvent>[history.Count];
                 for (int i = 0; i < history.Count; i++)
                 {
-                    copy[i] = history[i];
+                    materialized[i] = Migrate(history[i]);
                 }
 
-                aggregate.HydrateFromHistory(id, copy);
+                aggregate.HydrateFromHistory(id, materialized);
             }
         }
 
@@ -106,5 +109,21 @@ public sealed class EventSourcedRepository<TAggregate, TId, TEvent> : IEventSour
         }
 
         aggregate.ClearUncommittedEvents();
+    }
+
+    /// <summary>
+    /// Migrates a stored envelope through the upgrade pipeline. Metadata keeps the stored
+    /// version as provenance; only the hydrated payload moves forward.
+    /// </summary>
+    private EventEnvelope<TEvent> Migrate(EventEnvelope<TEvent> envelope)
+    {
+        if (_upgrades is null)
+        {
+            return envelope;
+        }
+
+        TEvent payload = envelope.Payload;
+        TEvent migrated = _upgrades.Transform(in payload, envelope.Metadata.Version);
+        return new EventEnvelope<TEvent>(envelope.Metadata, migrated);
     }
 }

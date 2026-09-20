@@ -32,13 +32,16 @@ public abstract class EventSourcedAggregate<TId, TEvent>
     /// <summary>Applies one event to state; must be deterministic for replays.</summary>
     protected abstract void Apply(in TEvent @event);
 
-    /// <summary>Applies and buffers an event for the next save.</summary>
-    protected void Emit(in TEvent @event)
+    /// <summary>Applies and buffers a version-1 event for the next save.</summary>
+    protected void Emit(in TEvent @event) => Emit(in @event, version: 1);
+
+    /// <summary>Applies and buffers a versioned event for the next save.</summary>
+    protected void Emit(in TEvent @event, int version)
     {
         Apply(in @event);
         _version++;
         _uncommitted.Add(new EventEnvelope<TEvent>(
-            new EventMetadata(Guid.Empty, Guid.Empty, Guid.Empty, 0L, 1, 0, Stopwatch.GetTimestamp()),
+            new EventMetadata(Guid.Empty, Guid.Empty, Guid.Empty, 0L, version, 0, Stopwatch.GetTimestamp()),
             @event));
     }
 

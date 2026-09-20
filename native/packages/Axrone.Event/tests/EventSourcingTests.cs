@@ -18,6 +18,8 @@ public class EventSourcingTests
 
         public void Add(int amount) => Emit(amount);
 
+        public void AddVersioned(int amount, int version) => Emit(amount, version);
+
         protected override void Apply(in int @event) => Total += @event;
     }
 
@@ -126,5 +128,44 @@ public class EventSourcingTests
 
         pipeline.Transform(21, version: 1).Should().Be(42);
         pipeline.Transform(21, version: 2).Should().Be(21);
+    }
+
+    [Fact]
+    public async Task EmitVersion_IsStored()
+    {
+        using var bus = new EventBus(64);
+        var store = new InMemoryEventStore<string, int>();
+        var snapshots = new InMemorySnapshotStore<Counter, string>();
+        var repository = new EventSourcedRepository<Counter, string, int>(store, bus, snapshots);
+
+        var counter = new Counter("v-1", 1);
+        counter.AddVersioned(5, 2);
+        await repository.SaveAsync(counter);
+
+        var history = await store.ReadStreamAsync("v-1", 1, 10);
+        history.Should().HaveCount(2);
+        history[0].Metadata.Version.Should().Be(1);
+        history[1].Metadata.Version.Should().Be(2);
+        history[1].Metadata.Sequence.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Load_AppliesUpgrades()
+    {
+        using var bus = new EventBus(64);
+        var store = new InMemoryEventStore<string, int>();
+        var snapshots = new InMemorySnapshotStore<Counter, string>();
+        var plain = new EventSourcedRepository<Counter, string, int>(store, bus, snapshots);
+
+        var counter = new Counter("up-1", 21);
+        await plain.SaveAsync(counter);
+
+        var pipeline = new EventUpgradePipeline<int>();
+        pipeline.Register(new DoublingUpgrader());
+        var upgrading = new EventSourcedRepository<Counter, string, int>(store, bus, snapshots, 100, pipeline);
+
+        Counter? loaded = await upgrading.LoadAsync("up-1");
+        loaded.Should().NotBeNull();
+        loaded!.Total.Should().Be(42);
     }
 }
