@@ -15,7 +15,8 @@ internal sealed class EventTelemetry : IDisposable
     private readonly Meter _meter;
     private readonly Counter<long> _published;
     private readonly Counter<long> _dispatched;
-    private readonly Counter<long> _dropped;
+    private readonly Counter<long> _droppedUnsubscribed;
+    private readonly Counter<long> _droppedPaused;
     private readonly Counter<long> _deadLettered;
     private readonly Counter<long> _deadLetterDropped;
     private readonly Histogram<double> _dispatchDurationMs;
@@ -28,7 +29,8 @@ internal sealed class EventTelemetry : IDisposable
         _meter = new Meter(meterName, "1.0.0");
         _published = _meter.CreateCounter<long>("events.published", "{events}");
         _dispatched = _meter.CreateCounter<long>("events.dispatched", "{events}");
-        _dropped = _meter.CreateCounter<long>("events.dropped", "{events}");
+        _droppedUnsubscribed = _meter.CreateCounter<long>("events.dropped.unsubscribed", "{events}");
+        _droppedPaused = _meter.CreateCounter<long>("events.dropped.paused", "{events}");
         _deadLettered = _meter.CreateCounter<long>("events.deadlettered", "{events}");
         _deadLetterDropped = _meter.CreateCounter<long>("events.deadletter.dropped", "{events}");
         _dispatchDurationMs = _meter.CreateHistogram<double>("events.dispatch.duration", "ms");
@@ -46,9 +48,13 @@ internal sealed class EventTelemetry : IDisposable
         _dispatchDurationMs.Record(elapsedMilliseconds);
     }
 
-    /// <summary>Records envelopes dequeued with no active subscriber.</summary>
+    /// <summary>Records envelopes dequeued while no subscription existed.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RecordDropped(int count) => _dropped.Add(count);
+    public void RecordDroppedUnsubscribed(int count) => _droppedUnsubscribed.Add(count);
+
+    /// <summary>Records envelopes skipped while every subscription was paused.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RecordDroppedPaused(int count) => _droppedPaused.Add(count);
 
     /// <summary>Records one retained dead letter.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

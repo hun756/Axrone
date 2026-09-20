@@ -198,6 +198,25 @@ public class RouterTests
 
         SpinWait.SpinUntil(() => router.DroppedItems == 2, TimeSpan.FromSeconds(5)).Should().BeTrue();
         router.DeadLetterCount.Should().Be(0);
+        router.DroppedUnsubscribed.Should().Be(2);
+        router.DroppedPaused.Should().Be(0);
+    }
+
+    [Fact]
+    public void PausedSubscriber_CountsPausedDrops()
+    {
+        using var router = new EventRouter<int>(64);
+        var count = 0;
+        using var sub = router.Subscribe((_, _) => Interlocked.Increment(ref count));
+        sub.Pause();
+
+        router.Publish(1);
+        router.Publish(2);
+
+        SpinWait.SpinUntil(() => router.DroppedPaused == 2, TimeSpan.FromSeconds(5)).Should().BeTrue();
+        router.DroppedUnsubscribed.Should().Be(0);
+        router.DroppedItems.Should().Be(2);
+        Volatile.Read(ref count).Should().Be(0);
     }
 
     [Fact]

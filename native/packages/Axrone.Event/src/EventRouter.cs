@@ -31,15 +31,22 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
     private int _state;
     private long _sequence;
-    private long _droppedItems;
+    private long _droppedUnsubscribed;
+    private long _droppedPaused;
     private long _droppedDeadLetters;
     private readonly int _deadLetterCapacity;
     private readonly EventTelemetry _telemetry;
     private ExceptionDispatchInfo? _fault;
     private int _disposed;
 
-    /// <summary>Items dequeued with no active subscriber.</summary>
-    public long DroppedItems => Interlocked.Read(ref _droppedItems);
+    /// <summary>All dequeued-but-undelivered items.</summary>
+    public long DroppedItems => DroppedUnsubscribed + DroppedPaused;
+
+    /// <summary>Items dequeued while no subscription existed.</summary>
+    public long DroppedUnsubscribed => Interlocked.Read(ref _droppedUnsubscribed);
+
+    /// <summary>Items skipped because every subscription was paused.</summary>
+    public long DroppedPaused => Interlocked.Read(ref _droppedPaused);
 
     /// <summary>Dead letters discarded because the bound was full (oldest first).</summary>
     public long DroppedDeadLetters => Interlocked.Read(ref _droppedDeadLetters);
@@ -495,7 +502,8 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
     {
         long start = Stopwatch.GetTimestamp();
         int dispatched = 0;
-        int dropped = 0;
+        int droppedUnsubscribed = 0;
+        int droppedPaused = 0;
 
         for (int i = 0; i < batch.Length; i++)
         {
@@ -523,8 +531,16 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
             if (!delivered)
             {
-                dropped++;
-                Interlocked.Increment(ref _droppedItems);
+                if (_subscriptions.IsEmpty)
+                {
+                    droppedUnsubscribed++;
+                    Interlocked.Increment(ref _droppedUnsubscribed);
+                }
+                else
+                {
+                    droppedPaused++;
+                    Interlocked.Increment(ref _droppedPaused);
+                }
             }
             else
             {
@@ -533,9 +549,14 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
 
         _telemetry.RecordDispatch(dispatched, (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency);
-        if (dropped > 0)
+        if (droppedUnsubscribed > 0)
         {
-            _telemetry.RecordDropped(dropped);
+            _telemetry.RecordDroppedUnsubscribed(droppedUnsubscribed);
+        }
+
+        if (droppedPaused > 0)
+        {
+            _telemetry.RecordDroppedPaused(droppedPaused);
         }
     }
 
