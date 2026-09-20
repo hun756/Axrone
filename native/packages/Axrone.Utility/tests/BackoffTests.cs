@@ -3,6 +3,7 @@ namespace Axrone.Utility.Tests.Backoff;
 using System.Diagnostics;
 using Axrone.Utility.Backoff;
 using Axrone.Utility.Backoff.SpinPolicies;
+using Axrone.Utility.Builders;
 
 public class BackoffDurationTests
 {
@@ -353,6 +354,29 @@ public class BackoffConfigurationBuilderTests
         config.MaxDuration.Should().Be(BackoffDuration.FromMilliseconds(2000));
         config.Multiplier.Should().Be(2.0);
         config.JitterRatio.Should().Be(0.25);
+    }
+
+    [Fact]
+    public void TryBuild_InvalidRange_ReportsDiagnostic()
+    {
+        var builder = new BackoffConfigurationBuilder()
+            .WithMinDuration(BackoffDuration.FromSeconds(5))
+            .WithMaxDuration(BackoffDuration.FromSeconds(1));
+
+        builder.TryBuild(out _, out var diagnostic).Should().BeFalse();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
+        diagnostic.Message.Should().Contain("ArgumentException");
+    }
+
+    [Fact]
+    public void Build_InvalidRange_PreservesThrowContract()
+    {
+        var act = () => new BackoffConfigurationBuilder()
+            .WithMinDuration(BackoffDuration.FromSeconds(5))
+            .WithMaxDuration(BackoffDuration.FromSeconds(1))
+            .Build();
+
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]

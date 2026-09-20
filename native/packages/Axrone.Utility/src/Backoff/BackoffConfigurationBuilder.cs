@@ -1,6 +1,9 @@
 namespace Axrone.Utility.Backoff;
 
-public sealed class BackoffConfigurationBuilder
+using System.Diagnostics.CodeAnalysis;
+using Axrone.Utility.Builders;
+
+public sealed class BackoffConfigurationBuilder : BuilderBase<BackoffConfigurationBuilder, BackoffConfiguration>
 {
     private BackoffDuration _minDuration = BackoffDuration.FromMicroseconds(50);
     private BackoffDuration _maxDuration = BackoffDuration.FromMilliseconds(2000);
@@ -59,7 +62,12 @@ public sealed class BackoffConfigurationBuilder
         return this;
     }
 
-    public BackoffConfiguration Build() =>
+    protected override BackoffConfigurationBuilder Self => this;
+
+    public override bool TryBuild([MaybeNullWhen(false)] out BackoffConfiguration result, out BuilderDiagnostic diagnostic) =>
+        TryCreate(Build, out result, out diagnostic);
+
+    public override BackoffConfiguration Build() =>
         new(
             _minDuration,
             _maxDuration,
