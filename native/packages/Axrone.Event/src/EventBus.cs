@@ -1,0 +1,107 @@
+namespace Axrone.Event;
+
+/// <summary>
+/// Typed publish/subscribe façade over per-type routers. Routers are created on first use with
+/// the bus-wide transport capacity; <see cref="Router{TEvent}"/> exposes the router for
+/// non-blocking publishes, filters, and observability.
+/// </summary>
+public sealed class EventBus : IEventBus, IDisposable, IAsyncDisposable
+{
+    private readonly ConcurrentDictionary<Type, object> _routers = new();
+    private readonly Lock _gate = new();
+    private readonly int _capacityPerRouter;
+    private int _disposed;
+
+    /// <summary>Creates a bus; every per-type router gets the same transport capacity.</summary>
+    /// <param name="capacityPerRouter">Ring capacity per event type; must be a power of two.</param>
+    public EventBus(int capacityPerRouter = 65536)
+    {
+        _capacityPerRouter = capacityPerRouter;
+    }
+
+    /// <inheritdoc/>
+    public void Publish<TEvent>(in TEvent message) => Router<TEvent>().Publish(in message);
+
+    /// <inheritdoc/>
+    public void PublishEnvelope<TEvent>(in EventEnvelope<TEvent> envelope) => Router<TEvent>().PublishEnvelope(in envelope);
+
+    /// <inheritdoc/>
+    public IEventSubscription Subscribe<TEvent>(Action<EventEnvelope<TEvent>, CancellationToken> handler) =>
+        Router<TEvent>().Subscribe(handler);
+
+    /// <inheritdoc/>
+    public IEventSubscription SubscribeAsync<TEvent>(Func<EventEnvelope<TEvent>, CancellationToken, ValueTask> handler) =>
+        Router<TEvent>().SubscribeAsync(handler);
+
+    /// <summary>Returns the router for the event type, creating it on first use.</summary>
+    public EventRouter<TEvent> Router<TEvent>()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            ThrowHelper.ThrowObjectDisposed(nameof(EventBus));
+        }
+
+        if (_routers.TryGetValue(typeof(TEvent), out object? existing))
+        {
+            return Unsafe.As<EventRouter<TEvent>>(existing);
+        }
+
+        return CreateRouterSlow<TEvent>();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private EventRouter<TEvent> CreateRouterSlow<TEvent>()
+    {
+        lock (_gate)
+        {
+            if (_routers.TryGetValue(typeof(TEvent), out object? existing))
+            {
+                return Unsafe.As<EventRouter<TEvent>>(existing);
+            }
+
+            var router = new EventRouter<TEvent>(_capacityPerRouter);
+            _routers[typeof(TEvent)] = router;
+            return router;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            foreach (object router in _routers.Values)
+            {
+                ((IDisposable)router).Dispose();
+            }
+
+            _routers.Clear();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        List<object> routers;
+        lock (_gate)
+        {
+            routers = new List<object>(_routers.Values);
+            _routers.Clear();
+        }
+
+        foreach (object router in routers)
+        {
+            await ((IAsyncDisposable)router).DisposeAsync().ConfigureAwait(false);
+        }
+    }
+}

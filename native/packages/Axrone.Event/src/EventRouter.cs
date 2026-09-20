@@ -1,0 +1,375 @@
+namespace Axrone.Event;
+
+/// <summary>
+/// Single-type fan-out router over a bounded MPMC queue. Publishers stamp at the edge, one
+/// background loop dispatches batches to active subscribers, failures land in dead letters.
+/// </summary>
+/// <remarks>
+/// The dispatch loop starts at construction and drains continuously, so a publish can never spin
+/// forever waiting for a future subscriber: envelopes with no active subscriber are dequeued,
+/// counted as dropped, and discarded. <see cref="Publish(in TEvent)"/> spins while running;
+/// <see cref="TryPublish(in TEvent)"/> is the non-blocking game-thread path.
+/// </remarks>
+/// <typeparam name="TEvent">Payload type.</typeparam>
+public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
+{
+    private const int StateRunning = 0;
+    private const int StateCompleting = 1;
+    private const int StateTerminated = 2;
+    private const int StateFaulted = 3;
+
+    private const int DispatchBatchSize = 256;
+
+    private readonly VyukovBoundedBatchQueue<EventEnvelope<TEvent>> _queue;
+    private readonly ConcurrentDictionary<Guid, EventSubscription<TEvent>> _subscriptions = new();
+    private readonly ConcurrentQueue<DeadLetterEntry<TEvent>> _deadLetters = new();
+    private readonly EventEnvelope<TEvent>[] _dispatchBuffer = new EventEnvelope<TEvent>[DispatchBatchSize];
+    private readonly Lock _gate = new();
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Task _dispatchLoop;
+
+    private volatile List<IEventFilter<TEvent>> _filters = new();
+    private volatile List<IEventInterceptor<TEvent>> _interceptors = new();
+
+    private int _state;
+    private long _sequence;
+    private long _droppedItems;
+    private ExceptionDispatchInfo? _fault;
+    private int _disposed;
+
+    /// <summary>Items dequeued with no active subscriber.</summary>
+    public long DroppedItems => Interlocked.Read(ref _droppedItems);
+
+    /// <summary>Envelopes waiting in transport.</summary>
+    public int QueuedCount => _queue.Count;
+
+    /// <summary>Registered subscriptions.</summary>
+    public int SubscriberCount => _subscriptions.Count;
+
+    /// <summary>Entries waiting in dead letters.</summary>
+    public int DeadLetterCount => _deadLetters.Count;
+
+    /// <summary>Creates a router with the given transport capacity (power of two).</summary>
+    public EventRouter(int capacity = 65536)
+    {
+        _queue = new VyukovBoundedBatchQueue<EventEnvelope<TEvent>>(new BufferCapacity((uint)capacity));
+        CancellationToken token = _cts.Token;
+        _dispatchLoop = Task.Factory.StartNew(
+            () => DispatchLoopAsync(token),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+    }
+
+    /// <summary>Registers a publish-gate filter (copy-on-write; publishers never block).</summary>
+    public void AddFilter(IEventFilter<TEvent> filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        lock (_gate)
+        {
+            var next = new List<IEventFilter<TEvent>>(_filters) { filter };
+            _filters = next;
+        }
+    }
+
+    /// <summary>Registers a publish/consumption observer (copy-on-write; publishers never block).</summary>
+    public void AddInterceptor(IEventInterceptor<TEvent> interceptor)
+    {
+        ArgumentNullException.ThrowIfNull(interceptor);
+        lock (_gate)
+        {
+            var next = new List<IEventInterceptor<TEvent>>(_interceptors) { interceptor };
+            _interceptors = next;
+        }
+    }
+
+    /// <summary>Subscribes a synchronous handler; starts delivery immediately.</summary>
+    public IEventSubscription Subscribe(Action<EventEnvelope<TEvent>, CancellationToken> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        var subscription = new EventSubscription<TEvent>(handler, RemoveSubscription);
+        _subscriptions.TryAdd(subscription.SubscriptionId, subscription);
+        return subscription;
+    }
+
+    /// <summary>Subscribes an asynchronous handler; starts delivery immediately.</summary>
+    public IEventSubscription SubscribeAsync(Func<EventEnvelope<TEvent>, CancellationToken, ValueTask> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        var subscription = new EventSubscription<TEvent>(handler, RemoveSubscription);
+        _subscriptions.TryAdd(subscription.SubscriptionId, subscription);
+        return subscription;
+    }
+
+    /// <summary>
+    /// Publishes a payload, spinning while the transport is full. Requires a running router;
+    /// throws once completed. For subscriber-less emission use <see cref="TryPublish(in TEvent)"/>.
+    /// </summary>
+    public void Publish(in TEvent message)
+    {
+        var envelope = Stamp(message);
+        PublishEnvelope(in envelope);
+    }
+
+    /// <summary>
+    /// Publishes a pre-built envelope, preserving an existing stamp (replay) or stamping when
+    /// unstamped. Spins while the transport is full.
+    /// </summary>
+    public void PublishEnvelope(in EventEnvelope<TEvent> envelope)
+    {
+        ProgressiveSpinBackoff.Initialize(out int backoff);
+        while (!TryPublishCore(in envelope))
+        {
+            ThrowIfFaulted();
+            if (Volatile.Read(ref _state) != StateRunning)
+            {
+                ThrowHelper.ThrowEngineTerminated();
+            }
+
+            ProgressiveSpinBackoff.Advance(ref backoff);
+        }
+    }
+
+    /// <summary>
+    /// Non-blocking publish; false when full or not running (backpressure, not an error).
+    /// </summary>
+    public bool TryPublish(in TEvent message)
+    {
+        var envelope = Stamp(message);
+        return TryPublishCore(in envelope);
+    }
+
+    /// <summary>Non-blocking envelope publish; preserves an existing stamp.</summary>
+    public bool TryPublishEnvelope(in EventEnvelope<TEvent> envelope) => TryPublishCore(in envelope);
+
+    /// <summary>Drains dead letters; the returned list is a cold-path allocation.</summary>
+    public List<DeadLetterEntry<TEvent>> DrainDeadLetters()
+    {
+        var drained = new List<DeadLetterEntry<TEvent>>();
+        while (_deadLetters.TryDequeue(out DeadLetterEntry<TEvent> entry))
+        {
+            drained.Add(entry);
+        }
+
+        return drained;
+    }
+
+    /// <summary>Stops accepting publishes; the loop drains remaining items, then terminates.</summary>
+    public void Complete(Exception? error = null)
+    {
+        if (error is not null)
+        {
+            _fault = ExceptionDispatchInfo.Capture(error);
+            Volatile.Write(ref _state, StateFaulted);
+        }
+        else
+        {
+            Interlocked.CompareExchange(ref _state, StateCompleting, StateRunning);
+        }
+
+        _cts.Cancel();
+    }
+
+    /// <summary>Rethrows the terminal fault captured by <see cref="Complete(Exception?)"/>.</summary>
+    public void ThrowIfFaulted() => _fault?.Throw();
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        Complete();
+        try
+        {
+            _dispatchLoop.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            // Loop observed cancellation mid-batch; shutdown is still clean.
+        }
+
+        _queue.Dispose();
+        _cts.Dispose();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        Complete();
+        try
+        {
+            await _dispatchLoop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Loop observed cancellation mid-batch; shutdown is still clean.
+        }
+
+        _queue.Dispose();
+        _cts.Dispose();
+    }
+
+    private bool TryPublishCore(in EventEnvelope<TEvent> envelope)
+    {
+        ThrowIfFaulted();
+        if (Volatile.Read(ref _state) != StateRunning)
+        {
+            return false;
+        }
+
+        EventEnvelope<TEvent> stamped = envelope.IsStamped ? envelope : StampEnvelope(in envelope);
+        foreach (IEventFilter<TEvent> filter in _filters)
+        {
+            if (!filter.ShouldProcess(in stamped))
+            {
+                return true;
+            }
+        }
+
+        foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+        {
+            interceptor.OnPublishing(in stamped);
+        }
+
+        if (!_queue.TryEnqueue(in stamped))
+        {
+            return false;
+        }
+
+        foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+        {
+            interceptor.OnPublished(in stamped);
+        }
+
+        return true;
+    }
+
+    private EventEnvelope<TEvent> Stamp(in TEvent message)
+    {
+        Guid id = Guid.NewGuid();
+        return new EventEnvelope<TEvent>(
+            new EventMetadata(
+                id,
+                id,
+                Guid.Empty,
+                Interlocked.Increment(ref _sequence),
+                1,
+                0,
+                Stopwatch.GetTimestamp()),
+            message);
+    }
+
+    private EventEnvelope<TEvent> StampEnvelope(in EventEnvelope<TEvent> envelope)
+    {
+        Guid id = Guid.NewGuid();
+        EventMetadata metadata = envelope.Metadata.WithIdentity(id, id);
+        metadata = metadata.WithSequence(Interlocked.Increment(ref _sequence));
+        return new EventEnvelope<TEvent>(metadata, envelope.Payload);
+    }
+
+    private void RemoveSubscription(Guid subscriptionId) => _subscriptions.TryRemove(subscriptionId, out _);
+
+    private async Task DispatchLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                int received;
+                try
+                {
+                    received = await _queue.DequeueBatchAsync(_dispatchBuffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                await DispatchBatchAsync(_dispatchBuffer.AsMemory(0, received), cancellationToken).ConfigureAwait(false);
+
+                if (Volatile.Read(ref _state) != StateRunning && _queue.IsEmpty)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            await DrainRemainingAsync().ConfigureAwait(false);
+            if (Volatile.Read(ref _state) != StateFaulted)
+            {
+                Volatile.Write(ref _state, StateTerminated);
+            }
+        }
+    }
+
+    private async ValueTask DrainRemainingAsync()
+    {
+        while (true)
+        {
+            int received = _queue.TryDequeueBatch(_dispatchBuffer.AsSpan());
+            if (received == 0)
+            {
+                break;
+            }
+
+            await DispatchBatchAsync(_dispatchBuffer.AsMemory(0, received), CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask DispatchBatchAsync(ReadOnlyMemory<EventEnvelope<TEvent>> batch, CancellationToken cancellationToken)
+    {
+        for (int i = 0; i < batch.Length; i++)
+        {
+            EventEnvelope<TEvent> envelope = batch.Span[i];
+            bool delivered = false;
+
+            foreach (EventSubscription<TEvent> subscription in _subscriptions.Values)
+            {
+                if (!subscription.IsActive)
+                {
+                    continue;
+                }
+
+                delivered = true;
+                try
+                {
+                    await subscription.InvokeAsync(in envelope, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _deadLetters.Enqueue(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.HandlerException, ex));
+                    NotifyConsumptionError(in envelope, ex);
+                }
+            }
+
+            if (!delivered)
+            {
+                Interlocked.Increment(ref _droppedItems);
+            }
+        }
+    }
+
+    private void NotifyConsumptionError(in EventEnvelope<TEvent> envelope, Exception exception)
+    {
+        try
+        {
+            foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+            {
+                interceptor.OnConsumptionError(in envelope, exception);
+            }
+        }
+        catch (Exception interceptorFault)
+        {
+            _deadLetters.Enqueue(DeadLetterEntry<TEvent>.Capture(in envelope, DeadLetterReason.DispatchFailure, interceptorFault));
+        }
+    }
+}
