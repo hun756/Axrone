@@ -18,15 +18,17 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
         Capacity = 65536,
         DispatchBatchSize = 256,
         DeadLetterCapacity = 1024,
+        MeterName = "Axrone.Event",
     };
 
     public int Capacity { get; set; }
     public int DispatchBatchSize { get; set; }
     public int DeadLetterCapacity { get; set; }
+    public string MeterName { get; set; }
 
     /// <inheritdoc/>
     public static RouterOptions Materialize(in RouterOptionsState state) =>
-        new(state.Capacity, state.DispatchBatchSize, state.DeadLetterCapacity);
+        new(state.Capacity, state.DispatchBatchSize, state.DeadLetterCapacity, state.MeterName);
 
     /// <inheritdoc/>
     public static bool TryValidate(in RouterOptionsState state, out BuilderDiagnostic diagnostic)
@@ -49,6 +51,12 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
             return false;
         }
 
+        if (string.IsNullOrEmpty(state.MeterName))
+        {
+            diagnostic = BuilderDiagnostic.Fail(BuilderStatusCode.ValidationFailed, "MeterName must be non-empty.");
+            return false;
+        }
+
         diagnostic = BuilderDiagnostic.Ok;
         return true;
     }
@@ -57,13 +65,14 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
     public bool Equals(RouterOptionsState other) =>
         Capacity == other.Capacity &&
         DispatchBatchSize == other.DispatchBatchSize &&
-        DeadLetterCapacity == other.DeadLetterCapacity;
+        DeadLetterCapacity == other.DeadLetterCapacity &&
+        MeterName == other.MeterName;
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is RouterOptionsState other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Capacity, DispatchBatchSize, DeadLetterCapacity);
+    public override int GetHashCode() => HashCode.Combine(Capacity, DispatchBatchSize, DeadLetterCapacity, MeterName);
 
     public static bool operator ==(RouterOptionsState left, RouterOptionsState right) => left.Equals(right);
 

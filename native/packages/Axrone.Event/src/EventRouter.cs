@@ -34,6 +34,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
     private long _droppedItems;
     private long _droppedDeadLetters;
     private readonly int _deadLetterCapacity;
+    private readonly EventTelemetry _telemetry;
     private ExceptionDispatchInfo? _fault;
     private int _disposed;
 
@@ -72,6 +73,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
 
         _deadLetterCapacity = options.DeadLetterCapacity;
+        _telemetry = new EventTelemetry(options.MeterName ?? "Axrone.Event");
         _dispatchBuffer = new EventEnvelope<TEvent>[options.DispatchBatchSize];
         _queue = new VyukovBoundedBatchQueue<EventEnvelope<TEvent>>(new BufferCapacity((uint)options.Capacity));
         CancellationToken token = _cts.Token;
@@ -175,17 +177,23 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         return drained;
     }
 
-    /// <summary>Stops accepting publishes; the loop drains remaining items, then terminates.</summary>
+    /// <summary>
+    /// Stops accepting publishes. A clean completion lets the loop drain remaining items, then
+    /// terminates; a fault stops dispatch immediately without draining.
+    /// </summary>
     public void Complete(Exception? error = null)
     {
         if (error is not null)
         {
+            int previous = Volatile.Read(ref _state);
             _fault = ExceptionDispatchInfo.Capture(error);
             Volatile.Write(ref _state, StateFaulted);
+            EventEventSource.Log.FaultOccurred(error.GetType().Name, error.Message);
+            EventEventSource.Log.StateTransition(previous, StateFaulted);
         }
-        else
+        else if (Interlocked.CompareExchange(ref _state, StateCompleting, StateRunning) == StateRunning)
         {
-            Interlocked.CompareExchange(ref _state, StateCompleting, StateRunning);
+            EventEventSource.Log.StateTransition(StateRunning, StateCompleting);
         }
 
         _cts.Cancel();
@@ -213,6 +221,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
 
         _queue.Dispose();
+        _telemetry.Dispose();
         _cts.Dispose();
     }
 
@@ -235,6 +244,7 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
 
         _queue.Dispose();
+        _telemetry.Dispose();
         _cts.Dispose();
     }
 
@@ -264,6 +274,8 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         {
             return false;
         }
+
+        _telemetry.RecordPublished();
 
         foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
         {
@@ -324,10 +336,11 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         }
         finally
         {
-            await DrainRemainingAsync().ConfigureAwait(false);
             if (Volatile.Read(ref _state) != StateFaulted)
             {
-                Volatile.Write(ref _state, StateTerminated);
+                await DrainRemainingAsync().ConfigureAwait(false);
+                int previous = Interlocked.Exchange(ref _state, StateTerminated);
+                EventEventSource.Log.StateTransition(previous, StateTerminated);
             }
         }
     }
@@ -348,6 +361,10 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
     private async ValueTask DispatchBatchAsync(ReadOnlyMemory<EventEnvelope<TEvent>> batch, CancellationToken cancellationToken)
     {
+        long start = Stopwatch.GetTimestamp();
+        int dispatched = 0;
+        int dropped = 0;
+
         for (int i = 0; i < batch.Length; i++)
         {
             EventEnvelope<TEvent> envelope = batch.Span[i];
@@ -374,8 +391,19 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
 
             if (!delivered)
             {
+                dropped++;
                 Interlocked.Increment(ref _droppedItems);
             }
+            else
+            {
+                dispatched++;
+            }
+        }
+
+        _telemetry.RecordDispatch(dispatched, (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency);
+        if (dropped > 0)
+        {
+            _telemetry.RecordDropped(dropped);
         }
     }
 
@@ -404,8 +432,10 @@ public sealed class EventRouter<TEvent> : IDisposable, IAsyncDisposable
         if (_deadLetters.Count >= _deadLetterCapacity && _deadLetters.TryDequeue(out _))
         {
             Interlocked.Increment(ref _droppedDeadLetters);
+            _telemetry.RecordDeadLetterDropped();
         }
 
         _deadLetters.Enqueue(entry);
+        _telemetry.RecordDeadLetter();
     }
 }

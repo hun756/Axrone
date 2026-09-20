@@ -38,6 +38,13 @@ public sealed class RouterOptionsBuilder
         return this;
     }
 
+    /// <summary>Sets the telemetry meter name.</summary>
+    public RouterOptionsBuilder WithTelemetry(string meterName)
+    {
+        State.MeterName = meterName;
+        return this;
+    }
+
     /// <inheritdoc/>
     public override void Reset() => State = RouterOptionsState.Default;
 

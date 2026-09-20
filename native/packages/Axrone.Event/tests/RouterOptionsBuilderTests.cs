@@ -91,7 +91,7 @@ public class RouterOptionsBuilderTests
     [Fact]
     public void Router_RejectsZeroBatchSize()
     {
-        var act = () => new EventRouter<int>(new RouterOptions(64, 0, 16));
+        var act = () => new EventRouter<int>(new RouterOptions(64, 0, 16, "Axrone.Event.Test"));
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
