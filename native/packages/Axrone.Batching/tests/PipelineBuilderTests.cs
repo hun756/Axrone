@@ -1,5 +1,7 @@
 namespace Axrone.Batching.Tests;
 
+using Axrone.Utility.Builders;
+
 /// <summary>
 /// Coverage for the pipeline builder.
 /// </summary>
@@ -43,5 +45,26 @@ public class PipelineBuilderTests
         var act = () => TimeSlicedPipeline.Create<int>(0).Build();
 
         act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void TryBuild_BadCapacity_ReportsDiagnostic()
+    {
+        var builder = TimeSlicedPipeline.Create<int>(0);
+
+        builder.TryBuild(out var pipeline, out BuilderDiagnostic diagnostic).Should().BeFalse();
+        pipeline.Should().BeNull();
+        diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);
+        diagnostic.Message.Should().Contain("ArgumentOutOfRangeException");
+    }
+
+    [Fact]
+    public void TryBuild_Valid_ReportsOk()
+    {
+        var builder = TimeSlicedPipeline.Create<int>(8);
+
+        builder.TryBuild(out var pipeline, out BuilderDiagnostic diagnostic).Should().BeTrue();
+        pipeline.Should().NotBeNull();
+        diagnostic.Should().Be(BuilderDiagnostic.Ok);
     }
 }

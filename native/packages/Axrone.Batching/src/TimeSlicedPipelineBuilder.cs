@@ -1,5 +1,8 @@
 namespace Axrone.Batching;
 
+using System.Diagnostics.CodeAnalysis;
+using Axrone.Utility.Builders;
+
 /// <summary>Entry point for pipeline builders.</summary>
 /// <remarks>
 /// Zero reflection: every option is a typed method, validated at build time by the same guards
@@ -16,7 +19,8 @@ public static class TimeSlicedPipeline
 
 /// <summary>Fluent builder for <see cref="TimeSlicedPipeline{T}"/> instances.</summary>
 /// <typeparam name="T">Element type.</typeparam>
-public sealed class TimeSlicedPipelineBuilder<T> where T : unmanaged
+public sealed class TimeSlicedPipelineBuilder<T> : BuilderBase<TimeSlicedPipelineBuilder<T>, TimeSlicedPipeline<T>>
+    where T : unmanaged
 {
     private int _capacity;
     private BatchStride _stride = BatchStride.Default;
@@ -48,6 +52,13 @@ public sealed class TimeSlicedPipelineBuilder<T> where T : unmanaged
         return this;
     }
 
+    /// <inheritdoc/>
+    protected override TimeSlicedPipelineBuilder<T> Self => this;
+
+    /// <summary>Attempts to build, reporting the pipeline guard failure as a diagnostic.</summary>
+    public override bool TryBuild([MaybeNullWhen(false)] out TimeSlicedPipeline<T> result, out BuilderDiagnostic diagnostic) =>
+        TryCreate(Build, out result, out diagnostic);
+
     /// <summary>Builds the pipeline.</summary>
-    public TimeSlicedPipeline<T> Build() => new(_capacity, _stride, _meterName);
+    public override TimeSlicedPipeline<T> Build() => new(_capacity, _stride, _meterName);
 }
