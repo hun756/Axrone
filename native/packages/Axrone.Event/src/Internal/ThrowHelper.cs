@@ -22,4 +22,11 @@ public static class ThrowHelper
     {
         throw new ArgumentOutOfRangeException(paramName, message);
     }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowConcurrencyConflict(long expected, long actual)
+    {
+        throw new InvalidOperationException($"Optimistic concurrency violation: expected stream version {expected}, found {actual}.");
+    }
 }
