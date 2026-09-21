@@ -1681,6 +1681,24 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         const before = this.nextSibling[index] !== 0 ? (this.nextSibling[index] as WidgetId) : null;
         const remap = new Map<string, string>();
         const cloned = this.cloneSnapshotForInstance(definition.root, recordKey, remap);
+        const instanceLayout = this.records[index]?.layoutInput as
+            | { position?: unknown; inset?: unknown }
+            | undefined;
+        if (instanceLayout && typeof instanceLayout === 'object') {
+            const placement: Record<string, unknown> = {};
+            if (instanceLayout.position !== undefined) {
+                placement['position'] = instanceLayout.position;
+            }
+            if (instanceLayout.inset !== undefined) {
+                placement['inset'] = instanceLayout.inset;
+            }
+            if (Object.keys(placement).length > 0) {
+                (cloned as { layout?: unknown }).layout = {
+                    ...((cloned.layout as Record<string, unknown> | undefined) ?? {}),
+                    ...placement,
+                };
+            }
+        }
         const variantName = typeof props.variant === 'string' ? props.variant : '';
         const variant = variantName ? definition.variants?.[variantName] : undefined;
         const mergedProps: Record<string, unknown> = {

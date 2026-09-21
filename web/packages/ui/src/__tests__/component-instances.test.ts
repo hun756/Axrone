@@ -268,6 +268,40 @@ describe('component instance expansion', () => {
         expect(getDropdownSelectedIndex(runtime, runtime.getBoundWidget('inst3__card')!)).toBe(0);
     });
 
+    it('keeps the instance document placement over the master layout', () => {
+        const runtime = prepareRuntime();
+        const asset = buildAsset(
+            [instanceNode('inst1', { componentId: 'tag' })],
+            {
+                tag: {
+                    name: 'Tag',
+                    root: {
+                        role: 'text',
+                        key: 'tag-text',
+                        enabled: true,
+                        interactive: false,
+                        layout: { width: 'content', height: 'content' },
+                        style: { color: '#e2e8f0ff' },
+                        text: textBlock('tag'),
+                        children: [],
+                    },
+                },
+            },
+        );
+        const authored = asset.root as unknown as { children: { layout: unknown }[] };
+        authored.children[0]!.layout = {
+            position: 'absolute',
+            width: 200,
+            height: 100,
+            inset: { left: 111, top: 222 },
+        };
+        runtime.loadFromAsset(asset);
+        runtime.commit();
+        const box = runtime.getLayoutBox(runtime.getBoundWidget('inst1__tag-text')!);
+        expect(box.x).toBe(111);
+        expect(box.y).toBe(222);
+    });
+
     it('expands nested instances and leaves missing masters alone', () => {
         const runtime = prepareRuntime();
         runtime.loadFromAsset(
