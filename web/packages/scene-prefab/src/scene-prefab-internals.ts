@@ -395,7 +395,7 @@ export const findScenePrefabComponentIndex = (
         }
     }
 
-    const typeName = selector.kind === 'type' ? selector.type : selector.type;
+    const typeName = selector.type;
     if (!typeName) {
         return -1;
     }

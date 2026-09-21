@@ -454,56 +454,24 @@ const applyScenePrefabOverrideOperation = (
             validateActorFieldValue(operation);
             const actor = ensureActor(state, operation.nodeId);
             switch (operation.field) {
-                case 'name': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'string') {
-                        throw new ScenePrefabValidationError("Actor field 'name' expects a string value");
-                    }
-                    actor.name = nextValue;
+                case 'name':
+                    actor.name = operation.value as string;
                     return;
-                }
-                case 'layer': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'number') {
-                        throw new ScenePrefabValidationError("Actor field 'layer' expects a number value");
-                    }
-                    actor.layer = nextValue;
+                case 'layer':
+                    actor.layer = operation.value as number;
                     return;
-                }
-                case 'tag': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'string') {
-                        throw new ScenePrefabValidationError("Actor field 'tag' expects a string value");
-                    }
-                    actor.tag = nextValue;
+                case 'tag':
+                    actor.tag = operation.value as string;
                     return;
-                }
-                case 'active': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'boolean') {
-                        throw new ScenePrefabValidationError("Actor field 'active' expects a boolean value");
-                    }
-                    actor.active = nextValue;
+                case 'active':
+                    actor.active = operation.value as boolean;
                     return;
-                }
-                case 'persistent': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'boolean') {
-                        throw new ScenePrefabValidationError(
-                            "Actor field 'persistent' expects a boolean value",
-                        );
-                    }
-                    actor.persistent = nextValue;
+                case 'persistent':
+                    actor.persistent = operation.value as boolean;
                     return;
-                }
-                case 'pooled': {
-                    const nextValue = operation.value;
-                    if (typeof nextValue !== 'boolean') {
-                        throw new ScenePrefabValidationError("Actor field 'pooled' expects a boolean value");
-                    }
-                    actor.pooled = nextValue;
+                case 'pooled':
+                    actor.pooled = operation.value as boolean;
                     return;
-                }
             }
             return;
         }
