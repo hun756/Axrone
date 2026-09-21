@@ -88,7 +88,6 @@ describe('EventEmitter - Event Options', () => {
                 if ('maxListeners' in obj && typeof obj.maxListeners !== 'number') return false;
                 if ('weakReferences' in obj && typeof obj.weakReferences !== 'boolean')
                     return false;
-                    return false;
                 if ('concurrencyLimit' in obj && typeof obj.concurrencyLimit !== 'number')
                     return false;
                 if ('bufferSize' in obj && typeof obj.bufferSize !== 'number') return false;
