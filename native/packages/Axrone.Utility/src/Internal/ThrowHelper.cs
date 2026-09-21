@@ -153,6 +153,13 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowUnalignedPointer(nuint address, nuint alignment)
+    {
+        throw new InvalidOperationException($"Pointer 0x{address:X} violates the required alignment of {alignment} bytes.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowTypeTooLargeForCacheLine(int typeSize, int maxAllowed)
     {
         throw new InvalidOperationException($"Type size of {typeSize} bytes exceeds the maximum allowable cacheline constraint of {maxAllowed} bytes.");
