@@ -201,6 +201,31 @@ describe('ScenePrefabWorkflow — resolution', () => {
             .toThrow(ScenePrefabResolutionError);
     });
 
+    it('throws ScenePrefabResolutionError on revision mismatch', () => {
+        const def: ScenePrefabDefinition = {
+            ...makeDefinition('rev-prefab'),
+            metadata: { revision: 'rev-2' },
+        };
+        const wf = new ScenePrefabWorkflow({ prefabs: [def] });
+        expect(() =>
+            wf.resolvePrefab({ kind: 'registry', prefabId: 'rev-prefab', revision: 'rev-1' }),
+        ).toThrow(ScenePrefabResolutionError);
+    });
+
+    it('resolves when revisions match or either side omits it', () => {
+        const def: ScenePrefabDefinition = {
+            ...makeDefinition('rev-prefab'),
+            metadata: { revision: 'rev-1' },
+        };
+        const wf = new ScenePrefabWorkflow({ prefabs: [def] });
+        expect(
+            wf.resolvePrefab({ kind: 'registry', prefabId: 'rev-prefab', revision: 'rev-1' }).definition.kind,
+        ).toBe('resolved');
+        expect(
+            wf.resolvePrefab({ kind: 'registry', prefabId: 'rev-prefab' }).definition.kind,
+        ).toBe('resolved');
+    });
+
     it('resolves inline reference', () => {
         const inlineDef = makeDefinition('inline-p', [makeActor('root', 'Inline')]);
         const wf = new ScenePrefabWorkflow();

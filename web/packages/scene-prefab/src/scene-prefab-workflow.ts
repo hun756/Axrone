@@ -194,6 +194,16 @@ export class ScenePrefabWorkflow implements ScenePrefabResolver, ScenePrefabRegi
             );
         }
 
+        if (
+            reference.revision !== undefined &&
+            definition.metadata?.revision !== undefined &&
+            definition.metadata.revision !== reference.revision
+        ) {
+            throw new ScenePrefabResolutionError(
+                `Prefab '${reference.prefabId}' revision mismatch: expected '${reference.revision}' but found '${definition.metadata.revision}'`,
+            );
+        }
+
         return this._resolveDefinition(definition, stack);
     }
 
