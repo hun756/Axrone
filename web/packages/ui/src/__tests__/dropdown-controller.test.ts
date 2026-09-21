@@ -98,7 +98,7 @@ const buildModernDropdownAsset = (): UIAsset =>
                         arrowColor: '#94a3b8ff',
                         hoverColor: '#ff0000ff',
                         selectedColor: '#00ff00ff',
-                        states: { normal: '#111111ff', open: '#222222ff' },
+                        states: { normal: '#111111ff', hover: '#333333ff', open: '#222222ff', disabled: '#444444ff' },
                     },
                     layout: {
                         width: 200,
@@ -356,5 +356,35 @@ describe('dropdown-select controller (preview open/close/select)', () => {
         expect(getDropdownSelectedIndex(runtime, dropdown)).toBe(2);
         const texts = frameTexts(runtime);
         expect(texts.filter((t) => t === 'Option 3')).toHaveLength(1);
+    });
+
+    it('applies hover tint on enter and restores normal on leave', () => {
+        const runtime = prepareRuntime();
+        runtime.loadFromAsset(buildModernDropdownAsset());
+        const triggerBox = runtime.getBoundWidget('drp-1-trigger')!;
+
+        runtime.commit();
+        expect(runtime.getWidgetStyleInput(triggerBox)?.background).toBe('#111111ff');
+
+        runtime.dispatchInput(pointerAtCenter(runtime, triggerBox, 'move'));
+        runtime.commit();
+        expect(runtime.getWidgetStyleInput(triggerBox)?.background).toBe('#333333ff');
+
+        runtime.dispatchInput({ type: 'pointer', phase: 'move', x: 799, y: 599 });
+        runtime.commit();
+        expect(runtime.getWidgetStyleInput(triggerBox)?.background).toBe('#111111ff');
+    });
+
+    it('applies disabled tint when the dropdown is disabled', () => {
+        const runtime = prepareRuntime();
+        const asset = buildModernDropdownAsset();
+        const root = asset.root as unknown as Record<string, unknown>;
+        const dropdownNode = (root.children as Record<string, unknown>[])[0]!;
+        dropdownNode.enabled = false;
+        runtime.loadFromAsset(asset);
+        runtime.commit();
+
+        const triggerBox = runtime.getBoundWidget('drp-1-trigger')!;
+        expect(runtime.getWidgetStyleInput(triggerBox)?.background).toBe('#444444ff');
     });
 });

@@ -33,6 +33,7 @@ export interface DropdownControllerState {
     selectedIndex: number;
     isOpen: boolean;
     hoveredIndex: number;
+    hovered: boolean;
     cachedContainer: WidgetId | null;
     cachedItems: WidgetId[];
     cachedSubtreeSize: number;
@@ -235,11 +236,22 @@ const applyAppearance = (context: DropdownContext): void => {
             const states = (props.states && typeof props.states === 'object' && !Array.isArray(props.states)
                 ? props.states
                 : {}) as Partial<Record<DropdownVisualState, string>>;
+            const disabledTint = asColorString(states.disabled);
             const openTint = asColorString(states.open);
+            const hoverTint = asColorString(states.hover);
             const normalTint = asColorString(states.normal);
-            if (state.isOpen && openTint !== null) {
+            const disabled = !runtime.isWidgetEnabled(context.widget);
+            if (disabled && disabledTint !== null) {
+                stylePatch.background = disabledTint;
+            } else if (!disabled && state.isOpen && openTint !== null) {
                 stylePatch.background = openTint;
-            } else if (!state.isOpen && normalTint !== null) {
+            } else if (!disabled && !state.isOpen && state.hovered) {
+                if (hoverTint !== null) {
+                    stylePatch.background = hoverTint;
+                } else if (normalTint !== null) {
+                    stylePatch.background = normalTint;
+                }
+            } else if (!disabled && !state.isOpen && normalTint !== null) {
                 stylePatch.background = normalTint;
             }
             if (Object.keys(layoutPatch).length > 0 || Object.keys(stylePatch).length > 0) {
@@ -324,6 +336,7 @@ export const dropdownController: WidgetController<
             selectedIndex,
             isOpen: false,
             hoveredIndex: -1,
+            hovered: false,
             cachedContainer: null,
             cachedItems: [],
             cachedSubtreeSize: 0,
@@ -431,10 +444,19 @@ export const dropdownController: WidgetController<
                         selectIndex(typed, state.hoveredIndex);
                     }
                     return true;
+                case 'enter': {
+                    state.hovered = true;
+                    applyAppearance(typed);
+                    return false;
+                }
                 case 'leave': {
                     const wasOpen = state.isOpen;
+                    const wasHovered = state.hovered;
+                    state.hovered = false;
                     if (wasOpen) {
                         setOpen(typed, false);
+                    } else if (wasHovered) {
+                        applyAppearance(typed);
                     }
                     return wasOpen;
                 }
