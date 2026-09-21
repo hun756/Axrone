@@ -211,6 +211,55 @@ const cloneConflictBaseValue = (
     return null;
 };
 
+const isSameComponentSelector = (
+    left: ScenePrefabComponentSelector,
+    right: ScenePrefabComponentSelector,
+): boolean => {
+    if (left.kind !== right.kind) {
+        return false;
+    }
+
+    if (left.kind === 'id' && right.kind === 'id') {
+        return left.componentId === right.componentId && (left.type ?? '') === (right.type ?? '');
+    }
+
+    if (left.kind === 'type' && right.kind === 'type') {
+        return left.type === right.type && (left.occurrence ?? 0) === (right.occurrence ?? 0);
+    }
+
+    return false;
+};
+
+const isSamePropertyPath = (
+    left: ScenePrefabPropertyPath,
+    right: ScenePrefabPropertyPath,
+): boolean =>
+    left.length === right.length && left.every((segment, index) => segment === right[index]);
+
+const isSameActorSnapshot = (left: SceneActorSnapshot, right: SceneActorSnapshot): boolean => {
+    if (
+        left.nodeId !== right.nodeId ||
+        (left.parentNodeId ?? null) !== (right.parentNodeId ?? null) ||
+        left.name !== right.name ||
+        left.layer !== right.layer ||
+        left.tag !== right.tag ||
+        left.active !== right.active ||
+        left.persistent !== right.persistent ||
+        left.pooled !== right.pooled ||
+        left.components.length !== right.components.length
+    ) {
+        return false;
+    }
+
+    if ((left.source?.prefabId ?? '') !== (right.source?.prefabId ?? '')) {
+        return false;
+    }
+
+    return left.components.every((component, index) =>
+        isSameComponentSnapshot(component, right.components[index]!),
+    );
+};
+
 const isSameComponentSnapshot = (
     left: SceneComponentSnapshot,
     right: SceneComponentSnapshot,
@@ -232,7 +281,7 @@ const isSameOverrideOperation = (
             return (
                 right.kind === 'add-actor' &&
                 left.afterNodeId === right.afterNodeId &&
-                JSON.stringify(left.actor) === JSON.stringify(right.actor)
+                isSameActorSnapshot(left.actor, right.actor)
             );
         case 'remove-actor':
             return right.kind === 'remove-actor' && left.nodeId === right.nodeId;
@@ -260,29 +309,29 @@ const isSameOverrideOperation = (
             return (
                 right.kind === 'remove-component' &&
                 left.nodeId === right.nodeId &&
-                JSON.stringify(left.selector) === JSON.stringify(right.selector)
+                isSameComponentSelector(left.selector, right.selector)
             );
         case 'replace-component':
             return (
                 right.kind === 'replace-component' &&
                 left.nodeId === right.nodeId &&
-                JSON.stringify(left.selector) === JSON.stringify(right.selector) &&
+                isSameComponentSelector(left.selector, right.selector) &&
                 isSameComponentSnapshot(left.component, right.component)
             );
         case 'set-component-property':
             return (
                 right.kind === 'set-component-property' &&
                 left.nodeId === right.nodeId &&
-                JSON.stringify(left.selector) === JSON.stringify(right.selector) &&
-                JSON.stringify(left.path) === JSON.stringify(right.path) &&
+                isSameComponentSelector(left.selector, right.selector) &&
+                isSamePropertyPath(left.path, right.path) &&
                 deepEqualSceneSerializedValue(left.value, right.value)
             );
         case 'unset-component-property':
             return (
                 right.kind === 'unset-component-property' &&
                 left.nodeId === right.nodeId &&
-                JSON.stringify(left.selector) === JSON.stringify(right.selector) &&
-                JSON.stringify(left.path) === JSON.stringify(right.path)
+                isSameComponentSelector(left.selector, right.selector) &&
+                isSamePropertyPath(left.path, right.path)
             );
     }
 };
