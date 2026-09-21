@@ -1,5 +1,6 @@
 namespace Axrone.Utility.Tests.Concurrency;
 
+using System.Runtime.InteropServices;
 using Axrone.Utility.Concurrency;
 
 public class AtomicsTests
@@ -91,5 +92,37 @@ public class AtomicsTests
         first.Exchange(11).Should().Be(9);
         field.Should().Be(11);
         first.IsLockFree.Should().BeTrue();
+
+        int single = 11;
+        first.CompareExchange(ref single, 12).Should().BeTrue();
+        field.Should().Be(12);
+    }
+
+    private sealed class IntHolder
+    {
+        public int Field;
+    }
+
+    [Fact]
+    public async Task AtomicRef_WaitsAndNotifies()
+    {
+        var holder = new IntHolder();
+        GCHandle pin = GCHandle.Alloc(holder, GCHandleType.Pinned);
+        try
+        {
+            var waiter = new AtomicRef<int>(ref holder.Field).WaitAsync(0).AsTask();
+            await Task.Delay(50);
+
+            var notifier = new AtomicRef<int>(ref holder.Field);
+            notifier.Store(1);
+            notifier.NotifyOne();
+
+            await waiter.WaitAsync(TimeSpan.FromSeconds(15));
+            holder.Field.Should().Be(1);
+        }
+        finally
+        {
+            pin.Free();
+        }
     }
 }

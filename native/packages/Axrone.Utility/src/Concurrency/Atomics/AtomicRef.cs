@@ -5,7 +5,7 @@ namespace Axrone.Utility.Concurrency;
 /// unlike <see cref="Atomic{T}"/> a copied <see cref="AtomicRef{T}"/> stays atomic.
 /// </summary>
 /// <typeparam name="T">Value type.</typeparam>
-public readonly ref struct AtomicRef<T>
+public readonly ref struct AtomicRef<T> : IAtomicWaitNotify<T>
     where T : unmanaged
 {
     private readonly ref T _location;
@@ -35,8 +35,27 @@ public readonly ref struct AtomicRef<T>
     public T Exchange(T desired, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
         AtomicCoreOps.Exchange(ref _location, desired, order);
 
+    /// <summary>Conditional write; refreshes <paramref name="expected"/> on mismatch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool CompareExchange(ref T expected, T desired, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        AtomicCoreOps.CompareExchange(ref _location, ref expected, desired, order, order);
+
     /// <summary>Conditional write with split success/failure orders; refreshes <paramref name="expected"/> on mismatch.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool CompareExchange(ref T expected, T desired, MemoryOrder success, MemoryOrder failure) =>
         AtomicCoreOps.CompareExchange(ref _location, ref expected, desired, success, failure);
+
+    /// <inheritdoc/>
+    public void Wait(T comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        FutexEngine.Wait(ref _location, comparand, order);
+
+    /// <inheritdoc/>
+    public ValueTask WaitAsync(T comparand, CancellationToken cancellationToken = default) =>
+        FutexEngine.WaitAsync(ref _location, comparand, cancellationToken);
+
+    /// <inheritdoc/>
+    public void NotifyOne() => FutexEngine.NotifyOne(ref _location);
+
+    /// <inheritdoc/>
+    public void NotifyAll() => FutexEngine.NotifyAll(ref _location);
 }
