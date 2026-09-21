@@ -407,13 +407,20 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
      *   `AggregateError`) when `captureRejections` is disabled and at
      *   least one handler threw.
      */
-    public async emit<K extends EventKey<T>>(
+    public emit<K extends EventKey<T>>(
         event: K,
         data: T[K],
         options: { priority?: EventPriority } = {}
     ): Promise<boolean> {
         this.#ensureRuntime();
+        return this.#emitInternal(event, data, options);
+    }
 
+    async #emitInternal<K extends EventKey<T>>(
+        event: K,
+        data: T[K],
+        options: { priority?: EventPriority } = {}
+    ): Promise<boolean> {
         const eventName = String(event);
         const priority = options.priority ?? DEFAULT_PRIORITY;
         const startTime = this.#options.metrics ? performance.now() : 0;
@@ -444,7 +451,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.#emitTapsFor(eventName, data, priority, false, 'end');
                 return true;
             } catch (error) {
-                this.#recordEmitMetric(eventName, startTime, 'buffered');
+                this.#recordEmitMetric(
+                    eventName,
+                    this.#options.metrics ? performance.now() - startTime : 0,
+                    'buffered'
+                );
                 this.#emitTapsFor(eventName, data, priority, false, 'end');
                 throw error;
             }
@@ -494,11 +505,7 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                             error instanceof EventHandlerError
                                 ? error
                                 : new EventHandlerError(eventName, error);
-                        if (this.#options.captureRejections) {
-                            errors.push(wrapped);
-                        } else {
-                            this.#reportAsyncError(wrapped);
-                        }
+                        errors.push(wrapped);
                     }
 
                     this.#recordExecutionMetric(
@@ -513,6 +520,17 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 }
 
                 if (errors.length > 0) {
+                    if (eventName === 'error') {
+                        throw errors.length === 1
+                            ? errors[0]
+                            : new EventHandlerError(
+                                  eventName,
+                                  new AggregateError(
+                                      errors as Error[],
+                                      `${errors.length} handlers failed`
+                                  )
+                              );
+                    }
                     const errorEvent = 'error' as EventKey<T>;
                     if (this.has(errorEvent)) {
                         for (const err of errors) {
@@ -539,7 +557,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, startTime, 'async');
+            this.#recordEmitMetric(
+                eventName,
+                this.#options.metrics ? performance.now() - startTime : 0,
+                'async'
+            );
             this.#emitTapsFor(eventName, data, priority, false, 'end');
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -646,7 +668,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                 this.#emitTapsFor(eventName, data, priority, true, 'end');
                 return true;
             } catch (error) {
-                this.#recordEmitMetric(eventName, startTime, 'buffered');
+                this.#recordEmitMetric(
+                    eventName,
+                    this.#options.metrics ? performance.now() - startTime : 0,
+                    'buffered'
+                );
                 this.#emitTapsFor(eventName, data, priority, true, 'end');
                 throw error;
             }
@@ -687,19 +713,32 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
                         hadAsyncCallbacks = true;
                         void Promise.resolve(result).then(
                             () => {
-                                // Intentionally not recording execution metric here:
-                                // the measured time includes await suspension and
-                                // scheduler latency, not the handler's actual cost.
+                                this.#recordExecutionMetric(
+                                    eventName,
+                                    metricsOn ? performance.now() - execStartTime : 0,
+                                    false
+                                );
                             },
                             (error) => {
-                                // Same reason: do not record timing for async
-                                // listeners invoked from emitSync. The error is
-                                // still surfaced through captureRejections or
-                                // reportAsyncError so behavior is unchanged.
                                 const wrapped = new EventHandlerError(eventName, error);
-
-                                if (this.#options.captureRejections) {
-                                    errors.push(wrapped);
+                                this.#recordExecutionMetric(
+                                    eventName,
+                                    metricsOn ? performance.now() - execStartTime : 0,
+                                    true
+                                );
+                                if (
+                                    this.#options.captureRejections &&
+                                    eventName !== 'error' &&
+                                    this.has('error' as EventKey<T>)
+                                ) {
+                                    try {
+                                        this.emitSync(
+                                            'error' as EventKey<T>,
+                                            wrapped as T[EventKey<T>]
+                                        );
+                                    } catch (emitError) {
+                                        this.#reportAsyncError(emitError);
+                                    }
                                 } else {
                                     this.#reportAsyncError(wrapped);
                                 }
@@ -729,6 +768,14 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
             }
 
             if (errors.length > 0) {
+                if (eventName === 'error') {
+                    throw errors.length === 1
+                        ? errors[0]
+                        : new EventHandlerError(
+                              eventName,
+                              new AggregateError(errors, `${errors.length} handlers failed`)
+                          );
+                }
                 const errorEvent = 'error' as EventKey<T>;
 
                 if (this.has(errorEvent)) {
@@ -755,7 +802,11 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
         } catch (error) {
             throw error;
         } finally {
-            this.#recordEmitMetric(eventName, startTime, 'sync');
+            this.#recordEmitMetric(
+                eventName,
+                this.#options.metrics ? performance.now() - startTime : 0,
+                'sync'
+            );
             this.#emitTapsFor(eventName, data, priority, true, 'end');
             const depth = this.#emitDepth.get(eventName) ?? 1;
             if (depth <= 1) {
@@ -1393,9 +1444,17 @@ export class EventEmitter<T extends EventMap = EventMap> implements IEventEmitte
 
                 try {
                     await callback(data as never);
-                    this.#recordExecutionMetric(eventName, startTime, false);
+                    this.#recordExecutionMetric(
+                        eventName,
+                        this.#options.metrics ? performance.now() - startTime : 0,
+                        false
+                    );
                 } catch (error) {
-                    this.#recordExecutionMetric(eventName, startTime, true);
+                    this.#recordExecutionMetric(
+                        eventName,
+                        this.#options.metrics ? performance.now() - startTime : 0,
+                        true
+                    );
                     if (subscription.once) {
                         this.#deleteSubscription(subscription);
                     }
