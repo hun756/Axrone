@@ -53,6 +53,7 @@ import {
 } from './runtime/internals';
 import { TextLayoutEngine } from './text';
 import { WidgetRegistry, type WidgetController } from './widget';
+import { COMPONENT_INSTANCE_ROLE } from './types/ui-asset';
 import type {
     ColorInput,
     FocusMoveDirection,
@@ -74,6 +75,8 @@ import type {
     UIPointerEvent,
     UIKeyEvent,
     UITextInputEvent,
+    UIComponentDefinition,
+    UIComponentInstanceProps,
     WidgetConfig,
     WidgetEventContext,
     WidgetEventHandlers,
@@ -249,7 +252,19 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             locale: this.locale,
             root: asset.root,
         });
-        this.rebuildBindingTable(asset.bindings);
+        const expansion = this.expandComponentInstances(asset.components);
+        const bindings = asset.bindings ? { ...asset.bindings } : undefined;
+        if (bindings) {
+            for (const name of Object.keys(bindings)) {
+                if (expansion.replaced.has(bindings[name] as WidgetKey)) {
+                    delete bindings[name];
+                }
+            }
+        }
+        this.rebuildBindingTable(bindings);
+        for (const [name, widget] of expansion.created) {
+            this.bindingTable.set(name, widget);
+        }
         this.remountControllers();
         return this;
     }
@@ -1555,7 +1570,11 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         return key;
     }
 
-    private restoreChildSnapshot(parent: WidgetId, snapshot: WidgetSnapshot): WidgetId {
+    private restoreChildSnapshot(
+        parent: WidgetId,
+        snapshot: WidgetSnapshot,
+        created?: Map<string, WidgetId>,
+    ): WidgetId {
         const child = this.createWidget({
             role: snapshot.role,
             controller: snapshot.controller,
@@ -1569,11 +1588,174 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
             image: cloneData(snapshot.image ?? null),
             focus: cloneData(snapshot.focus ?? EMPTY_FOCUS_INPUT),
         });
+        if (created !== undefined && typeof snapshot.key === 'string') {
+            created.set(snapshot.key, child);
+        }
         this.appendChild(parent, child);
         for (const grandChild of snapshot.children) {
-            this.restoreChildSnapshot(child, grandChild);
+            this.restoreChildSnapshot(child, grandChild, created);
         }
         return child;
+    }
+
+    private cloneSnapshotForInstance(
+        snapshot: WidgetSnapshot,
+        instanceKey: string,
+        remap: Map<string, string>,
+    ): WidgetSnapshot {
+        const rawKey = typeof snapshot.key === 'string' ? snapshot.key : null;
+        const nextKey = rawKey ? `${instanceKey}__${rawKey}` : snapshot.key;
+        if (rawKey && typeof nextKey === 'string') {
+            remap.set(rawKey, nextKey);
+        }
+        return {
+            role: snapshot.role,
+            controller: snapshot.controller,
+            key: nextKey,
+            props: snapshot.props,
+            enabled: snapshot.enabled,
+            interactive: snapshot.interactive,
+            layout: snapshot.layout,
+            style: snapshot.style,
+            text: snapshot.text,
+            image: snapshot.image,
+            focus: snapshot.focus,
+            children: (snapshot.children ?? []).map((child) =>
+                this.cloneSnapshotForInstance(child, instanceKey, remap)
+            ),
+        };
+    }
+
+    private remapSnapshotRefs(snapshot: WidgetSnapshot, remap: Map<string, string>): void {
+        const props = snapshot.props as Record<string, unknown> | undefined;
+        if (props) {
+            for (const [name, value] of Object.entries(props)) {
+                if (typeof value === 'string' && remap.has(value)) {
+                    props[name] = remap.get(value);
+                }
+            }
+        }
+        for (const child of snapshot.children ?? []) {
+            this.remapSnapshotRefs(child, remap);
+        }
+    }
+
+    private findSnapshotNode(snapshot: WidgetSnapshot, key: string): WidgetSnapshot | null {
+        if (snapshot.key === key) {
+            return snapshot;
+        }
+        for (const child of snapshot.children ?? []) {
+            const found = this.findSnapshotNode(child, key);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private expandInstanceNode(
+        instance: WidgetId,
+        definitions: Readonly<Record<string, UIComponentDefinition>>,
+        created: Map<string, WidgetId>,
+        replaced: Set<WidgetKey>,
+    ): boolean {
+        const index = instance as number;
+        const record = this.records[index];
+        if (!record || (this.flags[index] & NodeFlag.Allocated) === 0) {
+            return false;
+        }
+        const props = record.props as unknown as UIComponentInstanceProps;
+        const componentId = typeof props.componentId === 'string' ? props.componentId : '';
+        const definition = componentId ? definitions[componentId] : undefined;
+        if (!definition) {
+            return false;
+        }
+        const parent = this.parent[index];
+        if (parent === 0) {
+            return false;
+        }
+        if (record.key !== undefined) {
+            replaced.add(record.key);
+        }
+        const recordKey = typeof record.key === 'string' && record.key ? record.key : `inst${index}`;
+        const before = this.nextSibling[index] !== 0 ? (this.nextSibling[index] as WidgetId) : null;
+        const remap = new Map<string, string>();
+        const cloned = this.cloneSnapshotForInstance(definition.root, recordKey, remap);
+        const mergedProps: Record<string, unknown> = {
+            ...((cloned.props as Record<string, unknown> | undefined) ?? {}),
+        };
+        const propOverrides = props.propOverrides;
+        if (propOverrides && typeof propOverrides === 'object' && !Array.isArray(propOverrides)) {
+            Object.assign(mergedProps, propOverrides);
+        }
+        (cloned as { props?: unknown }).props = mergedProps;
+        this.remapSnapshotRefs(cloned, remap);
+        const textOverrides = props.textOverrides;
+        if (textOverrides && typeof textOverrides === 'object' && !Array.isArray(textOverrides)) {
+            for (const [masterKey, value] of Object.entries(textOverrides)) {
+                if (typeof value !== 'string') {
+                    continue;
+                }
+                const resolved = remap.get(masterKey);
+                const target = resolved ? this.findSnapshotNode(cloned, resolved) : null;
+                const text = target?.text as { value?: unknown } | undefined;
+                if (target && text && typeof text === 'object') {
+                    text.value = value;
+                }
+            }
+        }
+        this.removeWidget(instance);
+        const expanded = new Map<string, WidgetId>();
+        this.restoreChildSnapshot(parent as WidgetId, cloned, expanded);
+        const expandedRoot = expanded.get(cloned.key as string);
+        if (expandedRoot !== undefined) {
+            if (typeof record.key === 'string') {
+                created.set(record.key, expandedRoot);
+            }
+            if (before !== null) {
+                this.insertChildBefore(parent as WidgetId, expandedRoot, before);
+            }
+        }
+        for (const [name, widget] of expanded) {
+            created.set(name, widget);
+        }
+        return true;
+    }
+
+    private expandComponentInstances(
+        definitions: Readonly<Record<string, UIComponentDefinition>> | undefined,
+    ): { created: Map<string, WidgetId>; replaced: Set<WidgetKey> } {
+        const created = new Map<string, WidgetId>();
+        const replaced = new Set<WidgetKey>();
+        if (!definitions) {
+            return { created, replaced };
+        }
+        for (let pass = 0; pass < 16; pass += 1) {
+            const pending: number[] = [];
+            for (let index = 0; index < this.records.length; index += 1) {
+                const record = this.records[index];
+                if (!record || (this.flags[index] & NodeFlag.Allocated) === 0) {
+                    continue;
+                }
+                if (record.role !== COMPONENT_INSTANCE_ROLE) {
+                    continue;
+                }
+                pending.push(index);
+            }
+            if (pending.length === 0) {
+                break;
+            }
+            let progressed = false;
+            for (const index of pending) {
+                if (this.expandInstanceNode(index as WidgetId, definitions, created, replaced)) {
+                    progressed = true;
+                }
+            }
+            if (!progressed) {
+                break;
+            }
+        }
+        return { created, replaced };
     }
 
     private destroyNode(index: number): void {
