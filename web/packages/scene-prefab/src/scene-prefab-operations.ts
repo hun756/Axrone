@@ -186,13 +186,18 @@ export const mergeScenePrefabActors = (
     sourcePrefabId: string,
     lineage: readonly string[] = [sourcePrefabId],
 ): void => {
+    const actorPositions = new Map<string, number>();
+    for (let position = 0; position < state.actors.length; position += 1) {
+        actorPositions.set(state.actors[position]!.nodeId, position);
+    }
+
     for (let index = 0; index < actors.length; index += 1) {
         const actor = toMutableActor(actors[index]!, index, sourcePrefabId, lineage);
-        const existingActor = state.actorIndex.get(actor.nodeId);
-        if (existingActor) {
-            const actorIndex = state.actors.indexOf(existingActor);
-            state.actors.splice(actorIndex, 1, actor);
+        const existingPosition = actorPositions.get(actor.nodeId);
+        if (existingPosition !== undefined) {
+            state.actors.splice(existingPosition, 1, actor);
         } else {
+            actorPositions.set(actor.nodeId, state.actors.length);
             state.actors.push(actor);
         }
 
@@ -277,8 +282,20 @@ const ensureComponentIndex = (
 
 const collectSubtreeIds = (state: ScenePrefabState, rootNodeId: string): Set<string> => {
     const collected = new Set<string>();
-    const pending = [rootNodeId];
+    const childrenByParent = new Map<string, string[]>();
+    for (const actor of state.actors) {
+        if (actor.parentNodeId === null) {
+            continue;
+        }
+        const siblings = childrenByParent.get(actor.parentNodeId);
+        if (siblings) {
+            siblings.push(actor.nodeId);
+        } else {
+            childrenByParent.set(actor.parentNodeId, [actor.nodeId]);
+        }
+    }
 
+    const pending = [rootNodeId];
     while (pending.length > 0) {
         const currentNodeId = pending.pop()!;
         if (collected.has(currentNodeId)) {
@@ -287,10 +304,8 @@ const collectSubtreeIds = (state: ScenePrefabState, rootNodeId: string): Set<str
 
         collected.add(currentNodeId);
 
-        for (const actor of state.actors) {
-            if (actor.parentNodeId === currentNodeId) {
-                pending.push(actor.nodeId);
-            }
+        for (const childNodeId of childrenByParent.get(currentNodeId) ?? []) {
+            pending.push(childNodeId);
         }
     }
 
