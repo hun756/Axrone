@@ -383,8 +383,22 @@ const stableReplacer = (_key: string, value: unknown): unknown => {
  * Deep-compares an existing material resource with a new definition to determine
  * if they are semantically identical (shaderId + uniforms + textures + surface + passes).
  */
+const normalizeTextureMap = (
+    textures: Record<string, SceneTextureBindingDefinition | undefined> | undefined
+): Record<string, unknown> => {
+    const normalized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(textures ?? {})) {
+        if (v === undefined) {
+            continue;
+        }
+        const binding = normalizeSceneTextureBinding(v);
+        normalized[k] = { textureId: binding.textureId, samplerId: binding.samplerId, unit: binding.unit };
+    }
+    return normalized;
+};
+
 const areMaterialDefinitionsEquivalent = (
-    existing: SceneMaterialResource,
+    existing: SceneMaterialDefinition,
     incoming: SceneMaterialDefinition
 ): boolean => {
     // Compare shaderId
@@ -392,32 +406,23 @@ const areMaterialDefinitionsEquivalent = (
         return false;
     }
 
-    // Compare uniforms: existing is Map, incoming is Record
-    const existingUniforms: Record<string, unknown> = {};
-    for (const [k, v] of existing.uniforms) {
-        existingUniforms[k] = v;
-    }
-    const incomingUniforms = incoming.uniforms ?? {};
-    if (stableStringify(existingUniforms) !== stableStringify(incomingUniforms)) {
+    // Compare uniforms as plain records. The stored definition is a raw
+    // clone taken before the surface-texture bridge mutates the live
+    // resource, so re-registering an identical definition stays silent.
+    if (stableStringify(existing.uniforms ?? {}) !== stableStringify(incoming.uniforms ?? {})) {
         return false;
     }
 
-    // Compare textures: existing is Map<name, SceneMaterialTextureBinding>, incoming is Record<name, binding>
-    const existingTextures: Record<string, unknown> = {};
-    for (const [k, v] of existing.textureBindings) {
-        existingTextures[k] = { textureId: v.textureId, samplerId: v.samplerId, unit: v.unit };
-    }
-    const incomingTextures: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(incoming.textures ?? {})) {
-        const normalized = normalizeSceneTextureBinding(v as SceneTextureBindingDefinition);
-        incomingTextures[k] = { textureId: normalized.textureId, samplerId: normalized.samplerId, unit: normalized.unit };
-    }
-    if (stableStringify(existingTextures) !== stableStringify(incomingTextures)) {
+    // Compare textures after normalization on both sides
+    if (
+        stableStringify(normalizeTextureMap(existing.textures)) !==
+        stableStringify(normalizeTextureMap(incoming.textures))
+    ) {
         return false;
     }
 
     // Compare surface
-    const existingSurface = existing.surface;
+    const existingSurface = existing.surface ?? null;
     const incomingSurface = incoming.surface ?? null;
     if (existingSurface === null && incomingSurface === null) {
         // both null — equal
@@ -428,7 +433,7 @@ const areMaterialDefinitionsEquivalent = (
     }
 
     // Compare passes
-    const existingPasses = existing.passes;
+    const existingPasses = existing.passes ?? [];
     const incomingPasses = incoming.passes ?? [];
     if (existingPasses.length !== incomingPasses.length) {
         return false;
@@ -466,8 +471,11 @@ export class SceneMaterialRegistry {
     ): SceneMaterialHandle {
         const existing = this._resources.get(definition.id);
 
-        // Idempotent: if an identical material is already registered, return the existing handle silently.
-        if (existing && areMaterialDefinitionsEquivalent(existing, definition)) {
+        // Idempotent: compare against the stored raw definition, not the live
+        // resource — the surface-texture bridge mutates the resource after
+        // storage, which would otherwise defeat equivalence on re-registration.
+        const stored = this._definitions.get(definition.id);
+        if (existing && stored && areMaterialDefinitionsEquivalent(stored, definition)) {
             return toHandle(existing);
         }
 
