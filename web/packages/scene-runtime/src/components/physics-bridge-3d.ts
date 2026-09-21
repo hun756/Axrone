@@ -248,11 +248,19 @@ export class PhysicsBridge3D implements GameLoopSystem<SceneLoopState>, IContact
     }
 
     private _syncAllTransforms(): void {
-        const actors = this._ecsWorld.getAllActors();
-        for (const actor of actors) {
-            if (!actor.active || actor.isDestroyed) continue;
-            const rigidbody = actor.getComponent(Rigidbody3D);
-            if (rigidbody && this._initializedBodies.has(rigidbody)) {
+        // Iterate tracked bodies instead of scanning every actor: every
+        // initialized rigidbody is registered in _componentToActor, so this
+        // is O(bodies) rather than O(actors x components) per fixed step.
+        // Entries whose actor died are pruned — the strong maps would
+        // otherwise retain destroyed bodies until bridge disposal.
+        for (const [rigidbody, actor] of this._componentToActor) {
+            if (actor.isDestroyed) {
+                this._componentToActor.delete(rigidbody);
+                this._bodyIdToComponent.delete(rigidbody.bodyId);
+                continue;
+            }
+            if (!actor.active) continue;
+            if (this._initializedBodies.has(rigidbody)) {
                 rigidbody.syncTransformFromWorld();
             }
         }
