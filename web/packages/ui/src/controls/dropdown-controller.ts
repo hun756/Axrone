@@ -190,7 +190,7 @@ const applyHoverHighlight = (context: DropdownContext): void => {
                 : i === state.selectedIndex && selectedColor !== null
                   ? selectedColor
                   : '#00000000';
-        runtime.updateWidget(items[i], { style: { background } });
+        runtime.updateWidget(items[i], { style: { background: background as `#${string}` } });
     }
 };
 

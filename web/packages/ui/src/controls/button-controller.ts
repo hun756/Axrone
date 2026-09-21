@@ -207,6 +207,7 @@ export const buttonFeedbackController: WidgetController<
 		if (event.type !== 'pointer') {
 			return false;
 		}
+		const handled = event.phase === 'down' || event.phase === 'up';
 		switch (event.phase) {
 			case 'down':
 				state.pressed = true;
@@ -236,6 +237,6 @@ export const buttonFeedbackController: WidgetController<
 		}
 
 		applyFeedback(typed);
-		return event.phase === 'down' || event.phase === 'up';
+		return handled;
 	},
 };

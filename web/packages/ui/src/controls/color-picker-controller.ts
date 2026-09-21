@@ -84,7 +84,7 @@ const applyVisuals = (context: ColorPickerContext): void => {
             const selected = i === state.selectedIndex;
             runtime.updateWidget(swatch, {
                 style: {
-                    background: colors[i]!,
+                    background: colors[i]! as `#${string}`,
                     borderColor: selected ? SELECTED_BORDER_COLOR : UNSELECTED_BORDER_COLOR,
                     borderWidth: selected ? SELECTED_BORDER_WIDTH : 0,
                 },
@@ -97,7 +97,7 @@ const applyVisuals = (context: ColorPickerContext): void => {
         const preview = runtime.getBoundWidget(previewKey);
         if (preview !== null) {
             runtime.updateWidget(preview, {
-                style: { background: state.value },
+                style: { background: state.value as `#${string}` },
             });
         }
     }
