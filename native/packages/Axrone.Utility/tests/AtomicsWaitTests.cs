@@ -1,9 +1,19 @@
 namespace Axrone.Utility.Tests.Concurrency;
 
+using System.Runtime.InteropServices;
 using Axrone.Utility.Concurrency;
 
+/// <summary>
+/// Address-hashed rendezvous needs a stable address, so the holder is pinned for the test
+/// duration (see <see cref="AtomicsWaitAsyncTests"/>).
+/// </summary>
 public class AtomicsWaitTests
 {
+    private sealed class IntHolder
+    {
+        public Atomic<int> Value;
+    }
+
     [Fact]
     public void Wait_ReturnsImmediatelyWhenChanged()
     {
@@ -17,33 +27,49 @@ public class AtomicsWaitTests
     [Fact]
     public async Task Wait_WakesOnNotify()
     {
-        var atomic = new Atomic<int>(0);
-        var waiter = Task.Run(() => atomic.Wait(0));
-        await Task.Delay(50);
+        var holder = new IntHolder();
+        GCHandle pin = GCHandle.Alloc(holder, GCHandleType.Pinned);
+        try
+        {
+            var waiter = Task.Run(() => holder.Value.Wait(0));
+            await Task.Delay(50);
 
-        atomic.Store(1);
-        atomic.NotifyOne();
+            holder.Value.Store(1);
+            holder.Value.NotifyOne();
 
-        await waiter.WaitAsync(TimeSpan.FromSeconds(15));
-        atomic.Value.Should().Be(1);
+            await waiter.WaitAsync(TimeSpan.FromSeconds(15));
+            holder.Value.Value.Should().Be(1);
+        }
+        finally
+        {
+            pin.Free();
+        }
     }
 
     [Fact]
     public async Task NotifyAll_WakesEveryWaiter()
     {
-        var atomic = new Atomic<int>(0);
-        const int Waiters = 3;
-        var tasks = new Task[Waiters];
-        for (int i = 0; i < Waiters; i++)
+        var holder = new IntHolder();
+        GCHandle pin = GCHandle.Alloc(holder, GCHandleType.Pinned);
+        try
         {
-            tasks[i] = Task.Run(() => atomic.Wait(0));
+            const int Waiters = 3;
+            var tasks = new Task[Waiters];
+            for (int i = 0; i < Waiters; i++)
+            {
+                tasks[i] = Task.Run(() => holder.Value.Wait(0));
+            }
+
+            await Task.Delay(100);
+            holder.Value.Store(9);
+            holder.Value.NotifyAll();
+
+            await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(15));
         }
-
-        await Task.Delay(100);
-        atomic.Store(9);
-        atomic.NotifyAll();
-
-        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(15));
+        finally
+        {
+            pin.Free();
+        }
     }
 
     private sealed class Token

@@ -115,6 +115,84 @@ internal static class FutexEngine
         }
     }
 
+    /// <summary>
+    /// Async wait: completes when the value differs, on notify, or on cancellation. A location
+    /// that relocates mid-wait (GC move of an unpinned field) can miss the bucket rendezvous —
+    /// pin first for hard guarantees.
+    /// </summary>
+    public static unsafe ValueTask WaitAsync<T>(ref T location, T comparand, CancellationToken cancellationToken)
+        where T : unmanaged
+    {
+        if (!EqualityComparer<T>.Default.Equals(AtomicCoreOps.Load(ref location, MemoryOrder.Relaxed), comparand))
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        fixed (T* ptr = &location)
+        {
+            int bucket = SharedFallbackLock.IndexFor(ptr);
+            AsyncWaitNode node = AsyncWaitTable.Shared.Enqueue(bucket, cancellationToken);
+            if (!EqualityComparer<T>.Default.Equals(AtomicCoreOps.Load(ref location, MemoryOrder.Relaxed), comparand))
+            {
+                if (AsyncWaitTable.Shared.TryUnlink(node, bucket))
+                {
+                    AsyncWaitTable.Shared.Release(node);
+                    return ValueTask.CompletedTask;
+                }
+
+                return node.AsTask();
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                AsyncWaitTable.Shared.TryCancel(node, bucket, cancellationToken);
+            }
+
+            return node.AsTask();
+        }
+    }
+
+    /// <summary>Reference variant of <see cref="WaitAsync{T}(ref T, T, CancellationToken)"/>.</summary>
+    public static unsafe ValueTask WaitRefAsync<T>(ref T? location, T? comparand, CancellationToken cancellationToken)
+        where T : class
+    {
+        if (!ReferenceEquals(AtomicCoreOps.LoadRef(ref location, MemoryOrder.Relaxed), comparand))
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        void* address = Unsafe.AsPointer(ref Unsafe.AsRef(in location));
+        int bucket = SharedFallbackLock.IndexFor(address);
+        AsyncWaitNode node = AsyncWaitTable.Shared.Enqueue(bucket, cancellationToken);
+        if (!ReferenceEquals(AtomicCoreOps.LoadRef(ref location, MemoryOrder.Relaxed), comparand))
+        {
+            if (AsyncWaitTable.Shared.TryUnlink(node, bucket))
+            {
+                AsyncWaitTable.Shared.Release(node);
+                return ValueTask.CompletedTask;
+            }
+
+            return node.AsTask();
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            AsyncWaitTable.Shared.TryCancel(node, bucket, cancellationToken);
+        }
+
+        return node.AsTask();
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe void NotifyOne<T>(ref T location)
         where T : unmanaged
@@ -129,7 +207,7 @@ internal static class FutexEngine
                 }
                 catch (Exception)
                 {
-                    // OS wake is best-effort; the Monitor pulse below still reaches fallback waiters.
+                    // OS wake is best-effort; the pulses below still reach other waiters.
                 }
             }
 
@@ -138,6 +216,8 @@ internal static class FutexEngine
             {
                 Monitor.Pulse(root);
             }
+
+            AsyncWaitTable.Shared.Wake(SharedFallbackLock.IndexFor(ptr), all: false);
         }
     }
 
@@ -155,7 +235,7 @@ internal static class FutexEngine
                 }
                 catch (Exception)
                 {
-                    // OS wake is best-effort; the Monitor pulse below still reaches fallback waiters.
+                    // OS wake is best-effort; the pulses below still reach other waiters.
                 }
             }
 
@@ -164,6 +244,8 @@ internal static class FutexEngine
             {
                 Monitor.PulseAll(root);
             }
+
+            AsyncWaitTable.Shared.Wake(SharedFallbackLock.IndexFor(ptr), all: true);
         }
     }
 
@@ -177,6 +259,8 @@ internal static class FutexEngine
         {
             Monitor.Pulse(root);
         }
+
+        AsyncWaitTable.Shared.Wake(SharedFallbackLock.IndexFor(address), all: false);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -189,5 +273,7 @@ internal static class FutexEngine
         {
             Monitor.PulseAll(root);
         }
+
+        AsyncWaitTable.Shared.Wake(SharedFallbackLock.IndexFor(address), all: true);
     }
 }

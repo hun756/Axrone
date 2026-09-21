@@ -213,6 +213,10 @@ public struct AtomicNumber<T> : IAtomicNumber<T>, IAtomicBitwise<T>, IAtomicWait
         FutexEngine.Wait(ref _value, comparand, order);
 
     /// <inheritdoc/>
+    public ValueTask WaitAsync(T comparand, CancellationToken cancellationToken = default) =>
+        FutexEngine.WaitAsync(ref _value, comparand, cancellationToken);
+
+    /// <inheritdoc/>
     public void NotifyOne() => FutexEngine.NotifyOne(ref _value);
 
     /// <inheritdoc/>

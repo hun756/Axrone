@@ -11,6 +11,9 @@ public interface IAtomicWaitNotify<T>
     /// <summary>Blocks while the value equals <paramref name="comparand"/>.</summary>
     void Wait(T comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent);
 
+    /// <summary>Waits asynchronously while the value equals <paramref name="comparand"/>.</summary>
+    ValueTask WaitAsync(T comparand, CancellationToken cancellationToken = default);
+
     /// <summary>Wakes one waiter.</summary>
     void NotifyOne();
 

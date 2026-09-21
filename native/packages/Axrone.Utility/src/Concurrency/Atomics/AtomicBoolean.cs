@@ -65,6 +65,10 @@ public struct AtomicBoolean : IAtomic<bool>, IAtomicWaitNotify<bool>
         FutexEngine.Wait(ref _value, comparand ? (byte)1 : (byte)0, order);
 
     /// <inheritdoc/>
+    public ValueTask WaitAsync(bool comparand, CancellationToken cancellationToken = default) =>
+        FutexEngine.WaitAsync(ref _value, comparand ? (byte)1 : (byte)0, cancellationToken);
+
+    /// <inheritdoc/>
     public void NotifyOne() => FutexEngine.NotifyOne(ref _value);
 
     /// <inheritdoc/>

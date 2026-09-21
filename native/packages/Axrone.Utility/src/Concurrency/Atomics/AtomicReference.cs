@@ -66,6 +66,10 @@ public sealed class AtomicReference<T> : IAtomicWaitNotify<T?>
         FutexEngine.WaitRef(ref _value, comparand, order);
 
     /// <inheritdoc/>
+    public ValueTask WaitAsync(T? comparand, CancellationToken cancellationToken = default) =>
+        FutexEngine.WaitRefAsync(ref _value, comparand, cancellationToken);
+
+    /// <inheritdoc/>
     public void NotifyOne() => FutexEngine.NotifyOneRef(ref _value);
 
     /// <inheritdoc/>

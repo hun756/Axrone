@@ -36,11 +36,15 @@ internal static class SharedFallbackLock
 
     /// <summary>Returns the shared root guarding the given address.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe object ForAddress(void* address)
+    public static unsafe object ForAddress(void* address) => s_roots[IndexFor(address)];
+
+    /// <summary>Returns the table index for the given address.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe int IndexFor(void* address)
     {
         nuint mixed = (nuint)address;
         mixed ^= mixed >> 9;
         mixed ^= mixed >> 18;
-        return s_roots[(int)(mixed & (nuint)TableMask)];
+        return (int)(mixed & (nuint)TableMask);
     }
 }
