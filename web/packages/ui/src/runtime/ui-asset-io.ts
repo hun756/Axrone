@@ -128,10 +128,59 @@ function parseComponentDefinitions(
         if (!isPlainObject(raw)) {
             throw new InvalidUIAssetError(`${context}.components: "${id}" must be an object.`, { id, raw });
         }
-        result[id] = {
+        const definition: Record<string, unknown> = {
             name: requireString(raw, 'name', `${context}.components["${id}"]`),
             root: parseWidgetSnapshot(raw['root'], `${context}.components["${id}"].root`),
         };
+        if (raw['variants'] !== undefined) {
+            definition['variants'] = parseComponentVariants(raw['variants'], `${context}.components["${id}"].variants`);
+        }
+        result[id] = definition as unknown as UIComponentDefinition;
+    }
+    return result;
+}
+
+function parseStringRecord(value: unknown): Record<string, string> | undefined {
+    if (!isPlainObject(value)) {
+        return undefined;
+    }
+    const result: Record<string, string> = {};
+    for (const [key, entry] of Object.entries(value)) {
+        if (typeof entry !== 'string') {
+            return undefined;
+        }
+        result[key] = entry;
+    }
+    return result;
+}
+
+function parseComponentVariants(
+    value: unknown,
+    context: string
+): Readonly<Record<string, { textOverrides?: Record<string, string>; propOverrides?: Record<string, unknown> }>> {
+    if (!isPlainObject(value)) {
+        throw new InvalidUIAssetError(`${context} must be an object.`, { value });
+    }
+    const result: Record<string, { textOverrides?: Record<string, string>; propOverrides?: Record<string, unknown> }> = {};
+    for (const [name, raw] of Object.entries(value)) {
+        if (!isPlainObject(raw)) {
+            throw new InvalidUIAssetError(`${context}["${name}"] must be an object.`, { name, raw });
+        }
+        const variant: { textOverrides?: Record<string, string>; propOverrides?: Record<string, unknown> } = {};
+        if (raw['textOverrides'] !== undefined) {
+            const textOverrides = parseStringRecord(raw['textOverrides']);
+            if (!textOverrides) {
+                throw new InvalidUIAssetError(`${context}["${name}"].textOverrides must be a string record.`, { name });
+            }
+            variant.textOverrides = textOverrides;
+        }
+        if (raw['propOverrides'] !== undefined) {
+            if (!isPlainObject(raw['propOverrides'])) {
+                throw new InvalidUIAssetError(`${context}["${name}"].propOverrides must be an object.`, { name });
+            }
+            variant.propOverrides = raw['propOverrides'] as Record<string, unknown>;
+        }
+        result[name] = variant;
     }
     return result;
 }

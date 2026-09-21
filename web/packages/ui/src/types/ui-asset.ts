@@ -60,13 +60,20 @@ export interface UICanvasConfig {
  * architecture. A UI asset contains its own canvas configuration and widget tree,
  * independent of any 3D scene. Scenes reference UI assets by ID.
  */
+export interface UIComponentVariant {
+    readonly textOverrides?: Readonly<Record<string, string>>;
+    readonly propOverrides?: Readonly<Record<string, unknown>>;
+}
+
 export interface UIComponentDefinition {
     readonly name: string;
     readonly root: WidgetSnapshot;
+    readonly variants?: Readonly<Record<string, UIComponentVariant>>;
 }
 
 export interface UIComponentInstanceProps {
     readonly componentId: string;
+    readonly variant?: string;
     readonly textOverrides?: Readonly<Record<string, string>>;
     readonly propOverrides?: Readonly<Record<string, unknown>>;
 }

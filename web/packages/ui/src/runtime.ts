@@ -1681,18 +1681,25 @@ export class UIRuntime<TPayload = unknown> implements Disposable {
         const before = this.nextSibling[index] !== 0 ? (this.nextSibling[index] as WidgetId) : null;
         const remap = new Map<string, string>();
         const cloned = this.cloneSnapshotForInstance(definition.root, recordKey, remap);
+        const variantName = typeof props.variant === 'string' ? props.variant : '';
+        const variant = variantName ? definition.variants?.[variantName] : undefined;
         const mergedProps: Record<string, unknown> = {
             ...((cloned.props as Record<string, unknown> | undefined) ?? {}),
         };
-        const propOverrides = props.propOverrides;
-        if (propOverrides && typeof propOverrides === 'object' && !Array.isArray(propOverrides)) {
-            Object.assign(mergedProps, propOverrides);
+        const propLayers = [variant?.propOverrides, props.propOverrides];
+        for (const layer of propLayers) {
+            if (layer && typeof layer === 'object' && !Array.isArray(layer)) {
+                Object.assign(mergedProps, layer);
+            }
         }
         (cloned as { props?: unknown }).props = mergedProps;
         this.remapSnapshotRefs(cloned, remap);
-        const textOverrides = props.textOverrides;
-        if (textOverrides && typeof textOverrides === 'object' && !Array.isArray(textOverrides)) {
-            for (const [masterKey, value] of Object.entries(textOverrides)) {
+        const textLayers = [variant?.textOverrides, props.textOverrides];
+        for (const layer of textLayers) {
+            if (!layer || typeof layer !== 'object' || Array.isArray(layer)) {
+                continue;
+            }
+            for (const [masterKey, value] of Object.entries(layer)) {
                 if (typeof value !== 'string') {
                     continue;
                 }

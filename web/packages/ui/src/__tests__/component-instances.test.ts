@@ -208,6 +208,66 @@ describe('component instance expansion', () => {
         expect(frameTexts(runtime)).toContain('Alpha');
     });
 
+    it('layers variant overrides under instance overrides', () => {
+        const runtime = prepareRuntime();
+        const lane = (key: string, left: number, child: Record<string, unknown>) => ({
+            role: 'container',
+            key,
+            enabled: true,
+            interactive: false,
+            layout: { position: 'absolute', width: 220, height: 200, inset: { left, top: 0 } },
+            children: [child],
+        });
+        const asset = buildAsset(
+            [
+                lane('lane-1', 0, instanceNode('inst1', { componentId: 'card', variant: 'promo' })),
+                lane(
+                    'lane-2',
+                    300,
+                    instanceNode('inst2', {
+                        componentId: 'card',
+                        variant: 'promo',
+                        textOverrides: { 'card-item-0-text': 'Custom' },
+                    }),
+                ),
+                lane('lane-3', 600, instanceNode('inst3', { componentId: 'card', variant: 'ghost' })),
+            ],
+            {
+                card: {
+                    name: 'Card',
+                    root: dropdownMaster('card'),
+                    variants: {
+                        promo: {
+                            textOverrides: { 'card-item-0-text': 'Promo' },
+                            propOverrides: { selectedIndex: 1 },
+                        },
+                    },
+                },
+            },
+        );
+        (asset.bindings as Record<string, string>)['lane-1'] = 'lane-1';
+        (asset.bindings as Record<string, string>)['lane-2'] = 'lane-2';
+        (asset.bindings as Record<string, string>)['lane-3'] = 'lane-3';
+        runtime.loadFromAsset(asset);
+
+        const first = runtime.getBoundWidget('inst1__card')!;
+        expect(getDropdownSelectedIndex(runtime, first)).toBe(1);
+        runtime.commit();
+
+        const trigger = runtime.getBoundWidget('inst1__card-trigger')!;
+        const box = runtime.getLayoutBox(trigger);
+        runtime.dispatchInput({ type: 'pointer', phase: 'down', x: box.x + 4, y: box.y + 4 });
+        expect(frameTexts(runtime)).toContain('Promo');
+
+        const secondTrigger = runtime.getBoundWidget('inst2__card-trigger')!;
+        const secondBox = runtime.getLayoutBox(secondTrigger);
+        runtime.dispatchInput({ type: 'pointer', phase: 'down', x: secondBox.x + 4, y: secondBox.y + 4 });
+        expect(frameTexts(runtime)).toContain('Custom');
+        expect(getDropdownSelectedIndex(runtime, runtime.getBoundWidget('inst2__card')!)).toBe(1);
+
+        expect(getDropdownSelectedIndex(runtime, runtime.getBoundWidget('inst3__card')!)).toBe(0);
+    });
+
     it('expands nested instances and leaves missing masters alone', () => {
         const runtime = prepareRuntime();
         runtime.loadFromAsset(
