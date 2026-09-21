@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { hitTestBoundWidget, asString, asNumber, asArray, setWidgetVisible } from './internals';
+import { hitTestBoundWidget, asString, asNumber, asArray, asBoolean, asFiniteNumber, asColorString, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -41,6 +41,11 @@ export interface TabControllerProps {
     readonly inactiveTextColor?: string;
     readonly pageKey?: string;
     readonly pageNames?: readonly string[];
+    readonly panelHeight?: number;
+    readonly panelRadius?: number;
+    readonly panelBackground?: string;
+    readonly switchOnHover?: boolean;
+    readonly keyboardNav?: boolean;
 }
 
 export interface TabControllerState {
@@ -95,13 +100,15 @@ const applyVisuals = (context: TabContext): boolean => {
     const inactiveColor = (asString(props.inactiveColor) || DEFAULT_INACTIVE_COLOR) as `#${string}`;
     const activeTextColor = (asString(props.activeTextColor) || DEFAULT_ACTIVE_TEXT_COLOR) as `#${string}`;
     const inactiveTextColor = (asString(props.inactiveTextColor) || DEFAULT_INACTIVE_TEXT_COLOR) as `#${string}`;
+    const panelHeight = asFiniteNumber(props.panelHeight);
+    const panelRadius = asFiniteNumber(props.panelRadius);
+    const panelBackground = asColorString(props.panelBackground);
 
     let applied = false;
 
     for (let i = 0; i < count; i++) {
         const isActive = i === state.selectedIndex;
 
-        // --- tab widget ---
         const tabKey = resolveTabKey(props, i);
         const tab = runtime.getBoundWidget(tabKey);
         if (tab !== null) {
@@ -114,11 +121,24 @@ const applyVisuals = (context: TabContext): boolean => {
             applied = true;
         }
 
-        // --- panel widget ---
         const panelKey = resolvePanelKey(props, i);
         const panel = runtime.getBoundWidget(panelKey);
         if (panel !== null) {
             setWidgetVisible(runtime, panel, isActive);
+            const layoutPatch: Record<string, unknown> = {};
+            const stylePatch: Record<string, unknown> = {};
+            if (panelHeight !== null && panelHeight > 0) layoutPatch.height = panelHeight;
+            if (panelRadius !== null && panelRadius >= 0) stylePatch.radius = panelRadius;
+            if (panelBackground !== null) stylePatch.background = panelBackground as `#${string}`;
+            if (Object.keys(layoutPatch).length > 0 || Object.keys(stylePatch).length > 0) {
+                runtime.updateWidget(
+                    panel,
+                    {
+                        ...(Object.keys(layoutPatch).length > 0 ? { layout: layoutPatch } : {}),
+                        ...(Object.keys(stylePatch).length > 0 ? { style: stylePatch } : {}),
+                    },
+                );
+            }
             applied = true;
         }
     }
@@ -181,7 +201,12 @@ export const tabViewController: WidgetController<
             props.activeTextColor !== previous.activeTextColor ||
             props.inactiveTextColor !== previous.inactiveTextColor ||
             props.pageKey !== previous.pageKey ||
-            props.pageNames !== previous.pageNames
+            props.pageNames !== previous.pageNames ||
+            props.panelHeight !== previous.panelHeight ||
+            props.panelRadius !== previous.panelRadius ||
+            props.panelBackground !== previous.panelBackground ||
+            props.switchOnHover !== previous.switchOnHover ||
+            props.keyboardNav !== previous.keyboardNav
         ) {
             const previousSelected = typed.state.selectedIndex;
             const count = Math.max(0, asNumber(props.tabCount, 0) | 0);
@@ -218,12 +243,24 @@ export const tabViewController: WidgetController<
                     }
                     return false;
                 }
+                case 'move': {
+                    if (!asBoolean(props.switchOnHover, false)) return false;
+                    const hit = hitTestTab(typed, event.x, event.y);
+                    if (hit >= 0 && hit !== state.selectedIndex) {
+                        state.selectedIndex = hit;
+                        applyVisuals(typed);
+                        syncPage(typed, hit);
+                        return true;
+                    }
+                    return false;
+                }
                 default:
                     return false;
             }
         }
 
         if (event.type === 'key' && event.phase === 'down') {
+            if (!asBoolean(props.keyboardNav, true)) return false;
             switch (event.key) {
                 case 'ArrowRight': {
                     const next = state.selectedIndex + 1;
