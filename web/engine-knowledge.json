@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-21T09:33:28.322Z",
+  "generatedAt": "2026-09-21T11:40:15.820Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -8744,6 +8744,7 @@
         "BUTTON_STATE_OPACITY",
         "CHECKBOX_TOGGLE_CONTROLLER_TYPE",
         "COLOR_PICKER_CONTROLLER_TYPE",
+        "COMPONENT_INSTANCE_ROLE",
         "CanvasScaleResult",
         "ColorInput",
         "CornerRadii",
@@ -9104,6 +9105,8 @@
         "UICheckboxLabelPosition",
         "UICheckboxMarkStyle",
         "UICheckboxOptions",
+        "UIComponentDefinition",
+        "UIComponentInstanceProps",
         "UIControlTheme",
         "UIControlVariant",
         "UIEditBoxHandle",
@@ -9449,6 +9452,7 @@
         {
           "path": "@axrone/ui/types",
           "exports": [
+            "COMPONENT_INSTANCE_ROLE",
             "TRANSPARENT_COLOR",
             "normalizeColor",
             "normalizeColorToTuple"
@@ -9546,6 +9550,8 @@
             "UIAsset",
             "UICanvasConfig",
             "UICanvasScaleMode",
+            "UIComponentDefinition",
+            "UIComponentInstanceProps",
             "UIFrame",
             "UIFrameMetrics",
             "UIImageBorderInput",
@@ -16261,6 +16267,11 @@
       "name": "Component",
       "package": "@axrone/ecs-runtime",
       "kind": "class"
+    },
+    {
+      "name": "COMPONENT_INSTANCE_ROLE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "ComponentChangeEvent",
@@ -38358,6 +38369,16 @@
       "kind": "unknown"
     },
     {
+      "name": "UIComponentDefinition",
+      "package": "@axrone/ui",
+      "kind": "interface"
+    },
+    {
+      "name": "UIComponentInstanceProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "UIControlTheme",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -41798,6 +41819,12 @@
       "kind": "class",
       "code": "declare abstract class Component<TConfig extends ComponentConfig = ComponentConfig, TData extends Record<string, any> = Record<string, any>> implements ComponentLifecycle, ComponentSerialization, ComponentValidation, ComponentDebug { constructor(config?: TConfig); get id(): ComponentId; get state()…",
       "package": "@axrone/ecs-runtime"
+    },
+    {
+      "name": "COMPONENT_INSTANCE_ROLE",
+      "kind": "const",
+      "code": "declare const COMPONENT_INSTANCE_ROLE = \"custom:instance\";",
+      "package": "@axrone/ui"
     },
     {
       "name": "ComponentError",
