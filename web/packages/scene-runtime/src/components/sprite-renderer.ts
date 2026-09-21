@@ -265,6 +265,7 @@ export class SpriteRenderer extends Component {
         this._passId = value;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get size(): Vec2 {
         return this._size;
     }
@@ -275,6 +276,7 @@ export class SpriteRenderer extends Component {
         this._size.y = next.y;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get sourceSize(): Vec2 {
         return this._sourceSize;
     }
@@ -285,6 +287,7 @@ export class SpriteRenderer extends Component {
         this._sourceSize.y = next.y;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get anchor(): Vec2 {
         return this._anchor;
     }
@@ -295,6 +298,7 @@ export class SpriteRenderer extends Component {
         this._anchor.y = next.y;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get color(): Color {
         return this._color;
     }
@@ -307,6 +311,7 @@ export class SpriteRenderer extends Component {
         this._color.a = next.a;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get uvRect(): SpriteRendererRectState {
         return this._uvRect;
     }
@@ -319,6 +324,7 @@ export class SpriteRenderer extends Component {
         this._uvRect.height = next.height;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get sliceBorder(): SpriteRendererBorderState | null {
         return this._sliceBorder;
     }

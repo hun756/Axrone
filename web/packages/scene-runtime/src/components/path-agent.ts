@@ -206,6 +206,7 @@ export class PathAgent extends Component {
         return this._pathStatus;
     }
 
+    /** Live steering state — read-only view owned by the movement update. */
     get velocity(): Vec3 {
         return this._velocity;
     }

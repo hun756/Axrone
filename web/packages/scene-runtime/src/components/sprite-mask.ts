@@ -62,6 +62,7 @@ export class SpriteMask extends Component {
         this._cornerRadius = config.cornerRadius ?? null;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get size(): Vec2 {
         return this._size;
     }
@@ -72,6 +73,7 @@ export class SpriteMask extends Component {
         this._size.y = next.y;
     }
 
+    /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get anchor(): Vec2 {
         return this._anchor;
     }
