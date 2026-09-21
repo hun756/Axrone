@@ -165,6 +165,7 @@ export class SceneSpriteBatchRuntime {
     private _vertexBufferSize = 0;
     private _indexBuffer: WebGLBuffer | null = null;
     private _indexBufferSize = 0;
+    private _attributesConfigured = false;
     private _scissorEnabled = false;
     private _activeClipRect: Render2DRectLike | null = null;
     private _activeMask: Render2DSpriteMask | null = null;
@@ -340,6 +341,7 @@ export class SceneSpriteBatchRuntime {
             this._indexBuffer = null;
         }
 
+        this._attributesConfigured = false;
         this._submissions.length = 0;
         this._submissionRendererIds.length = 0;
         this._resetClipRect();
@@ -394,6 +396,10 @@ export class SceneSpriteBatchRuntime {
             }
         }
 
+        if (this._attributesConfigured) {
+            return;
+        }
+
         this._options.gl.bindVertexArray(this._vertexArray);
         this._options.gl.bindBuffer(this._options.gl.ARRAY_BUFFER, this._vertexBuffer);
         this._options.gl.bindBuffer(
@@ -428,6 +434,7 @@ export class SceneSpriteBatchRuntime {
             20
         );
         this._options.gl.bindVertexArray(null);
+        this._attributesConfigured = true;
     }
 
     private _upload(buildResult: Render2DSpriteBatchBuildResult): void {
