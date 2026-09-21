@@ -115,6 +115,19 @@ const rebuildActorIndex = (state: ScenePrefabState): void => {
             );
         }
         state.actorIndex.set(actor.nodeId, actor);
+
+        const seenComponentIds = new Set<string>();
+        for (const component of actor.components) {
+            if (!component.id) {
+                continue;
+            }
+            if (seenComponentIds.has(component.id)) {
+                throw new ScenePrefabValidationError(
+                    `Prefab '${state.id}' actor '${actor.nodeId}' contains duplicate component '${component.id}'`,
+                );
+            }
+            seenComponentIds.add(component.id);
+        }
     }
 };
 
