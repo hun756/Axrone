@@ -20,6 +20,7 @@ export interface SceneShaderResource {
 export interface SceneShaderRegistrationResult {
     readonly handle: SceneShaderHandle;
     readonly previous: SceneShaderResource | null;
+    readonly evictedVariants: readonly SceneShaderResource[];
 }
 
 const toHandle = (resource: SceneShaderResource): SceneShaderHandle => ({
@@ -62,10 +63,14 @@ export class SceneShaderRegistry {
         const previous = this._resources.get(resource.id) ?? null;
         this._resources.set(resource.id, resource);
         this._definitions.set(resource.id, cloneSceneShaderDefinition(definition));
+        // Variants compiled from the previous source are stale and must be
+        // reclaimed by the owner — never serve them for the new definition.
+        const evictedVariants = this._takeVariants(resource.id);
 
         return {
             handle: toHandle(resource),
             previous,
+            evictedVariants,
         };
     }
 
@@ -116,17 +121,34 @@ export class SceneShaderRegistry {
 
     clear(): readonly SceneShaderResource[] {
         const resources = [...this._resources.values()];
+        for (const variants of this._variants.values()) {
+            resources.push(...variants.values());
+        }
         this._resources.clear();
         this._definitions.clear();
         this._variants.clear();
         return resources;
     }
 
-    clearVariants(): void {
+    clearVariants(): readonly SceneShaderResource[] {
+        const evicted: SceneShaderResource[] = [];
+        for (const variants of this._variants.values()) {
+            evicted.push(...variants.values());
+        }
         this._variants.clear();
+        return evicted;
     }
 
     clearVariantsForShader(shaderId: string): boolean {
         return this._variants.delete(shaderId);
+    }
+
+    private _takeVariants(shaderId: string): SceneShaderResource[] {
+        const variants = this._variants.get(shaderId);
+        if (!variants) {
+            return [];
+        }
+        this._variants.delete(shaderId);
+        return [...variants.values()];
     }
 }

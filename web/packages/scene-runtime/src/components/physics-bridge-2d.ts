@@ -221,6 +221,17 @@ export class PhysicsBridge2D implements GameLoopSystem<SceneLoopState>, IContact
     // ── Internal ──────────────────────────────────────────────────────────
 
     private _registerNewComponents(): void {
+        // Drop entries whose actor died — the strong maps would otherwise
+        // retain destroyed bodies until bridge disposal.
+        for (const [rigidbody, actor] of this._componentToActor) {
+            if (actor.isDestroyed) {
+                this._componentToActor.delete(rigidbody);
+                if (rigidbody.bodyId != null) {
+                    this._bodyIdToComponent.delete(rigidbody.bodyId);
+                }
+            }
+        }
+
         const actors = this._ecsWorld.getAllActors();
 
         for (const actor of actors) {

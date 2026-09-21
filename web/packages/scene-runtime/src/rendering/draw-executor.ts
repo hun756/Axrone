@@ -1,3 +1,4 @@
+import type { LightingUniformValueMap } from '@axrone/lighting';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneFogState } from '../fog-state';
 import type { SceneLightingState } from '../lighting-collector';
@@ -28,6 +29,12 @@ export interface SceneDrawExecutorContext {
     readonly renderPass: SceneRenderPassResource;
     readonly cameraFrame: SceneCameraFrameState;
     readonly lighting: SceneLightingState;
+    /**
+     * Frame-scoped lighting values, precomputed once per frame by the render
+     * runtime. Optional so standalone executor uses keep working — when
+     * absent the binder derives the map per draw.
+     */
+    readonly lightingValues?: LightingUniformValueMap;
     readonly fog: SceneFogState;
     readonly elapsedSeconds: number;
     readonly deltaSeconds: number;
@@ -131,7 +138,12 @@ export class SceneDrawExecutor {
             viewportWidth: context.viewportWidth,
             viewportHeight: context.viewportHeight,
         });
-        this._dependencies.lightingUniformBinder.apply(shader, item.renderer, context.lighting);
+        this._dependencies.lightingUniformBinder.apply(
+            shader,
+            item.renderer,
+            context.lighting,
+            context.lightingValues
+        );
         this._dependencies.fogUniformBinder.apply(shader, context.fog);
         this._dependencies.skinningUniformBinder.apply(shader, item.renderer);
 

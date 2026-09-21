@@ -188,6 +188,7 @@ export class Animator extends Component {
     private readonly _tempQuat = new Quat();
     private _stepAnimationWarned = false;
     private _cullingModeWarned = false;
+    private _rebuildWarned = false;
 
     constructor(config: AnimatorConfig = {}) {
         super();
@@ -245,6 +246,7 @@ export class Animator extends Component {
             this._loop = value;
             if (this._layerDefinitions === null) {
                 this._controllerDirty = true;
+                this._rebuildWarned = false;
             }
         }
     }
@@ -283,6 +285,7 @@ export class Animator extends Component {
         }
         this._applyRootMotionEnabled = value;
         this._controllerDirty = true;
+        this._rebuildWarned = false;
         this._controller = null;
         this._streamingScheduler = null;
         this._streamingSnapshot = null;
@@ -681,6 +684,7 @@ export class Animator extends Component {
         }
         this._controllerDirty = true;
         this._controller = null;
+        this._rebuildWarned = false;
         this._streamingScheduler = null;
         this._streamingSnapshot = null;
         this._pendingStreamingRequests = Object.freeze([]);
@@ -696,20 +700,23 @@ export class Animator extends Component {
 
         this._rebuildTargetMap(instanceId);
         if (this._clipDefinitions.length === 0 || this._resolvedTargets.size === 0) {
-            console.warn(
-                `[Animator] _ensureController: Cannot build AnimationController. ` +
-                `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
-                `instanceId=${instanceId ?? 'null'}. ` +
-                `Animation will NOT play.`,
-            );
-            if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
-                const requiredNodeIds = this._getRequiredTargetNodeIds();
+            if (!this._rebuildWarned) {
+                this._rebuildWarned = true;
                 console.warn(
-                    `[Animator] _ensureController: Clips reference ${requiredNodeIds.length} target node(s) ` +
-                    `[${requiredNodeIds.slice(0, 10).join(', ')}${requiredNodeIds.length > 10 ? '...' : ''}] ` +
-                    `but no PrefabNodeBinding matches were found in the actor hierarchy. ` +
-                    `Verify that imported GLB bone nodes exist as scene entities with correct PrefabNodeBinding.nodeId.`,
+                    `[Animator] _ensureController: Cannot build AnimationController. ` +
+                    `clipDefinitions=${this._clipDefinitions.length}, resolvedTargets=${this._resolvedTargets.size}. ` +
+                    `instanceId=${instanceId ?? 'null'}. ` +
+                    `Animation will NOT play. (This warning will not repeat.)`,
                 );
+                if (this._clipDefinitions.length > 0 && this._resolvedTargets.size === 0) {
+                    const requiredNodeIds = this._getRequiredTargetNodeIds();
+                    console.warn(
+                        `[Animator] _ensureController: Clips reference ${requiredNodeIds.length} target node(s) ` +
+                        `[${requiredNodeIds.slice(0, 10).join(', ')}${requiredNodeIds.length > 10 ? '...' : ''}] ` +
+                        `but no PrefabNodeBinding matches were found in the actor hierarchy. ` +
+                        `Verify that imported GLB bone nodes exist as scene entities with correct PrefabNodeBinding.nodeId.`,
+                    );
+                }
             }
             this._controller = null;
             this._controllerDirty = this._clipDefinitions.length > 0;
@@ -724,13 +731,16 @@ export class Animator extends Component {
             const missingTargets = this._getRequiredRigTargetNodeIds().filter(
                 (id) => !this._resolvedTargets.has(id)
             );
-            const availableTargets = [...this._resolvedTargets.keys()].slice(0, 15).join(', ');
-            console.warn(
-                `[Animator] _ensureController: ${missingTargets.length} required rig target(s) not resolved: ` +
-                `[${missingTargets.slice(0, 10).join(', ')}${missingTargets.length > 10 ? '...' : ''}]. ` +
-                `Available targets: [${availableTargets}${this._resolvedTargets.size > 15 ? '...' : ''}]. ` +
-                `Controller will NOT be created.`,
-            );
+            if (!this._rebuildWarned) {
+                this._rebuildWarned = true;
+                const availableTargets = [...this._resolvedTargets.keys()].slice(0, 15).join(', ');
+                console.warn(
+                    `[Animator] _ensureController: ${missingTargets.length} required rig target(s) not resolved: ` +
+                    `[${missingTargets.slice(0, 10).join(', ')}${missingTargets.length > 10 ? '...' : ''}]. ` +
+                    `Available targets: [${availableTargets}${this._resolvedTargets.size > 15 ? '...' : ''}]. ` +
+                    `Controller will NOT be created. (This warning will not repeat.)`,
+                );
+            }
             this._controller = null;
             this._controllerDirty = true;
             return null;
@@ -789,6 +799,7 @@ export class Animator extends Component {
         this._streamingSnapshot = null;
         this._pendingStreamingRequests = Object.freeze([]);
         this._controllerDirty = false;
+        this._rebuildWarned = false;
         const streaming = this._syncStreamingState(this._controller);
         if (!this._isStreamingBlocked(streaming)) {
             this._applyFrame(this._controller.currentFrame);
