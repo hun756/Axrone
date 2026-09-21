@@ -30,6 +30,13 @@ public static class ObservableOperators
         return new MergeObservable<T>(first, second);
     }
 
+    /// <summary>Suppresses consecutive duplicates; state is per subscription.</summary>
+    public static IObservable<T> DistinctUntilChanged<T>(this IObservable<T> source, IEqualityComparer<T>? comparer = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return new DistinctObservable<T>(source, comparer ?? EqualityComparer<T>.Default);
+    }
+
     private sealed class WhereObservable<T> : IObservable<T>
     {
         private readonly IObservable<T> _source;
@@ -121,6 +128,66 @@ public static class ObservableOperators
             public void Attach() => _upstream = _parent._source.Subscribe(this);
 
             public void OnNext(T value) => _downstream.OnNext(_parent._selector(value));
+
+            public void OnError(Exception error) => _downstream.OnError(error);
+
+            public void OnCompleted() => _downstream.OnCompleted();
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    _upstream?.Dispose();
+                }
+            }
+        }
+    }
+
+    private sealed class DistinctObservable<T> : IObservable<T>
+    {
+        private readonly IObservable<T> _source;
+        private readonly IEqualityComparer<T> _comparer;
+
+        public DistinctObservable(IObservable<T> source, IEqualityComparer<T> comparer)
+        {
+            _source = source;
+            _comparer = comparer;
+        }
+
+        public IDisposable Subscribe(IObserver<T> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new DistinctSubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class DistinctSubscription : IObserver<T>, IDisposable
+        {
+            private readonly DistinctObservable<T> _parent;
+            private readonly IObserver<T> _downstream;
+            private IDisposable? _upstream;
+            private T _last = default!;
+            private bool _hasValue;
+            private int _disposed;
+
+            public DistinctSubscription(DistinctObservable<T> parent, IObserver<T> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+            }
+
+            public void Attach() => _upstream = _parent._source.Subscribe(this);
+
+            public void OnNext(T value)
+            {
+                if (!_hasValue || !_parent._comparer.Equals(_last, value))
+                {
+                    _hasValue = true;
+                    _last = value;
+                    _downstream.OnNext(value);
+                }
+            }
 
             public void OnError(Exception error) => _downstream.OnError(error);
 
