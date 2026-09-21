@@ -2,7 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
-import { hitTestBoundWidget, asString, asNumber, setWidgetVisible } from './internals';
+import { hitTestBoundWidget, asString, asNumber, asArray, setWidgetVisible } from './internals';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -39,6 +39,8 @@ export interface TabControllerProps {
     readonly inactiveColor?: string;
     readonly activeTextColor?: string;
     readonly inactiveTextColor?: string;
+    readonly pageKey?: string;
+    readonly pageNames?: readonly string[];
 }
 
 export interface TabControllerState {
@@ -63,6 +65,19 @@ const resolveTabKey = (props: TabControllerProps, index: number): string =>
 /** Resolves the panel widget key for a given index. */
 const resolvePanelKey = (props: TabControllerProps, index: number): string =>
     `${asString(props.panelPrefix) || 'panel-'}${index}`;
+
+const syncPage = (context: TabContext, index: number): void => {
+    const props = context.props as TabControllerProps;
+    const pageKey = asString(props.pageKey);
+    if (!pageKey) return;
+    const pageNames = asArray(props.pageNames);
+    if (index < 0 || index >= pageNames.length) return;
+    const page = pageNames[index];
+    if (!page) return;
+    const pageWidget = context.runtime.getBoundWidget(pageKey);
+    if (pageWidget === null) return;
+    context.runtime.updateWidget(pageWidget, { props: { page } });
+};
 
 /**
  * Pushes the visual state onto all tab and panel widgets.
@@ -164,12 +179,22 @@ export const tabViewController: WidgetController<
             props.activeColor !== previous.activeColor ||
             props.inactiveColor !== previous.inactiveColor ||
             props.activeTextColor !== previous.activeTextColor ||
-            props.inactiveTextColor !== previous.inactiveTextColor
+            props.inactiveTextColor !== previous.inactiveTextColor ||
+            props.pageKey !== previous.pageKey ||
+            props.pageNames !== previous.pageNames
         ) {
+            const previousSelected = typed.state.selectedIndex;
             const count = Math.max(0, asNumber(props.tabCount, 0) | 0);
             const authored = asNumber(props.selectedIndex, typed.state.selectedIndex);
             typed.state.selectedIndex = count > 0 ? clamp(authored, 0, count - 1) : 0;
             applyVisuals(typed);
+            if (
+                typed.state.selectedIndex !== previousSelected ||
+                props.pageKey !== previous.pageKey ||
+                props.pageNames !== previous.pageNames
+            ) {
+                syncPage(typed, typed.state.selectedIndex);
+            }
         }
     },
     input: (event: Readonly<UIInputEvent>, context) => {
@@ -188,6 +213,7 @@ export const tabViewController: WidgetController<
                     if (hit >= 0 && hit !== state.selectedIndex) {
                         state.selectedIndex = hit;
                         applyVisuals(typed);
+                        syncPage(typed, hit);
                         return true;
                     }
                     return false;
@@ -203,12 +229,14 @@ export const tabViewController: WidgetController<
                     const next = state.selectedIndex + 1;
                     state.selectedIndex = next < count ? next : 0;
                     applyVisuals(typed);
+                    syncPage(typed, state.selectedIndex);
                     return true;
                 }
                 case 'ArrowLeft': {
                     const prev = state.selectedIndex - 1;
                     state.selectedIndex = prev >= 0 ? prev : count - 1;
                     applyVisuals(typed);
+                    syncPage(typed, state.selectedIndex);
                     return true;
                 }
                 default:

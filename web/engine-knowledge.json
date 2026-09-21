@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-19T20:48:48.505Z",
+  "generatedAt": "2026-09-21T09:33:28.322Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -8743,9 +8743,12 @@
         "BUTTON_FEEDBACK_CONTROLLER_TYPE",
         "BUTTON_STATE_OPACITY",
         "CHECKBOX_TOGGLE_CONTROLLER_TYPE",
+        "COLOR_PICKER_CONTROLLER_TYPE",
         "CanvasScaleResult",
         "ColorInput",
         "CornerRadii",
+        "DATETIME_PICKER_CONTROLLER_TYPE",
+        "DEFAULT_COLOR_PICKER_VALUE",
         "DRAG_CONTROLLER_TYPE",
         "DROPDOWN_SELECT_CONTROLLER_TYPE",
         "DisposedUIError",
@@ -8781,9 +8784,14 @@
         "GlyphAtlasPageSnapshot",
         "InvalidUIAssetError",
         "KerningPairKey",
+        "LIST_VIEW_CONTROLLER_TYPE",
         "LayoutBox",
         "LayoutTreeAdapter",
+        "MODAL_CONTROLLER_TYPE",
+        "NAVIGATION_CONTROLLER_TYPE",
+        "PAGE_CONTROLLER_TYPE",
         "RADIO_GROUP_CONTROLLER_TYPE",
+        "RATING_CONTROLLER_TYPE",
         "ReadonlyColor",
         "RenderCommand",
         "ResolvedLayout",
@@ -8791,6 +8799,7 @@
         "RetryPolicy",
         "SEGMENTED_CONTROL_CONTROLLER_TYPE",
         "SLIDER_CONTROLLER_TYPE",
+        "STEPPER_CONTROLLER_TYPE",
         "SizeLike",
         "StaticFontFaceAsset",
         "SystemFontFaceAssetOptions",
@@ -8798,6 +8807,7 @@
         "TOGGLE_SWITCH_CONTROLLER_TYPE",
         "TOOLTIP_HOST_CONTROLLER_TYPE",
         "TRANSPARENT_COLOR",
+        "TREE_VIEW_CONTROLLER_TYPE",
         "TextBlockInput",
         "TextGlyphPlacement",
         "TextLayoutConstraint",
@@ -8832,6 +8842,7 @@
         "buttonFeedbackController",
         "canvasScaleToTransform",
         "checkboxToggleController",
+        "colorPickerController",
         "compileLayoutInput",
         "compileLength",
         "createAnchoredLayout",
@@ -8859,6 +8870,7 @@
         "createUIWidget",
         "createUploadedGlyphKey",
         "createWidgetFactory",
+        "dateTimePickerController",
         "defaultUIControlTheme",
         "defineWidget",
         "deserializeUIAsset",
@@ -8870,24 +8882,42 @@
         "ensureSystemUIFont",
         "eventTriggerController",
         "getCheckboxChecked",
+        "getColorPickerSelectedIndex",
+        "getColorPickerValue",
+        "getDateTimePickerValue",
         "getDropdownSelectedIndex",
         "getEditBoxValue",
+        "getListViewSelectedIndex",
+        "getListViewStartIndex",
+        "getModalOpen",
+        "getNavigationRoute",
+        "getPage",
         "getRadioGroupSelectedIndex",
+        "getRatingValue",
         "getSegmentedSelectedIndex",
         "getSliderValue",
+        "getStepperValue",
         "getTabSelectedIndex",
         "getToggleIsOn",
+        "getTreeViewExpanded",
+        "getTreeViewSelectedIndex",
+        "isDateTimePickerEditing",
         "isEventTriggerArmed",
         "isTooltipVisible",
         "isWidgetDragging",
+        "listViewController",
         "mapViewportPointToCanvas",
+        "modalController",
+        "navigationController",
         "normalizeAnchor",
         "normalizeColor",
         "normalizeColorToTuple",
         "normalizeCorners",
         "normalizeEdges",
+        "pageController",
         "parseRichTextMarkup",
         "radioGroupController",
+        "ratingController",
         "renderUIFrame",
         "resolveCanvasScale",
         "resolveLength",
@@ -8899,11 +8929,13 @@
         "serializeUIAsset",
         "setEditBoxValue",
         "sliderController",
+        "stepperController",
         "tabViewController",
         "toByteArray",
         "toUint8Array",
         "toggleSwitchController",
         "tooltipHostController",
+        "treeViewController",
         "validateUIAsset"
       ],
       "typeExports": [
@@ -8927,9 +8959,13 @@
         "ColorHexString",
         "ColorInput",
         "ColorLike",
+        "ColorPickerControllerProps",
+        "ColorPickerControllerState",
         "CornerInput",
         "CornerRadii",
         "CustomRenderCommand",
+        "DateTimePickerControllerProps",
+        "DateTimePickerControllerState",
         "DisplayMode",
         "DragAxis",
         "DragBounds",
@@ -8986,6 +9022,14 @@
         "LayoutBox",
         "LayoutTreeAdapter",
         "LengthKind",
+        "ListViewControllerProps",
+        "ListViewControllerState",
+        "ModalControllerProps",
+        "ModalControllerState",
+        "NavigationControllerProps",
+        "NavigationControllerState",
+        "PageControllerProps",
+        "PageControllerState",
         "PercentageString",
         "PopupConfig",
         "PopupHandle",
@@ -8995,6 +9039,8 @@
         "QuadRenderCommand",
         "RadioGroupControllerProps",
         "RadioGroupControllerState",
+        "RatingControllerProps",
+        "RatingControllerState",
         "ReadonlyColor",
         "RectLike",
         "RenderCommand",
@@ -9015,6 +9061,8 @@
         "SliderControllerState",
         "SliderOrientation",
         "StaticFontFaceAsset",
+        "StepperControllerProps",
+        "StepperControllerState",
         "StretchString",
         "StrokeRenderCommand",
         "SystemFontFaceAssetOptions",
@@ -9040,6 +9088,8 @@
         "TooltipControllerProps",
         "TooltipControllerState",
         "TooltipPosition",
+        "TreeViewControllerProps",
+        "TreeViewControllerState",
         "UIAnimationConfig",
         "UIAnimationHandle",
         "UIAsset",
@@ -9133,22 +9183,33 @@
             "BUTTON_FEEDBACK_CONTROLLER_TYPE",
             "BUTTON_STATE_OPACITY",
             "CHECKBOX_TOGGLE_CONTROLLER_TYPE",
+            "COLOR_PICKER_CONTROLLER_TYPE",
+            "DATETIME_PICKER_CONTROLLER_TYPE",
+            "DEFAULT_COLOR_PICKER_VALUE",
             "DRAG_CONTROLLER_TYPE",
             "DROPDOWN_SELECT_CONTROLLER_TYPE",
             "EDIT_BOX_CONTROLLER_TYPE",
             "EVENT_TRIGGER_CONTROLLER_TYPE",
             "Easing",
+            "LIST_VIEW_CONTROLLER_TYPE",
+            "MODAL_CONTROLLER_TYPE",
+            "NAVIGATION_CONTROLLER_TYPE",
+            "PAGE_CONTROLLER_TYPE",
             "RADIO_GROUP_CONTROLLER_TYPE",
+            "RATING_CONTROLLER_TYPE",
             "SEGMENTED_CONTROL_CONTROLLER_TYPE",
             "SLIDER_CONTROLLER_TYPE",
+            "STEPPER_CONTROLLER_TYPE",
             "TAB_VIEW_CONTROLLER_TYPE",
             "TOGGLE_SWITCH_CONTROLLER_TYPE",
             "TOOLTIP_HOST_CONTROLLER_TYPE",
+            "TREE_VIEW_CONTROLLER_TYPE",
             "animate",
             "animateWidgetColor",
             "animateWidgetOpacity",
             "buttonFeedbackController",
             "checkboxToggleController",
+            "colorPickerController",
             "createAnchoredLayout",
             "createFallbackUIFontAsset",
             "createOverlayLayout",
@@ -9166,6 +9227,7 @@
             "createUISlider",
             "createUIToggle",
             "createUIWidget",
+            "dateTimePickerController",
             "defaultUIControlTheme",
             "dragController",
             "dropdownController",
@@ -9173,26 +9235,46 @@
             "ensureFallbackUIFont",
             "eventTriggerController",
             "getCheckboxChecked",
+            "getColorPickerSelectedIndex",
+            "getColorPickerValue",
+            "getDateTimePickerValue",
             "getDropdownSelectedIndex",
             "getEditBoxValue",
+            "getListViewSelectedIndex",
+            "getListViewStartIndex",
+            "getModalOpen",
+            "getNavigationRoute",
+            "getPage",
             "getRadioGroupSelectedIndex",
+            "getRatingValue",
             "getSegmentedSelectedIndex",
             "getSliderValue",
+            "getStepperValue",
             "getTabSelectedIndex",
             "getToggleIsOn",
+            "getTreeViewExpanded",
+            "getTreeViewSelectedIndex",
+            "isDateTimePickerEditing",
             "isEventTriggerArmed",
             "isTooltipVisible",
             "isWidgetDragging",
+            "listViewController",
+            "modalController",
+            "navigationController",
+            "pageController",
             "radioGroupController",
+            "ratingController",
             "resolveTheme",
             "resolveThemeScale",
             "resolveVariantPalette",
             "segmentedController",
             "setEditBoxValue",
             "sliderController",
+            "stepperController",
             "tabViewController",
             "toggleSwitchController",
-            "tooltipHostController"
+            "tooltipHostController",
+            "treeViewController"
           ],
           "typeExports": [
             "AnimationTarget",
@@ -9204,6 +9286,10 @@
             "CheckboxMarkStyle",
             "CheckboxTransitionMode",
             "CheckboxVisualState",
+            "ColorPickerControllerProps",
+            "ColorPickerControllerState",
+            "DateTimePickerControllerProps",
+            "DateTimePickerControllerState",
             "DragAxis",
             "DragBounds",
             "DragControllerProps",
@@ -9217,17 +9303,29 @@
             "EventTriggerControllerProps",
             "EventTriggerControllerState",
             "EventTriggerEventType",
+            "ListViewControllerProps",
+            "ListViewControllerState",
+            "ModalControllerProps",
+            "ModalControllerState",
+            "NavigationControllerProps",
+            "NavigationControllerState",
+            "PageControllerProps",
+            "PageControllerState",
             "PopupConfig",
             "PopupHandle",
             "PopupManager",
             "PopupPosition",
             "RadioGroupControllerProps",
             "RadioGroupControllerState",
+            "RatingControllerProps",
+            "RatingControllerState",
             "SegmentedControllerProps",
             "SegmentedControllerState",
             "SliderControllerProps",
             "SliderControllerState",
             "SliderOrientation",
+            "StepperControllerProps",
+            "StepperControllerState",
             "TabControllerProps",
             "TabControllerState",
             "ToggleControllerProps",
@@ -9235,6 +9333,8 @@
             "TooltipControllerProps",
             "TooltipControllerState",
             "TooltipPosition",
+            "TreeViewControllerProps",
+            "TreeViewControllerState",
             "UIAnimationConfig",
             "UIAnimationHandle",
             "UIBaseOptions",
@@ -15893,6 +15993,11 @@
       "kind": "unknown"
     },
     {
+      "name": "COLOR_PICKER_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "ColorBlendMode",
       "package": "@axrone/numeric",
       "kind": "enum"
@@ -15946,6 +16051,21 @@
       "name": "ColorModule",
       "package": "@axrone/particle-system",
       "kind": "class"
+    },
+    {
+      "name": "colorPickerController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ColorPickerControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ColorPickerControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "ColorSpace",
@@ -18298,6 +18418,26 @@
       "kind": "class"
     },
     {
+      "name": "DATETIME_PICKER_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "dateTimePickerController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "DateTimePickerControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "DateTimePickerControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "debounce",
       "package": "@axrone/observer",
       "kind": "function"
@@ -18426,6 +18566,11 @@
       "name": "DEFAULT_AUDIO_MESSAGE_RESOLVER",
       "package": "@axrone/audio",
       "kind": "const"
+    },
+    {
+      "name": "DEFAULT_COLOR_PICKER_VALUE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "DEFAULT_INPUT_MESSAGE_RESOLVER",
@@ -20783,6 +20928,16 @@
       "kind": "unknown"
     },
     {
+      "name": "getColorPickerSelectedIndex",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getColorPickerValue",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "getComponentMetadata",
       "package": "@axrone/ecs-runtime",
       "kind": "function"
@@ -20815,6 +20970,11 @@
     {
       "name": "getCoreSceneRuntimeProfile",
       "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "getDateTimePickerValue",
+      "package": "@axrone/ui",
       "kind": "unknown"
     },
     {
@@ -20898,6 +21058,26 @@
       "kind": "const"
     },
     {
+      "name": "getListViewSelectedIndex",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getListViewStartIndex",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getModalOpen",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getNavigationRoute",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "getOrCreateGLContext",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -20905,6 +21085,11 @@
     {
       "name": "getOrCreateGLContext",
       "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "getPage",
+      "package": "@axrone/ui",
       "kind": "unknown"
     },
     {
@@ -20919,6 +21104,11 @@
     },
     {
       "name": "getRadioGroupSelectedIndex",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getRatingValue",
       "package": "@axrone/ui",
       "kind": "unknown"
     },
@@ -21048,12 +21238,27 @@
       "kind": "unknown"
     },
     {
+      "name": "getStepperValue",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "getTabSelectedIndex",
       "package": "@axrone/ui",
       "kind": "unknown"
     },
     {
       "name": "getToggleIsOn",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getTreeViewExpanded",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getTreeViewSelectedIndex",
       "package": "@axrone/ui",
       "kind": "unknown"
     },
@@ -25068,6 +25273,11 @@
       "kind": "interface"
     },
     {
+      "name": "isDateTimePickerEditing",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "isDirectionalLightDefinition",
       "package": "@axrone/lighting",
       "kind": "unknown"
@@ -26798,6 +27008,11 @@
       "kind": "unknown"
     },
     {
+      "name": "LIST_VIEW_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "listAlgorithms",
       "package": "@axrone/hash",
       "kind": "function"
@@ -26811,6 +27026,21 @@
       "name": "listShaderLibraries",
       "package": "@axrone/asset-shader",
       "kind": "const"
+    },
+    {
+      "name": "listViewController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ListViewControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ListViewControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "LN2",
@@ -27348,6 +27578,26 @@
       "kind": "unknown"
     },
     {
+      "name": "MODAL_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "modalController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ModalControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ModalControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "modulatePaintAlpha",
       "package": "@axrone/shapes-2d",
       "kind": "unknown"
@@ -27501,6 +27751,26 @@
       "name": "Narrowphase2D",
       "package": "@axrone/physics-2d",
       "kind": "class"
+    },
+    {
+      "name": "NAVIGATION_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "navigationController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "NavigationControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "NavigationControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "neq",
@@ -28051,6 +28321,26 @@
       "name": "PaddingVerificationPolicy",
       "package": "@axrone/utility",
       "kind": "type"
+    },
+    {
+      "name": "PAGE_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "pageController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "PageControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "PageControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "PaintValidationError",
@@ -29211,6 +29501,26 @@
       "name": "rangeProp",
       "package": "@axrone/asset-shader",
       "kind": "const"
+    },
+    {
+      "name": "RATING_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "ratingController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "RatingControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "RatingControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "RayBuilder2D",
@@ -36703,6 +37013,26 @@
       "kind": "unknown"
     },
     {
+      "name": "STEPPER_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "stepperController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "StepperControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "StepperControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
       "name": "StopAction",
       "package": "@axrone/particle-system",
       "kind": "enum"
@@ -37646,6 +37976,26 @@
       "name": "traverseSync",
       "package": "@axrone/memory",
       "kind": "const"
+    },
+    {
+      "name": "TREE_VIEW_CONTROLLER_TYPE",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "treeViewController",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "TreeViewControllerProps",
+      "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "TreeViewControllerState",
+      "package": "@axrone/ui",
+      "kind": "unknown"
     },
     {
       "name": "TriangleShape",
@@ -41306,6 +41656,12 @@
       "package": "@axrone/numeric"
     },
     {
+      "name": "COLOR_PICKER_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const COLOR_PICKER_CONTROLLER_TYPE = \"color-picker\";",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "ColorBlendMode",
       "kind": "enum",
       "code": "declare enum ColorBlendMode { NORMAL = 0, MULTIPLY = 1, SCREEN = 2, OVERLAY = 3, SOFT_LIGHT = 4, HARD_LIGHT = 5, COLOR_DODGE = 6, COLOR_BURN = 7, DARKEN = 8, LIGHTEN = 9, DIFFERENCE = 10, EXCLUSION = 11, HUE = 12, SATURATION = 13, COLOR = 14, LUMINOSITY = 15 }",
@@ -41340,6 +41696,12 @@
       "kind": "class",
       "code": "declare class ColorModule extends BaseModule<'color'> { constructor(configuration: ColorConfiguration); getParticleColor(particleId: ParticleId): {; r: number; g: number; b: number; a: number; getGradientColorAtTime(t: number): {; getActiveParticleCount(): number; invalidateCache(): void; … }",
       "package": "@axrone/particle-system"
+    },
+    {
+      "name": "colorPickerController",
+      "kind": "const",
+      "code": "declare const colorPickerController: WidgetController<typeof COLOR_PICKER_CONTROLLER_TYPE, Record<string, unknown>, ColorPickerControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "ColorSpace",
@@ -43142,6 +43504,18 @@
       "package": "@axrone/utility"
     },
     {
+      "name": "DATETIME_PICKER_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const DATETIME_PICKER_CONTROLLER_TYPE = \"datetime-picker\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "dateTimePickerController",
+      "kind": "const",
+      "code": "declare const dateTimePickerController: WidgetController<typeof DATETIME_PICKER_CONTROLLER_TYPE, Record<string, unknown>, DateTimePickerControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "debounce",
       "kind": "function",
       "code": "declare function debounce<T>(source: IObservableSubject<T>, ms: number): IObservableSubject<T>;",
@@ -43242,6 +43616,12 @@
       "kind": "const",
       "code": "declare const DEFAULT_AUDIO_MESSAGE_RESOLVER: AudioMessageResolver;",
       "package": "@axrone/audio"
+    },
+    {
+      "name": "DEFAULT_COLOR_PICKER_VALUE",
+      "kind": "const",
+      "code": "declare const DEFAULT_COLOR_PICKER_VALUE = \"#ffffffff\";",
+      "package": "@axrone/ui"
     },
     {
       "name": "DEFAULT_INPUT_MESSAGE_RESOLVER",
@@ -44570,6 +44950,18 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "getColorPickerSelectedIndex",
+      "kind": "const",
+      "code": "declare const getColorPickerSelectedIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getColorPickerValue",
+      "kind": "const",
+      "code": "declare const getColorPickerValue: (runtime: UIRuntime, widget: WidgetId) => string | null;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "getComponentMetadata",
       "kind": "function",
       "code": "declare function getComponentMetadata<T extends Component>(componentType: ComponentType<T>): ScriptMetadata | undefined;",
@@ -44592,6 +44984,12 @@
       "kind": "const",
       "code": "declare const getCoreSceneRuntimeProfile: <R extends ComponentRegistry = Record<string, never>>() => SceneRuntimeProfile<R>;",
       "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "getDateTimePickerValue",
+      "kind": "const",
+      "code": "declare const getDateTimePickerValue: (runtime: UIRuntime, widget: WidgetId) => string | null;",
+      "package": "@axrone/ui"
     },
     {
       "name": "getDefaultSceneBuiltInRegistry",
@@ -44654,10 +45052,40 @@
       "package": "@axrone/memory"
     },
     {
+      "name": "getListViewSelectedIndex",
+      "kind": "const",
+      "code": "declare const getListViewSelectedIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getListViewStartIndex",
+      "kind": "const",
+      "code": "declare const getListViewStartIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getModalOpen",
+      "kind": "const",
+      "code": "declare const getModalOpen: (runtime: UIRuntime, widget: WidgetId) => boolean | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getNavigationRoute",
+      "kind": "const",
+      "code": "declare const getNavigationRoute: (runtime: UIRuntime, widget: WidgetId) => string | null;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "getOrCreateGLContext",
       "kind": "const",
       "code": "declare const getOrCreateGLContext: (gl: WebGL2RenderingContext, canvas?: HTMLCanvasElement | null) => IGLContext;",
       "package": "@axrone/render-webgl2"
+    },
+    {
+      "name": "getPage",
+      "kind": "const",
+      "code": "declare const getPage: (runtime: UIRuntime, widget: WidgetId) => string | null;",
+      "package": "@axrone/ui"
     },
     {
       "name": "getParentIndex",
@@ -44675,6 +45103,12 @@
       "name": "getRadioGroupSelectedIndex",
       "kind": "const",
       "code": "declare const getRadioGroupSelectedIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getRatingValue",
+      "kind": "const",
+      "code": "declare const getRatingValue: (runtime: UIRuntime, widget: WidgetId) => number | null;",
       "package": "@axrone/ui"
     },
     {
@@ -44798,6 +45232,12 @@
       "package": "@axrone/asset-2d"
     },
     {
+      "name": "getStepperValue",
+      "kind": "const",
+      "code": "declare const getStepperValue: (runtime: UIRuntime, widget: WidgetId) => number | null;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "getTabSelectedIndex",
       "kind": "const",
       "code": "declare const getTabSelectedIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
@@ -44807,6 +45247,18 @@
       "name": "getToggleIsOn",
       "kind": "const",
       "code": "declare const getToggleIsOn: (runtime: UIRuntime, widget: WidgetId) => boolean | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getTreeViewExpanded",
+      "kind": "const",
+      "code": "declare const getTreeViewExpanded: (runtime: UIRuntime, widget: WidgetId) => readonly number[] | null;",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "getTreeViewSelectedIndex",
+      "kind": "const",
+      "code": "declare const getTreeViewSelectedIndex: (runtime: UIRuntime, widget: WidgetId) => number | null;",
       "package": "@axrone/ui"
     },
     {
@@ -45806,6 +46258,12 @@
       "package": "@axrone/shapes-2d"
     },
     {
+      "name": "isDateTimePickerEditing",
+      "kind": "const",
+      "code": "declare const isDateTimePickerEditing: (runtime: UIRuntime, widget: WidgetId) => boolean | null;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "isDirectionalLightDefinition",
       "kind": "const",
       "code": "declare const isDirectionalLightDefinition: (value: unknown) => value is DirectionalLightDefinition;",
@@ -46484,6 +46942,12 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "LIST_VIEW_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const LIST_VIEW_CONTROLLER_TYPE = \"list-view\";",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "listAlgorithms",
       "kind": "function",
       "code": "declare function listAlgorithms(): readonly HashAlgorithmName[];",
@@ -46500,6 +46964,12 @@
       "kind": "const",
       "code": "declare const listShaderLibraries: () => readonly ShaderLibraryEntry[];",
       "package": "@axrone/asset-shader"
+    },
+    {
+      "name": "listViewController",
+      "kind": "const",
+      "code": "declare const listViewController: WidgetController<typeof LIST_VIEW_CONTROLLER_TYPE, Record<string, unknown>, ListViewControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "LN2",
@@ -46844,6 +47314,18 @@
       "package": "@axrone/utility"
     },
     {
+      "name": "MODAL_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const MODAL_CONTROLLER_TYPE = \"modal\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "modalController",
+      "kind": "const",
+      "code": "declare const modalController: WidgetController<typeof MODAL_CONTROLLER_TYPE, Record<string, unknown>, ModalControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "modulatePaintAlpha",
       "kind": "const",
       "code": "declare const modulatePaintAlpha: (color: Readonly<IColorLike>, opacity: number) => ResolvedColor;",
@@ -46920,6 +47402,18 @@
       "kind": "class",
       "code": "declare class Narrowphase2D { constructor(); acquireManifold(): WritableManifold; releaseManifold(manifold: WritableManifold): void; dispose(): void; collide(shapeIdA: ShapeId, shapeIdB: ShapeId, typeA: ShapeType, typeB: ShapeType, shapeManager: ShapeManager2D, ctx: CollisionContext, manifold: Writ…",
       "package": "@axrone/physics-2d"
+    },
+    {
+      "name": "NAVIGATION_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const NAVIGATION_CONTROLLER_TYPE = \"navigation\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "navigationController",
+      "kind": "const",
+      "code": "declare const navigationController: WidgetController<typeof NAVIGATION_CONTROLLER_TYPE, Record<string, unknown>, NavigationControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "neq",
@@ -47238,6 +47732,18 @@
       "kind": "function",
       "code": "declare function orientQuadTowardCamera(model: Float32Array, cameraWorld: Float32Array): Float32Array;",
       "package": "@axrone/ui-webgl2"
+    },
+    {
+      "name": "PAGE_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const PAGE_CONTROLLER_TYPE = \"page-controller\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "pageController",
+      "kind": "const",
+      "code": "declare const pageController: WidgetController<typeof PAGE_CONTROLLER_TYPE, Record<string, unknown>, PageControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "PaintValidationError",
@@ -47724,6 +48230,18 @@
       "kind": "const",
       "code": "declare const rangeProp: (name: string, type: RenderShaderValueType, min: number, max: number, step: number, defaultValue?: RenderShaderPropertyDefinition[\"defaultValue\"], options?: ShaderEffectPropertyOptions) => RenderShaderPropertyDefinition;",
       "package": "@axrone/asset-shader"
+    },
+    {
+      "name": "RATING_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const RATING_CONTROLLER_TYPE = \"rating\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "ratingController",
+      "kind": "const",
+      "code": "declare const ratingController: WidgetController<typeof RATING_CONTROLLER_TYPE, Record<string, unknown>, RatingControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "RayBuilder2D",
@@ -49880,6 +50398,18 @@
       "package": "@axrone/utility"
     },
     {
+      "name": "STEPPER_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const STEPPER_CONTROLLER_TYPE = \"stepper\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "stepperController",
+      "kind": "const",
+      "code": "declare const stepperController: WidgetController<typeof STEPPER_CONTROLLER_TYPE, Record<string, unknown>, StepperControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
+    },
+    {
       "name": "StopAction",
       "kind": "enum",
       "code": "declare enum StopAction { None = 0, Disable = 1, Destroy = 2, Callback = 3 }",
@@ -50310,6 +50840,18 @@
       "kind": "const",
       "code": "declare const traverseSync: <T, U>(items: readonly T[], selector: (item: T, index: number) => ILazy<U>) => ILazy<readonly U[]>;",
       "package": "@axrone/memory"
+    },
+    {
+      "name": "TREE_VIEW_CONTROLLER_TYPE",
+      "kind": "const",
+      "code": "declare const TREE_VIEW_CONTROLLER_TYPE = \"tree-view\";",
+      "package": "@axrone/ui"
+    },
+    {
+      "name": "treeViewController",
+      "kind": "const",
+      "code": "declare const treeViewController: WidgetController<typeof TREE_VIEW_CONTROLLER_TYPE, Record<string, unknown>, TreeViewControllerState, UIRuntime, unknown>;",
+      "package": "@axrone/ui"
     },
     {
       "name": "triangulateEarClipping",
