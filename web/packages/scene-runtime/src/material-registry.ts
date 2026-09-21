@@ -380,7 +380,7 @@ const stableReplacer = (_key: string, value: unknown): unknown => {
 };
 
 /**
- * Deep-compares an existing material resource with a new definition to determine
+ * Deep-compares a stored material definition with a new definition to determine
  * if they are semantically identical (shaderId + uniforms + textures + surface + passes).
  */
 const normalizeTextureMap = (

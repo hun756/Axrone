@@ -240,9 +240,6 @@ export class SceneBillboardBatchRuntime {
 
             for (const subject of this._subjects) {
                 const key = this._resolveRunKey(subject);
-                if (!key) {
-                    continue;
-                }
                 if (
                     runKey === null ||
                     runKey.mode !== key.mode ||
