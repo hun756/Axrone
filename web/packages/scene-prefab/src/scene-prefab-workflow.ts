@@ -3,6 +3,7 @@ import { isInlineScenePrefabReference, isScenePrefabReference } from './scene-pr
 import {
     applyScenePrefabOverrideOperations,
     createScenePrefabState,
+    getScenePrefabLineage,
     materializeScenePrefabResolvedDefinition,
     mergeScenePrefabActors,
     scopeScenePrefabActors,
@@ -33,11 +34,6 @@ export interface ScenePrefabWorkflowOptions {
 export interface ResolveScenePrefabOptions extends ScenePrefabResolveOptions {
     readonly registry?: ScenePrefabRegistrySource;
 }
-
-const getDefinitionLineage = (definition: ScenePrefabDefinition): readonly string[] =>
-    definition.kind === 'resolved' && 'lineage' in definition && Array.isArray(definition.lineage)
-        ? definition.lineage
-        : [definition.id];
 
 export class ScenePrefabWorkflow implements ScenePrefabResolver, ScenePrefabRegistrySource {
     private readonly _definitions = new Map<string, ScenePrefabDefinition>();
@@ -213,7 +209,7 @@ export class ScenePrefabWorkflow implements ScenePrefabResolver, ScenePrefabRegi
 
         const nextStack = [...stack, definition.id];
         const baseDefinition = definition.base ? this._resolveReference(definition.base, nextStack) : undefined;
-        const lineage = baseDefinition ? [...baseDefinition.lineage, definition.id] : getDefinitionLineage(definition);
+        const lineage = baseDefinition ? [...baseDefinition.lineage, definition.id] : getScenePrefabLineage(definition);
         const state = baseDefinition
             ? createScenePrefabState(baseDefinition, baseDefinition.id, baseDefinition.lineage)
             : createScenePrefabState(definition, definition.id, lineage);

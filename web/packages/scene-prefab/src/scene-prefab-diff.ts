@@ -3,6 +3,8 @@ import {
     cloneSceneComponentSnapshot,
     cloneScenePrefabOverrideOperation,
     cloneSceneSerializedValue,
+    copySceneActorSnapshot,
+    copySceneComponentSnapshot,
     createScenePrefabComponentSelector,
     deepEqualSceneSerializedValue,
     getScenePrefabComponentSelectorKey,
@@ -500,11 +502,7 @@ const createConflict = (
                 persistent: actor.persistent,
                 pooled: actor.pooled,
                 ...(actor.source ? { source: actor.source } : {}),
-                components: actor.components.map((component) => ({
-                    ...(component.id ? { id: component.id } : {}),
-                    type: component.type,
-                    data: component.data,
-                })),
+                components: actor.components.map((component) => copySceneComponentSnapshot(component)),
             });
         } else {
             switch (localDescriptor.fieldKey) {
@@ -533,11 +531,7 @@ const createConflict = (
         }
     } else {
         const componentEntry = indexComponents(
-            actor.components.map((component) => ({
-                ...(component.id ? { id: component.id } : {}),
-                type: component.type,
-                data: component.data,
-            })),
+            actor.components.map((component) => copySceneComponentSnapshot(component)),
         ).get(localDescriptor.componentKey);
 
         if (!componentEntry) {
@@ -615,22 +609,7 @@ export const diffScenePrefabDefinitions = (
     }
 
     for (const actor of topologicallyOrderAddedActors(
-        targetState.actors.map((entry) => ({
-            nodeId: entry.nodeId,
-            parentNodeId: entry.parentNodeId,
-            name: entry.name,
-            layer: entry.layer,
-            tag: entry.tag,
-            active: entry.active,
-            persistent: entry.persistent,
-            pooled: entry.pooled,
-            ...(entry.source ? { source: entry.source } : {}),
-            components: entry.components.map((component) => ({
-                ...(component.id ? { id: component.id } : {}),
-                type: component.type,
-                data: component.data,
-            })),
-        })),
+        targetState.actors.map((entry) => copySceneActorSnapshot(entry)),
         addedActorIds,
     )) {
         overrides.push({
@@ -708,18 +687,10 @@ export const diffScenePrefabDefinitions = (
         }
 
         const baseComponents = indexComponents(
-            baseActor.components.map((component) => ({
-                ...(component.id ? { id: component.id } : {}),
-                type: component.type,
-                data: component.data,
-            })),
+            baseActor.components.map((component) => copySceneComponentSnapshot(component)),
         );
         const targetComponents = indexComponents(
-            targetActor.components.map((component) => ({
-                ...(component.id ? { id: component.id } : {}),
-                type: component.type,
-                data: component.data,
-            })),
+            targetActor.components.map((component) => copySceneComponentSnapshot(component)),
         );
 
         for (const [key, entry] of baseComponents) {

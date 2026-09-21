@@ -118,7 +118,7 @@ const rebuildActorIndex = (state: ScenePrefabState): void => {
     }
 };
 
-const getScenePrefabLineage = (definition: ScenePrefabDefinition): readonly string[] =>
+export const getScenePrefabLineage = (definition: ScenePrefabDefinition): readonly string[] =>
     definition.kind === 'resolved' && 'lineage' in definition && Array.isArray(definition.lineage)
         ? definition.lineage
         : [definition.id];
