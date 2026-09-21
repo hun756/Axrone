@@ -1,4 +1,5 @@
 import type { IGLStateCache } from '@axrone/render-webgl2';
+import { createLightingUniformValueMap } from '@axrone/lighting';
 import { Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, Transform } from '@axrone/ecs-runtime';
 import { selectSceneCamera } from '../camera-selector';
@@ -221,6 +222,9 @@ export class SceneRenderRuntime {
             this._options.groundLight,
             cameraFrame?.position
         );
+        // Derive the lighting uniform map once per frame — every mesh draw
+        // in every pass below shares it instead of rebuilding it per draw.
+        const lightingValues = createLightingUniformValueMap(lighting);
         const renderPasses = this._options.resources.renderPasses.getEnabledResources();
 
         if (renderPasses.length === 0) {
@@ -247,6 +251,7 @@ export class SceneRenderRuntime {
                 renderPass,
                 cameraFrame,
                 lighting,
+                lightingValues,
                 fog: this._fogState,
                 elapsedSeconds: params.elapsedSeconds,
                 deltaSeconds: params.deltaSeconds,
