@@ -1066,6 +1066,42 @@ export class ParticleSystem extends Component {
         this._coreSystem?.reset();
     }
 
+    override onDestroy(): void {
+        if (this._coreSystem) {
+            this._coreSystem.destroy();
+            this._coreSystem = null;
+        }
+    }
+
+    private _handleSystemStopped(): void {
+        if (!this._playing) {
+            return;
+        }
+        this._playing = false;
+        switch (this._stopAction) {
+            case 'disable':
+                this.enabled = false;
+                break;
+            case 'destroy':
+                this.actor?.destroy();
+                break;
+            case 'callback':
+                (
+                    this.world as
+                        | {
+                              emitSync?: (event: string, data: Record<string, unknown>) => boolean;
+                          }
+                        | undefined
+                )?.emitSync?.('particle:stopped', {
+                    actorId: this.actor?.id,
+                    entity: this.entity,
+                });
+                break;
+            default:
+                break;
+        }
+    }
+
     /** Immediately emits `count` particles, bypassing the rate limiter. */
     emitBurst(count: number): void {
         const total = Math.max(0, Math.floor(count));
@@ -1149,6 +1185,10 @@ export class ParticleSystem extends Component {
 
         this._integrate(dt);
         this.advanceTextureFrame(dt);
+
+        if (!this._looping && this._loopTime >= this._duration && this._aliveCount <= 0) {
+            this._handleSystemStopped();
+        }
     }
 
     private _emitOverTime(dt: number): void {
@@ -1490,7 +1530,10 @@ export class ParticleSystem extends Component {
             if (this._playing) {
                 this._coreSystem.play();
             }
-        } catch {
+        } catch (error) {
+            console.warn(
+                `[ParticleSystem] Core simulation init failed, falling back to CPU simulation: ${(error as Error)?.message ?? error}`
+            );
             this._coreSystem = null;
         }
     }
@@ -1575,7 +1618,7 @@ export class ParticleSystem extends Component {
         this.advanceTextureFrame(dt);
 
         if (!this._looping && this._elapsed >= this._duration && alive === 0) {
-            this._playing = false;
+            this._handleSystemStopped();
         }
     }
 
