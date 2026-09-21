@@ -13,8 +13,7 @@ internal struct PoolCounterCell
 
 internal sealed class PoolCounterStore
 {
-    [ThreadStatic]
-    private static PoolCounterStore? t_current;
+    private static readonly AsyncLocal<PoolCounterStore?> t_current = new();
 
     private static readonly List<WeakReference<PoolCounterStore>> s_all = new();
     private static readonly object s_gate = new();
@@ -26,11 +25,11 @@ internal sealed class PoolCounterStore
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            var current = t_current;
+            var current = t_current.Value;
             if (current is not null) return current;
 
             current = new PoolCounterStore();
-            t_current = current;
+            t_current.Value = current;
             lock (s_gate) s_all.Add(new WeakReference<PoolCounterStore>(current));
             return current;
         }

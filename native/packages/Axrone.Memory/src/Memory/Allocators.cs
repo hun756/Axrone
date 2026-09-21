@@ -1,6 +1,7 @@
 namespace Axrone.Memory;
 
 using System.Runtime.InteropServices;
+using Axrone.Utility.Alignment;
 using Axrone.Utility.Disposable;
 
 public sealed class ManagedArrayBlockAllocator<T> : IBlockAllocator<T>
@@ -46,19 +47,18 @@ public sealed class PinnedHeapBlockAllocator<T> : IBlockAllocator<T>
 public sealed unsafe class NativeAlignedBlockAllocator<T> : IBlockAllocator<T> where T : unmanaged
 {
     public static readonly NativeAlignedBlockAllocator<T> Instance = new();
-    private const nuint ByteAlignment = 64;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public Memory<T> Allocate(int elementCount, out object? lifetimeToken)
     {
         nuint byteSize = checked((nuint)elementCount * (nuint)sizeof(T));
-        void* nativePointer = NativeMemory.AlignedAlloc(byteSize, ByteAlignment);
+        void* nativePointer = NativeMemory.AlignedAlloc(byteSize, (nuint)Alignment.CacheLine64Bytes);
         if (nativePointer == null)
         {
             ThrowAllocationFailed(byteSize);
         }
 
-        NativeBlockMemoryManager<T> manager = new((T*)nativePointer, elementCount, ByteAlignment);
+        NativeBlockMemoryManager<T> manager = new((T*)nativePointer, elementCount, (nuint)Alignment.CacheLine64Bytes);
         lifetimeToken = manager;
         return manager.Memory;
     }
@@ -68,8 +68,8 @@ public sealed unsafe class NativeAlignedBlockAllocator<T> : IBlockAllocator<T> w
     {
         if (lifetimeToken is NativeBlockMemoryManager<T> manager)
         {
-            NativeMemory.AlignedFree(manager.Pointer);
             ((IDisposable)manager).Dispose();
+            NativeMemory.AlignedFree(manager.Pointer);
         }
     }
 

@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Categorizes the kind of error represented by an <see cref="Error"/>.</summary>
 public enum ErrorType : byte

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Provides LINQ-style and monadic extension methods for <see cref="Result{T}"/>.</summary>
 public static class ResultExtensions

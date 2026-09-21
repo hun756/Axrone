@@ -17,12 +17,22 @@ public static class FloatCompare
     /// <summary>Compare two floats with absolute epsilon tolerance.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool AlmostEqual(float a, float b, float epsilon = DefaultFloatEpsilon)
-        => MathF.Abs(a - b) <= epsilon;
+    {
+        if (a == b) return true;
+        if (float.IsNaN(a) || float.IsNaN(b)) return false;
+        if (float.IsInfinity(a) || float.IsInfinity(b)) return false;
+        return MathF.Abs(a - b) <= epsilon;
+    }
 
     /// <summary>Compare two doubles with absolute epsilon tolerance.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool AlmostEqual(double a, double b, double epsilon = DefaultDoubleEpsilon)
-        => Math.Abs(a - b) <= epsilon;
+    {
+        if (a == b) return true;
+        if (double.IsNaN(a) || double.IsNaN(b)) return false;
+        if (double.IsInfinity(a) || double.IsInfinity(b)) return false;
+        return Math.Abs(a - b) <= epsilon;
+    }
 
     /// <summary>
     /// Compare two floats with relative + absolute epsilon (ULP-aware).
@@ -30,6 +40,8 @@ public static class FloatCompare
     /// </summary>
     public static bool AlmostEqualRelative(float a, float b, float relEpsilon = 1e-4f, float absEpsilon = DefaultFloatEpsilon)
     {
+        if (float.IsNaN(a) || float.IsNaN(b)) return false;
+        if (float.IsInfinity(a) || float.IsInfinity(b)) return a == b;
         var diff = MathF.Abs(a - b);
         if (diff <= absEpsilon) return true;
         var largest = MathF.Max(MathF.Abs(a), MathF.Abs(b));
@@ -41,25 +53,31 @@ public static class FloatCompare
     /// </summary>
     public static bool AlmostEqualRelative(double a, double b, double relEpsilon = 1e-6, double absEpsilon = DefaultDoubleEpsilon)
     {
+        if (double.IsNaN(a) || double.IsNaN(b)) return false;
+        if (double.IsInfinity(a) || double.IsInfinity(b)) return a == b;
         var diff = Math.Abs(a - b);
         if (diff <= absEpsilon) return true;
         var largest = Math.Max(Math.Abs(a), Math.Abs(b));
         return diff <= largest * relEpsilon;
     }
 
-    /// <summary>Three-way comparison for floats with epsilon.</summary>
+    /// <summary>Three-way comparison for floats with epsilon. NaN sorts after all non-NaN values.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Compare(float a, float b, float epsilon = DefaultFloatEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
+        if (float.IsNaN(a)) return 1;
+        if (float.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
 
-    /// <summary>Three-way comparison for doubles with epsilon.</summary>
+    /// <summary>Three-way comparison for doubles with epsilon. NaN sorts after all non-NaN values.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Compare(double a, double b, double epsilon = DefaultDoubleEpsilon)
     {
         if (AlmostEqual(a, b, epsilon)) return 0;
+        if (double.IsNaN(a)) return 1;
+        if (double.IsNaN(b)) return -1;
         return a < b ? -1 : 1;
     }
 

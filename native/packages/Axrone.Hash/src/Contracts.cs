@@ -14,6 +14,7 @@ public enum HashAlgorithmId : byte
     HmacSha512 = 10
 }
 
+/// <summary>Represents a fixed-size hash digest value with equality, comparison, and formatting support.</summary>
 public interface IHashDigest<TSelf> :
     IEquatable<TSelf>,
     IComparable<TSelf>,
@@ -33,8 +34,9 @@ public interface IHashDigest<TSelf> :
     static abstract bool TryParse(ReadOnlySpan<byte> utf8Chars, out TSelf result);
 }
 
+/// <summary>Accumulates data incrementally for hash computation.</summary>
 public interface IHashAccumulator<TSelf, TDigest> : IDisposable
-    where TSelf : struct, IHashAccumulator<TSelf, TDigest>
+    where TSelf : IHashAccumulator<TSelf, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
 {
     void Append(ReadOnlySpan<byte> source);
@@ -43,6 +45,7 @@ public interface IHashAccumulator<TSelf, TDigest> : IDisposable
     void Reset();
 }
 
+/// <summary>Defines a one-shot hash algorithm with static hash computation methods.</summary>
 public interface IHashAlgorithm<TSelf, TDigest>
     where TSelf : IHashAlgorithm<TSelf, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
@@ -52,6 +55,7 @@ public interface IHashAlgorithm<TSelf, TDigest>
     static abstract void Hash(ReadOnlySpan<byte> source, Span<byte> destination);
 }
 
+/// <summary>Defines a keyed (MAC) hash algorithm.</summary>
 public interface IKeyedHashAlgorithm<TSelf, TDigest>
     where TSelf : IKeyedHashAlgorithm<TSelf, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
@@ -61,14 +65,16 @@ public interface IKeyedHashAlgorithm<TSelf, TDigest>
     static abstract void Hash(ReadOnlySpan<byte> key, ReadOnlySpan<byte> source, Span<byte> destination);
 }
 
+/// <summary>Extends a hash algorithm with incremental (streaming) computation via an accumulator.</summary>
 public interface IIncrementalHashAlgorithm<TSelf, TState, TDigest> : IHashAlgorithm<TSelf, TDigest>
     where TSelf : IIncrementalHashAlgorithm<TSelf, TState, TDigest>
-    where TState : struct, IHashAccumulator<TState, TDigest>
+    where TState : IHashAccumulator<TState, TDigest>
     where TDigest : unmanaged, IHashDigest<TDigest>
 {
     static abstract TState CreateAccumulator();
 }
 
+/// <summary>Stateful hasher that supports incremental append and digest retrieval.</summary>
 public interface IHasher : IDisposable
 {
     HashAlgorithmId Id { get; }

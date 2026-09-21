@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Event</RootNamespace>
+    <AssemblyName>Axrone.Event</AssemblyName>
+    <Description>Event envelope contracts, pub/sub bus abstractions, and dead-letter vocabulary for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory in hot-path structs -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1000: Static members on generic types — envelope/entry factories live on the generic type by design -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1716: Reserved keyword conflict — Axrone.Event namespace and Pause/Resume vocabulary are intentional public API -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1031: Catching general exceptions — intentional for per-subscriber dead-letter capture -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1002: Don't use List<T> — DrainDeadLetters is a cold-path snapshot by design -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Event.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

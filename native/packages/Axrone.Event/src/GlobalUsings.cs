@@ -1,0 +1,13 @@
+global using System;
+global using System.Buffers;
+global using System.Collections.Concurrent;
+global using System.Collections.Generic;
+global using System.Diagnostics;
+global using System.Diagnostics.CodeAnalysis;
+global using System.Runtime.CompilerServices;
+global using System.Runtime.ExceptionServices;
+global using System.Threading;
+global using System.Threading.Tasks;
+global using Axrone.Collections;
+global using Axrone.Event.Internal;
+global using Axrone.Utility.Backoff.SpinPolicies;

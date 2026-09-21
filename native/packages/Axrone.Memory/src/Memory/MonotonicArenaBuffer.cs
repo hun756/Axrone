@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Alignment;
+
 public sealed unsafe class MonotonicArenaBuffer : IDisposable
 {
     private struct ArenaSegment
@@ -15,15 +17,16 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     private byte* _currentSegmentBase;
     private nint _currentSegmentCapacity;
     private long _currentOffset;
+    private long _segmentGeneration;
     private DisposalTracker _tracker;
 
     public MonotonicArenaBuffer(nint segmentCapacity = 1048576)
     {
         if (segmentCapacity <= 0) ThrowHelper.ThrowArgumentOutOfRangeException(nameof(segmentCapacity));
 
-        _segmentCapacity = AlignTo64(segmentCapacity);
+        _segmentCapacity = Alignment.CacheLine64.AlignUp(segmentCapacity);
         _segments = new ArenaSegment[4];
-        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, 64);
+        void* initialAlloc = NativeMemory.AlignedAlloc((nuint)_segmentCapacity, (nuint)Alignment.CacheLine64Bytes);
         if (initialAlloc == null) ThrowHelper.ThrowInsufficientMemory("Failed to allocate initial arena chunk.");
 
         _segments[0] = new ArenaSegment { MemoryBlock = initialAlloc, ByteCapacity = _segmentCapacity };
@@ -46,7 +49,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     {
         nint byteCount = checked((nint)count * (nint)sizeof(T));
         void* pointer = AllocateBytes(byteCount);
-        NativeBlockMemoryManager<T> manager = new((T*)pointer, count, 64);
+        ArenaBackedMemoryManager<T> manager = new((T*)pointer, count, this);
         return manager.Memory;
     }
 
@@ -56,16 +59,20 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
         ThrowIfDisposed();
         if (byteCount <= 0) return null;
 
-        nint alignedAllocationSize = AlignTo64(byteCount);
+        nint alignedAllocationSize = Alignment.CacheLine64.AlignUp(byteCount);
 
-        // Lock-free fast path: atomic bump pointer
+        // Lock-free fast path: snapshot generation, atomic bump, verify generation unchanged
+        long genBefore = Volatile.Read(ref _segmentGeneration);
         nint offset = (nint)Interlocked.Add(ref _currentOffset, (long)alignedAllocationSize);
-        if (offset <= Volatile.Read(ref _currentSegmentCapacity))
+        long genAfter = Volatile.Read(ref _segmentGeneration);
+
+        if (genBefore == genAfter && offset <= Volatile.Read(ref _currentSegmentCapacity))
         {
+            Thread.MemoryBarrier();
             return _currentSegmentBase + (offset - alignedAllocationSize);
         }
 
-        // Slow path: segment overflow, expansion lock required
+        // Slow path: segment overflow or generation changed, expansion lock required
         return AllocateOverflowSlow(alignedAllocationSize);
     }
 
@@ -84,7 +91,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
             else
             {
-                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, 64);
+                void* newBlock = NativeMemory.AlignedAlloc((nuint)newCapacity, (nuint)Alignment.CacheLine64Bytes);
                 if (newBlock == null) ThrowHelper.ThrowInsufficientMemory($"Failed to allocate arena chunk of {newCapacity} bytes.");
 
                 if (_activeSegmentCount == _segments.Length) Array.Resize(ref _segments, _segments.Length * 2);
@@ -97,6 +104,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
             }
 
             _currentOffset = (long)alignedSize;
+            _segmentGeneration++;
             return _currentSegmentBase;
         }
     }
@@ -115,6 +123,7 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
                 _currentSegmentBase = (byte*)_segments[0].MemoryBlock;
                 _currentSegmentCapacity = _segments[0].ByteCapacity;
                 _currentOffset = 0;
+                _segmentGeneration++;
             }
         }
     }
@@ -142,8 +151,37 @@ public sealed unsafe class MonotonicArenaBuffer : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static nint AlignTo64(nint size) => (size + 63) & ~63;
+    internal void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
+}
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed() => _tracker.ThrowIfDisposed(nameof(MonotonicArenaBuffer));
+internal sealed unsafe class ArenaBackedMemoryManager<T> : MemoryManager<T> where T : unmanaged
+{
+    private readonly T* _pointer;
+    private readonly int _length;
+    private readonly MonotonicArenaBuffer _arena;
+
+    public ArenaBackedMemoryManager(T* pointer, int length, MonotonicArenaBuffer arena)
+    {
+        _pointer = pointer;
+        _length = length;
+        _arena = arena;
+    }
+
+    public override Span<T> GetSpan()
+    {
+        _arena.ThrowIfDisposed();
+        return new Span<T>(_pointer, _length);
+    }
+
+    public override MemoryHandle Pin(int elementIndex = 0)
+    {
+        _arena.ThrowIfDisposed();
+        if ((uint)elementIndex > (uint)_length)
+            ThrowHelper.ThrowArgumentOutOfRangeException(nameof(elementIndex));
+        return new MemoryHandle(_pointer + elementIndex);
+    }
+
+    public override void Unpin() { }
+
+    protected override void Dispose(bool disposing) { }
 }

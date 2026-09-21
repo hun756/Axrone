@@ -51,11 +51,11 @@ public class SingletonRegistryTests
     }
 
     [Fact]
-    public void Get_UnregisteredType_ThrowsKeyNotFoundException()
+    public void Get_UnregisteredType_ThrowsSingletonNotFoundException()
     {
         var registry = new SingletonRegistry();
         var act = () => registry.Get<UntouchedService>();
-        act.Should().Throw<KeyNotFoundException>();
+        act.Should().Throw<SingletonNotFoundException>();
     }
 
     [Fact]

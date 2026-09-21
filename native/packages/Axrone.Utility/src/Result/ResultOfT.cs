@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Represents the outcome of an operation that either succeeded with a value of type <typeparamref name="TValue"/> or failed with error information.</summary>
 /// <typeparam name="TValue">The type of the success value.</typeparam>
@@ -318,8 +318,13 @@ public readonly struct Result<TValue> : IResult<TValue>, IEquatable<Result<TValu
 
     /// <summary>Implicitly converts a value to a successful <see cref="Result{TValue}"/>.</summary>
     /// <param name="value">The value to wrap.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static implicit operator Result<TValue>(TValue value) => Success(value);
+    public static implicit operator Result<TValue>(TValue value)
+    {
+        if (value is null) ThrowHelper.ThrowArgumentNullException(nameof(value));
+        return Success(value);
+    }
 
     /// <summary>Implicitly converts an <see cref="Error"/> to a failed <see cref="Result{TValue}"/>.</summary>
     /// <param name="error">The error to convert.</param>

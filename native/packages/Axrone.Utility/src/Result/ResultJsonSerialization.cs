@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>JSON converter for non-generic <see cref="Result"/> using System.Text.Json.</summary>
 public sealed class ResultJsonConverter : JsonConverter<Result>

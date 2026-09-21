@@ -170,7 +170,7 @@ public class MpmcRingBufferTests
     [Fact]
     public void Enqueue_WithTimeout_ReturnsFailureOnTimeout()
     {
-        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 2, WaitStrategy = new BusySpinWaitStrategy() });
+        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 2 });
         buffer.TryEnqueue(1);
         buffer.TryEnqueue(2);
         var result = buffer.Enqueue(3, TimeSpan.FromMilliseconds(10));
@@ -180,7 +180,7 @@ public class MpmcRingBufferTests
     [Fact]
     public void Dequeue_WithTimeout_ReturnsFailureOnTimeout()
     {
-        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 16, WaitStrategy = new BusySpinWaitStrategy() });
+        var buffer = new MpmcRingBuffer<int>(new RingBufferOptions { Capacity = 16 });
         var result = buffer.Dequeue(TimeSpan.FromMilliseconds(10));
         result.IsFailure.Should().BeTrue();
     }
@@ -303,41 +303,6 @@ public class ConcurrencyRingBufferTests
     }
 }
 
-public class WaitStrategyTests
-{
-    [Fact]
-    public void BusySpin_CanBeReset()
-    {
-        var strategy = new BusySpinWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void Yield_CanBeReset()
-    {
-        var strategy = new YieldWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void SpinWait_CanBeReset()
-    {
-        var strategy = new SpinWaitStrategy();
-        strategy.Reset();
-        strategy.Wait();
-    }
-
-    [Fact]
-    public void Adaptive_ProgressesThroughPhases()
-    {
-        var strategy = new AdaptiveWaitStrategy();
-        strategy.Reset();
-        for (int i = 0; i < 60; i++) strategy.Wait();
-    }
-}
-
 public class ResultIntegrationTests
 {
     [Fact]
@@ -364,5 +329,155 @@ public class ResultIntegrationTests
         var buffer = new MpmcRingBuffer<int>(16);
         var result = buffer.Dequeue(TimeSpan.Zero);
         result.IsFailure.Should().BeTrue();
+    }
+}
+
+public class BackoffIntegrationTests
+{
+    [Fact]
+    public void GenericBuffer_WithAggressiveSpin_WorksCorrectly()
+    {
+        var buffer = new MpmcRingBuffer<int, AggressiveSpinBackoff>(16);
+        buffer.TryEnqueue(42).Should().BeTrue();
+        buffer.TryDequeue(out int item).Should().BeTrue();
+        item.Should().Be(42);
+    }
+
+    [Fact]
+    public void GenericBuffer_WithProgressiveSpin_WorksCorrectly()
+    {
+        var buffer = new MpmcRingBuffer<int, ProgressiveSpinBackoff>(16);
+        buffer.TryEnqueue(99).Should().BeTrue();
+        buffer.Count.Should().Be(1);
+        buffer.TryDequeue(out int item).Should().BeTrue();
+        item.Should().Be(99);
+    }
+
+    [Fact]
+    public void GenericBuffer_WithYieldingBackoff_WorksCorrectly()
+    {
+        var buffer = new MpmcRingBuffer<int, YieldingBackoff>(16);
+        for (int i = 0; i < 5; i++) buffer.TryEnqueue(i);
+        buffer.Count.Should().Be(5);
+        for (int i = 0; i < 5; i++)
+        {
+            buffer.TryDequeue(out int item).Should().BeTrue();
+            item.Should().Be(i);
+        }
+    }
+
+    [Fact]
+    public void GenericBuffer_WithAdaptiveSpin_WorksCorrectly()
+    {
+        var buffer = new MpmcRingBuffer<int, AdaptiveSpinBackoff>(16);
+        buffer.TryEnqueue(7).Should().BeTrue();
+        buffer.TryDequeue(out int item).Should().BeTrue();
+        item.Should().Be(7);
+    }
+
+    [Fact]
+    public void GenericBuffer_TimedEnqueue_UsesBackoff()
+    {
+        var buffer = new MpmcRingBuffer<int, AggressiveSpinBackoff>(new RingBufferOptions { Capacity = 2 });
+        buffer.TryEnqueue(1);
+        buffer.TryEnqueue(2);
+        var result = buffer.Enqueue(3, TimeSpan.FromMilliseconds(10));
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GenericBuffer_TimedDequeue_UsesBackoff()
+    {
+        var buffer = new MpmcRingBuffer<int, ProgressiveSpinBackoff>(16);
+        var result = buffer.Dequeue(TimeSpan.FromMilliseconds(10));
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GenericBuffer_TimedEnqueue_SucceedsWhenSpaceAvailable()
+    {
+        var buffer = new MpmcRingBuffer<int, AdaptiveSpinBackoff>(16);
+        var result = buffer.Enqueue(42, TimeSpan.FromSeconds(1));
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GenericBuffer_TimedDequeue_SucceedsWhenItemAvailable()
+    {
+        var buffer = new MpmcRingBuffer<int, AggressiveSpinBackoff>(16);
+        buffer.TryEnqueue(42);
+        var result = buffer.Dequeue(TimeSpan.FromSeconds(1));
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(42);
+    }
+
+    [Fact]
+    public void GenericBuffer_Dispose_PreventsFurtherOperations()
+    {
+        var buffer = new MpmcRingBuffer<int, AggressiveSpinBackoff>(16);
+        buffer.Dispose();
+        buffer.IsDisposed.Should().BeTrue();
+        var act = () => buffer.TryEnqueue(1);
+        act.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void NonGenericWrapper_DelegatesToInner()
+    {
+        var buffer = new MpmcRingBuffer<int>(16);
+        buffer.Capacity.Should().Be(16);
+        buffer.TryEnqueue(42).Should().BeTrue();
+        buffer.Count.Should().Be(1);
+        buffer.TryDequeue(out int item).Should().BeTrue();
+        item.Should().Be(42);
+    }
+
+    [Fact]
+    public void NonGenericWrapper_ProducerConsumer_Work()
+    {
+        var buffer = new MpmcRingBuffer<int>(16);
+        var producer = buffer.Producer;
+        var consumer = buffer.Consumer;
+        producer.Should().NotBeNull();
+        consumer.Should().NotBeNull();
+        producer.Capacity.Should().Be(16);
+        consumer.Capacity.Should().Be(16);
+
+        producer.TryEnqueue(10).Should().BeTrue();
+        consumer.TryDequeue(out int item).Should().BeTrue();
+        item.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task GenericBuffer_ConcurrentWithCustomBackoff_NoDataLoss()
+    {
+        var buffer = new MpmcRingBuffer<int, ProgressiveSpinBackoff>(1024);
+        const int itemCount = 10_000;
+        var produced = new ConcurrentBag<int>();
+        var consumed = new ConcurrentBag<int>();
+
+        var producer = Task.Run(() =>
+        {
+            for (int i = 0; i < itemCount; i++)
+            {
+                while (!buffer.TryEnqueue(i)) Thread.SpinWait(1);
+                produced.Add(i);
+            }
+        });
+
+        var consumer = Task.Run(() =>
+        {
+            for (int i = 0; i < itemCount; i++)
+            {
+                int item;
+                while (!buffer.TryDequeue(out item)) Thread.SpinWait(1);
+                consumed.Add(item);
+            }
+        });
+
+        await Task.WhenAll(producer, consumer);
+
+        consumed.Count.Should().Be(itemCount);
+        produced.Count.Should().Be(itemCount);
     }
 }

@@ -1,5 +1,7 @@
 namespace Axrone.Memory;
 
+using Axrone.Utility.Alignment;
+
 public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketRegistry<T> where T : unmanaged
 {
     private readonly int _blockSize;
@@ -24,13 +26,13 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
         _clearMode = clearMode;
 
         nuint totalBytes = checked((nuint)blockSize * (nuint)blockCount * (nuint)sizeof(T));
-        _backingPointer = NativeMemory.AlignedAlloc(totalBytes, 64);
+        _backingPointer = NativeMemory.AlignedAlloc(totalBytes, (nuint)Alignment.CacheLine64Bytes);
         if (_backingPointer == null)
         {
             ThrowHelper.ThrowInsufficientMemory($"Failed to allocate {totalBytes} contiguous slab memory bytes.");
         }
 
-        _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, blockSize * blockCount, 64);
+        _rootManager = new NativeBlockMemoryManager<T>((T*)_backingPointer, checked(blockSize * blockCount), (nuint)Alignment.CacheLine64Bytes);
         _slotArray = new PooledBufferSlot<T>[blockCount];
         _freeSlotQueue = new MpmcRingBuffer<PooledBufferSlot<T>>(Math.Max(2, blockCount));
 
@@ -152,6 +154,13 @@ public sealed unsafe class ContiguousSlabPool<T> : MemoryPool<T>, IPoolBucketReg
     {
         if (_tracker.TryDispose())
         {
+            long active = Volatile.Read(ref _activeRentals);
+            if (active > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot dispose ContiguousSlabPool with {active} active rental(s). Return all rented blocks before disposing.");
+            }
+
             for (int i = 0; i < _slotArray.Length; i++) _slotArray[i].FinalizeEviction();
             _freeSlotQueue.Dispose();
             ((IDisposable)_rootManager).Dispose();

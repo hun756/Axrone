@@ -244,14 +244,14 @@ internal sealed class ShardedPoolStorage<T> : IPoolStorage<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(in PooledItem<T> item)
     {
-        int idx = Math.Abs(Environment.CurrentManagedThreadId % _shards.Length);
+        int idx = ((Environment.CurrentManagedThreadId % _shards.Length) + _shards.Length) % _shards.Length;
         _shards[idx].Enqueue(in item);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryDequeue(out PooledItem<T> item)
     {
-        int idx = Math.Abs(Environment.CurrentManagedThreadId % _shards.Length);
+        int idx = ((Environment.CurrentManagedThreadId % _shards.Length) + _shards.Length) % _shards.Length;
         if (_shards[idx].TryDequeue(out item))
             return true;
         for (int i = 0; i < _shards.Length; i++)
@@ -303,13 +303,12 @@ internal sealed class ShardedPoolStorage<T> : IPoolStorage<T> where T : class
 internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : class
 {
     private readonly Channel<PooledItem<T>> _channel;
-    private int _count;
 
     public BoundedChannelPoolStorage(int capacity)
     {
         var options = new BoundedChannelOptions(capacity > 0 ? capacity : Environment.ProcessorCount * 32)
         {
-            FullMode = BoundedChannelFullMode.Wait,
+            FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = false,
             SingleWriter = false,
             AllowSynchronousContinuations = true,
@@ -317,38 +316,29 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
         _channel = Channel.CreateBounded<PooledItem<T>>(options);
     }
 
-    public int Count => Volatile.Read(ref _count);
+    public int Count => _channel.Reader.Count;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(in PooledItem<T> item)
     {
-        if (_channel.Writer.TryWrite(item))
-            Interlocked.Increment(ref _count);
+        _channel.Writer.TryWrite(item);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryDequeue(out PooledItem<T> item)
     {
-        if (_channel.Reader.TryRead(out item))
-        {
-            Interlocked.Decrement(ref _count);
-            return true;
-        }
-        item = default;
-        return false;
+        return _channel.Reader.TryRead(out item);
     }
 
     public async ValueTask EnqueueAsync(PooledItem<T> item, CancellationToken cancellationToken)
     {
         await _channel.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
-        Interlocked.Increment(ref _count);
     }
 
     public void Clear(Action<PooledItem<T>> action)
     {
         while (_channel.Reader.TryRead(out var item))
         {
-            Interlocked.Decrement(ref _count);
             action(item);
         }
     }
@@ -357,7 +347,6 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
     {
         while (_channel.Reader.TryRead(out var item))
         {
-            Interlocked.Decrement(ref _count);
             await action(item).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
         }
@@ -368,7 +357,6 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
         var items = new List<PooledItem<T>>();
         while (_channel.Reader.TryRead(out var pooled))
         {
-            Interlocked.Decrement(ref _count);
             items.Add(pooled);
         }
 
@@ -378,13 +366,8 @@ internal sealed class BoundedChannelPoolStorage<T> : IPoolStorage<T> where T : c
             if (ReferenceEquals(items[i].Instance, instance))
                 found = true;
 
-            SpinWait spin = new SpinWait();
             while (!_channel.Writer.TryWrite(items[i]))
-            {
-                spin.SpinOnce();
-            }
-
-            Interlocked.Increment(ref _count);
+                Thread.SpinWait(8);
         }
         return found;
     }

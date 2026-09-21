@@ -25,12 +25,12 @@ public class SingletonScopeTests
     }
 
     [Fact]
-    public void Get_NotInEither_ThrowsKeyNotFoundException()
+    public void Get_NotInEither_ThrowsSingletonNotFoundException()
     {
         var parent = new SingletonRegistry();
         var child = new SingletonScope(parent);
         var act = () => child.Get<UntouchedService>();
-        act.Should().Throw<KeyNotFoundException>();
+        act.Should().Throw<SingletonNotFoundException>();
     }
 
     [Fact]

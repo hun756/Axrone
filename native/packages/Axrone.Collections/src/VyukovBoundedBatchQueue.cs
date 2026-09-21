@@ -14,7 +14,7 @@ using Axrone.Utility.Disposable;
 /// <typeparam name="T">The type of items managed by the queue.</typeparam>
 /// <typeparam name="TBackoff">Static backoff strategy configuring contention mechanics.</typeparam>
 public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
 {
     private readonly BufferCapacity _capacity;
     private readonly BoundedSlotStorage<T> _storage;
@@ -343,8 +343,17 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
 
         AsyncBatchWaiter<T> waiter = _asyncCoordinator.RentBatchWaiter(isEnqueue: true);
         waiter.MemoryIn = items;
+        int late = _asyncCoordinator.RegisterOrTakeBatchEnqueue(this, items, waiter);
+        if (late > 0)
+        {
+            return new ValueTask<int>(late);
+        }
+
         waiter.HookCancellation(cancellationToken);
-        _asyncCoordinator.RegisterBatchEnqueue(waiter);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _asyncCoordinator.TryCancelBatchWaiter(waiter, cancellationToken);
+        }
 
         return new ValueTask<int>(waiter, waiter.Version);
     }
@@ -363,8 +372,16 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
 
         AsyncItemWaiter<T> waiter = _asyncCoordinator.RentItemWaiter(isEnqueue: true);
         waiter.Item = item;
+        if (_asyncCoordinator.RegisterOrTakeItemEnqueue(this, waiter))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         waiter.HookCancellation(cancellationToken);
-        _asyncCoordinator.RegisterItemEnqueue(waiter);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _asyncCoordinator.TryCancelItemWaiter(waiter, cancellationToken);
+        }
 
         return new ValueTask(waiter, waiter.Version);
     }
@@ -384,8 +401,17 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
 
         AsyncBatchWaiter<T> waiter = _asyncCoordinator.RentBatchWaiter(isEnqueue: false);
         waiter.MemoryOut = destination;
+        int late = _asyncCoordinator.RegisterOrTakeBatchDequeue(this, destination, waiter);
+        if (late > 0)
+        {
+            return new ValueTask<int>(late);
+        }
+
         waiter.HookCancellation(cancellationToken);
-        _asyncCoordinator.RegisterBatchDequeue(waiter);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _asyncCoordinator.TryCancelBatchWaiter(waiter, cancellationToken);
+        }
 
         return new ValueTask<int>(waiter, waiter.Version);
     }
@@ -403,8 +429,16 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
         }
 
         AsyncItemWaiter<T> waiter = _asyncCoordinator.RentItemWaiter(isEnqueue: false);
+        if (_asyncCoordinator.RegisterOrTakeItemDequeue(this, waiter, out T? late) && late is not null)
+        {
+            return new ValueTask<T>(late);
+        }
+
         waiter.HookCancellation(cancellationToken);
-        _asyncCoordinator.RegisterItemDequeue(waiter);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _asyncCoordinator.TryCancelItemWaiter(waiter, cancellationToken);
+        }
 
         return new ValueTask<T>(waiter, waiter.Version);
     }
@@ -416,6 +450,13 @@ public sealed class VyukovBoundedBatchQueue<T, TBackoff> : IBatchQueue<T>
     public void Dispose()
     {
         if (!_tracker.TryDispose()) return;
+
+        // Memory barrier ensures the disposed flag is visible to all threads before we free resources.
+        // This reduces (but doesn't eliminate) the window where an in-flight operation might access freed memory.
+        // Callers must ensure no operations are in-flight when calling Dispose for complete safety.
+        Thread.MemoryBarrier();
+
+        _asyncCoordinator.Dispose();
         _storage.Dispose();
     }
 }

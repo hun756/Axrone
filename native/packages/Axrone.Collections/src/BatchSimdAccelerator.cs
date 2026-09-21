@@ -26,6 +26,11 @@ internal static unsafe class BatchSimdAccelerator
         nuint i = 0;
         ulong expBase = (ulong)expectedBase.Value;
 
+        // Acquire fence: producers write sequence values with Volatile.Write (release semantics).
+        // On ARM64, SIMD loads have no ordering guarantees without an explicit fence.
+        // This barrier ensures all prior sequence writes are visible before we read them.
+        Thread.MemoryBarrier();
+
         // Cascade 1: 512-bit SIMD (AVX10 / AVX-512)
         if (Vector512.IsHardwareAccelerated && limit >= 8)
         {

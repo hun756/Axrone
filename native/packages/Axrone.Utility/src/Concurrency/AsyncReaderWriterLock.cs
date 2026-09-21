@@ -27,22 +27,22 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
             switch (_lockType)
             {
-                case READ_LOCK:
+                case LockTypeRead:
                     lockObj.ExitReadLock();
                     break;
-                case UPGRADEABLE_READ_LOCK:
+                case LockTypeUpgradeableRead:
                     lockObj.ExitUpgradeableReadLock();
                     break;
-                case WRITE_LOCK:
+                case LockTypeWrite:
                     lockObj.ExitWriteLock();
                     break;
             }
         }
     }
 
-    private const int READ_LOCK = 1;
-    private const int UPGRADEABLE_READ_LOCK = 2;
-    private const int WRITE_LOCK = 3;
+    private const int LockTypeRead = 1;
+    private const int LockTypeUpgradeableRead = 2;
+    private const int LockTypeWrite = 3;
 
     private readonly SemaphoreSlim _upgradeSemaphore;
     private readonly SemaphoreSlim _writeSemaphore;
@@ -51,6 +51,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     private int _readerCount;
     private int _upgraderCount;
     private int _writerCount;
+    private int _writerQueued;
     private volatile int _disposeState;
 
     /// <summary>
@@ -81,7 +82,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     public LockHandle ReadLock()
     {
         EnterReadLock();
-        return new LockHandle(this, READ_LOCK);
+        return new LockHandle(this, LockTypeRead);
     }
 
     /// <summary>
@@ -94,7 +95,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     public LockHandle UpgradeableReadLock()
     {
         EnterUpgradeableReadLock();
-        return new LockHandle(this, UPGRADEABLE_READ_LOCK);
+        return new LockHandle(this, LockTypeUpgradeableRead);
     }
 
     /// <summary>
@@ -106,7 +107,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     public LockHandle WriteLock()
     {
         EnterWriteLock();
-        return new LockHandle(this, WRITE_LOCK);
+        return new LockHandle(this, LockTypeWrite);
     }
 
     /// <summary>
@@ -120,7 +121,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     public async Task<LockHandle> ReadLockAsync(CancellationToken cancellationToken = default)
     {
         await EnterReadLockAsync(cancellationToken).ConfigureAwait(false);
-        return new LockHandle(this, READ_LOCK);
+        return new LockHandle(this, LockTypeRead);
     }
 
     /// <summary>
@@ -135,7 +136,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         await EnterUpgradeableReadLockAsync(cancellationToken).ConfigureAwait(false);
-        return new LockHandle(this, UPGRADEABLE_READ_LOCK);
+        return new LockHandle(this, LockTypeUpgradeableRead);
     }
 
     /// <summary>
@@ -149,7 +150,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
     public async Task<LockHandle> WriteLockAsync(CancellationToken cancellationToken = default)
     {
         await EnterWriteLockAsync(cancellationToken).ConfigureAwait(false);
-        return new LockHandle(this, WRITE_LOCK);
+        return new LockHandle(this, LockTypeWrite);
     }
 
     /// <summary>
@@ -170,7 +171,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         bool acquired = await TryEnterWriteLockAsync(timeout, cancellationToken)
             .ConfigureAwait(false);
         return acquired
-            ? new LockHandle(this, WRITE_LOCK)
+            ? new LockHandle(this, LockTypeWrite)
             : throw new TimeoutException("Failed to acquire write lock");
     }
 
@@ -190,32 +191,38 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK || current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeWrite || current.LockType == LockTypeUpgradeableRead)
             {
                 _recursiveData.Value = (current.LockType, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
-                _recursiveData.Value = (READ_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeRead, current.Count + 1);
                 return;
             }
         }
 
-        _writeSemaphore.Wait();
+        _upgradeSemaphore.Wait();
         try
         {
             Interlocked.Increment(ref _readerCount);
         }
         finally
         {
+            _upgradeSemaphore.Release();
+        }
+
+        if (Volatile.Read(ref _writerQueued) > 0)
+        {
+            _writeSemaphore.Wait();
             _writeSemaphore.Release();
         }
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (READ_LOCK, 1);
+            _recursiveData.Value = (LockTypeRead, 1);
         }
     }
 
@@ -235,32 +242,38 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK || current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeWrite || current.LockType == LockTypeUpgradeableRead)
             {
                 _recursiveData.Value = (current.LockType, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
-                _recursiveData.Value = (READ_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeRead, current.Count + 1);
                 return;
             }
         }
 
-        await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _upgradeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             Interlocked.Increment(ref _readerCount);
         }
         finally
         {
+            _upgradeSemaphore.Release();
+        }
+
+        if (Volatile.Read(ref _writerQueued) > 0)
+        {
+            await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             _writeSemaphore.Release();
         }
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (READ_LOCK, 1);
+            _recursiveData.Value = (LockTypeRead, 1);
         }
     }
 
@@ -281,19 +294,19 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
                 _recursiveData.Value = (current.LockType, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
-                _recursiveData.Value = (UPGRADEABLE_READ_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeUpgradeableRead, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 throw new LockRecursionException(
                     "Cannot upgrade from read lock to upgradeable read lock");
@@ -321,7 +334,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (UPGRADEABLE_READ_LOCK, 1);
+            _recursiveData.Value = (LockTypeUpgradeableRead, 1);
         }
     }
 
@@ -344,19 +357,19 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
                 _recursiveData.Value = (current.LockType, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
-                _recursiveData.Value = (UPGRADEABLE_READ_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeUpgradeableRead, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 throw new LockRecursionException(
                     "Cannot upgrade from read lock to upgradeable read lock");
@@ -384,7 +397,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (UPGRADEABLE_READ_LOCK, 1);
+            _recursiveData.Value = (LockTypeUpgradeableRead, 1);
         }
     }
 
@@ -404,18 +417,18 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 throw new LockRecursionException("Cannot upgrade from read lock to write lock");
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
                 _writeSemaphore.Wait();
                 try
@@ -429,7 +442,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                     throw;
                 }
 
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return;
             }
         }
@@ -437,8 +450,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         _writeSemaphore.Wait();
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -448,7 +470,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (WRITE_LOCK, 1);
+            _recursiveData.Value = (LockTypeWrite, 1);
         }
     }
 
@@ -469,18 +491,18 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return true;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 return false;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
                 if (!_writeSemaphore.Wait(millisecondsTimeout))
                 {
@@ -489,8 +511,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -498,7 +529,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                     throw;
                 }
 
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return true;
             }
         }
@@ -510,8 +541,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -521,7 +561,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (WRITE_LOCK, 1);
+            _recursiveData.Value = (LockTypeWrite, 1);
         }
 
         return true;
@@ -546,18 +586,18 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return true;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 return false;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
                 if (!await _writeSemaphore
                     .WaitAsync(timeout, cancellationToken)
@@ -568,8 +608,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -577,7 +626,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                     throw;
                 }
 
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return true;
             }
         }
@@ -591,8 +640,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -602,7 +660,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (WRITE_LOCK, 1);
+            _recursiveData.Value = (LockTypeWrite, 1);
         }
 
         return true;
@@ -627,24 +685,33 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK)
+            if (current.LockType == LockTypeWrite)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK)
+            if (current.LockType == LockTypeRead)
             {
                 throw new LockRecursionException("Cannot upgrade from read lock to write lock");
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK)
+            if (current.LockType == LockTypeUpgradeableRead)
             {
                 await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    WaitForReadersToDrain();
-                    Interlocked.Increment(ref _writerCount);
+                    Interlocked.Increment(ref _writerQueued);
+                    try
+                    {
+                        WaitForReadersToDrain();
+                        Interlocked.Increment(ref _writerCount);
+                    }
+                    catch
+                    {
+                        Interlocked.Decrement(ref _writerQueued);
+                        throw;
+                    }
                 }
                 catch
                 {
@@ -652,7 +719,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
                     throw;
                 }
 
-                _recursiveData.Value = (WRITE_LOCK, current.Count + 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count + 1);
                 return;
             }
         }
@@ -660,8 +727,17 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         await _writeSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            WaitForReadersToDrain();
-            Interlocked.Increment(ref _writerCount);
+            Interlocked.Increment(ref _writerQueued);
+            try
+            {
+                WaitForReadersToDrain();
+                Interlocked.Increment(ref _writerCount);
+            }
+            catch
+            {
+                Interlocked.Decrement(ref _writerQueued);
+                throw;
+            }
         }
         catch
         {
@@ -671,7 +747,7 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
 
         if (_supportRecursion && _recursiveData is not null)
         {
-            _recursiveData.Value = (WRITE_LOCK, 1);
+            _recursiveData.Value = (LockTypeWrite, 1);
         }
     }
 
@@ -688,20 +764,20 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if ((current.LockType == WRITE_LOCK || current.LockType == UPGRADEABLE_READ_LOCK)
+            if ((current.LockType == LockTypeWrite || current.LockType == LockTypeUpgradeableRead)
                 && current.Count > 0)
             {
                 _recursiveData.Value = (current.LockType, current.Count - 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK && current.Count > 1)
+            if (current.LockType == LockTypeRead && current.Count > 1)
             {
-                _recursiveData.Value = (READ_LOCK, current.Count - 1);
+                _recursiveData.Value = (LockTypeRead, current.Count - 1);
                 return;
             }
 
-            if (current.LockType == READ_LOCK && current.Count == 1)
+            if (current.LockType == LockTypeRead && current.Count == 1)
             {
                 _recursiveData.Value = (0, 0);
             }
@@ -723,19 +799,19 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK && current.Count > 0)
+            if (current.LockType == LockTypeWrite && current.Count > 0)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count - 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count - 1);
                 return;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK && current.Count > 1)
+            if (current.LockType == LockTypeUpgradeableRead && current.Count > 1)
             {
-                _recursiveData.Value = (UPGRADEABLE_READ_LOCK, current.Count - 1);
+                _recursiveData.Value = (LockTypeUpgradeableRead, current.Count - 1);
                 return;
             }
 
-            if (current.LockType == UPGRADEABLE_READ_LOCK && current.Count == 1)
+            if (current.LockType == LockTypeUpgradeableRead && current.Count == 1)
             {
                 _recursiveData.Value = (0, 0);
             }
@@ -758,19 +834,20 @@ public sealed class AsyncReaderWriterLock : IDisposable, IAsyncDisposable
         {
             var current = _recursiveData.Value;
 
-            if (current.LockType == WRITE_LOCK && current.Count > 1)
+            if (current.LockType == LockTypeWrite && current.Count > 1)
             {
-                _recursiveData.Value = (WRITE_LOCK, current.Count - 1);
+                _recursiveData.Value = (LockTypeWrite, current.Count - 1);
                 return;
             }
 
-            if (current.LockType == WRITE_LOCK && current.Count == 1)
+            if (current.LockType == LockTypeWrite && current.Count == 1)
             {
                 _recursiveData.Value = (0, 0);
             }
         }
 
         Interlocked.Decrement(ref _writerCount);
+        Interlocked.Decrement(ref _writerQueued);
         _writeSemaphore.Release();
     }
 

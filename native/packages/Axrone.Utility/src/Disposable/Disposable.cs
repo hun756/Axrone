@@ -25,39 +25,54 @@ public sealed class ActionDisposable : IDisposable
 
 /// <summary>
 /// Accumulates multiple <see cref="IDisposable"/> instances and disposes them in reverse order.
+/// Thread-safe for concurrent Add and Dispose calls.
 /// </summary>
 public sealed class CompositeDisposable : IDisposable
 {
     private readonly List<IDisposable> _disposables = [];
-    private bool _disposed;
+    private readonly object _gate = new();
+    private int _disposed;
 
-    public int Count => _disposables.Count;
-    public bool IsDisposed => _disposed;
+    public int Count
+    {
+        get { lock (_gate) { return _disposables.Count; } }
+    }
+
+    public bool IsDisposed => Volatile.Read(ref _disposed) == 1;
 
     public void Add(IDisposable disposable)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(disposable);
-        _disposables.Add(disposable);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
+            _disposables.Add(disposable);
+        }
     }
 
     public void AddRange(IEnumerable<IDisposable> disposables)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(disposables);
-        foreach (var d in disposables)
-            _disposables.Add(d);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
+            foreach (var d in disposables)
+                _disposables.Add(d);
+        }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        IDisposable[] snapshot;
+        lock (_gate)
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            snapshot = [.. _disposables];
+            _disposables.Clear();
+        }
 
-        for (var i = _disposables.Count - 1; i >= 0; i--)
-            _disposables[i].Dispose();
-
-        _disposables.Clear();
+        for (var i = snapshot.Length - 1; i >= 0; i--)
+            snapshot[i].Dispose();
     }
 }
 
@@ -94,25 +109,46 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
     public void Add(IDisposable disposable)
     {
         ArgumentNullException.ThrowIfNull(disposable);
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         _disposables.Push(disposable);
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+#pragma warning disable CA2000 // popped is either disposed immediately or pushed back for later disposal
+            if (_disposables.TryPop(out var popped))
+#pragma warning restore CA2000
+            {
+                if (ReferenceEquals(popped, disposable))
+                {
+                    disposable.Dispose();
+                }
+                else
+                {
+                    _disposables.Push(popped);
+                }
+            }
+            ObjectDisposedException.ThrowIf(true, this);
+        }
     }
 
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+        List<Exception>? exceptions = null;
         while (_disposables.TryPop(out var disposable))
         {
             try { disposable.Dispose(); }
-            catch { }
+            catch (Exception ex) { exceptions ??= []; exceptions.Add(ex); }
         }
+#pragma warning disable CA1065 // Intentionally surface dispose failures rather than silently losing them
+        if (exceptions is not null) throw new AggregateException(exceptions);
+#pragma warning restore CA1065
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+        List<Exception>? exceptions = null;
         while (_disposables.TryPop(out var disposable))
         {
             try
@@ -122,7 +158,8 @@ public sealed class ConcurrentCompositeDisposable : IDisposable, IAsyncDisposabl
                 else
                     disposable.Dispose();
             }
-            catch { }
+            catch (Exception ex) { exceptions ??= []; exceptions.Add(ex); }
         }
+        if (exceptions is not null) throw new AggregateException(exceptions);
     }
 }

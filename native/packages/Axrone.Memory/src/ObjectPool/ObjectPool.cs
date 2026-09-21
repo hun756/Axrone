@@ -106,6 +106,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private volatile bool _allowExpansion;
     private volatile DiagnosticsLevel _diagnosticsLevel;
     private volatile int _maximumCapacity;
+    private long _idleTimeoutTicks;
 
     private int _count;
     private int _rented;
@@ -140,6 +141,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _allowExpansion = configuration.AllowPoolExpansion;
         _diagnosticsLevel = configuration.DiagnosticsLevel;
         _maximumCapacity = configuration.MaximumCapacity;
+        Volatile.Write(ref _idleTimeoutTicks, configuration.IdleTimeout.Ticks);
         ValidateConfiguration(configuration);
         ValidateStrategy(configuration.Strategy);
         _syncLock = new object();
@@ -304,12 +306,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -331,12 +330,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -404,9 +400,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.RecycleFailureCount);
             _metrics.LastException = ex;
-            _handler.OnDispose?.Invoke(item);
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
+            if (instanceId != 0L) _objectInfo.TryRemove(instanceId, out _);
+            if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
+                RecordEvent($"Reset failed for instance {instanceId}: {ex.Message}");
             return;
         }
         finally
@@ -924,12 +928,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -951,12 +952,9 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
                 if (Volatile.Read(ref _rented) >= _maximumCapacity
                     && !_allowExpansion)
                 {
-                    if (_throwOnExhaustion)
-                    {
-                        RecordExhaustion();
-                        ThrowHelper.ThrowInvalidOperationException(
-                            "The pool is exhausted and cannot allocate more items.");
-                    }
+                    RecordExhaustion();
+                    ThrowHelper.ThrowInvalidOperationException(
+                        "The pool is exhausted and pool expansion is disabled. Cannot allocate more items.");
                 }
                 return CreateNewInstance(sw);
             }
@@ -1027,9 +1025,17 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         {
             Interlocked.Increment(ref _metrics.RecycleFailureCount);
             _metrics.LastException = ex;
-            _handler.OnDispose?.Invoke(item);
+            try
+            {
+                _handler.OnDispose?.Invoke(item);
+            }
+            catch { Interlocked.Increment(ref _metrics.DisposeFailureCount); }
+            Interlocked.Increment(ref _metrics.TotalDestroyed);
             Interlocked.Decrement(ref _count);
             Interlocked.Decrement(ref _rented);
+            if (instanceId != 0L) _objectInfo.TryRemove(instanceId, out _);
+            if (_diagnosticsLevel >= DiagnosticsLevel.Basic)
+                RecordEvent($"Reset failed for instance {instanceId}: {ex.Message}");
             return;
         }
         finally
@@ -1504,6 +1510,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         _allowExpansion = configuration.AllowPoolExpansion;
         _diagnosticsLevel = configuration.DiagnosticsLevel;
         _maximumCapacity = configuration.MaximumCapacity;
+        Volatile.Write(ref _idleTimeoutTicks, configuration.IdleTimeout.Ticks);
         Thread.MemoryBarrier();
 
         if (configuration.MaximumCapacity < oldConfiguration.MaximumCapacity)
@@ -1777,7 +1784,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
     private void ScavengeCore()
     {
         if (_configuration.EvictionStrategy == EvictionStrategy.None
-            || _configuration.IdleTimeout <= TimeSpan.Zero)
+            || Volatile.Read(ref _idleTimeoutTicks) <= 0)
         {
             return;
         }
@@ -1786,7 +1793,7 @@ public sealed class ObjectPool<T> : IObjectPool<T> where T : class
         Interlocked.Increment(ref _metrics.ScavengeCount);
         _metrics.LastScavengeTime = DateTime.UtcNow;
 
-        DateTime cutoffTime = DateTime.UtcNow - _configuration.IdleTimeout;
+        DateTime cutoffTime = DateTime.UtcNow - new TimeSpan(Volatile.Read(ref _idleTimeoutTicks));
         int removed = 0;
         int currentGen = _generation;
 

@@ -2,6 +2,7 @@ namespace Axrone.Collections;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Axrone.Utility.Alignment;
 using Axrone.Utility.Disposable;
 
 /// <summary>
@@ -29,7 +30,8 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
 
         // Allocate 64-byte aligned off-heap memory for monotonic sequences
         nuint seqBytes = (nuint)_capacity * (nuint)sizeof(nuint);
-        _sequences = (nuint*)NativeMemory.AllocZeroed(seqBytes, 64);
+        _sequences = (nuint*)NativeMemory.AlignedAlloc(seqBytes, (nuint)Alignment.CacheLine64Bytes);
+        NativeMemory.Clear(_sequences, seqBytes);
 
         for (nuint i = 0; i < (nuint)_capacity; i++)
         {
@@ -39,7 +41,8 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
         if (!RuntimeHelpers.IsReferenceOrContainsReferences<T>())
         {
             nuint itemBytes = (nuint)_capacity * (nuint)Unsafe.SizeOf<T>();
-            _nativePointer = (nint)NativeMemory.AllocZeroed(itemBytes, 64);
+            _nativePointer = (nint)NativeMemory.AlignedAlloc(itemBytes, (nuint)Alignment.CacheLine64Bytes);
+            NativeMemory.Clear((void*)_nativePointer, itemBytes);
             _managedItems = null;
         }
         else
@@ -203,5 +206,20 @@ internal sealed unsafe class BoundedSlotStorage<T> : IDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    ~BoundedSlotStorage()
+    {
+        if (_tracker.IsDisposed) return;
+
+        if (_sequences != null)
+        {
+            NativeMemory.AlignedFree(_sequences);
+        }
+
+        if (_nativePointer != 0)
+        {
+            NativeMemory.AlignedFree((void*)_nativePointer);
+        }
     }
 }

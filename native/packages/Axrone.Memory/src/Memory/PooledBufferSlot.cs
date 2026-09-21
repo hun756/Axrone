@@ -49,6 +49,9 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
         get => _slotCapacity;
     }
 
+    /// <summary>Owning pool; the thread cache is shared across instances, so rent must validate it.</summary>
+    internal IPoolBucketRegistry<T> Registry => _registry;
+
     public Memory<T> Memory
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -94,27 +97,31 @@ public sealed class PooledBufferSlot<T> : IMemoryOwner<T>, IPooledBufferToken<T>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Return(uint leaseId)
     {
-        if (Volatile.Read(ref _leaseGeneration) != leaseId)
+        if (Interlocked.CompareExchange(ref _state, 0, 1) != 1)
         {
             return;
         }
 
-        if (Interlocked.CompareExchange(ref _state, 0, 1) == 1)
+        if (Volatile.Read(ref _leaseGeneration) != leaseId)
         {
-            if (_clearMode == MemoryClearMode.OnReturn)
-            {
-                _allocatedMemory.Span.Clear();
-            }
-            _registry.Recycle(_bucketIndex, this);
+            Volatile.Write(ref _state, 1);
+            return;
         }
+
+        if (_clearMode == MemoryClearMode.OnReturn)
+        {
+            _allocatedMemory.Span.Clear();
+        }
+        _registry.Recycle(_bucketIndex, this);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
+        Interlocked.Increment(ref _leaseGeneration);
+
         if (Interlocked.CompareExchange(ref _state, 0, 1) == 1)
         {
-            Interlocked.Increment(ref _leaseGeneration);
             if (_clearMode == MemoryClearMode.OnReturn)
             {
                 _allocatedMemory.Span.Clear();

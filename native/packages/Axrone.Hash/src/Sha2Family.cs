@@ -1,6 +1,6 @@
 namespace Axrone.Hash;
 
-public struct Sha256Accumulator : IHashAccumulator<Sha256Accumulator, Digest256>
+public sealed class Sha256Accumulator : IHashAccumulator<Sha256Accumulator, Digest256>
 {
     private IncrementalHash _hash;
 
@@ -10,19 +10,19 @@ public struct Sha256Accumulator : IHashAccumulator<Sha256Accumulator, Digest256>
 
     public Digest256 GetDigest(bool reset = false)
     {
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[Digest256.ByteCount];
         if (reset) _hash.GetHashAndReset(buffer); else _hash.GetCurrentHash(buffer);
         return new Digest256(buffer);
     }
 
     public bool TryGetDigest(Span<byte> destination, out int bytesWritten, bool reset = false)
     {
-        if (destination.Length < 32) { bytesWritten = 0; return false; }
+        if (destination.Length < Digest256.ByteCount) { bytesWritten = 0; return false; }
         if (reset) return _hash.TryGetHashAndReset(destination, out bytesWritten);
         return _hash.TryGetCurrentHash(destination, out bytesWritten);
     }
 
-    public void Reset() { Span<byte> dump = stackalloc byte[32]; _hash.TryGetHashAndReset(dump, out _); }
+    public void Reset() { Span<byte> dump = stackalloc byte[Digest256.ByteCount]; _hash.TryGetHashAndReset(dump, out _); }
     public void Dispose() => _hash?.Dispose();
 }
 
@@ -33,7 +33,7 @@ public sealed class Sha256Algorithm : IIncrementalHashAlgorithm<Sha256Algorithm,
 
     public static Digest256 Hash(ReadOnlySpan<byte> source)
     {
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[Digest256.ByteCount];
         SHA256.HashData(source, buffer);
         return new Digest256(buffer);
     }
@@ -41,7 +41,7 @@ public sealed class Sha256Algorithm : IIncrementalHashAlgorithm<Sha256Algorithm,
     public static void Hash(ReadOnlySpan<byte> source, Span<byte> destination) => SHA256.HashData(source, destination);
 }
 
-public struct Sha384Accumulator : IHashAccumulator<Sha384Accumulator, Digest384>
+public sealed class Sha384Accumulator : IHashAccumulator<Sha384Accumulator, Digest384>
 {
     private IncrementalHash _hash;
 
@@ -51,19 +51,19 @@ public struct Sha384Accumulator : IHashAccumulator<Sha384Accumulator, Digest384>
 
     public Digest384 GetDigest(bool reset = false)
     {
-        Span<byte> buffer = stackalloc byte[48];
+        Span<byte> buffer = stackalloc byte[Digest384.ByteCount];
         if (reset) _hash.GetHashAndReset(buffer); else _hash.GetCurrentHash(buffer);
         return new Digest384(buffer);
     }
 
     public bool TryGetDigest(Span<byte> destination, out int bytesWritten, bool reset = false)
     {
-        if (destination.Length < 48) { bytesWritten = 0; return false; }
+        if (destination.Length < Digest384.ByteCount) { bytesWritten = 0; return false; }
         if (reset) return _hash.TryGetHashAndReset(destination, out bytesWritten);
         return _hash.TryGetCurrentHash(destination, out bytesWritten);
     }
 
-    public void Reset() { Span<byte> dump = stackalloc byte[48]; _hash.TryGetHashAndReset(dump, out _); }
+    public void Reset() { Span<byte> dump = stackalloc byte[Digest384.ByteCount]; _hash.TryGetHashAndReset(dump, out _); }
     public void Dispose() => _hash?.Dispose();
 }
 
@@ -74,7 +74,7 @@ public sealed class Sha384Algorithm : IIncrementalHashAlgorithm<Sha384Algorithm,
 
     public static Digest384 Hash(ReadOnlySpan<byte> source)
     {
-        Span<byte> buffer = stackalloc byte[48];
+        Span<byte> buffer = stackalloc byte[Digest384.ByteCount];
         SHA384.HashData(source, buffer);
         return new Digest384(buffer);
     }
@@ -82,7 +82,7 @@ public sealed class Sha384Algorithm : IIncrementalHashAlgorithm<Sha384Algorithm,
     public static void Hash(ReadOnlySpan<byte> source, Span<byte> destination) => SHA384.HashData(source, destination);
 }
 
-public struct Sha512Accumulator : IHashAccumulator<Sha512Accumulator, Digest512>
+public sealed class Sha512Accumulator : IHashAccumulator<Sha512Accumulator, Digest512>
 {
     private IncrementalHash _hash;
 
@@ -92,19 +92,19 @@ public struct Sha512Accumulator : IHashAccumulator<Sha512Accumulator, Digest512>
 
     public Digest512 GetDigest(bool reset = false)
     {
-        Span<byte> buffer = stackalloc byte[64];
+        Span<byte> buffer = stackalloc byte[Digest512.ByteCount];
         if (reset) _hash.GetHashAndReset(buffer); else _hash.GetCurrentHash(buffer);
         return new Digest512(buffer);
     }
 
     public bool TryGetDigest(Span<byte> destination, out int bytesWritten, bool reset = false)
     {
-        if (destination.Length < 64) { bytesWritten = 0; return false; }
+        if (destination.Length < Digest512.ByteCount) { bytesWritten = 0; return false; }
         if (reset) return _hash.TryGetHashAndReset(destination, out bytesWritten);
         return _hash.TryGetCurrentHash(destination, out bytesWritten);
     }
 
-    public void Reset() { Span<byte> dump = stackalloc byte[64]; _hash.TryGetHashAndReset(dump, out _); }
+    public void Reset() { Span<byte> dump = stackalloc byte[Digest512.ByteCount]; _hash.TryGetHashAndReset(dump, out _); }
     public void Dispose() => _hash?.Dispose();
 }
 
@@ -115,7 +115,7 @@ public sealed class Sha512Algorithm : IIncrementalHashAlgorithm<Sha512Algorithm,
 
     public static Digest512 Hash(ReadOnlySpan<byte> source)
     {
-        Span<byte> buffer = stackalloc byte[64];
+        Span<byte> buffer = stackalloc byte[Digest512.ByteCount];
         SHA512.HashData(source, buffer);
         return new Digest512(buffer);
     }

@@ -59,6 +59,8 @@
     <NoWarn>$(NoWarn);CA1051</NoWarn>
     <!-- CA1062: Validate arguments of public methods — pool internals trust callers -->
     <NoWarn>$(NoWarn);CA1062</NoWarn>
+    <!-- CA2225: Implicit operator alternatives — BufferCapacity implicit conversions are intentional API design -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
     <!-- CA1033: Interface methods should be callable by child types — pool design choice -->
     <NoWarn>$(NoWarn);CA1033</NoWarn>
     <!-- CA1816: GC.SuppressFinalize — pool types don't need finalizers -->

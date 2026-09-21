@@ -108,6 +108,27 @@ public sealed class TieredMemoryPoolTests : IDisposable
         using var owner = pool.Rent(64);
         owner.Memory.Length.Should().BeGreaterThanOrEqualTo(128);
     }
+
+    [Fact]
+    public void CrossPoolCachePollution_DoesNotLeakSmallerBlocks()
+    {
+        // The thread cache is shared across pool instances while bucket indices are
+        // pool-relative: a 64-byte slot cached by the default pool must never serve a
+        // minimum-128 pool on the same thread.
+        using (var defaultPool = new TieredMemoryPool<byte>())
+        {
+            using var warmup = defaultPool.Rent(64);
+        }
+
+        using var pool = new TieredMemoryPool<byte>(new BufferPoolOptions
+        {
+            MinimumBlockSize = 128,
+            MaximumBlockSize = 1024,
+            ClearMode = MemoryClearMode.OnReturn
+        });
+        using var owner = pool.Rent(64);
+        owner.Memory.Length.Should().BeGreaterThanOrEqualTo(128);
+    }
 }
 
 public class ContiguousSlabPoolTests

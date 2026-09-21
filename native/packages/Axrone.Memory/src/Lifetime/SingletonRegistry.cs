@@ -141,7 +141,7 @@ public sealed class SingletonRegistry : ISingletonRegistry
             return (T)entry.Resolve();
         }
 
-        throw new KeyNotFoundException(typeof(T).FullName ?? nameof(T));
+        throw new SingletonNotFoundException(typeof(T).FullName ?? nameof(T));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

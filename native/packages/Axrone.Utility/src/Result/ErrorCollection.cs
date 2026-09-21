@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Enterprise.Patterns.Result;
+namespace Axrone.Utility.Result;
 
 /// <summary>Allocation-optimized, immutable, read-only collection of <see cref="Error"/> values. Uses optimized storage: a single field for 0 or 1 error, an array for 2+.</summary>
 [DebuggerDisplay("Count = {Count}")]
@@ -158,7 +158,7 @@ public readonly struct ErrorCollection : IReadOnlyList<Error>, IEquatable<ErrorC
         return _count switch
         {
             0 => ReadOnlySpan<Error>.Empty,
-            1 => ToArray(),
+            1 => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in _single), 1),
             _ => _multiple.AsSpan(0, _count)
         };
     }

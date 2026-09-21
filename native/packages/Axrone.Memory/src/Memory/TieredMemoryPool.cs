@@ -12,6 +12,8 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     private readonly int _globalQueueCapacity;
     private readonly Timer? _trimTimer;
     private readonly int _autoTrimPercentage;
+    private long _oversizedActiveBytes;
+    private long _oversizedActiveCount;
     private DisposalTracker _tracker;
 
     public TieredMemoryPool(BufferPoolOptions? options = null, IBlockAllocator<T>? customAllocator = null)
@@ -201,8 +203,20 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     {
         PerThreadPartitionCache<T> threadCache = PerThreadPartitionCache<T>.Instance;
 
-        if (threadCache.TryRetrieve(bucketIndex, out PooledBufferSlot<T>? cachedSlot))
+        // The thread cache is shared across pool instances while bucket indices are
+        // pool-relative: a slot cached by another pool must never serve this rent, or a
+        // smaller block leaks through MinimumBlockSize. Foreign slots are evicted (the
+        // partition only shrinks, so the loop terminates) and we fall through below.
+        while (threadCache.TryRetrieve(bucketIndex, out PooledBufferSlot<T>? cachedSlot))
         {
+            if (!ReferenceEquals(cachedSlot.Registry, this))
+            {
+                ref var evictCell = ref PoolCounterStore.Current.Cell;
+                evictCell.TotalAllocatedBytes -= _allocator.ComputeByteSize(cachedSlot.Capacity);
+                cachedSlot.FinalizeEviction();
+                continue;
+            }
+
             ref var cell = ref PoolCounterStore.Current.Cell;
             cell.Tier1Hits++;
             cell.ActiveAllocations++;
@@ -250,16 +264,17 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
         cell.TotalRentedBytes += byteSize;
         cell.ActiveAllocations++;
 
+        Interlocked.Add(ref _oversizedActiveBytes, byteSize);
+        Interlocked.Increment(ref _oversizedActiveCount);
+
         return new DynamicSingleBufferOwner<T>(
             raw,
             token,
             _allocator,
             bytes =>
             {
-                ref var rc = ref PoolCounterStore.Current.Cell;
-                rc.TotalAllocatedBytes -= bytes;
-                rc.TotalRentedBytes -= bytes;
-                rc.ActiveAllocations--;
+                Interlocked.Add(ref _oversizedActiveBytes, -bytes);
+                Interlocked.Decrement(ref _oversizedActiveCount);
             },
             byteSize);
     }
@@ -335,6 +350,13 @@ public sealed class TieredMemoryPool<T> : MemoryPool<T>, IPoolBucketRegistry<T>
     {
         if (_tracker.TryDispose())
         {
+            // NOTE: Per-pool active rental guard is not feasible because PerThreadPartitionCache<T>
+            // is thread-static and shares slots across pool instances. A slot created by Pool A
+            // can be retrieved by Pool B from the thread cache, but its _registry still points to
+            // Pool A, so Recycle decrements Pool A's counter — making per-pool tracking unreliable.
+            // See audit finding #5 (TieredMemoryPool.Dispose rental guard) — deferred until
+            // pool-specific caches or slot registry rebinding is implemented.
+
             _trimTimer?.Dispose();
 
             for (int i = 0; i < _tier2GlobalQueues.Length; i++)

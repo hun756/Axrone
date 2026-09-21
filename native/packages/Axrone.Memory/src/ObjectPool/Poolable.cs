@@ -10,9 +10,9 @@ namespace Axrone.Memory.ObjectPool;
 [DebuggerDisplay("Poolable<{typeof(T).Name}> Id = {_poolableId}, Disposed = {IsDisposed}")]
 public sealed class Poolable<T> : IPoolable<T> where T : class
 {
-    private const int STATE_ACTIVE = 0;
-    private const int STATE_DISPOSED = 1;
-    private const int STATE_DETACHED = 2;
+    private const int StateActive = 0;
+    private const int StateDisposed = 1;
+    private const int StateDetached = 2;
 
     private static int s_nextPoolableId;
 
@@ -37,7 +37,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
         _trackRentTime = trackRentTime;
         _onDispose = onDispose;
         _poolableId = Interlocked.Increment(ref s_nextPoolableId);
-        _state = STATE_ACTIVE;
+        _state = StateActive;
     }
 
     internal int PoolableId
@@ -68,7 +68,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
     /// <summary>
     /// Gets a value indicating whether this poolable has been disposed or detached.
     /// </summary>
-    public bool IsDisposed => Volatile.Read(ref _state) != STATE_ACTIVE;
+    public bool IsDisposed => Volatile.Read(ref _state) != StateActive;
 
     /// <summary>
     /// Gets the elapsed time since this poolable was rented.
@@ -82,7 +82,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Detach()
     {
-        Interlocked.Exchange(ref _state, STATE_DETACHED);
+        Interlocked.Exchange(ref _state, StateDetached);
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _state, STATE_DISPOSED) != STATE_ACTIVE)
+        if (Interlocked.Exchange(ref _state, StateDisposed) != StateActive)
             return;
 
         if (_pool == null)
@@ -117,7 +117,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _state, STATE_DISPOSED) != STATE_ACTIVE)
+        if (Interlocked.Exchange(ref _state, StateDisposed) != StateActive)
             return ValueTask.CompletedTask;
 
         if (_pool == null)
@@ -135,7 +135,7 @@ public sealed class Poolable<T> : IPoolable<T> where T : class
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ThrowIfDisposed()
     {
-        if (Volatile.Read(ref _state) == STATE_DISPOSED)
+        if (Volatile.Read(ref _state) == StateDisposed)
         {
             ThrowHelper.ThrowObjectDisposedException(nameof(Poolable<T>));
         }

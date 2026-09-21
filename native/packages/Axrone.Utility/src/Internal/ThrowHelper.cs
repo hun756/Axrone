@@ -1,5 +1,7 @@
 namespace Axrone.Utility.Internal;
 
+using Axrone.Utility.Builders;
+
 public static class ThrowHelper
 {
     private const int MaxBatchCapacity = 0x3FFFFFFF;
@@ -49,6 +51,13 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentException(string message)
+    {
+        throw new ArgumentException(message);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowNotSupportedException(string message)
     {
         throw new NotSupportedException(message);
@@ -66,13 +75,6 @@ public static class ThrowHelper
     public static void ThrowInvalidBufferCapacity(uint capacity)
     {
         throw new ArgumentOutOfRangeException(nameof(capacity), capacity, $"Buffer capacity {capacity} must be a power of 2 between 2 and {MaxBufferCapacity}.");
-    }
-
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowInvalidAlignment(nuint value)
-    {
-        throw new ArgumentException($"Alignment value {value} must be a power of two and at least {IntPtr.Size} bytes.", nameof(value));
     }
 
     [DoesNotReturn]
@@ -133,5 +135,103 @@ public static class ThrowHelper
     public static void ThrowInsufficientMemory(string message)
     {
         throw new InsufficientMemoryException(message);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidAlignment(uint value)
+    {
+        throw new ArgumentOutOfRangeException(nameof(value), value, "Alignment must be a non-zero power of two.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowTypeTooLargeForCacheLine(int typeSize, int maxAllowed)
+    {
+        throw new InvalidOperationException($"Type size of {typeSize} bytes exceeds the maximum allowable cacheline constraint of {maxAllowed} bytes.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowOutOfMemory(nuint bytes, nuint alignment)
+    {
+        throw new InsufficientMemoryException($"Failed to allocate {bytes} bytes with alignment boundary {alignment}.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNegativeCount()
+    {
+        throw new ArgumentOutOfRangeException("count", "Count cannot be negative.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDestinationTooShort()
+    {
+        throw new ArgumentException("Destination span is shorter than the source span.", "destinations");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposed(string objectName)
+    {
+        throw new ObjectDisposedException(objectName, "The aligned memory resource has already been disposed.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowIndexOutOfRange()
+    {
+        throw new ArgumentOutOfRangeException("Gather/Scatter index is outside the bounds of the source or destination span.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCapacity(nuint capacity)
+    {
+        throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be an integral power of two >= 2.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDoubleCommit()
+    {
+        throw new InvalidOperationException("Batch memory reservation has already been committed.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowLifecycleTerminated()
+    {
+        throw new InvalidOperationException("Operation failed: Memory arena is completing, drained, or faulted.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidMarker()
+    {
+        throw new InvalidOperationException("Specified marker is invalid or out of sequence.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNoReservation()
+    {
+        throw new InvalidOperationException("No reservation exists to advance.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidAdvance()
+    {
+        throw new ArgumentOutOfRangeException("count", "Advance count exceeds reservation size.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBuilderFailed(in BuilderDiagnostic diagnostic)
+    {
+        throw new InvalidOperationException($"Build failed [{diagnostic.Code}]: {diagnostic.Message}");
     }
 }
