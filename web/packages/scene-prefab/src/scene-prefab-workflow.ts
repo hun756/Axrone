@@ -1,5 +1,9 @@
 import { ScenePrefabResolutionError } from './errors';
-import { isInlineScenePrefabReference, isScenePrefabReference } from './scene-prefab-internals';
+import {
+    cloneScenePrefabDefinition,
+    isInlineScenePrefabReference,
+    isScenePrefabReference,
+} from './scene-prefab-internals';
 import {
     applyScenePrefabOverrideOperations,
     createScenePrefabState,
@@ -100,7 +104,7 @@ export class ScenePrefabWorkflow implements ScenePrefabResolver, ScenePrefabRegi
             const cached = this._resolutionCache.get(cacheKey);
             if (cached) {
                 return {
-                    definition: cached,
+                    definition: cloneScenePrefabDefinition(cached) as ScenePrefabResolvedDefinition,
                     conflicts: [],
                     cacheHit: true,
                 };
@@ -116,7 +120,10 @@ export class ScenePrefabWorkflow implements ScenePrefabResolver, ScenePrefabRegi
                 : definition;
 
         if (cacheKey) {
-            this._resolutionCache.set(cacheKey, resolvedDefinition);
+            this._resolutionCache.set(
+                cacheKey,
+                cloneScenePrefabDefinition(resolvedDefinition) as ScenePrefabResolvedDefinition,
+            );
         }
 
         return {

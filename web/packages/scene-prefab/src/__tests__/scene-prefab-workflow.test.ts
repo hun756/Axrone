@@ -293,6 +293,16 @@ describe('ScenePrefabWorkflow — caching', () => {
         );
         expect(result.cacheHit).toBe(false);
     });
+
+    it('cached results are isolated from caller mutation', () => {
+        const wf = new ScenePrefabWorkflow({ prefabs: [makeDefinition('p1')] });
+        const first = wf.resolvePrefab({ kind: 'registry', prefabId: 'p1' });
+        (first.definition.actors[0] as { name: string }).name = 'Mutated';
+
+        const second = wf.resolvePrefab({ kind: 'registry', prefabId: 'p1' });
+        expect(second.cacheHit).toBe(true);
+        expect(second.definition.actors[0]!.name).toBe('Root');
+    });
 });
 
 // ---------------------------------------------------------------------------
