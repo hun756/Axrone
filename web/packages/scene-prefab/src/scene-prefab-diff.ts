@@ -762,12 +762,13 @@ export const mergeScenePrefabDefinitions = (
         const choice = resolveConflictChoice(firstConflict, options);
 
         if (choice === 'manual') {
+            const conflictingOperations = conflictIndexes.map((index) => mergedOverrides[index]!);
             for (const index of [...conflictIndexes].sort((left, right) => right - left)) {
                 mergedOverrides.splice(index, 1);
             }
 
-            for (const index of conflictIndexes) {
-                conflicts.push(createConflict(base, localOverrides[index]!, incomingOperation));
+            for (const localOperation of conflictingOperations) {
+                conflicts.push(createConflict(base, localOperation, incomingOperation));
             }
 
             continue;
