@@ -58,6 +58,13 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentException(string paramName, string message)
+    {
+        throw new ArgumentException(message, paramName);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowNotSupportedException(string message)
     {
         throw new NotSupportedException(message);
