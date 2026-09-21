@@ -103,6 +103,9 @@ export class SceneAssetRuntime {
         if (result.previous) {
             this._shaderFactory.delete(result.previous);
         }
+        for (const variant of result.evictedVariants) {
+            this._shaderFactory.delete(variant);
+        }
 
         return result.handle;
     }
