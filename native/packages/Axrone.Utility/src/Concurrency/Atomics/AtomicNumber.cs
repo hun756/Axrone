@@ -10,7 +10,7 @@ namespace Axrone.Utility.Concurrency;
 /// interlocked operations; everything else falls back to a CAS loop.
 /// </remarks>
 /// <typeparam name="T">Numeric value type.</typeparam>
-public struct AtomicNumber<T> : IAtomicNumber<T>, IAtomicBitwise<T>
+public struct AtomicNumber<T> : IAtomicNumber<T>, IAtomicBitwise<T>, IAtomicWaitNotify<T>
     where T : unmanaged, INumber<T>, IBitwiseOperators<T, T, T>
 {
     private T _value;
@@ -207,6 +207,16 @@ public struct AtomicNumber<T> : IAtomicNumber<T>, IAtomicBitwise<T>
             }
         }
     }
+
+    /// <inheritdoc/>
+    public void Wait(T comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        FutexEngine.Wait(ref _value, comparand, order);
+
+    /// <inheritdoc/>
+    public void NotifyOne() => FutexEngine.NotifyOne(ref _value);
+
+    /// <inheritdoc/>
+    public void NotifyAll() => FutexEngine.NotifyAll(ref _value);
 
     /// <inheritdoc/>
     public override string ToString() => Load().ToString() ?? string.Empty;

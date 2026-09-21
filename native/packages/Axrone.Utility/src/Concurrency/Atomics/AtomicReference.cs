@@ -5,7 +5,7 @@ namespace Axrone.Utility.Concurrency;
 /// value-type atomics, aliasing is safe here.
 /// </summary>
 /// <typeparam name="T">Reference type.</typeparam>
-public sealed class AtomicReference<T>
+public sealed class AtomicReference<T> : IAtomicWaitNotify<T?>
     where T : class
 {
     private T? _value;
@@ -60,6 +60,16 @@ public sealed class AtomicReference<T>
             }
         }
     }
+
+    /// <inheritdoc/>
+    public void Wait(T? comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        FutexEngine.WaitRef(ref _value, comparand, order);
+
+    /// <inheritdoc/>
+    public void NotifyOne() => FutexEngine.NotifyOneRef(ref _value);
+
+    /// <inheritdoc/>
+    public void NotifyAll() => FutexEngine.NotifyAllRef(ref _value);
 
     /// <inheritdoc/>
     public override string ToString() => Load()?.ToString() ?? "null";

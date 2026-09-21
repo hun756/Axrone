@@ -10,7 +10,7 @@ namespace Axrone.Utility.Concurrency;
 /// copies because copies share the reference.
 /// </remarks>
 /// <typeparam name="T">Value type.</typeparam>
-public struct Atomic<T> : IAtomic<T>
+public struct Atomic<T> : IAtomic<T>, IAtomicWaitNotify<T>
     where T : unmanaged
 {
     private T _value;
@@ -89,6 +89,16 @@ public struct Atomic<T> : IAtomic<T>
             }
         }
     }
+
+    /// <inheritdoc/>
+    public void Wait(T comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        FutexEngine.Wait(ref _value, comparand, order);
+
+    /// <inheritdoc/>
+    public void NotifyOne() => FutexEngine.NotifyOne(ref _value);
+
+    /// <inheritdoc/>
+    public void NotifyAll() => FutexEngine.NotifyAll(ref _value);
 
     /// <inheritdoc/>
     public override string ToString() => Load().ToString() ?? string.Empty;

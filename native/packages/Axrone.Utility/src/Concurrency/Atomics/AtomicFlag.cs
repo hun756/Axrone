@@ -6,7 +6,7 @@ namespace Axrone.Utility.Concurrency;
 /// <remarks>
 /// Same copy discipline as <see cref="Atomic{T}"/>: share fields through <see cref="AtomicRef{T}"/> instead.
 /// </remarks>
-public struct AtomicFlag
+public struct AtomicFlag : IAtomicWaitNotify<bool>
 {
     private byte _flag;
 
@@ -30,6 +30,16 @@ public struct AtomicFlag
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Test(MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
         AtomicCoreOps.Load(ref _flag, order) != 0;
+
+    /// <inheritdoc/>
+    public void Wait(bool comparand, MemoryOrder order = MemoryOrder.SequentiallyConsistent) =>
+        FutexEngine.Wait(ref _flag, comparand ? (byte)1 : (byte)0, order);
+
+    /// <inheritdoc/>
+    public void NotifyOne() => FutexEngine.NotifyOne(ref _flag);
+
+    /// <inheritdoc/>
+    public void NotifyAll() => FutexEngine.NotifyAll(ref _flag);
 
     /// <inheritdoc/>
     public override string ToString() => Test().ToString();

@@ -30,9 +30,17 @@ internal static class SharedFallbackLock
     {
         unsafe
         {
-            nuint address = (nuint)Unsafe.AsPointer(ref location);
-            nuint mixed = address ^ (address >> 9) ^ (address >> 18);
-            return s_roots[(int)(mixed & (nuint)TableMask)];
+            return ForAddress((void*)Unsafe.AsPointer(ref location));
         }
+    }
+
+    /// <summary>Returns the shared root guarding the given address.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe object ForAddress(void* address)
+    {
+        nuint mixed = (nuint)address;
+        mixed ^= mixed >> 9;
+        mixed ^= mixed >> 18;
+        return s_roots[(int)(mixed & (nuint)TableMask)];
     }
 }
