@@ -56,6 +56,22 @@ public static class ObservableOperators
         return new ScanObservable<T, TAccumulate>(source, seed, accumulator);
     }
 
+    /// <summary>Switches to a fallback stream on error; a throwing handler terminates downstream.</summary>
+    public static IObservable<T> Catch<T>(this IObservable<T> source, Func<Exception, IObservable<T>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(handler);
+        return new CatchObservable<T>(source, handler);
+    }
+
+    /// <summary>Resubscribes up to <paramref name="retryCount"/> times after the initial attempt.</summary>
+    public static IObservable<T> Retry<T>(this IObservable<T> source, int retryCount)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentOutOfRangeException.ThrowIfLessThan(retryCount, 0, nameof(retryCount));
+        return new RetryObservable<T>(source, retryCount);
+    }
+
     private sealed class WhereObservable<T> : IObservable<T>
     {
         private readonly IObservable<T> _source;
@@ -378,6 +394,184 @@ public static class ObservableOperators
             {
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
                 {
+                    _upstream?.Dispose();
+                }
+            }
+        }
+    }
+
+    private sealed class CatchObservable<T> : IObservable<T>
+    {
+        private readonly IObservable<T> _source;
+        private readonly Func<Exception, IObservable<T>> _handler;
+
+        public CatchObservable(IObservable<T> source, Func<Exception, IObservable<T>> handler)
+        {
+            _source = source;
+            _handler = handler;
+        }
+
+        public IDisposable Subscribe(IObserver<T> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new CatchSubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class CatchSubscription : IObserver<T>, IDisposable
+        {
+            private readonly CatchObservable<T> _parent;
+            private readonly IObserver<T> _downstream;
+            private IDisposable? _upstream;
+            private int _switched;
+            private int _stopped;
+            private int _disposed;
+
+            public CatchSubscription(CatchObservable<T> parent, IObserver<T> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+            }
+
+            public void Attach() => _upstream = _parent._source.Subscribe(this);
+
+            public void OnNext(T value)
+            {
+                if (Volatile.Read(ref _stopped) == 0)
+                {
+                    _downstream.OnNext(value);
+                }
+            }
+
+            public void OnError(Exception error)
+            {
+                if (Volatile.Read(ref _stopped) != 0)
+                {
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _switched, 1, 0) == 0)
+                {
+                    _upstream?.Dispose();
+                    IObservable<T> fallback;
+                    try
+                    {
+                        fallback = _parent._handler(error);
+                    }
+                    catch (Exception handlerFault)
+                    {
+                        Terminate(o => o.OnError(handlerFault));
+                        return;
+                    }
+
+                    _upstream = fallback.Subscribe(this);
+                    return;
+                }
+
+                Terminate(o => o.OnError(error));
+            }
+
+            public void OnCompleted() => Terminate(static o => o.OnCompleted());
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    Interlocked.Exchange(ref _stopped, 1);
+                    _upstream?.Dispose();
+                }
+            }
+
+            private void Terminate(Action<IObserver<T>> terminal)
+            {
+                if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                {
+                    _upstream?.Dispose();
+                    terminal(_downstream);
+                }
+            }
+        }
+    }
+
+    private sealed class RetryObservable<T> : IObservable<T>
+    {
+        private readonly IObservable<T> _source;
+        private readonly int _retryCount;
+
+        public RetryObservable(IObservable<T> source, int retryCount)
+        {
+            _source = source;
+            _retryCount = retryCount;
+        }
+
+        public IDisposable Subscribe(IObserver<T> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new RetrySubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class RetrySubscription : IObserver<T>, IDisposable
+        {
+            private readonly RetryObservable<T> _parent;
+            private readonly IObserver<T> _downstream;
+            private IDisposable? _upstream;
+            private int _remaining;
+            private int _stopped;
+            private int _disposed;
+
+            public RetrySubscription(RetryObservable<T> parent, IObserver<T> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+                _remaining = parent._retryCount;
+            }
+
+            public void Attach() => _upstream = _parent._source.Subscribe(this);
+
+            public void OnNext(T value)
+            {
+                if (Volatile.Read(ref _stopped) == 0)
+                {
+                    _downstream.OnNext(value);
+                }
+            }
+
+            public void OnError(Exception error)
+            {
+                if (Volatile.Read(ref _stopped) != 0)
+                {
+                    return;
+                }
+
+                if (_remaining-- > 0)
+                {
+                    _upstream?.Dispose();
+                    _upstream = _parent._source.Subscribe(this);
+                    return;
+                }
+
+                if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                {
+                    _downstream.OnError(error);
+                }
+            }
+
+            public void OnCompleted()
+            {
+                if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                {
+                    _downstream.OnCompleted();
+                }
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    Interlocked.Exchange(ref _stopped, 1);
                     _upstream?.Dispose();
                 }
             }
