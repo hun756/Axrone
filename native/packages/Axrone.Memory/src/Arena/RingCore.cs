@@ -55,6 +55,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void AbandonWrite(ulong sequence, int count)
     {
+        ThrowIfSettled(HeadCommitted.Value, (long)sequence, count);
         ZeroRingRange((nuint)sequence, (nuint)count);
         SpinWaitCommitHead((long)sequence, count);
         Lifecycle.ReleaseLease();
@@ -66,6 +67,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     {
         if (ZeroOnRecycle)
         {
+            ThrowIfSettled(TailCommitted.Value, (long)sequence, count);
             ZeroRingRange((nuint)sequence, (nuint)count);
         }
 
@@ -77,6 +79,7 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void AbandonRead(ulong sequence, int count)
     {
+        ThrowIfSettled(TailCommitted.Value, (long)sequence, count);
         SpinWaitCommitTail((long)sequence, count);
         Lifecycle.ReleaseLease();
         WriteSignal.Signal();
@@ -94,14 +97,36 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
         WriteSignal.Signal();
     }
 
+    /// <summary>
+    /// Settlement seal: cursors move monotonically, so a cursor past the range proves it was
+    /// already settled — by a copied handle, a stale retry, or anyone. The lease identity is the
+    /// (coordinator, sequence, count) triple the reservation already carries; no extra state.
+    /// Empty ranges stay no-ops exactly as before.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ThrowIfSettled(long committed, long sequence, int count)
+    {
+        if (count > 0 && committed > sequence)
+        {
+            ThrowHelper.ThrowDoubleCommit();
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private void SpinWaitCommitHead(long sequence, int count)
     {
         int spinCount = 0;
         long startTimestamp = Stopwatch.GetTimestamp();
 
-        while (HeadCommitted.CompareExchange(sequence + count, sequence) == false)
+        while (true)
         {
+            long committed = HeadCommitted.Value;
+            ThrowIfSettled(committed, sequence, count);
+            if (committed == sequence && HeadCommitted.CompareExchange(sequence + count, sequence))
+            {
+                break;
+            }
+
             TBackoff.Advance(ref spinCount);
 
             if ((spinCount & 0x3FF) == 0 && spinCount > 0)
@@ -127,8 +152,15 @@ internal sealed unsafe class RingCore<T, TBackoff> : IArenaCommitCoordinator<T>,
         int spinCount = 0;
         long startTimestamp = Stopwatch.GetTimestamp();
 
-        while (TailCommitted.CompareExchange(sequence + count, sequence) == false)
+        while (true)
         {
+            long committed = TailCommitted.Value;
+            ThrowIfSettled(committed, sequence, count);
+            if (committed == sequence && TailCommitted.CompareExchange(sequence + count, sequence))
+            {
+                break;
+            }
+
             TBackoff.Advance(ref spinCount);
 
             if ((spinCount & 0x3FF) == 0 && spinCount > 0)
