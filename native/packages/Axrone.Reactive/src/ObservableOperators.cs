@@ -30,6 +30,21 @@ public static class ObservableOperators
         return new MergeObservable<T>(first, second);
     }
 
+    /// <summary>
+    /// Combines the latest values once both streams fired; completes when both complete, so a
+    /// single-value stream (configuration) keeps combining with a live feed.
+    /// </summary>
+    public static IObservable<TResult> CombineLatest<TFirst, TSecond, TResult>(
+        this IObservable<TFirst> first,
+        IObservable<TSecond> second,
+        Func<TFirst, TSecond, TResult> combiner)
+    {
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(second);
+        ArgumentNullException.ThrowIfNull(combiner);
+        return new CombineLatestObservable<TFirst, TSecond, TResult>(first, second, combiner);
+    }
+
     /// <summary>Suppresses consecutive duplicates; state is per subscription.</summary>
     public static IObservable<T> DistinctUntilChanged<T>(this IObservable<T> source, IEqualityComparer<T>? comparer = null)
     {
@@ -574,6 +589,133 @@ public static class ObservableOperators
                     Interlocked.Exchange(ref _stopped, 1);
                     _upstream?.Dispose();
                 }
+            }
+        }
+    }
+
+    private sealed class CombineLatestObservable<TFirst, TSecond, TResult> : IObservable<TResult>
+    {
+        private readonly IObservable<TFirst> _first;
+        private readonly IObservable<TSecond> _second;
+        private readonly Func<TFirst, TSecond, TResult> _combiner;
+
+        public CombineLatestObservable(IObservable<TFirst> first, IObservable<TSecond> second, Func<TFirst, TSecond, TResult> combiner)
+        {
+            _first = first;
+            _second = second;
+            _combiner = combiner;
+        }
+
+        public IDisposable Subscribe(IObserver<TResult> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new CombineLatestSubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class CombineLatestSubscription : IDisposable
+        {
+            private readonly CombineLatestObservable<TFirst, TSecond, TResult> _parent;
+            private readonly IObserver<TResult> _downstream;
+            private readonly FirstObserver _firstObserver;
+            private readonly SecondObserver _secondObserver;
+            private IDisposable? _first;
+            private IDisposable? _second;
+            private TFirst _latestFirst = default!;
+            private TSecond _latestSecond = default!;
+            private bool _hasFirst;
+            private bool _hasSecond;
+            private int _remaining = 2;
+            private int _stopped;
+            private int _disposed;
+
+            public CombineLatestSubscription(CombineLatestObservable<TFirst, TSecond, TResult> parent, IObserver<TResult> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+                _firstObserver = new FirstObserver(this);
+                _secondObserver = new SecondObserver(this);
+            }
+
+            public void Attach()
+            {
+                _first = _parent._first.Subscribe(_firstObserver);
+                _second = _parent._second.Subscribe(_secondObserver);
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    Interlocked.Exchange(ref _stopped, 1);
+                    _first?.Dispose();
+                    _second?.Dispose();
+                }
+            }
+
+            private void PublishFirst(TFirst value)
+            {
+                _latestFirst = value;
+                _hasFirst = true;
+                if (_hasSecond && Volatile.Read(ref _stopped) == 0)
+                {
+                    _downstream.OnNext(_parent._combiner(_latestFirst, _latestSecond));
+                }
+            }
+
+            private void PublishSecond(TSecond value)
+            {
+                _latestSecond = value;
+                _hasSecond = true;
+                if (_hasFirst && Volatile.Read(ref _stopped) == 0)
+                {
+                    _downstream.OnNext(_parent._combiner(_latestFirst, _latestSecond));
+                }
+            }
+
+            private void Terminal(Action<IObserver<TResult>> terminal)
+            {
+                if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                {
+                    _first?.Dispose();
+                    _second?.Dispose();
+                    terminal(_downstream);
+                }
+            }
+
+            private void SourceCompleted()
+            {
+                if (Interlocked.Decrement(ref _remaining) == 0)
+                {
+                    Terminal(static o => o.OnCompleted());
+                }
+            }
+
+            private sealed class FirstObserver : IObserver<TFirst>
+            {
+                private readonly CombineLatestSubscription _owner;
+
+                public FirstObserver(CombineLatestSubscription owner) => _owner = owner;
+
+                public void OnNext(TFirst value) => _owner.PublishFirst(value);
+
+                public void OnError(Exception error) => _owner.Terminal(o => o.OnError(error));
+
+                public void OnCompleted() => _owner.SourceCompleted();
+            }
+
+            private sealed class SecondObserver : IObserver<TSecond>
+            {
+                private readonly CombineLatestSubscription _owner;
+
+                public SecondObserver(CombineLatestSubscription owner) => _owner = owner;
+
+                public void OnNext(TSecond value) => _owner.PublishSecond(value);
+
+                public void OnError(Exception error) => _owner.Terminal(o => o.OnError(error));
+
+                public void OnCompleted() => _owner.SourceCompleted();
             }
         }
     }
