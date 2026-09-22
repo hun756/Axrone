@@ -37,6 +37,17 @@ public static class ObservableOperators
         return new DistinctObservable<T>(source, comparer ?? EqualityComparer<T>.Default);
     }
 
+    /// <summary>
+    /// Completes when the other stream fires; the other completing silently just detaches it.
+    /// The standard lifecycle binder: entity destroyed completes the subscription.
+    /// </summary>
+    public static IObservable<T> TakeUntil<T, TOther>(this IObservable<T> source, IObservable<TOther> other)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(other);
+        return new TakeUntilObservable<T, TOther>(source, other);
+    }
+
     private sealed class WhereObservable<T> : IObservable<T>
     {
         private readonly IObservable<T> _source;
@@ -200,6 +211,110 @@ public static class ObservableOperators
                     _upstream?.Dispose();
                 }
             }
+        }
+    }
+
+    private sealed class TakeUntilObservable<T, TOther> : IObservable<T>
+    {
+        private readonly IObservable<T> _source;
+        private readonly IObservable<TOther> _other;
+
+        public TakeUntilObservable(IObservable<T> source, IObservable<TOther> other)
+        {
+            _source = source;
+            _other = other;
+        }
+
+        public IDisposable Subscribe(IObserver<T> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new TakeUntilSubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class TakeUntilSubscription : IDisposable
+        {
+            private readonly TakeUntilObservable<T, TOther> _parent;
+            private readonly IObserver<T> _downstream;
+            private readonly GateObserver _gate;
+            private IDisposable? _source;
+            private IDisposable? _other;
+            private int _disposed;
+
+            public TakeUntilSubscription(TakeUntilObservable<T, TOther> parent, IObserver<T> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+                _gate = new GateObserver(this);
+            }
+
+            public void Attach()
+            {
+                _source = _parent._source.Subscribe(_gate);
+                _other = _parent._other.Subscribe(_gate.Other);
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    _source?.Dispose();
+                    _other?.Dispose();
+                }
+            }
+
+            private void Terminate(Action<IObserver<T>> terminal)
+            {
+                if (Interlocked.Exchange(ref _gate.Closed, 1) == 0)
+                {
+                    _source?.Dispose();
+                    _other?.Dispose();
+                    terminal(_downstream);
+                }
+            }
+
+            private sealed class GateObserver : IObserver<T>
+            {
+                private readonly TakeUntilSubscription _owner;
+
+                public OtherObserver Other { get; }
+
+                public int Closed;
+
+                public GateObserver(TakeUntilSubscription owner)
+                {
+                    _owner = owner;
+                    Other = new OtherObserver(owner);
+                }
+
+                public void OnNext(T value)
+                {
+                    if (Volatile.Read(ref Closed) == 0)
+                    {
+                        _owner._downstream.OnNext(value);
+                    }
+                }
+
+                public void OnError(Exception error) => _owner.Terminate(o => o.OnError(error));
+
+                public void OnCompleted() => _owner.Terminate(static o => o.OnCompleted());
+            }
+
+            private sealed class OtherObserver : IObserver<TOther>
+            {
+                private readonly TakeUntilSubscription _owner;
+
+                public OtherObserver(TakeUntilSubscription owner) => _owner = owner;
+
+                public void OnNext(TOther value) => _owner.Terminate(static o => o.OnCompleted());
+
+                public void OnError(Exception error) => _owner.Terminate(o => o.OnError(error));
+
+                public void OnCompleted() => _owner.DisposeOther();
+            }
+
+            private void DisposeOther() => _other?.Dispose();
         }
     }
 
