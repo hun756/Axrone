@@ -61,6 +61,7 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
             next[current.Length] = observer;
             if (Interlocked.CompareExchange(ref _observers, next, current) == current)
             {
+                ReactiveTelemetry.Subscribed();
                 return new Subscription(this, observer);
             }
         }
@@ -89,6 +90,9 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
             return;
         }
 
+        ReactiveTelemetry.SourceCompleted();
+        ReactiveEventSource.Log.SourceCompleted();
+
         IObserver<T>[] snapshot = Interlocked.Exchange(ref _observers, []);
         for (int i = 0; i < snapshot.Length; i++)
         {
@@ -113,6 +117,9 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
             Volatile.Write(ref _terminal, StateFaulted);
             snapshot = Interlocked.Exchange(ref _observers, []);
         }
+
+        ReactiveTelemetry.SourceFaulted();
+        ReactiveEventSource.Log.FaultDelivered(error.GetType().Name, error.Message);
 
         for (int i = 0; i < snapshot.Length; i++)
         {
