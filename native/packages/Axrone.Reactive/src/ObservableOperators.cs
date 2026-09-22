@@ -48,6 +48,14 @@ public static class ObservableOperators
         return new TakeUntilObservable<T, TOther>(source, other);
     }
 
+    /// <summary>Running accumulation; emits every intermediate state, never the seed.</summary>
+    public static IObservable<TAccumulate> Scan<T, TAccumulate>(this IObservable<T> source, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(accumulator);
+        return new ScanObservable<T, TAccumulate>(source, seed, accumulator);
+    }
+
     private sealed class WhereObservable<T> : IObservable<T>
     {
         private readonly IObservable<T> _source;
@@ -315,6 +323,64 @@ public static class ObservableOperators
             }
 
             private void DisposeOther() => _other?.Dispose();
+        }
+    }
+
+    private sealed class ScanObservable<T, TAccumulate> : IObservable<TAccumulate>
+    {
+        private readonly IObservable<T> _source;
+        private readonly TAccumulate _seed;
+        private readonly Func<TAccumulate, T, TAccumulate> _accumulator;
+
+        public ScanObservable(IObservable<T> source, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator)
+        {
+            _source = source;
+            _seed = seed;
+            _accumulator = accumulator;
+        }
+
+        public IDisposable Subscribe(IObserver<TAccumulate> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            var subscription = new ScanSubscription(this, observer);
+            subscription.Attach();
+            return subscription;
+        }
+
+        private sealed class ScanSubscription : IObserver<T>, IDisposable
+        {
+            private readonly ScanObservable<T, TAccumulate> _parent;
+            private readonly IObserver<TAccumulate> _downstream;
+            private IDisposable? _upstream;
+            private TAccumulate _state;
+            private int _disposed;
+
+            public ScanSubscription(ScanObservable<T, TAccumulate> parent, IObserver<TAccumulate> downstream)
+            {
+                _parent = parent;
+                _downstream = downstream;
+                _state = parent._seed;
+            }
+
+            public void Attach() => _upstream = _parent._source.Subscribe(this);
+
+            public void OnNext(T value)
+            {
+                _state = _parent._accumulator(_state, value);
+                _downstream.OnNext(_state);
+            }
+
+            public void OnError(Exception error) => _downstream.OnError(error);
+
+            public void OnCompleted() => _downstream.OnCompleted();
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    _upstream?.Dispose();
+                }
+            }
         }
     }
 
