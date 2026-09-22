@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-21T11:40:15.820Z",
+  "generatedAt": "2026-09-21T17:29:36.541Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -9107,6 +9107,7 @@
         "UICheckboxOptions",
         "UIComponentDefinition",
         "UIComponentInstanceProps",
+        "UIComponentVariant",
         "UIControlTheme",
         "UIControlVariant",
         "UIEditBoxHandle",
@@ -9552,6 +9553,7 @@
             "UICanvasScaleMode",
             "UIComponentDefinition",
             "UIComponentInstanceProps",
+            "UIComponentVariant",
             "UIFrame",
             "UIFrameMetrics",
             "UIImageBorderInput",
@@ -38377,6 +38379,11 @@
       "name": "UIComponentInstanceProps",
       "package": "@axrone/ui",
       "kind": "unknown"
+    },
+    {
+      "name": "UIComponentVariant",
+      "package": "@axrone/ui",
+      "kind": "interface"
     },
     {
       "name": "UIControlTheme",
