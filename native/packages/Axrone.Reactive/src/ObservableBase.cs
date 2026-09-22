@@ -4,11 +4,19 @@ namespace Axrone.Reactive;
 /// Derivable cold-observable root: game classes inherit stream behavior instead of wiring it.
 /// </summary>
 /// <remarks>
-/// Zero-cost contract: subscribing allocates (node + array copy, cold path); publishing never
-/// allocates and never locks — readers take a snapshot reference. Concurrent publishes may
-/// interleave per observer; terminal delivery (error/completed) replays to late subscribers.
-/// An observer that throws propagates to the publisher; faulty observers must be isolated by
-/// the subscriber side, not the source. No schedulers, no timers — the engine drives threads.
+/// <para><b>Allocation contract:</b> subscribing allocates (subscription node plus one array
+/// copy — cold path); publishing never allocates and never locks, readers take a snapshot
+/// reference. Concurrent publishes may interleave per observer.</para>
+/// <para><b>Backpressure:</b> none — this is a push model. A slow observer blocks the publishing
+/// thread for every subscriber behind it. Shed, sample, or buffer upstream (operators,
+/// transport queues) instead of slowing observers.</para>
+/// <para><b>Fault philosophy:</b> a throwing observer aborts the broadcast and propagates to the
+/// publisher (Reactive parity). This differs deliberately from the event bus, which isolates
+/// per-subscriber faults into dead letters: isolation needs somewhere to put the failure, and
+/// only a transport owns a dead-letter queue. Isolate at the transport edge, not the source.</para>
+/// <para><b>Terminal races:</b> an in-flight publish racing a terminal call may still deliver
+/// after the terminal signal; late subscribers always observe exactly one terminal, in order.
+/// No schedulers, no timers — the engine drives threads.</para>
 /// </remarks>
 /// <typeparam name="T">Notification type.</typeparam>
 public abstract class ObservableBase<T> : IObservable<T>, IDisposable
