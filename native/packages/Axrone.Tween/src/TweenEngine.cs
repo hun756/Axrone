@@ -82,7 +82,9 @@ public sealed class TweenEngine : IDisposable
             spec.OnUpdateVector3,
             spec.OnUpdateVector4,
             spec.OnStart,
-            spec.OnComplete);
+            spec.OnComplete,
+            spec.OnStepComplete,
+            spec.OnKill);
 
         uint generation = _store.GenerationOf(index);
         handle = new TweenHandle(this, new TweenId(index, generation));
@@ -202,7 +204,7 @@ public sealed class TweenEngine : IDisposable
         }
     }
 
-    /// <summary>Cancels a tween; false for stale identities. Pending awaiters complete false.</summary>
+    /// <summary>Cancels a tween, firing its kill callback; false for stale identities. Pending awaiters complete false.</summary>
     public bool Cancel(TweenId id)
     {
         if (!_store.Validate(id))
@@ -210,6 +212,7 @@ public sealed class TweenEngine : IDisposable
             return false;
         }
 
+        _store.OnKillOf((int)id.Index)?.Invoke();
         _store.Free((uint)id.Index);
         _telemetry.RecordCanceled();
 

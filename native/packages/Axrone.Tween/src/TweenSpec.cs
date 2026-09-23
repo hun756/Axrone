@@ -21,6 +21,8 @@ using System.Numerics;
 /// <param name="OnUpdateVector4">Per-tick callback for four-lane tweens.</param>
 /// <param name="OnStart">Fires once when playback starts.</param>
 /// <param name="OnComplete">Fires once when playback finishes.</param>
+/// <param name="OnStepComplete">Fires at the end of every playthrough, including the last.</param>
+/// <param name="OnKill">Fires when cancelled before completion.</param>
 public readonly record struct TweenSpec(
     Vector128<float> Start,
     Vector128<float> End,
@@ -37,4 +39,6 @@ public readonly record struct TweenSpec(
     Action<Vector3>? OnUpdateVector3,
     Action<Vector4>? OnUpdateVector4,
     Action? OnStart,
-    Action? OnComplete);
+    Action? OnComplete,
+    Action? OnStepComplete,
+    Action? OnKill);

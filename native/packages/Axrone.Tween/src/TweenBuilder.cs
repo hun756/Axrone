@@ -260,6 +260,20 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
         return this;
     }
 
+    /// <summary>Fires at the end of every playthrough, including the last.</summary>
+    public TweenBuilder OnStepComplete(Action callback)
+    {
+        State.OnStepComplete = callback;
+        return this;
+    }
+
+    /// <summary>Fires when cancelled before completion.</summary>
+    public TweenBuilder OnKill(Action callback)
+    {
+        State.OnKill = callback;
+        return this;
+    }
+
     /// <inheritdoc/>
     public override void Reset()
     {

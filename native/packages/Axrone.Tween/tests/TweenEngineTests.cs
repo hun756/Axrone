@@ -126,4 +126,54 @@ public class TweenEngineTests
         handle.Goto(DurationNs.Zero).Should().BeFalse();
         handle.Rewind().Should().BeFalse();
     }
+
+    [Fact]
+    public void StepCallback_FiresPerPlaythrough()
+    {
+        using var engine = Create(out ManualTweenClock clock);
+        int steps = 0;
+        bool done = false;
+        var spec = new TweenBuilder()
+            .From(0f)
+            .To(1f)
+            .DurationSeconds(1f)
+            .Loops(2)
+            .OnStepComplete(() => steps++)
+            .OnComplete(() => done = true)
+            .Build();
+        engine.Play(spec);
+
+        clock.Advance(DurationNs.FromSeconds(1f));
+        engine.Update();
+        clock.Advance(DurationNs.FromSeconds(1f));
+        engine.Update();
+
+        steps.Should().Be(2);
+        done.Should().BeTrue();
+    }
+
+    [Fact]
+    public void KillCallback_FiresOnCancelOnly()
+    {
+        using var engine = Create(out ManualTweenClock clock);
+        bool killed = false;
+        bool done = false;
+        var spec = new TweenBuilder()
+            .From(0f)
+            .To(1f)
+            .DurationSeconds(10f)
+            .OnKill(() => killed = true)
+            .OnComplete(() => done = true)
+            .Build();
+        var handle = engine.Play(spec);
+
+        handle.Cancel().Should().BeTrue();
+        killed.Should().BeTrue();
+        done.Should().BeFalse();
+
+        var finished = engine.Play(spec);
+        clock.Advance(DurationNs.FromSeconds(10f));
+        engine.Update();
+        finished.State.Should().Be(TweenState.Inactive);
+    }
 }

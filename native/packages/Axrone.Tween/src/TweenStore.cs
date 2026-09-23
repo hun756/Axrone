@@ -39,6 +39,8 @@ public sealed class TweenStore : IDisposable
     private readonly Action<Vector4>?[] _updateVector4s;
     private readonly Action?[] _onStarts;
     private readonly Action?[] _onCompletes;
+    private readonly Action?[] _onSteps;
+    private readonly Action?[] _onKills;
 
     private readonly int[] _dense;
     private readonly int[] _sparse;
@@ -82,6 +84,8 @@ public sealed class TweenStore : IDisposable
         _updateVector4s = new Action<Vector4>?[capacity];
         _onStarts = new Action?[capacity];
         _onCompletes = new Action?[capacity];
+        _onSteps = new Action?[capacity];
+        _onKills = new Action?[capacity];
         _dense = new int[capacity];
         _sparse = new int[capacity];
         _nextFree = new int[capacity];
@@ -144,7 +148,9 @@ public sealed class TweenStore : IDisposable
         Action<Vector3>? onUpdateVector3,
         Action<Vector4>? onUpdateVector4,
         Action? onStart,
-        Action? onComplete)
+        Action? onComplete,
+        Action? onStepComplete,
+        Action? onKill)
     {
         int i = (int)index;
         _starts[i] = start;
@@ -166,6 +172,8 @@ public sealed class TweenStore : IDisposable
         _updateVector4s[i] = onUpdateVector4;
         _onStarts[i] = onStart;
         _onCompletes[i] = onComplete;
+        _onSteps[i] = onStepComplete;
+        _onKills[i] = onKill;
 
         lock (_gate)
         {
@@ -287,11 +295,6 @@ public sealed class TweenStore : IDisposable
             return false;
         }
 
-        if (_modes[slot] == PlaybackMode.Once)
-        {
-            return true;
-        }
-
         int remaining = _remainingLoops[slot];
         if (remaining > 1 || remaining < 0)
         {
@@ -306,9 +309,12 @@ public sealed class TweenStore : IDisposable
                 SwapEnds(slot);
             }
 
+            OnStepCompleteOf(slot)?.Invoke();
             return false;
         }
 
+        // Final playthrough: step fires here too, then completion follows upstream.
+        OnStepCompleteOf(slot)?.Invoke();
         return true;
     }
 
@@ -346,6 +352,8 @@ public sealed class TweenStore : IDisposable
         _updateVector4s[i] = null;
         _onStarts[i] = null;
         _onCompletes[i] = null;
+        _onSteps[i] = null;
+        _onKills[i] = null;
         _customEasings[i] = null;
 
         while (true)
@@ -385,6 +393,8 @@ public sealed class TweenStore : IDisposable
     internal Action<Vector3>? OnUpdateVector3Of(int index) => _updateVector3s[index];
     internal Action<Vector4>? OnUpdateVector4Of(int index) => _updateVector4s[index];
     internal Action? OnCompleteOf(int index) => _onCompletes[index];
+    internal Action? OnStepCompleteOf(int index) => _onSteps[index];
+    internal Action? OnKillOf(int index) => _onKills[index];
     internal void SwapEnds(int index)
     {
         Vector128<float> temp = _starts[index];
@@ -403,6 +413,8 @@ public sealed class TweenStore : IDisposable
             Array.Clear(_updateVector4s);
             Array.Clear(_onStarts);
             Array.Clear(_onCompletes);
+            Array.Clear(_onSteps);
+            Array.Clear(_onKills);
             Array.Clear(_customEasings);
         }
     }

@@ -35,6 +35,8 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
     public Action<Vector4>? OnUpdateVector4 { get; set; }
     public Action? OnStart { get; set; }
     public Action? OnComplete { get; set; }
+    public Action? OnStepComplete { get; set; }
+    public Action? OnKill { get; set; }
 
     /// <inheritdoc/>
     public static TweenSpec Materialize(in TweenSpecState state) => new(
@@ -53,7 +55,9 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
         state.OnUpdateVector3,
         state.OnUpdateVector4,
         state.OnStart,
-        state.OnComplete);
+        state.OnComplete,
+        state.OnStepComplete,
+        state.OnKill);
 
     /// <inheritdoc/>
     public static bool TryValidate(in TweenSpecState state, out BuilderDiagnostic diagnostic)
