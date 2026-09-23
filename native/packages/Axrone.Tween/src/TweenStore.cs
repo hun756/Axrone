@@ -240,19 +240,37 @@ public sealed class TweenStore : IDisposable
             {
                 if (TickSlot(slot, delta, globalTimeScale))
                 {
+                    // Read everything the settlement needs before claiming: the claim
+                    // releases the callbacks. A lost claim means an external cancel won
+                    // the race and already settled this tween — report nothing more.
                     uint generation = GenerationOf((uint)slot);
-                    OnCompleteOf(slot)?.Invoke();
+                    Action? onComplete = OnCompleteOf(slot);
+                    if (!TryRetire((uint)slot))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        onComplete?.Invoke();
+                    }
+                    catch (Exception)
+                    {
+                        settled?.Invoke((uint)slot, generation, false);
+                        continue;
+                    }
+
                     settled?.Invoke((uint)slot, generation, true);
-                    Free((uint)slot);
                     completed++;
                 }
             }
             catch (Exception)
             {
                 uint generation = GenerationOf((uint)slot);
-                SetState(slot, TweenState.Faulted);
-                settled?.Invoke((uint)slot, generation, false);
-                Free((uint)slot);
+                if (TryRetire((uint)slot))
+                {
+                    settled?.Invoke((uint)slot, generation, false);
+                }
             }
         }
 
@@ -333,19 +351,26 @@ public sealed class TweenStore : IDisposable
     /// and faulted slots retire — the final state is unobservable after the generation bump, so
     /// it is not stored and repeat frees are safe no-ops.
     /// </summary>
-    public void Free(uint index)
+    public void Free(uint index) => TryRetire(index);
+
+    /// <summary>
+    /// Claims a live slot for settlement: the check, unlink, and generation bump happen under
+    /// one gate, so racing settlers (tick completion versus external cancel) produce exactly
+    /// one winner. Returns false when another settler already claimed the slot.
+    /// </summary>
+    internal bool TryRetire(uint index)
     {
         int i = (int)index;
-        TweenState observed = GetState(i);
-        if (observed != TweenState.Playing && observed != TweenState.Paused && observed != TweenState.Faulted)
-        {
-            return;
-        }
-
-        SetState(i, TweenState.Inactive);
-
         lock (_gate)
         {
+            TweenState observed = GetState(i);
+            if (observed != TweenState.Playing && observed != TweenState.Paused && observed != TweenState.Faulted)
+            {
+                return false;
+            }
+
+            SetState(i, TweenState.Inactive);
+
             int denseIndex = _sparse[i];
             int last = _dense[_activeCount - 1];
             _dense[denseIndex] = last;
@@ -374,6 +399,70 @@ public sealed class TweenStore : IDisposable
             {
                 break;
             }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Moves the play head without touching state, only when the slot is live, holds the
+    /// expected generation, and is playing or paused — all checked under the gate.
+    /// </summary>
+    internal bool TrySeek(uint index, uint generation, DurationNs position)
+    {
+        int i = (int)index;
+        lock (_gate)
+        {
+            if (Volatile.Read(ref _generations[i]) != generation)
+            {
+                return false;
+            }
+
+            TweenState observed = GetState(i);
+            if (observed != TweenState.Playing && observed != TweenState.Paused)
+            {
+                return false;
+            }
+
+            _elapsed[i] = position;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Applies a lifecycle transition only when the slot is live, holds the expected
+    /// generation, and sits in one of the accepted states — all checked under the gate, so a
+    /// racing settlement cannot resurrect a retired slot. Optionally resets the play head.
+    /// </summary>
+    internal bool TryTransition(
+        uint index,
+        uint generation,
+        TweenState fromA,
+        TweenState fromB,
+        TweenState to,
+        DurationNs? elapsedOverride)
+    {
+        int i = (int)index;
+        lock (_gate)
+        {
+            if (Volatile.Read(ref _generations[i]) != generation)
+            {
+                return false;
+            }
+
+            TweenState observed = GetState(i);
+            if (observed != fromA && observed != fromB)
+            {
+                return false;
+            }
+
+            if (elapsedOverride.HasValue)
+            {
+                _elapsed[i] = elapsedOverride.Value;
+            }
+
+            SetState(i, to);
+            return true;
         }
     }
 

@@ -219,13 +219,20 @@ public sealed class TweenEngine : IDisposable
             return false;
         }
 
+        // Claim before firing: the tick thread claims the same way, so completion and
+        // cancel produce exactly one outcome. A lost claim means the tween just settled.
+        Action? onKill = _store.OnKillOf((int)id.Index);
+        if (!_store.TryRetire(id.Index))
+        {
+            return false;
+        }
+
         try
         {
-            _store.OnKillOf((int)id.Index)?.Invoke();
+            onKill?.Invoke();
         }
         finally
         {
-            _store.Free((uint)id.Index);
             _telemetry.RecordCanceled();
 
             lock (_awaitGate)
@@ -244,40 +251,12 @@ public sealed class TweenEngine : IDisposable
     }
 
     /// <summary>Pauses a playing tween.</summary>
-    public bool Pause(TweenId id)
-    {
-        if (!_store.Validate(id))
-        {
-            return false;
-        }
-
-        int index = (int)id.Index;
-        if (_store.GetState(index) != TweenState.Playing)
-        {
-            return false;
-        }
-
-        _store.SetState(index, TweenState.Paused);
-        return true;
-    }
+    public bool Pause(TweenId id) =>
+        _store.TryTransition(id.Index, id.Generation, TweenState.Playing, TweenState.Playing, TweenState.Paused, null);
 
     /// <summary>Resumes a paused tween.</summary>
-    public bool Resume(TweenId id)
-    {
-        if (!_store.Validate(id))
-        {
-            return false;
-        }
-
-        int index = (int)id.Index;
-        if (_store.GetState(index) != TweenState.Paused)
-        {
-            return false;
-        }
-
-        _store.SetState(index, TweenState.Playing);
-        return true;
-    }
+    public bool Resume(TweenId id) =>
+        _store.TryTransition(id.Index, id.Generation, TweenState.Paused, TweenState.Paused, TweenState.Playing, null);
 
     /// <summary>Queries tween state; stale identities report inactive.</summary>
     public TweenState QueryState(TweenId id)
@@ -292,43 +271,11 @@ public sealed class TweenEngine : IDisposable
 
     /// <summary>Restarts a live tween from zero and plays it. Completed tweens are freed;
     /// replay them by scheduling again.</summary>
-    public bool Restart(TweenId id)
-    {
-        if (!_store.Validate(id))
-        {
-            return false;
-        }
-
-        int index = (int)id.Index;
-        TweenState state = _store.GetState(index);
-        if (state != TweenState.Playing && state != TweenState.Paused)
-        {
-            return false;
-        }
-
-        _store.ElapsedOf(index, DurationNs.Zero);
-        _store.SetState(index, TweenState.Playing);
-        return true;
-    }
+    public bool Restart(TweenId id) =>
+        _store.TryTransition(id.Index, id.Generation, TweenState.Playing, TweenState.Paused, TweenState.Playing, DurationNs.Zero);
 
     /// <summary>Moves the play head, preserving state; past-the-end finishes on the next tick.</summary>
-    public bool Goto(TweenId id, DurationNs position)
-    {
-        if (!_store.Validate(id))
-        {
-            return false;
-        }
-
-        int index = (int)id.Index;
-        TweenState state = _store.GetState(index);
-        if (state != TweenState.Playing && state != TweenState.Paused)
-        {
-            return false;
-        }
-
-        _store.ElapsedOf(index, position);
-        return true;
-    }
+    public bool Goto(TweenId id, DurationNs position) => _store.TrySeek(id.Index, id.Generation, position);
 
     /// <summary>Moves the play head to zero, preserving state.</summary>
     public bool Rewind(TweenId id) => Goto(id, DurationNs.Zero);
