@@ -13,7 +13,7 @@ using System.Numerics;
 /// <param name="Easing">Curve selector.</param>
 /// <param name="CustomEasing">Curve function when <see cref="Easing"/> is Custom.</param>
 /// <param name="Mode">Loop behavior.</param>
-/// <param name="LoopCount">Extra playthroughs; negative means infinite.</param>
+/// <param name="LoopCount">Total playthroughs (1 plays once); negative means infinite.</param>
 /// <param name="TimeScale">Playback rate multiplier; must be positive.</param>
 /// <param name="OnUpdateFloat">Per-tick callback for single-lane tweens.</param>
 /// <param name="OnUpdateVector2">Per-tick callback for two-lane tweens.</param>

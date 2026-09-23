@@ -204,7 +204,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
         return this;
     }
 
-    /// <summary>Sets extra playthroughs; negative means infinite.</summary>
+    /// <summary>Sets total playthroughs (1 plays once); negative means infinite.</summary>
     public TweenBuilder Loops(int count)
     {
         State.LoopCount = count;

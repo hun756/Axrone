@@ -19,6 +19,8 @@
     <NoWarn>$(NoWarn);CA1028</NoWarn>
     <!-- CA1815: Struct Equals/GetHashCode — easing curves are stateless function carriers with no meaningful equality -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1031: Catching general exceptions — per-tween fault isolation is the contract -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

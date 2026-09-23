@@ -179,15 +179,122 @@ public sealed class TweenStore : IDisposable
     }
 
     /// <summary>
-    /// Retires a live slot: invisible first, then unlinked, callbacks released. Only live
-    /// (playing or paused) slots retire — the final state is unobservable after the generation
-    /// bump, so it is not stored and repeat frees are safe no-ops.
+    /// Advances all live tweens by the delta; returns completions. A throwing callback faults
+    /// only its own tween (retired, tick continues) — engine availability never depends on
+    /// user code.
+    /// </summary>
+    public int Update(DurationNs delta, float globalTimeScale)
+    {
+        int completed = 0;
+        int count = ActiveCount;
+        for (int d = 0; d < count; d++)
+        {
+            int slot = _dense[d];
+            if (GetState(slot) != TweenState.Playing)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (TickSlot(slot, delta, globalTimeScale))
+                {
+                    OnCompleteOf(slot)?.Invoke();
+                    Free((uint)slot);
+                    completed++;
+                }
+            }
+            catch (Exception)
+            {
+                SetState(slot, TweenState.Faulted);
+                Free((uint)slot);
+            }
+        }
+
+        return completed;
+    }
+
+    private bool TickSlot(int slot, DurationNs delta, float globalTimeScale)
+    {
+        long effectiveDelta = (long)(delta.Value * globalTimeScale * _timeScales[slot]);
+        long elapsed = _elapsed[slot].Value + effectiveDelta;
+        long delay = _delays[slot].Value;
+        if (elapsed < delay)
+        {
+            _elapsed[slot] = new DurationNs(elapsed);
+            return false;
+        }
+
+        long duration = _durations[slot].Value;
+        long active = elapsed - delay;
+        float t = duration > 0 ? Math.Clamp((float)active / duration, 0.0f, 1.0f) : 1.0f;
+
+        float factor = _easings[slot] == EasingKind.Custom
+            ? _customEasings[slot]!(t)
+            : EasingEvaluator.Evaluate(_easings[slot], t);
+
+        Vector128<float> current = Vector128.Add(
+            _starts[slot],
+            Vector128.Multiply(Vector128.Subtract(_ends[slot], _starts[slot]), Vector128.Create(factor)));
+        _currents[slot] = current;
+
+        switch (_channels[slot])
+        {
+            case 1:
+                OnUpdateFloatOf(slot)?.Invoke(current.GetElement(0));
+                break;
+            case 2:
+                OnUpdateVector2Of(slot)?.Invoke(new Vector2(current.GetElement(0), current.GetElement(1)));
+                break;
+            case 3:
+                OnUpdateVector3Of(slot)?.Invoke(new Vector3(current.GetElement(0), current.GetElement(1), current.GetElement(2)));
+                break;
+            default:
+                OnUpdateVector4Of(slot)?.Invoke(current.AsVector4());
+                break;
+        }
+
+        if (active < duration)
+        {
+            _elapsed[slot] = new DurationNs(elapsed);
+            return false;
+        }
+
+        if (_modes[slot] == PlaybackMode.Once)
+        {
+            return true;
+        }
+
+        int remaining = _remainingLoops[slot];
+        if (remaining > 1 || remaining < 0)
+        {
+            if (remaining > 1)
+            {
+                _remainingLoops[slot] = remaining - 1;
+            }
+
+            _elapsed[slot] = new DurationNs(delay);
+            if (_modes[slot] == PlaybackMode.PingPong)
+            {
+                SwapEnds(slot);
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Retires a live slot: invisible first, then unlinked, callbacks released. Playing, paused,
+    /// and faulted slots retire — the final state is unobservable after the generation bump, so
+    /// it is not stored and repeat frees are safe no-ops.
     /// </summary>
     public void Free(uint index)
     {
         int i = (int)index;
         TweenState observed = GetState(i);
-        if (observed != TweenState.Playing && observed != TweenState.Paused)
+        if (observed != TweenState.Playing && observed != TweenState.Paused && observed != TweenState.Faulted)
         {
             return;
         }
