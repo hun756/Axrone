@@ -18,6 +18,7 @@ public sealed class TweenEngine : IDisposable
     private readonly TweenStore _store;
     private readonly ITweenClock _clock;
     private readonly TweenTelemetry _telemetry;
+    private readonly Action<uint, uint, bool> _settledHook;
     private readonly Lock _awaitGate = new();
     private readonly Dictionary<TweenId, List<TaskCompletionSource<bool>>> _awaiters = new();
     private readonly Queue<(TweenId Id, bool Completed)> _recentlySettled = new();
@@ -35,6 +36,7 @@ public sealed class TweenEngine : IDisposable
         _store = new TweenStore(capacity);
         _clock = clock ?? new StopwatchTweenClock();
         _telemetry = new TweenTelemetry(meterName);
+        _settledHook = OnTweenSettled;
     }
 
     /// <summary>Global playback rate multiplier.</summary>
@@ -120,7 +122,7 @@ public sealed class TweenEngine : IDisposable
             return;
         }
 
-        int completed = _store.Update(delta, TimeScale, OnTweenSettled);
+        int completed =         _store.Update(delta, TimeScale, _settledHook);
         if (completed > 0)
         {
             _telemetry.RecordCompleted(completed);
