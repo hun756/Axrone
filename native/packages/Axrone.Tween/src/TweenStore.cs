@@ -183,7 +183,17 @@ public sealed class TweenStore : IDisposable
         }
 
         SetState(i, TweenState.Playing);
-        _onStarts[i]?.Invoke();
+        try
+        {
+            _onStarts[i]?.Invoke();
+        }
+        catch (Exception)
+        {
+            // A throwing start callback must not orphan the slot in the dense set:
+            // release it, then let the user exception propagate with its stack intact.
+            Free((uint)i);
+            throw;
+        }
     }
 
     private int _ticking;

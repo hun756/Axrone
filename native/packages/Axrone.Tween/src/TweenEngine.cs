@@ -49,7 +49,10 @@ public sealed class TweenEngine : IDisposable
     /// <summary>Live tweens.</summary>
     public int ActiveCount => _store.ActiveCount;
 
-    /// <summary>Schedules a spec; false when full or not running (backpressure, not an error).</summary>
+    /// <summary>
+    /// Schedules a spec; false when full or not running (backpressure, not an error).
+    /// A throwing start callback releases the slot and propagates — loud user bug, clean engine.
+    /// </summary>
     public bool TryPlay(TweenSpec spec, out TweenHandle handle)
     {
         ThrowIfFaulted();
@@ -204,7 +207,11 @@ public sealed class TweenEngine : IDisposable
         }
     }
 
-    /// <summary>Cancels a tween, firing its kill callback; false for stale identities. Pending awaiters complete false.</summary>
+    /// <summary>
+    /// Cancels a tween, firing its kill callback; false for stale identities. Pending awaiters
+    /// complete false. A throwing kill callback still releases the slot and settles awaiters —
+    /// the exception propagates but the engine never keeps the wreckage.
+    /// </summary>
     public bool Cancel(TweenId id)
     {
         if (!_store.Validate(id))
@@ -212,17 +219,23 @@ public sealed class TweenEngine : IDisposable
             return false;
         }
 
-        _store.OnKillOf((int)id.Index)?.Invoke();
-        _store.Free((uint)id.Index);
-        _telemetry.RecordCanceled();
-
-        lock (_awaitGate)
+        try
         {
-            if (_awaiters.Remove(id, out List<TaskCompletionSource<bool>>? list))
+            _store.OnKillOf((int)id.Index)?.Invoke();
+        }
+        finally
+        {
+            _store.Free((uint)id.Index);
+            _telemetry.RecordCanceled();
+
+            lock (_awaitGate)
             {
-                for (int i = 0; i < list.Count; i++)
+                if (_awaiters.Remove(id, out List<TaskCompletionSource<bool>>? list))
                 {
-                    list[i].SetResult(false);
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        list[i].SetResult(false);
+                    }
                 }
             }
         }
