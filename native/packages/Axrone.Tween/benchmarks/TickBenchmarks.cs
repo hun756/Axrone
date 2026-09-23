@@ -9,7 +9,9 @@ namespace Axrone.Tween.Benchmarks;
 /// <remarks>
 /// Infinite loops keep the live set stable no matter how many iterations the harness pilots;
 /// finite tweens would decay the workload to an empty ring. Setup is excluded. Measured
-/// ~9ns per tween with zero allocated bytes; see BenchmarkDotNet.Artifacts for machine numbers.
+/// 2026-09-23, ShortRun, .NET 10 X64: 51ns for a lone tween, 9.8ns/tween at 64 live,
+/// 9.7ns/tween at 512 live — linear scaling, zero allocated bytes. See
+/// BenchmarkDotNet.Artifacts for the full machine report.
 /// </remarks>
 [MemoryDiagnoser]
 public class TickBenchmarks : IDisposable
