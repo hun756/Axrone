@@ -182,6 +182,27 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
         return this;
     }
 
+    /// <summary>
+    /// Drives a waypoint path with 0→1 progress: the path is sampled per tick while loops,
+    /// ping-pong, delays, and step callbacks keep working, because the path is only ever a
+    /// function of progress. A previously set single-lane update still fires with the raw
+    /// progress value.
+    /// </summary>
+    public TweenBuilder Waypoints(WaypointPath path, Action<Vector4> onPoint)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(onPoint);
+        From(0.0f);
+        To(1.0f);
+        Action<float>? previous = State.OnUpdateFloat;
+        State.OnUpdateFloat = progress =>
+        {
+            previous?.Invoke(progress);
+            onPoint(path.Sample(progress));
+        };
+        return this;
+    }
+
     /// <summary>Selects a built-in curve.</summary>
     public TweenBuilder Ease(EasingKind easing)
     {
