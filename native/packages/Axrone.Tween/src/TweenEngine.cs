@@ -13,8 +13,13 @@ public sealed class TweenEngine : IDisposable
     private const int StateTerminated = 2;
     private const int StateFaulted = 3;
 
+    private const int RecentSettledCapacity = 64;
+
     private readonly TweenStore _store;
     private readonly ITweenClock _clock;
+    private readonly Lock _awaitGate = new();
+    private readonly Dictionary<TweenId, List<TaskCompletionSource<bool>>> _awaiters = new();
+    private readonly Queue<(TweenId Id, bool Completed)> _recentlySettled = new();
     private float _timeScale = 1.0f;
     private int _state;
     private ExceptionDispatchInfo? _fault;
@@ -110,10 +115,81 @@ public sealed class TweenEngine : IDisposable
             return;
         }
 
-        _store.Update(delta, TimeScale);
+        _store.Update(delta, TimeScale, OnTweenSettled);
     }
 
-    /// <summary>Cancels a tween; false for stale identities.</summary>
+    /// <summary>
+    /// Awaits termination: true for natural completion, false for cancel/fault/unknown outcome.
+    /// Awaiting an already-settled tween consults a bounded recent-settled record; older history
+    /// reports false. Continuations never run on the tick thread.
+    /// </summary>
+    public Task<bool> AwaitAsync(TweenId id)
+    {
+        List<TaskCompletionSource<bool>>? list = null;
+        lock (_awaitGate)
+        {
+            if (!_store.Validate(id))
+            {
+                foreach ((TweenId settledId, bool completed) in _recentlySettled)
+                {
+                    if (settledId.Equals(id))
+                    {
+                        return Task.FromResult(completed);
+                    }
+                }
+
+                return Task.FromResult(false);
+            }
+
+            var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!_awaiters.TryGetValue(id, out list))
+            {
+                list = new List<TaskCompletionSource<bool>>(1);
+                _awaiters[id] = list;
+            }
+
+            list.Add(source);
+            if (!_store.Validate(id))
+            {
+                _awaiters.Remove(id);
+                foreach ((TweenId settledId, bool settled) in _recentlySettled)
+                {
+                    if (settledId.Equals(id))
+                    {
+                        return Task.FromResult(settled);
+                    }
+                }
+
+                return Task.FromResult(false);
+            }
+
+            return source.Task;
+        }
+    }
+
+    private void OnTweenSettled(uint index, uint generation, bool completed)
+    {
+        var id = new TweenId(index, generation);
+        List<TaskCompletionSource<bool>>? list = null;
+        lock (_awaitGate)
+        {
+            _recentlySettled.Enqueue((id, completed));
+            while (_recentlySettled.Count > RecentSettledCapacity)
+            {
+                _recentlySettled.Dequeue();
+            }
+
+            if (_awaiters.Remove(id, out list))
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    list[i].SetResult(completed);
+                }
+            }
+        }
+    }
+
+    /// <summary>Cancels a tween; false for stale identities. Pending awaiters complete false.</summary>
     public bool Cancel(TweenId id)
     {
         if (!_store.Validate(id))
@@ -122,6 +198,18 @@ public sealed class TweenEngine : IDisposable
         }
 
         _store.Free((uint)id.Index);
+
+        lock (_awaitGate)
+        {
+            if (_awaiters.Remove(id, out List<TaskCompletionSource<bool>>? list))
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    list[i].SetResult(false);
+                }
+            }
+        }
+
         return true;
     }
 

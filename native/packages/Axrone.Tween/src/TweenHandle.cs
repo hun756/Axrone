@@ -43,6 +43,13 @@ public readonly struct TweenHandle : IEquatable<TweenHandle>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Resume() => _engine != null && _engine.Resume(Id);
 
+    /// <summary>
+    /// Awaits termination through the owning engine (no downcast, no polling): true for natural
+    /// completion, false for cancel, fault, or unknown outcome.
+    /// </summary>
+    public TaskAwaiter<bool> GetAwaiter() =>
+        (_engine != null ? _engine.AwaitAsync(Id) : Task.FromResult(false)).GetAwaiter();
+
     /// <inheritdoc/>
     public bool Equals(TweenHandle other) => Id.Equals(other.Id) && ReferenceEquals(_engine, other._engine);
 

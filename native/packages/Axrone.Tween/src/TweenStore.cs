@@ -181,9 +181,9 @@ public sealed class TweenStore : IDisposable
     /// <summary>
     /// Advances all live tweens by the delta; returns completions. A throwing callback faults
     /// only its own tween (retired, tick continues) — engine availability never depends on
-    /// user code.
+    /// user code. The optional hook observes every settle with its outcome before release.
     /// </summary>
-    public int Update(DurationNs delta, float globalTimeScale)
+    public int Update(DurationNs delta, float globalTimeScale, Action<uint, uint, bool>? settled = null)
     {
         int completed = 0;
         int count = ActiveCount;
@@ -199,14 +199,18 @@ public sealed class TweenStore : IDisposable
             {
                 if (TickSlot(slot, delta, globalTimeScale))
                 {
+                    uint generation = GenerationOf((uint)slot);
                     OnCompleteOf(slot)?.Invoke();
+                    settled?.Invoke((uint)slot, generation, true);
                     Free((uint)slot);
                     completed++;
                 }
             }
             catch (Exception)
             {
+                uint generation = GenerationOf((uint)slot);
                 SetState(slot, TweenState.Faulted);
+                settled?.Invoke((uint)slot, generation, false);
                 Free((uint)slot);
             }
         }
