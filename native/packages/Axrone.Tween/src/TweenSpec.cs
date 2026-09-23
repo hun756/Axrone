@@ -23,6 +23,7 @@ using System.Numerics;
 /// <param name="OnComplete">Fires once when playback finishes.</param>
 /// <param name="OnStepComplete">Fires at the end of every playthrough, including the last.</param>
 /// <param name="OnKill">Fires when cancelled before completion.</param>
+/// <param name="RepeatDelay">Gap inserted between playthroughs; zero plays them back-to-back.</param>
 public readonly record struct TweenSpec(
     Vector128<float> Start,
     Vector128<float> End,
@@ -41,4 +42,26 @@ public readonly record struct TweenSpec(
     Action? OnStart,
     Action? OnComplete,
     Action? OnStepComplete,
-    Action? OnKill);
+    Action? OnKill,
+    DurationNs RepeatDelay)
+{
+    /// <summary>
+    /// Wall-clock length of the full schedule: initial delay, every playthrough, and the
+    /// gaps between them. Null for infinite loops, which never end by construction.
+    /// </summary>
+    public DurationNs? TotalDuration
+    {
+        get
+        {
+            if (LoopCount < 0)
+            {
+                return null;
+            }
+
+            long playthroughs = Math.Max(LoopCount, 1);
+            long gaps = playthroughs - 1;
+            return new DurationNs(unchecked(
+                Delay.Value + (Duration.Value * playthroughs) + (RepeatDelay.Value * gaps)));
+        }
+    }
+}

@@ -197,6 +197,20 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
         return this;
     }
 
+    /// <summary>Sets the gap inserted between playthroughs.</summary>
+    public TweenBuilder RepeatDelay(DurationNs delay)
+    {
+        State.RepeatDelay = delay;
+        return this;
+    }
+
+    /// <summary>Sets the gap inserted between playthroughs, in seconds.</summary>
+    public TweenBuilder RepeatDelaySeconds(float seconds)
+    {
+        State.RepeatDelay = DurationNs.FromSeconds(seconds);
+        return this;
+    }
+
     /// <summary>Sets loop behavior.</summary>
     public TweenBuilder Mode(PlaybackMode mode)
     {

@@ -37,6 +37,7 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
     public Action? OnComplete { get; set; }
     public Action? OnStepComplete { get; set; }
     public Action? OnKill { get; set; }
+    public DurationNs RepeatDelay { get; set; }
 
     /// <inheritdoc/>
     public static TweenSpec Materialize(in TweenSpecState state) => new(
@@ -57,7 +58,8 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
         state.OnStart,
         state.OnComplete,
         state.OnStepComplete,
-        state.OnKill);
+        state.OnKill,
+        state.RepeatDelay);
 
     /// <inheritdoc/>
     public static bool TryValidate(in TweenSpecState state, out BuilderDiagnostic diagnostic)
@@ -91,6 +93,14 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
             diagnostic = BuilderDiagnostic.Fail(
                 BuilderStatusCode.ValidationFailed,
                 "TimeScale must be positive.");
+            return false;
+        }
+
+        if (state.RepeatDelay.Value < 0)
+        {
+            diagnostic = BuilderDiagnostic.Fail(
+                BuilderStatusCode.ValidationFailed,
+                "RepeatDelay cannot be negative.");
             return false;
         }
 

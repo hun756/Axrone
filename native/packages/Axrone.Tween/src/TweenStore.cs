@@ -23,6 +23,7 @@ public sealed class TweenStore : IDisposable
     private readonly Vector128<float>[] _currents;
     private readonly DurationNs[] _durations;
     private readonly DurationNs[] _delays;
+    private readonly DurationNs[] _repeatDelays;
     private readonly DurationNs[] _elapsed;
     private readonly float[] _timeScales;
     private readonly uint[] _generations;
@@ -68,6 +69,7 @@ public sealed class TweenStore : IDisposable
         _currents = new Vector128<float>[capacity];
         _durations = new DurationNs[capacity];
         _delays = new DurationNs[capacity];
+        _repeatDelays = new DurationNs[capacity];
         _elapsed = new DurationNs[capacity];
         _timeScales = new float[capacity];
         _generations = new uint[capacity];
@@ -137,6 +139,7 @@ public sealed class TweenStore : IDisposable
         Vector128<float> end,
         DurationNs duration,
         DurationNs delay,
+        DurationNs repeatDelay,
         EasingKind easing,
         Func<float, float>? customEasing,
         PlaybackMode mode,
@@ -158,6 +161,7 @@ public sealed class TweenStore : IDisposable
         _currents[i] = start;
         _durations[i] = duration;
         _delays[i] = delay;
+        _repeatDelays[i] = repeatDelay;
         _elapsed[i] = DurationNs.Zero;
         _timeScales[i] = timeScale;
         _easings[i] = easing;
@@ -331,7 +335,10 @@ public sealed class TweenStore : IDisposable
                 _remainingLoops[slot] = remaining - 1;
             }
 
-            _elapsed[slot] = new DurationNs(delay);
+            // Rewind behind the delay line by the repeat gap: the next playthrough
+            // waits out the gap before producing values again. Zero gap replays
+            // back-to-back exactly as before.
+            _elapsed[slot] = new DurationNs(delay - _repeatDelays[slot].Value);
             if (_modes[slot] == PlaybackMode.PingPong)
             {
                 SwapEnds(slot);

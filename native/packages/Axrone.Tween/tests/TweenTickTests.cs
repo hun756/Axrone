@@ -11,6 +11,7 @@ public class TweenTickTests
             spec.End,
             spec.Duration,
             spec.Delay,
+            spec.RepeatDelay,
             spec.Easing,
             spec.CustomEasing,
             spec.Mode,

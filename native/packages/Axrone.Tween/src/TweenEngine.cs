@@ -50,6 +50,12 @@ public sealed class TweenEngine : IDisposable
     public int ActiveCount => _store.ActiveCount;
 
     /// <summary>
+    /// Ceiling for a single pump step; larger deltas are clamped. Guards against stall
+    /// jumps (a frozen frame must not fast-forward the choreography). Null disables.
+    /// </summary>
+    public DurationNs? MaxDelta { get; set; }
+
+    /// <summary>
     /// Schedules a spec; false when full or not running (backpressure, not an error).
     /// A throwing start callback releases the slot and propagates — loud user bug, clean engine.
     /// </summary>
@@ -74,6 +80,7 @@ public sealed class TweenEngine : IDisposable
             spec.End,
             spec.Duration,
             spec.Delay,
+            spec.RepeatDelay,
             spec.Easing,
             spec.CustomEasing,
             spec.Mode,
@@ -125,6 +132,11 @@ public sealed class TweenEngine : IDisposable
         if (Volatile.Read(ref _state) == StateTerminated)
         {
             return;
+        }
+
+        if (MaxDelta.HasValue && delta > MaxDelta.Value)
+        {
+            delta = MaxDelta.Value;
         }
 
         int completed =         _store.Update(delta, TimeScale, _settledHook);

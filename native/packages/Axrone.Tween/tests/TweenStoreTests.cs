@@ -13,6 +13,7 @@ public class TweenStoreTests
             Vector128.Create(1f, 1f, 1f, 1f),
             DurationNs.FromSeconds(1f),
             DurationNs.Zero,
+            DurationNs.Zero,
             EasingKind.Linear,
             null,
             PlaybackMode.Once,
