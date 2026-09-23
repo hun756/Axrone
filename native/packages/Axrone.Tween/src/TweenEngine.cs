@@ -17,6 +17,7 @@ public sealed class TweenEngine : IDisposable
 
     private readonly TweenStore _store;
     private readonly ITweenClock _clock;
+    private readonly TweenTelemetry _telemetry;
     private readonly Lock _awaitGate = new();
     private readonly Dictionary<TweenId, List<TaskCompletionSource<bool>>> _awaiters = new();
     private readonly Queue<(TweenId Id, bool Completed)> _recentlySettled = new();
@@ -28,10 +29,12 @@ public sealed class TweenEngine : IDisposable
     /// <summary>Creates an engine.</summary>
     /// <param name="capacity">Tween slots.</param>
     /// <param name="clock">Time source; wall clock by default.</param>
-    public TweenEngine(int capacity = 1024, ITweenClock? clock = null)
+    /// <param name="meterName">OpenTelemetry meter name.</param>
+    public TweenEngine(int capacity = 1024, ITweenClock? clock = null, string meterName = "Axrone.Tween")
     {
         _store = new TweenStore(capacity);
         _clock = clock ?? new StopwatchTweenClock();
+        _telemetry = new TweenTelemetry(meterName);
     }
 
     /// <summary>Global playback rate multiplier.</summary>
@@ -81,6 +84,7 @@ public sealed class TweenEngine : IDisposable
 
         uint generation = _store.GenerationOf(index);
         handle = new TweenHandle(this, new TweenId(index, generation));
+        _telemetry.RecordSubmitted();
         return true;
     }
 
@@ -109,13 +113,20 @@ public sealed class TweenEngine : IDisposable
     /// <summary>Pumps an explicit delta (deterministic stepping).</summary>
     public void Update(DurationNs delta)
     {
+        long start = Stopwatch.GetTimestamp();
         ThrowIfFaulted();
         if (Volatile.Read(ref _state) == StateTerminated)
         {
             return;
         }
 
-        _store.Update(delta, TimeScale, OnTweenSettled);
+        int completed = _store.Update(delta, TimeScale, OnTweenSettled);
+        if (completed > 0)
+        {
+            _telemetry.RecordCompleted(completed);
+        }
+
+        _telemetry.RecordTick((Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency);
     }
 
     /// <summary>
@@ -198,6 +209,7 @@ public sealed class TweenEngine : IDisposable
         }
 
         _store.Free((uint)id.Index);
+        _telemetry.RecordCanceled();
 
         lock (_awaitGate)
         {
@@ -267,6 +279,7 @@ public sealed class TweenEngine : IDisposable
         {
             _fault = ExceptionDispatchInfo.Capture(error);
             Volatile.Write(ref _state, StateFaulted);
+            TweenEventSource.Log.FaultOccurred(error.GetType().Name, error.Message);
         }
         else
         {
@@ -287,5 +300,6 @@ public sealed class TweenEngine : IDisposable
 
         Complete();
         _store.Dispose();
+        _telemetry.Dispose();
     }
 }
