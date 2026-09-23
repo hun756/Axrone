@@ -178,12 +178,35 @@ public sealed class TweenStore : IDisposable
         _onStarts[i]?.Invoke();
     }
 
+    private int _ticking;
+
     /// <summary>
     /// Advances all live tweens by the delta; returns completions. A throwing callback faults
     /// only its own tween (retired, tick continues) — engine availability never depends on
     /// user code. The optional hook observes every settle with its outcome before release.
     /// </summary>
+    /// <remarks>
+    /// Single-pump only: concurrent or reentrant <see cref="Update"/> calls throw instead of
+    /// tearing the dense iteration. Drive all ticks from one thread.
+    /// </remarks>
     public int Update(DurationNs delta, float globalTimeScale, Action<uint, uint, bool>? settled = null)
+    {
+        if (Interlocked.Exchange(ref _ticking, 1) != 0)
+        {
+            ThrowHelper.ThrowInvalidOperation("TweenStore.Update is single-pump: concurrent or reentrant ticks are not allowed.");
+        }
+
+        try
+        {
+            return UpdateCore(delta, globalTimeScale, settled);
+        }
+        finally
+        {
+            Volatile.Write(ref _ticking, 0);
+        }
+    }
+
+    private int UpdateCore(DurationNs delta, float globalTimeScale, Action<uint, uint, bool>? settled)
     {
         int completed = 0;
         int count = ActiveCount;

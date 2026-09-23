@@ -187,4 +187,46 @@ public class TweenTickTests
         store.Update(DurationNs.FromSeconds(0.5f), 2f).Should().Be(1);
         seen.Should().Equal(10f);
     }
+
+    [Fact]
+    public void ConcurrentUpdate_ThrowsInsteadOfTearing()
+    {
+        using var store = new TweenStore(8);
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        var spec = new TweenBuilder()
+            .From(0f)
+            .To(10f)
+            .DurationSeconds(10f)
+            .OnUpdate((float _) =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(15));
+            })
+            .OnComplete(() => { })
+            .Build();
+        Play(store, spec);
+
+        Exception? background = null;
+        var ticker = new Thread(() =>
+        {
+            try
+            {
+                store.Update(DurationNs.FromSeconds(0.016f), 1f);
+            }
+            catch (Exception ex)
+            {
+                background = ex;
+            }
+        });
+        ticker.Start();
+        entered.Wait(TimeSpan.FromSeconds(15)).Should().BeTrue();
+
+        var act = () => store.Update(DurationNs.FromSeconds(0.016f), 1f);
+        act.Should().Throw<InvalidOperationException>();
+
+        release.Set();
+        ticker.Join(TimeSpan.FromSeconds(15)).Should().BeTrue();
+        background.Should().BeNull();
+    }
 }
