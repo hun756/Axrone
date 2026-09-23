@@ -77,4 +77,53 @@ public class TweenEngineTests
 
         act.Should().Throw<InvalidOperationException>().WithMessage("engine fault");
     }
+
+    [Fact]
+    public void Restart_ReplaysFromZero()
+    {
+        using var engine = Create(out ManualTweenClock clock);
+        var seen = new List<float>();
+        var handle = engine.Play(Linear(0f, 10f, 1f, v => seen.Add(v)));
+
+        clock.Advance(DurationNs.FromSeconds(1f));
+        engine.Update();
+        seen.Should().Equal(10f);
+
+        handle.Restart().Should().BeFalse();
+
+        var replay = engine.Play(Linear(0f, 10f, 1f, v => seen.Add(v)));
+        clock.Advance(DurationNs.FromSeconds(0.5f));
+        engine.Update();
+        replay.Restart().Should().BeTrue();
+        clock.Advance(DurationNs.FromSeconds(0.5f));
+        engine.Update();
+        seen.Should().Equal(10f, 5f, 5f);
+    }
+
+    [Fact]
+    public void Goto_JumpsPlayhead()
+    {
+        using var engine = Create(out ManualTweenClock clock);
+        var seen = new List<float>();
+        var handle = engine.Play(Linear(0f, 10f, 1f, v => seen.Add(v)));
+
+        handle.Goto(DurationNs.FromSeconds(0.75f)).Should().BeTrue();
+        clock.Advance(DurationNs.FromSeconds(0.016f));
+        engine.Update();
+
+        seen.Should().ContainSingle().Which.Should().BeApproximately(7.66f, 1e-3f);
+    }
+
+    [Fact]
+    public void Controls_RejectStaleIdentities()
+    {
+        using var engine = Create(out ManualTweenClock clock);
+        var handle = engine.Play(Linear(0f, 10f, 1f));
+        clock.Advance(DurationNs.FromSeconds(1f));
+        engine.Update();
+
+        handle.Restart().Should().BeFalse();
+        handle.Goto(DurationNs.Zero).Should().BeFalse();
+        handle.Rewind().Should().BeFalse();
+    }
 }

@@ -43,6 +43,18 @@ public readonly struct TweenHandle : IEquatable<TweenHandle>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Resume() => _engine != null && _engine.Resume(Id);
 
+    /// <summary>Restarts a live tween from zero and plays it.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Restart() => _engine != null && _engine.Restart(Id);
+
+    /// <summary>Moves the play head, preserving state.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Goto(DurationNs position) => _engine != null && _engine.Goto(Id, position);
+
+    /// <summary>Moves the play head to zero, preserving state.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Rewind() => _engine != null && _engine.Rewind(Id);
+
     /// <summary>
     /// Awaits termination through the owning engine (no downcast, no polling): true for natural
     /// completion, false for cancel, fault, or unknown outcome.

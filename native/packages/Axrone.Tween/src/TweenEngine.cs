@@ -274,6 +274,49 @@ public sealed class TweenEngine : IDisposable
         return _store.GetState((int)id.Index);
     }
 
+    /// <summary>Restarts a live tween from zero and plays it. Completed tweens are freed;
+    /// replay them by scheduling again.</summary>
+    public bool Restart(TweenId id)
+    {
+        if (!_store.Validate(id))
+        {
+            return false;
+        }
+
+        int index = (int)id.Index;
+        TweenState state = _store.GetState(index);
+        if (state != TweenState.Playing && state != TweenState.Paused)
+        {
+            return false;
+        }
+
+        _store.ElapsedOf(index, DurationNs.Zero);
+        _store.SetState(index, TweenState.Playing);
+        return true;
+    }
+
+    /// <summary>Moves the play head, preserving state; past-the-end finishes on the next tick.</summary>
+    public bool Goto(TweenId id, DurationNs position)
+    {
+        if (!_store.Validate(id))
+        {
+            return false;
+        }
+
+        int index = (int)id.Index;
+        TweenState state = _store.GetState(index);
+        if (state != TweenState.Playing && state != TweenState.Paused)
+        {
+            return false;
+        }
+
+        _store.ElapsedOf(index, position);
+        return true;
+    }
+
+    /// <summary>Moves the play head to zero, preserving state.</summary>
+    public bool Rewind(TweenId id) => Goto(id, DurationNs.Zero);
+
     /// <summary>Stops accepting schedules; in-flight tweens keep ticking until terminated.</summary>
     public void Complete(Exception? error = null)
     {
