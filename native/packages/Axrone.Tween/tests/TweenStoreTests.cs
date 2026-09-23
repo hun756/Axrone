@@ -24,6 +24,8 @@ public class TweenStoreTests
             null,
             null,
             null,
+            null,
+            null,
             null);
     }
 

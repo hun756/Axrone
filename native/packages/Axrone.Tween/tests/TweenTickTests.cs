@@ -22,7 +22,9 @@ public class TweenTickTests
             spec.OnUpdateVector3,
             spec.OnUpdateVector4,
             spec.OnStart,
-            spec.OnComplete);
+            spec.OnComplete,
+            spec.OnStepComplete,
+            spec.OnKill);
         return index;
     }
 
