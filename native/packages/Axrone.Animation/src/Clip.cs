@@ -207,3 +207,124 @@ public sealed class AnimationChannel
         return Math.Clamp(low - 1, 0, times.Length - 2);
     }
 }
+
+/// <summary>Timed named marker fired during playback.</summary>
+public readonly record struct ClipEvent(float Time, string Name, string Payload);
+
+/// <summary>Foot-ground contact window with a ramped weight.</summary>
+public readonly record struct FootContact(float StartTime, float EndTime, int BoneIndex)
+{
+    /// <summary>Contact weight at a time: ramps at edges, floored inside.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public float EvaluateWeight(float time)
+    {
+        if (time < StartTime || time > EndTime)
+        {
+            return 0.0f;
+        }
+
+        float duration = EndTime - StartTime;
+        if (duration <= AnimationConstants.SoaEpsilon)
+        {
+            return 1.0f;
+        }
+
+        float n = (time - StartTime) / duration;
+        float ramp = MathF.Min(n, 1.0f - n);
+        return MathF.Min(1.0f, MathF.Max(AnimationConstants.FootWeightFloor, ramp * 4.0f));
+    }
+}
+
+/// <summary>Named set of channels with events, foot contacts, and tags.</summary>
+public sealed class AnimationClip
+{
+    private AnimationChannel[] _channels;
+    private ClipEvent[] _events;
+    private FootContact[] _footContacts;
+
+    /// <summary>Clip identity.</summary>
+    public ClipId Id { get; }
+
+    /// <summary>Playback length; at least the last key time.</summary>
+    public float Duration { get; }
+
+    /// <summary>Channels.</summary>
+    public ReadOnlySpan<AnimationChannel> Channels => _channels;
+
+    /// <summary>Sorted events.</summary>
+    public ReadOnlySpan<ClipEvent> Events => _events;
+
+    /// <summary>Foot contacts.</summary>
+    public ReadOnlySpan<FootContact> FootContacts => _footContacts;
+
+    /// <summary>Tags for motion matching.</summary>
+    public HashSet<string> Tags { get; }
+
+    /// <summary>Creates a clip, sanitizing events, contacts, and tags.</summary>
+    public AnimationClip(ClipId id, float duration, AnimationChannel[] channels, ClipEvent[]? events = null, FootContact[]? contacts = null, IEnumerable<string>? tags = null)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        Id = id;
+        _channels = channels;
+
+        float maxKeyTime = 0.0f;
+        for (int i = 0; i < channels.Length; i++)
+        {
+            ReadOnlySpan<float> times = channels[i].KeyTimes;
+            if (times.Length > 0)
+            {
+                maxKeyTime = MathF.Max(maxKeyTime, times[times.Length - 1]);
+            }
+        }
+
+        Duration = MathF.Max(MathF.Max(duration, maxKeyTime), 0.0f);
+
+        var cleanEvents = new List<ClipEvent>();
+        if (events != null)
+        {
+            foreach (ClipEvent evt in events)
+            {
+                if (!float.IsNaN(evt.Time) && !string.IsNullOrWhiteSpace(evt.Name))
+                {
+                    cleanEvents.Add(evt);
+                }
+            }
+
+            cleanEvents.Sort(static (a, b) => a.Time.CompareTo(b.Time));
+        }
+
+        _events = cleanEvents.ToArray();
+
+        var cleanContacts = new List<FootContact>();
+        if (contacts != null)
+        {
+            foreach (FootContact contact in contacts)
+            {
+                float start = MathF.Min(contact.StartTime, contact.EndTime);
+                float end = MathF.Max(contact.StartTime, contact.EndTime);
+                cleanContacts.Add(new FootContact(start, end, contact.BoneIndex));
+            }
+        }
+
+        _footContacts = cleanContacts.ToArray();
+
+        Tags = new HashSet<string>(StringComparer.Ordinal);
+        if (tags != null)
+        {
+            foreach (string tag in tags)
+            {
+                if (!string.IsNullOrWhiteSpace(tag))
+                {
+                    Tags.Add(tag);
+                }
+            }
+        }
+    }
+
+    /// <summary>Replaces channels (streaming merge).</summary>
+    public void RebuildChannels(AnimationChannel[] newChannels)
+    {
+        ArgumentNullException.ThrowIfNull(newChannels);
+        _channels = newChannels;
+    }
+}
