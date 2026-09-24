@@ -172,6 +172,11 @@ public sealed class ParameterStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ClearTriggers() => Array.Clear(_triggers, 0, _triggers.Length);
 
+    /// <summary>Whether a parameter exists and is a trigger.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsTrigger(string name) =>
+        _nameToIndex.TryGetValue(name, out int index) && _types[index] == ParameterType.Trigger;
+
     /// <summary>Evaluates a transition condition against current values.</summary>
     public bool EvaluateCondition(in ParameterCondition condition)
     {
