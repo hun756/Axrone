@@ -124,17 +124,17 @@ public static unsafe partial class SimdFloat32
         ref float src = ref MemoryMarshal.GetReference(source);
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) ExpKernel512(Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) ExpKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) ExpKernel128(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
@@ -275,17 +275,17 @@ public static unsafe partial class SimdFloat32
         ref float src = ref MemoryMarshal.GetReference(source);
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) LogKernel512(Vector512.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) LogKernel256(Vector256.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step) LogKernel128(Vector128.LoadUnsafe(in src, i)).StoreUnsafe(ref dst, i);
@@ -304,7 +304,7 @@ public static unsafe partial class SimdFloat32
         ref float src = ref MemoryMarshal.GetReference(source);
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -314,13 +314,13 @@ public static unsafe partial class SimdFloat32
                 (Vector512.Create(1f) / (Vector512.Create(1f) + e)).StoreUnsafe(ref dst, i);
             }
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (Vector256.Create(1f) / (Vector256.Create(1f) + ExpKernel256(Vector256.Create(0f) - Vector256.LoadUnsafe(in src, i)))).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -344,7 +344,7 @@ public static unsafe partial class SimdFloat32
         ref float src = ref MemoryMarshal.GetReference(source);
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             Vector512<float> vClamp = Vector512.Create(9f);
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
@@ -355,7 +355,7 @@ public static unsafe partial class SimdFloat32
                 ((p - Vector512.Create(1f)) / (p + Vector512.Create(1f))).StoreUnsafe(ref dst, i);
             }
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -365,7 +365,7 @@ public static unsafe partial class SimdFloat32
                 ((p - Vector256.Create(1f)) / (p + Vector256.Create(1f))).StoreUnsafe(ref dst, i);
             }
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -405,7 +405,7 @@ public static unsafe partial class SimdFloat32
         ref float eRef = ref MemoryMarshal.GetReference(exponent);
         ref float dRef = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -427,7 +427,7 @@ public static unsafe partial class SimdFloat32
                 result.StoreUnsafe(ref dRef, i);
             }
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -449,7 +449,7 @@ public static unsafe partial class SimdFloat32
                 result.StoreUnsafe(ref dRef, i);
             }
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
@@ -494,21 +494,21 @@ public static unsafe partial class SimdFloat32
         }
 
         nuint i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             Vector512<float> vMax = Vector512.Create(maxVal);
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 ExpKernel512(Vector512.LoadUnsafe(in src, i) - vMax).StoreUnsafe(ref dst, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             Vector256<float> vMax = Vector256.Create(maxVal);
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 ExpKernel256(Vector256.LoadUnsafe(in src, i) - vMax).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             Vector128<float> vMax = Vector128.Create(maxVal);
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
@@ -522,21 +522,21 @@ public static unsafe partial class SimdFloat32
         float invSum = 1f / sum;
 
         i = 0;
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             Vector512<float> vInv = Vector512.Create(invSum);
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (Vector512.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
         }
-        else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        else if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             Vector256<float> vInv = Vector256.Create(invSum);
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (Vector256.LoadUnsafe(in dst, i) * vInv).StoreUnsafe(ref dst, i);
         }
-        else if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        else if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             Vector128<float> vInv = Vector128.Create(invSum);
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
@@ -579,7 +579,7 @@ public static unsafe partial class SimdFloat32
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
 
-        if (Vector256.IsHardwareAccelerated && count >= (nuint)Vector256<ushort>.Count)
+        if (SimdRuntime.UseVector256Path && count >= (nuint)Vector256<ushort>.Count)
         {
             Vector256<uint> signMask = Vector256.Create(0x8000u);
             Vector256<uint> expMask = Vector256.Create(0x7C00u);
@@ -598,7 +598,7 @@ public static unsafe partial class SimdFloat32
                 ConvertHalfVec256(hi, signMask, expMask, mantMask13, bias, infExp).StoreUnsafe(ref dst, i + halfStep);
             }
         }
-        if (Vector128.IsHardwareAccelerated && count >= (nuint)Vector128<ushort>.Count)
+        if (SimdRuntime.UseVector128Path && count >= (nuint)Vector128<ushort>.Count)
         {
             Vector128<uint> signMask = Vector128.Create(0x8000u);
             Vector128<uint> expMask = Vector128.Create(0x7C00u);
@@ -683,7 +683,7 @@ public static unsafe partial class SimdFloat32
         ref ushort dst = ref Unsafe.As<byte, ushort>(ref MemoryMarshal.GetReference(destination));
         ref float src = ref MemoryMarshal.GetReference(source);
         nuint i = 0;
-        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             Vector256<uint> signMask = Vector256.Create(0x80000000u);
             Vector256<uint> expMask = Vector256.Create(0x7F800000u);

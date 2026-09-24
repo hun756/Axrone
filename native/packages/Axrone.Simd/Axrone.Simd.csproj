@@ -33,6 +33,12 @@
     <NoWarn>$(NoWarn);CA1707</NoWarn>
     <!-- CA1716: Reserved keyword conflicts — Select, Fill, base, step are intentional SIMD API names -->
     <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA1028: Non-int32 enum storage — byte backing is load-bearing: FeatureBitmask256
+         partitions index (byte)feature, so widening would break the 256-bit layout contract -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1027: Flags on SimdFeature — actively wrong: values are distinct per feature and
+         combine only through FeatureBitmask256, never by bitwise-OR of the enum itself -->
+    <NoWarn>$(NoWarn);CA1027</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
