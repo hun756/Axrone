@@ -489,3 +489,139 @@ public sealed class Blend2DMotionNode : MotionNode
         }
     }
 }
+
+/// <summary>Per-child parameter-weighted blend with single-active fast path.</summary>
+public sealed class DirectMotionNode : MotionNode
+{
+    private readonly string[] _parameterNames;
+    private readonly MotionNode[] _children;
+
+    /// <inheritdoc/>
+    public override MotionKind Kind => MotionKind.Direct;
+
+    /// <summary>Driving parameter per child.</summary>
+    public ReadOnlySpan<string> ParameterNames => _parameterNames;
+
+    /// <summary>Children aligned with parameters.</summary>
+    public ReadOnlySpan<MotionNode> Children => _children;
+
+    /// <summary>Creates a blend.</summary>
+    public DirectMotionNode((string Parameter, MotionNode Child)[] entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        if (entries.Length == 0)
+        {
+            AnimationThrowHelper.ThrowCompilation(AnimationErrorCode.CompilationEmptyChildren, "Direct blend requires at least one child.");
+        }
+
+        _parameterNames = new string[entries.Length];
+        _children = new MotionNode[entries.Length];
+        for (int i = 0; i < entries.Length; i++)
+        {
+            _parameterNames[i] = entries[i].Parameter;
+            _children[i] = entries[i].Child;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override float GetDuration()
+    {
+        float max = 0.0f;
+        for (int i = 0; i < _children.Length; i++)
+        {
+            max = MathF.Max(max, _children[i].GetDuration());
+        }
+
+        return max;
+    }
+
+    /// <inheritdoc/>
+    [SkipLocalsInit]
+    public override void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth)
+    {
+        ArgumentNullException.ThrowIfNull(outFrame);
+        ArgumentNullException.ThrowIfNull(arena);
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (depth >= AnimationConstants.MaxBlendDepth)
+        {
+            AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
+        }
+
+        Span<float> weights = stackalloc float[_children.Length];
+        int activeCount = 0;
+        int singleIndex = -1;
+
+        for (int i = 0; i < _children.Length; i++)
+        {
+            float w = MathF.Max(0.0f, parameters.GetFloat(_parameterNames[i]));
+            weights[i] = w;
+            if (w > 0.0f)
+            {
+                activeCount++;
+                singleIndex = i;
+            }
+        }
+
+        if (activeCount == 0)
+        {
+            outFrame.ResetToRest(rig);
+            return;
+        }
+
+        if (activeCount == 1)
+        {
+            _children[singleIndex].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
+        }
+
+        AnimationFrame[] scratchFrames = ArrayPool<AnimationFrame>.Shared.Rent(_children.Length);
+        try
+        {
+            for (int i = 0; i < _children.Length; i++)
+            {
+                scratchFrames[i] = arena.Alloc();
+                _children[i].Evaluate(normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
+            }
+
+            BlendingKernels.BlendWeightedFrames(outFrame, scratchFrames.AsSpan(0, _children.Length), weights, rig);
+
+            for (int i = 0; i < _children.Length; i++)
+            {
+                arena.Free();
+            }
+        }
+        finally
+        {
+            ArrayPool<AnimationFrame>.Shared.Return(scratchFrames);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    {
+        if (_children.Length == 0)
+        {
+            deltaPos = Vector3.Zero;
+            deltaRot = Quaternion.Identity;
+            return;
+        }
+
+        _children[0].ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        if (layerWeight <= 0.0f)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _children.Length; i++)
+        {
+            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+        }
+    }
+}
