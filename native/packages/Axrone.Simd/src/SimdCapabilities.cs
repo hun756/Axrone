@@ -179,3 +179,109 @@ public readonly struct SimdCapabilities : IFeatureQuery, ITopologyDescriptor, IE
     /// <inheritdoc/>
     public static bool operator !=(SimdCapabilities left, SimdCapabilities right) => !left.Equals(right);
 }
+
+/// <summary>Point-in-time dispatch counters.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public readonly record struct SimdTelemetrySnapshot(
+    long Avx512Dispatches,
+    long Avx2Dispatches,
+    long Vector128Dispatches,
+    long ScalarDispatches)
+{
+    /// <summary>All dispatches.</summary>
+    public long TotalDispatches => Avx512Dispatches + Avx2Dispatches + Vector128Dispatches + ScalarDispatches;
+
+    /// <inheritdoc/>
+    public override string ToString() =>
+        $"AVX-512: {Avx512Dispatches}, AVX2: {Avx2Dispatches}, Vector128: {Vector128Dispatches}, Scalar: {ScalarDispatches} (Total: {TotalDispatches})";
+}
+
+/// <summary>
+/// Dispatch counters with cache-line separation: wide-vector counters live on one line,
+/// base/scalar counters on another, so heterogeneous multithreaded workloads never share.
+/// </summary>
+[StructLayout(LayoutKind.Explicit, Size = 128)]
+public struct SimdTelemetryCounters
+{
+    [FieldOffset(0)]
+    private long _avx512Dispatches;
+
+    [FieldOffset(8)]
+    private long _avx2Dispatches;
+
+    [FieldOffset(64)]
+    private long _vector128Dispatches;
+
+    [FieldOffset(72)]
+    private long _scalarDispatches;
+
+    /// <summary>Records one dispatch on the tier.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void Increment(SimdDispatchTier tier)
+    {
+        switch (tier)
+        {
+            case SimdDispatchTier.Avx512:
+                Interlocked.Increment(ref _avx512Dispatches);
+                break;
+            case SimdDispatchTier.Avx2:
+                Interlocked.Increment(ref _avx2Dispatches);
+                break;
+            case SimdDispatchTier.Vector128:
+                Interlocked.Increment(ref _vector128Dispatches);
+                break;
+            case SimdDispatchTier.Scalar:
+                Interlocked.Increment(ref _scalarDispatches);
+                break;
+        }
+    }
+
+    /// <summary>Records one AVX-512 dispatch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void IncrementAvx512() => Interlocked.Increment(ref _avx512Dispatches);
+
+    /// <summary>Records one AVX2 dispatch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void IncrementAvx2() => Interlocked.Increment(ref _avx2Dispatches);
+
+    /// <summary>Records one 128-bit dispatch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void IncrementVector128() => Interlocked.Increment(ref _vector128Dispatches);
+
+    /// <summary>Records one scalar dispatch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void IncrementScalar() => Interlocked.Increment(ref _scalarDispatches);
+
+    /// <summary>AVX-512 dispatches.</summary>
+    public long Avx512Dispatches
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _avx512Dispatches);
+    }
+
+    /// <summary>AVX2 dispatches.</summary>
+    public long Avx2Dispatches
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _avx2Dispatches);
+    }
+
+    /// <summary>128-bit dispatches.</summary>
+    public long Vector128Dispatches
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _vector128Dispatches);
+    }
+
+    /// <summary>Scalar dispatches.</summary>
+    public long ScalarDispatches
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Volatile.Read(ref _scalarDispatches);
+    }
+
+    /// <summary>Captures a snapshot.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SimdTelemetrySnapshot CreateSnapshot() =>
+        new(Avx512Dispatches, Avx2Dispatches, Vector128Dispatches, ScalarDispatches);
+}
