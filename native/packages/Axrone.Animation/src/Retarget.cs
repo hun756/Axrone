@@ -111,4 +111,56 @@ public sealed class RetargetProfile
             AnimationThrowHelper.ThrowRetargeting(AnimationErrorCode.RetargetingNoMapping, "Zero bone mappings resolved.");
         }
     }
+
+    /// <summary>Retargets a source frame onto a target frame, copying curves through.</summary>
+    public void RetargetFrame(AnimationFrame sourceFrame, AnimationFrame targetFrame)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFrame);
+        ArgumentNullException.ThrowIfNull(targetFrame);
+
+        ReadOnlySpan<Vector3> sourceT = sourceFrame.ReadTranslations();
+        ReadOnlySpan<Quaternion> sourceR = sourceFrame.ReadRotations();
+        ReadOnlySpan<Vector3> sourceS = sourceFrame.ReadScales();
+
+        Span<Vector3> targetT = targetFrame.GetTranslations();
+        Span<Quaternion> targetR = targetFrame.GetRotations();
+        Span<Vector3> targetS = targetFrame.GetScales();
+
+        for (int s = 0; s < SourceRig.BoneCount; s++)
+        {
+            int t = _sourceToTargetMap[s];
+            if (t == -1)
+            {
+                continue;
+            }
+
+            if (TranslationMode == RetargetTranslationMode.Absolute)
+            {
+                targetT[t] = sourceT[s];
+            }
+            else if (TranslationMode == RetargetTranslationMode.Scaled)
+            {
+                targetT[t] = sourceT[s] * _lengthRatios[s];
+            }
+
+            if (RotationMode == RetargetRotationMode.Copy)
+            {
+                targetR[t] = sourceR[s];
+            }
+            else if (RotationMode == RetargetRotationMode.Offset)
+            {
+                targetR[t] = Quaternion.Normalize(_rotationOffsets[s] * sourceR[s]);
+            }
+
+            targetS[t] = sourceS[s];
+        }
+
+        Span<float> targetCurves = targetFrame.Curves.AsSpan();
+        ReadOnlySpan<float> sourceCurves = sourceFrame.Curves.AsSpan();
+        int curveCount = Math.Min(targetCurves.Length, sourceCurves.Length);
+        for (int i = 0; i < curveCount; i++)
+        {
+            targetCurves[i] = sourceCurves[i];
+        }
+    }
 }
