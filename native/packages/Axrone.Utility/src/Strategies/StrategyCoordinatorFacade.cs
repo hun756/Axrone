@@ -2,6 +2,7 @@ namespace Axrone.Utility.Strategies;
 
 using System.Threading.Tasks;
 using Axrone.Utility.Backoff.SpinPolicies;
+using Axrone.Utility.Descriptors;
 
 /// <summary>Coordinator with standard adaptive backoff and null metrics.</summary>
 public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput> : IDisposable, IAsyncDisposable
@@ -14,10 +15,16 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput> : IDis
     /// <summary>In-flight executions.</summary>
     public long InFlightCount => _core.InFlightCount;
 
+    /// <summary>Generational handle of the active strategy.</summary>
+    public DescriptorHandle<StrategyNode> ActiveStrategyHandle => _core.ActiveStrategyHandle;
+
+    /// <summary>Live registrations.</summary>
+    public long RegisteredCount => _core.RegisteredCount;
+
     /// <summary>Creates a coordinator.</summary>
-    public DynamicStrategyCoordinator()
+    public DynamicStrategyCoordinator(DescriptorTableOptions? descriptorOptions = null)
     {
-        _core = new DynamicStrategyCoordinator<TContext, TInput, TOutput, AdaptiveSpinBackoff, NullStrategyMetricsSink>();
+        _core = new DynamicStrategyCoordinator<TContext, TInput, TOutput, AdaptiveSpinBackoff, NullStrategyMetricsSink>(descriptorOptions: descriptorOptions);
     }
 
     /// <summary>Registers a static strategy type.</summary>
@@ -45,6 +52,11 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput> : IDis
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TrySwap(StrategyId id) =>
         _core.TrySwap(id);
+
+    /// <summary>Swaps the active strategy by generational handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TrySwap(in DescriptorHandle<StrategyNode> handle) =>
+        _core.TrySwap(in handle);
 
     /// <summary>Executes the active strategy.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

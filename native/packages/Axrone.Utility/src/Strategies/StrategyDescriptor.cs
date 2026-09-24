@@ -1,10 +1,24 @@
 namespace Axrone.Utility.Strategies;
 
-/// <summary>Registered strategy node: identity, invoker, and optional state.</summary>
+using Axrone.Utility.Descriptors;
+
+/// <summary>
+/// Registered strategy node: declared identity, invocation, and optional state.
+/// Lifecycle identity is derived from the shared descriptor library: the
+/// coordinator issues a generational <see cref="Handle"/> at registration, so
+/// slot reuse is ABA-safe and liveness is table-authoritative. A standalone
+/// descriptor carries <see cref="DescriptorHandle{TDescriptor}.Invalid"/> until registered.
+/// </summary>
 public sealed class StrategyDescriptor<TContext, TInput, TOutput>
 {
-    /// <summary>Strategy identity.</summary>
+    /// <summary>Author-declared strategy identity.</summary>
     public StrategyId Id { get; }
+
+    /// <summary>
+    /// Generational lifecycle identity issued by the coordinator's descriptor
+    /// table. Invalid until registered.
+    /// </summary>
+    public DescriptorHandle<StrategyNode> Handle { get; internal set; }
 
     /// <summary>Invocation delegate (cached static lambda for static strategies).</summary>
     public StrategyInvoker<TContext, TInput, TOutput> Invoker { get; }

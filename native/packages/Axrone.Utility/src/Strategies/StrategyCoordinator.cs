@@ -4,11 +4,16 @@ using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using Axrone.Utility.Alignment;
 using Axrone.Utility.Backoff;
+using Axrone.Utility.Descriptors;
 
 /// <summary>
 /// Lock-free strategy execution with atomic hot-swapping. Registration and swaps
 /// serialize on a cold-path gate; the execution hot path takes no locks.
 /// Backoff reuses the shared <see cref="ISpinBackoff"/> family — no second dialect.
+/// Node identity is derived from the shared descriptor library: every registration
+/// occupies a generational <see cref="DescriptorTable{TDescriptor}"/> slot, so the
+/// coordinator owns no parallel id universe — handles are ABA-safe by construction
+/// and liveness is table-authoritative. The hot path never touches table memory.
 /// </summary>
 public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBackoff, TMetrics> : IDisposable, IAsyncDisposable
     where TBackoff : struct, ISpinBackoff
@@ -30,8 +35,8 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
     private TaskCompletionSource<bool>? _drainCompletion;
     private int _isDisposed;
 
-    private StrategyDescriptor<TContext, TInput, TOutput>?[] _registry = new StrategyDescriptor<TContext, TInput, TOutput>?[8];
-    private uint _registryCount;
+    private readonly DescriptorTable<StrategyNode> _nodes;
+    private readonly StrategyDescriptor<TContext, TInput, TOutput>?[] _sidecar;
 
     private TMetrics _metrics;
 
@@ -58,10 +63,29 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
         get => _inFlightCount.Value;
     }
 
-    /// <summary>Creates a coordinator. The id starts empty until the first registration.</summary>
-    public DynamicStrategyCoordinator(TMetrics metrics = default)
+    /// <summary>Generational handle of the active strategy; invalid until the first registration.</summary>
+    public DescriptorHandle<StrategyNode> ActiveStrategyHandle
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _activeDescriptor?.Handle ?? default;
+    }
+
+    /// <summary>Live registrations (table-authoritative).</summary>
+    public long RegisteredCount
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _nodes.ActiveCount;
+    }
+
+    /// <summary>
+    /// Creates a coordinator. The id starts empty until the first registration.
+    /// Registry capacity comes from the descriptor table options (default 64 slots).
+    /// </summary>
+    public DynamicStrategyCoordinator(TMetrics metrics = default, DescriptorTableOptions? descriptorOptions = null)
     {
         _metrics = metrics;
+        _nodes = new DescriptorTable<StrategyNode>(descriptorOptions ?? new DescriptorTableOptions { Capacity = 64 });
+        _sidecar = new StrategyDescriptor<TContext, TInput, TOutput>?[_nodes.Capacity];
         _lifecycleState.Reset();
         _inFlightCount.Reset();
     }
@@ -79,7 +103,7 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
                 static (ref TContext ctx, in TInput inp, out TOutput outp) =>
                     TStrategy.Execute(ref ctx, in inp, out outp));
 
-            RegisterCore(descriptor);
+            RegisterCore(descriptor, StrategyNodeKind.Static);
         }
     }
 
@@ -97,7 +121,7 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
                 strategy.Execute,
                 strategy);
 
-            RegisterCore(descriptor);
+            RegisterCore(descriptor, StrategyNodeKind.Instance);
         }
     }
 
@@ -109,7 +133,7 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
         lock (_lifecycleLock)
         {
             EnsureAssignable();
-            RegisterCore(descriptor);
+            RegisterCore(descriptor, StrategyNodeKind.Instance);
         }
     }
 
@@ -122,27 +146,28 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
             nuint length = (nuint)descriptors.Length;
             for (nuint i = 0; i < length; i++)
             {
-                RegisterCore(descriptors[(int)i]);
+                RegisterCore(descriptors[(int)i], StrategyNodeKind.Instance);
             }
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void RegisterCore(StrategyDescriptor<TContext, TInput, TOutput> descriptor)
+    private void RegisterCore(StrategyDescriptor<TContext, TInput, TOutput> descriptor, StrategyNodeKind flags)
     {
-        StrategyDescriptor<TContext, TInput, TOutput>?[] registry = _registry;
-        uint count = _registryCount;
-
-        if (count == (uint)registry.Length)
+        if (descriptor.Handle.IsValid)
         {
-            var expanded = new StrategyDescriptor<TContext, TInput, TOutput>?[registry.Length << 1];
-            Array.Copy(registry, expanded, registry.Length);
-            _registry = expanded;
-            registry = expanded;
+            ThrowHelper.ThrowInvalidOperationException("Strategy descriptor is already registered.");
         }
 
-        registry[count] = descriptor;
-        _registryCount = count + 1;
+        var node = new StrategyNode(descriptor.Id.Value, flags);
+        if (!_nodes.TryAllocate(in node, out DescriptorHandle<StrategyNode> handle))
+        {
+            ThrowHelper.ThrowInvalidOperationException($"Strategy registry exhausted (capacity {_nodes.Capacity}).");
+        }
+
+        _nodes.TrySetStatus(in handle, DescriptorStatus.Active);
+        _sidecar[handle.SlotIndex] = descriptor;
+        descriptor.Handle = handle;
 
         if (_activeDescriptor is null)
         {
@@ -154,8 +179,8 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
     }
 
     /// <summary>
-    /// Atomically swaps the active strategy. Serialized with registration so the
-    /// registry/count pair is always observed consistently (no torn reads).
+    /// Atomically swaps the active strategy by declared id. Serialized with
+    /// registration so slot state is always observed consistently (no torn reads).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public bool TrySwap(StrategyId id)
@@ -167,23 +192,59 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
 
         lock (_lifecycleLock)
         {
-            StrategyDescriptor<TContext, TInput, TOutput>?[] registry = _registry;
-            nuint count = _registryCount;
+            StrategyDescriptor<TContext, TInput, TOutput>?[] sidecar = _sidecar;
+            nuint capacity = _nodes.Capacity;
 
-            for (nuint i = 0; i < count; i++)
+            for (nuint i = 0; i < capacity; i++)
             {
-                StrategyDescriptor<TContext, TInput, TOutput>? candidate = registry[i];
+                StrategyDescriptor<TContext, TInput, TOutput>? candidate = sidecar[i];
                 if (candidate is not null && candidate.Id == id)
                 {
-                    StrategyDescriptor<TContext, TInput, TOutput>? previous = Interlocked.Exchange(ref _activeDescriptor, candidate);
-                    ActiveStrategyId = id;
-                    _metrics.OnSwapped(previous?.Id ?? StrategyId.Empty, id);
+                    SwapCore(candidate);
                     return true;
                 }
             }
 
             return false;
         }
+    }
+
+    /// <summary>
+    /// Atomically swaps the active strategy by generational handle. Stale handles
+    /// (freed slots, recycled generations) fail closed — no scan, ABA-safe.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public bool TrySwap(in DescriptorHandle<StrategyNode> handle)
+    {
+        if (!handle.IsValid)
+        {
+            return false;
+        }
+
+        lock (_lifecycleLock)
+        {
+            if (!_nodes.TryGet(in handle, out _))
+            {
+                return false;
+            }
+
+            StrategyDescriptor<TContext, TInput, TOutput>? candidate = _sidecar[handle.SlotIndex];
+            if (candidate is null || candidate.Handle != handle)
+            {
+                return false;
+            }
+
+            SwapCore(candidate);
+            return true;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void SwapCore(StrategyDescriptor<TContext, TInput, TOutput> candidate)
+    {
+        StrategyDescriptor<TContext, TInput, TOutput>? previous = Interlocked.Exchange(ref _activeDescriptor, candidate);
+        ActiveStrategyId = candidate.Id;
+        _metrics.OnSwapped(previous?.Id ?? StrategyId.Empty, candidate.Id);
     }
 
     /// <summary>
@@ -362,6 +423,8 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
             TBackoff.Advance(ref spin);
         }
 
+        FreeAllDescriptors();
+        _nodes.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -384,7 +447,38 @@ public sealed class DynamicStrategyCoordinator<TContext, TInput, TOutput, TBacko
         }
         finally
         {
+            FreeAllDescriptors();
+            await _nodes.DisposeAsync().ConfigureAwait(false);
             GC.SuppressFinalize(this);
+        }
+    }
+
+    /// <summary>
+    /// Reclaims every table slot. Runs after the dispatch drain, so no execution
+    /// can observe a freed slot; the hot path holds only managed references.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void FreeAllDescriptors()
+    {
+        lock (_lifecycleLock)
+        {
+            StrategyDescriptor<TContext, TInput, TOutput>?[] sidecar = _sidecar;
+            nuint capacity = _nodes.Capacity;
+
+            for (nuint i = 0; i < capacity; i++)
+            {
+                StrategyDescriptor<TContext, TInput, TOutput>? descriptor = sidecar[i];
+                if (descriptor is not null)
+                {
+                    DescriptorHandle<StrategyNode> handle = descriptor.Handle;
+                    descriptor.Handle = default;
+                    sidecar[i] = null;
+                    if (handle.IsValid)
+                    {
+                        _nodes.TryFree(in handle);
+                    }
+                }
+            }
         }
     }
 
