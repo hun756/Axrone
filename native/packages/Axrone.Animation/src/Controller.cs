@@ -36,3 +36,115 @@ public sealed class AnimationLayer
         Machine = machine;
     }
 }
+
+/// <summary>
+/// Top-level runtime: advances layer state machines, composes override/additive
+/// layers onto the current frame, extracts layer-zero root motion, and clears
+/// triggers at the frame boundary.
+/// </summary>
+public sealed class AnimationController : IDisposable
+{
+    private readonly List<AnimationLayer> _layers = new();
+
+    /// <summary>Driven rig.</summary>
+    public Rig Rig { get; }
+
+    /// <summary>Shared parameters.</summary>
+    public ParameterStore Parameters { get; }
+
+    /// <summary>Composed output frame.</summary>
+    public AnimationFrame CurrentFrame { get; }
+
+    /// <summary>Scratch arena.</summary>
+    public FrameArena Arena { get; }
+
+    /// <summary>Creates a controller over a rig.</summary>
+    public AnimationController(Rig rig, ParameterStore parameters, Dictionary<CurveId, int> curveLayout, int arenaCapacity = 64)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(curveLayout);
+        Rig = rig;
+        Parameters = parameters;
+        CurrentFrame = new AnimationFrame(rig.BoneCount, curveLayout);
+        Arena = new FrameArena(rig.BoneCount, curveLayout, arenaCapacity);
+        CurrentFrame.ResetToRest(rig);
+    }
+
+    /// <summary>Adds a layer (index 0 is the base).</summary>
+    public void AddLayer(AnimationLayer layer)
+    {
+        ArgumentNullException.ThrowIfNull(layer);
+        _layers.Add(layer);
+    }
+
+    /// <summary>Layer count.</summary>
+    public int LayerCount => _layers.Count;
+
+    /// <summary>
+    /// Advances all weighted layers, composes the frame, and reports root motion.
+    /// The event list is caller-owned and cleared first.
+    /// </summary>
+    public void Update(float deltaTime, ICollection<ClipEvent> outEvents, out Vector3 rootMotionDeltaPos, out Quaternion rootMotionDeltaRot)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        outEvents.Clear();
+        Arena.Reset();
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            AnimationLayer layer = _layers[i];
+            if (layer.Weight <= 0.0f)
+            {
+                continue;
+            }
+
+            layer.Machine.Update(deltaTime, Parameters, outEvents, layer.Weight);
+        }
+
+        if (_layers.Count > 0 && _layers[0].Weight > 0.0f)
+        {
+            _layers[0].Machine.Evaluate(CurrentFrame, Arena, Rig, Parameters);
+            _layers[0].Machine.ExtractRootDelta(Rig, out rootMotionDeltaPos, out rootMotionDeltaRot);
+        }
+        else
+        {
+            CurrentFrame.ResetToRest(Rig);
+            rootMotionDeltaPos = Vector3.Zero;
+            rootMotionDeltaRot = Quaternion.Identity;
+        }
+
+        for (int i = 1; i < _layers.Count; i++)
+        {
+            AnimationLayer layer = _layers[i];
+            float weight = FastMath.Clamp01(layer.Weight);
+            if (weight <= 0.0f)
+            {
+                continue;
+            }
+
+            AnimationFrame layerFrame = Arena.Alloc();
+            layer.Machine.Evaluate(layerFrame, Arena, Rig, Parameters);
+
+            if (layer.Mode == LayerMode.Override)
+            {
+                BlendingKernels.BlendFrame(CurrentFrame, CurrentFrame, layerFrame, weight, layer.BoneMask);
+            }
+            else
+            {
+                BlendingKernels.ApplyAdditiveFrame(CurrentFrame, CurrentFrame, layerFrame, Rig, weight);
+            }
+
+            Arena.Free();
+        }
+
+        Parameters.ClearTriggers();
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Arena.Reset();
+        GC.SuppressFinalize(this);
+    }
+}
