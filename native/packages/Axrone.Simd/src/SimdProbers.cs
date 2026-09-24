@@ -1,5 +1,7 @@
 namespace Axrone.Simd;
 
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.Wasm;
 using System.Runtime.Intrinsics.X86;
 
 /// <summary>x86-64 probing: BCL intrinsics first, raw CPUID leaves for the rest.</summary>
@@ -215,5 +217,308 @@ internal static class X8664Prober
         }
 
         return new FeatureBitmask256(p0, 0UL, 0UL, 0UL);
+    }
+}
+
+/// <summary>OS-level ARM feature probes for capabilities the BCL does not surface.</summary>
+internal static partial class ArmOsCapabilityProber
+{
+    [LibraryImport("libc", EntryPoint = "getauxval")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    private static partial nuint GetAuxVal(nuint type);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "IsProcessorFeaturePresent")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvStdcall)])]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsProcessorFeaturePresent(uint processorFeature);
+
+    [LibraryImport("libc", EntryPoint = "sysctlbyname", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    private static unsafe partial int SysCtlByName(string name, void* oldp, nuint* oldlenp, void* newp, nuint newlen);
+
+    private const nuint AT_HWCAP = 16;
+
+    // ARM64 HWCAP flags (Linux uapi asm/hwcap.h)
+    private const ulong HWCAP_ATOMICS = 1UL << 8;
+    private const ulong HWCAP_SHA512 = 1UL << 21;
+    private const ulong HWCAP_SM3 = 1UL << 18;
+    private const ulong HWCAP_SM4 = 1UL << 19;
+    private const ulong HWCAP_LRCPC = 1UL << 20;
+
+    // ARM32 (ARMv7) HWCAP flags (Linux uapi asm/hwcap.h)
+    private const ulong HWCAP_ARM32_NEON = 1UL << 12;
+
+    private const uint PF_ARM_V81_ATOMIC_INSTRUCTIONS_AVAILABLE = 34;
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe bool CheckArmFeature(SimdFeature feature)
+    {
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsAndroid())
+        {
+            ulong hwcap = (ulong)GetAuxVal(AT_HWCAP);
+            return feature switch
+            {
+                SimdFeature.ArmAtomics => (hwcap & HWCAP_ATOMICS) != 0,
+                SimdFeature.ArmSha512 => (hwcap & HWCAP_SHA512) != 0,
+                SimdFeature.ArmSm3 => (hwcap & HWCAP_SM3) != 0,
+                SimdFeature.ArmSm4 => (hwcap & HWCAP_SM4) != 0,
+                SimdFeature.ArmRcpc => (hwcap & HWCAP_LRCPC) != 0,
+                _ => false,
+            };
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return feature switch
+            {
+                SimdFeature.ArmAtomics => IsProcessorFeaturePresent(PF_ARM_V81_ATOMIC_INSTRUCTIONS_AVAILABLE),
+                _ => false,
+            };
+        }
+
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsMacCatalyst() || OperatingSystem.IsIOS() || OperatingSystem.IsTvOS() || OperatingSystem.IsWatchOS())
+        {
+            string? mib = feature switch
+            {
+                SimdFeature.ArmAtomics => "hw.optional.arm.FEAT_LSE",
+                SimdFeature.ArmSha512 => "hw.optional.arm.FEAT_SHA512",
+                SimdFeature.ArmRcpc => "hw.optional.arm.FEAT_LRCPC",
+                _ => null,
+            };
+
+            if (mib is null)
+            {
+                return false;
+            }
+
+            // CA1508 cannot see through the native out-param: sysctlbyname writes value
+            // on success, so the comparison is live, not dead.
+#pragma warning disable CA1508
+            int value = 0;
+            nuint size = (nuint)sizeof(int);
+            if (SysCtlByName(mib, &value, &size, null, 0) == 0)
+            {
+                return value != 0;
+            }
+#pragma warning restore CA1508
+        }
+
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool CheckArm32Neon()
+    {
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsAndroid())
+        {
+            ulong hwcap = (ulong)GetAuxVal(AT_HWCAP);
+            return (hwcap & HWCAP_ARM32_NEON) != 0;
+        }
+
+        return false;
+    }
+}
+
+/// <summary>ARM64 probing: BCL intrinsics plus OS capability fallbacks.</summary>
+internal static class Arm64Prober
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p1 = 0;
+
+        if (ArmBase.IsSupported)
+        {
+            p1 |= 1UL << ((byte)SimdFeature.ArmBase - 64);
+            if (AdvSimd.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.AdvSimd - 64);
+            }
+
+            if (System.Runtime.Intrinsics.Arm.Aes.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmAes - 64);
+            }
+
+            if (Crc32.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmCrc32 - 64);
+            }
+
+            if (Dp.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmDp - 64);
+            }
+
+            if (Rdm.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmRdm - 64);
+            }
+
+            if (Sha1.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSha1 - 64);
+            }
+
+            if (Sha256.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSha256 - 64);
+            }
+
+            // SYSLIB5003: Sve/Sve2 stay experimental in .NET 9/10; suppressed under
+            // TreatWarningsAsErrors the same way the reference implementation does.
+#pragma warning disable SYSLIB5003
+            if (Sve.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSve - 64);
+            }
+
+            if (Sve2.IsSupported)
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSve2 - 64);
+            }
+#pragma warning restore SYSLIB5003
+
+            if (ArmOsCapabilityProber.CheckArmFeature(SimdFeature.ArmAtomics))
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmAtomics - 64);
+            }
+
+            if (ArmOsCapabilityProber.CheckArmFeature(SimdFeature.ArmSha512))
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSha512 - 64);
+            }
+
+            if (ArmOsCapabilityProber.CheckArmFeature(SimdFeature.ArmSm3))
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSm3 - 64);
+            }
+
+            if (ArmOsCapabilityProber.CheckArmFeature(SimdFeature.ArmSm4))
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmSm4 - 64);
+            }
+
+            if (ArmOsCapabilityProber.CheckArmFeature(SimdFeature.ArmRcpc))
+            {
+                p1 |= 1UL << ((byte)SimdFeature.ArmRcpc - 64);
+            }
+        }
+
+        return new FeatureBitmask256(0UL, p1, 0UL, 0UL);
+    }
+}
+
+/// <summary>32-bit ARM probing with an HWCAP fallback for NEON.</summary>
+internal static class Arm32Prober
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p1 = 0;
+
+        if (ArmBase.IsSupported)
+        {
+            p1 |= 1UL << ((byte)SimdFeature.ArmBase - 64);
+            if (AdvSimd.IsSupported || ArmOsCapabilityProber.CheckArm32Neon())
+            {
+                p1 |= 1UL << ((byte)SimdFeature.AdvSimd - 64);
+            }
+        }
+
+        return new FeatureBitmask256(0UL, p1, 0UL, 0UL);
+    }
+}
+
+/// <summary>WebAssembly 128-bit SIMD rides on PackedSimd and Vector128.</summary>
+internal static class WasmProber
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p2 = 0;
+        if (PackedSimd.IsSupported || Vector128.IsHardwareAccelerated)
+        {
+            p2 |= 1UL << ((byte)SimdFeature.WasmPackedSimd - 128);
+        }
+
+        return new FeatureBitmask256(0UL, 0UL, p2, 0UL);
+    }
+}
+
+/// <summary>RISC-V vector support follows portable acceleration.</summary>
+internal static class RiscV64Prober
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p2 = 0;
+        if (Vector.IsHardwareAccelerated)
+        {
+            p2 |= 1UL << ((byte)SimdFeature.RiscVVector - 128);
+        }
+
+        return new FeatureBitmask256(0UL, 0UL, p2, 0UL);
+    }
+}
+
+/// <summary>LoongArch LSX/LASX follow the matching portable widths.</summary>
+internal static class LoongArch64Prober
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p2 = 0;
+        if (Vector128.IsHardwareAccelerated)
+        {
+            p2 |= 1UL << ((byte)SimdFeature.LoongArchLsx - 128);
+        }
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            p2 |= 1UL << ((byte)SimdFeature.LoongArchLasx - 128);
+        }
+
+        return new FeatureBitmask256(0UL, 0UL, p2, 0UL);
+    }
+}
+
+/// <summary>Portable <c>System.Numerics</c> acceleration flags, valid on every ISA.</summary>
+internal static class GenericVectorProber
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static FeatureBitmask256 Probe()
+    {
+        ulong p3 = 0;
+
+        if (Vector.IsHardwareAccelerated)
+        {
+            p3 |= 1UL << ((byte)SimdFeature.VectorHardwareAccelerated - 192);
+        }
+
+        if (Vector64.IsHardwareAccelerated)
+        {
+            p3 |= 1UL << ((byte)SimdFeature.Vector64HardwareAccelerated - 192);
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            p3 |= 1UL << ((byte)SimdFeature.Vector128HardwareAccelerated - 192);
+        }
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            p3 |= 1UL << ((byte)SimdFeature.Vector256HardwareAccelerated - 192);
+        }
+
+        if (Vector512.IsHardwareAccelerated)
+        {
+            p3 |= 1UL << ((byte)SimdFeature.Vector512HardwareAccelerated - 192);
+        }
+
+        return new FeatureBitmask256(0UL, 0UL, 0UL, p3);
     }
 }
