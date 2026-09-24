@@ -184,3 +184,169 @@ public sealed class ClipMotionNode : MotionNode
         return IsLooping ? FastMath.WrapTime(time, duration) : Math.Clamp(time, 0.0f, duration);
     }
 }
+
+/// <summary>Segment bracketing a Blend1D parameter value.</summary>
+public readonly record struct Blend1DSegment(int Index0, int Index1, float Weight);
+
+/// <summary>One-parameter blend over sorted threshold children.</summary>
+public sealed class Blend1DMotionNode : MotionNode
+{
+    /// <inheritdoc/>
+    public override MotionKind Kind => MotionKind.Blend1D;
+
+    private readonly float[] _thresholds;
+    private readonly MotionNode[] _children;
+
+    /// <summary>Driving parameter name.</summary>
+    public string ParameterName { get; }
+
+    /// <summary>Sorted thresholds.</summary>
+    public ReadOnlySpan<float> Thresholds => _thresholds;
+
+    /// <summary>Children aligned with thresholds.</summary>
+    public ReadOnlySpan<MotionNode> Children => _children;
+
+    /// <summary>Creates a blend; entries sort by threshold.</summary>
+    public Blend1DMotionNode(string parameterName, (float Threshold, MotionNode Child)[] entries)
+    {
+        ArgumentNullException.ThrowIfNull(parameterName);
+        ArgumentNullException.ThrowIfNull(entries);
+        if (entries.Length == 0)
+        {
+            AnimationThrowHelper.ThrowCompilation(AnimationErrorCode.CompilationEmptyChildren, "Blend1D requires at least one child.");
+        }
+
+        Array.Sort(entries, static (a, b) => a.Threshold.CompareTo(b.Threshold));
+        ParameterName = parameterName;
+        _thresholds = new float[entries.Length];
+        _children = new MotionNode[entries.Length];
+        for (int i = 0; i < entries.Length; i++)
+        {
+            _thresholds[i] = entries[i].Threshold;
+            _children[i] = entries[i].Child;
+        }
+    }
+
+    /// <summary>Finds the bracketing segment: linear scan for few children, binary beyond.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Blend1DSegment FindSegment(float paramValue)
+    {
+        int length = _thresholds.Length;
+        if (length == 1 || paramValue <= _thresholds[0])
+        {
+            return new Blend1DSegment(0, 0, 1.0f);
+        }
+
+        if (paramValue >= _thresholds[length - 1])
+        {
+            return new Blend1DSegment(length - 1, length - 1, 1.0f);
+        }
+
+        int index0 = 0;
+        if (length <= AnimationConstants.Blend1DLinearScanLimit)
+        {
+            for (int i = 0; i < length - 1; i++)
+            {
+                if (paramValue <= _thresholds[i + 1])
+                {
+                    index0 = i;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            int probe = Array.BinarySearch(_thresholds, paramValue);
+            index0 = probe >= 0 ? probe : ~probe - 1;
+        }
+
+        int index1 = index0 + 1;
+        float span = _thresholds[index1] - _thresholds[index0];
+        float weight = span > AnimationConstants.SoaEpsilon ? (paramValue - _thresholds[index0]) / span : 0.0f;
+        return new Blend1DSegment(index0, index1, FastMath.Clamp01(weight));
+    }
+
+    /// <inheritdoc/>
+    public override float GetDuration()
+    {
+        if (Children.Length == 0)
+        {
+            return 0.0f;
+        }
+
+        float sum = 0.0f;
+        for (int i = 0; i < Children.Length; i++)
+        {
+            sum += Children[i].GetDuration();
+        }
+
+        return sum / Children.Length;
+    }
+
+    /// <inheritdoc/>
+    public override void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth)
+    {
+        ArgumentNullException.ThrowIfNull(outFrame);
+        ArgumentNullException.ThrowIfNull(arena);
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (depth >= AnimationConstants.MaxBlendDepth)
+        {
+            AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
+        }
+
+        float paramValue = parameters.GetFloat(ParameterName);
+        Blend1DSegment segment = FindSegment(paramValue);
+
+        if (segment.Index0 == segment.Index1 || segment.Weight <= 0.0f)
+        {
+            Children[segment.Index0].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
+        }
+
+        if (segment.Weight >= 1.0f)
+        {
+            Children[segment.Index1].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
+        }
+
+        AnimationFrame frame0 = arena.Alloc();
+        AnimationFrame frame1 = arena.Alloc();
+
+        Children[segment.Index0].Evaluate(normalizedTime, frame0, arena, rig, parameters, depth + 1);
+        Children[segment.Index1].Evaluate(normalizedTime, frame1, arena, rig, parameters, depth + 1);
+
+        BlendingKernels.BlendFrame(outFrame, frame0, frame1, segment.Weight);
+
+        arena.Free();
+        arena.Free();
+    }
+
+    /// <inheritdoc/>
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    {
+        if (Children.Length == 0)
+        {
+            deltaPos = Vector3.Zero;
+            deltaRot = Quaternion.Identity;
+            return;
+        }
+
+        Children[0].ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        if (layerWeight <= 0.0f)
+        {
+            return;
+        }
+
+        for (int i = 0; i < Children.Length; i++)
+        {
+            Children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+        }
+    }
+}
