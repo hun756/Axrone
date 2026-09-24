@@ -81,3 +81,45 @@ public enum AnimationErrorCode
     /// <summary>Streaming chunk incompatible with clip.</summary>
     StreamingChunkIncompatible = 25,
 }
+
+/// <summary>Base animation failure carrying a machine-readable code.</summary>
+public class AnimationException : Exception
+{
+    /// <summary>Failure code.</summary>
+    public AnimationErrorCode Code { get; }
+
+    /// <summary>Creates a failure.</summary>
+    public AnimationException(AnimationErrorCode code, string message)
+        : base($"[{code}] {message}") => Code = code;
+}
+
+/// <summary>Rig, clip, or controller definition rejected.</summary>
+public sealed class ValidationException : AnimationException
+{
+    /// <summary>Creates a validation failure.</summary>
+    public ValidationException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>Motion graph or controller build rejected, with the offending path.</summary>
+public sealed class CompilationException : AnimationException
+{
+    /// <summary>Motion path that failed, when known.</summary>
+    public string? MotionPath { get; }
+
+    /// <summary>Creates a compilation failure.</summary>
+    public CompilationException(AnimationErrorCode code, string message, string? motionPath = null)
+        : base(code, motionPath != null ? $"{message} (Path: {motionPath})" : message) => MotionPath = motionPath;
+}
+
+/// <summary>Named bone, clip, or parameter did not resolve.</summary>
+public sealed class ResolutionException : AnimationException
+{
+    /// <summary>Creates a resolution failure.</summary>
+    public ResolutionException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
