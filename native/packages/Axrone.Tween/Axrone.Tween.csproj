@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Tween</RootNamespace>
+    <AssemblyName>Axrone.Tween</AssemblyName>
+    <Description>Deterministic tween engine for the Axrone engine: easing library, fluent builder, sequences and awaitable handles.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: Enum storage type — byte chosen for minimal memory in hot-path structs -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Struct Equals/GetHashCode — easing curves are stateless function carriers with no meaningful equality -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1031: Catching general exceptions — per-tween fault isolation is the contract -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Tween.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

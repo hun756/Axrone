@@ -1,0 +1,35 @@
+namespace Axrone.Tween;
+
+/// <summary>Easing curve selector.</summary>
+public enum EasingKind : byte
+{
+    Linear = 0,
+    EaseInQuad = 1,
+    EaseOutQuad = 2,
+    EaseInOutQuad = 3,
+    EaseInCubic = 4,
+    EaseOutCubic = 5,
+    EaseInOutCubic = 6,
+    EaseInQuart = 7,
+    EaseOutQuart = 8,
+    EaseInOutQuart = 9,
+    EaseInQuint = 10,
+    EaseOutQuint = 11,
+    EaseInOutQuint = 12,
+    EaseInExpo = 13,
+    EaseOutExpo = 14,
+    EaseInOutExpo = 15,
+    EaseInCirc = 16,
+    EaseOutCirc = 17,
+    EaseInOutCirc = 18,
+    EaseInElastic = 19,
+    EaseOutElastic = 20,
+    EaseInOutElastic = 21,
+    EaseInBack = 22,
+    EaseOutBack = 23,
+    EaseInOutBack = 24,
+    EaseInBounce = 25,
+    EaseOutBounce = 26,
+    EaseInOutBounce = 27,
+    Custom = 28,
+}

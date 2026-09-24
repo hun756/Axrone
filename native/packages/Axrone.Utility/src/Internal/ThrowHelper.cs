@@ -58,6 +58,13 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentException(string paramName, string message)
+    {
+        throw new ArgumentException(message, paramName);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowNotSupportedException(string message)
     {
         throw new NotSupportedException(message);
@@ -142,6 +149,13 @@ public static class ThrowHelper
     public static void ThrowInvalidAlignment(uint value)
     {
         throw new ArgumentOutOfRangeException(nameof(value), value, "Alignment must be a non-zero power of two.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowUnalignedPointer(nuint address, nuint alignment)
+    {
+        throw new InvalidOperationException($"Pointer 0x{address:X} violates the required alignment of {alignment} bytes.");
     }
 
     [DoesNotReturn]
