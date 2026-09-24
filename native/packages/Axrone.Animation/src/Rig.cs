@@ -142,6 +142,52 @@ public sealed class Rig
     public int FindBoneIndex(string name) =>
         _nameToIndex.TryGetValue(name, out int index) ? index : -1;
 
+    /// <summary>Composes the rest-pose world matrix palette (16 floats per bone).</summary>
+    [SkipLocalsInit]
+    public void CreateRestMatrixPalette(Span<float> outPalette)
+    {
+        if (outPalette.Length < BoneCount * 16)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, "Output matrix palette too small.");
+        }
+
+        Span<Vector3> worldT = stackalloc Vector3[BoneCount];
+        Span<Quaternion> worldR = stackalloc Quaternion[BoneCount];
+        Span<Vector3> worldS = stackalloc Vector3[BoneCount];
+
+        ReadOnlySpan<float> buf = RestPoseBuffer;
+        int rBase = BoneCount * 3;
+        int sBase = BoneCount * 7;
+
+        for (int i = 0; i < _evaluationOrder.Length; i++)
+        {
+            int b = _evaluationOrder[i];
+            int p = _parents[b];
+            int tOff = b * 3;
+            int rOff = rBase + (b * 4);
+            int sOff = sBase + (b * 3);
+
+            Vector3 locT = new(buf[tOff], buf[tOff + 1], buf[tOff + 2]);
+            Quaternion locR = new(buf[rOff], buf[rOff + 1], buf[rOff + 2], buf[rOff + 3]);
+            Vector3 locS = new(buf[sOff], buf[sOff + 1], buf[sOff + 2]);
+
+            if (p == -1)
+            {
+                worldT[b] = locT;
+                worldR[b] = locR;
+                worldS[b] = locS;
+            }
+            else
+            {
+                worldS[b] = worldS[p] * locS;
+                worldR[b] = Quaternion.Normalize(worldR[p] * locR);
+                worldT[b] = worldT[p] + Vector3.Transform(locT * worldS[p], worldR[p]);
+            }
+
+            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], outPalette.Slice(b * 16, 16));
+        }
+    }
+
     private static float[]? BuildInverseBindMatrices(ReadOnlySpan<BoneInfo> bones)
     {
         bool custom = false;
