@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Animation</RootNamespace>
+    <AssemblyName>Axrone.Animation</AssemblyName>
+    <Description>Skeletal animation runtime for the Axrone engine: rigs, clips, blend trees, state machines, IK, retargeting and streaming.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1032: Standard exception ctors — every animation failure must carry a code;
+         parameterless/message-only ctors would violate that invariant -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1720: Float/Int member names — Unity/TS domain parity, intentional -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Animation.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Simd/Axrone.Simd.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

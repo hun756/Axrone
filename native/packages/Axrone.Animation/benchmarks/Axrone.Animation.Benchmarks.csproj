@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Axrone.Animation.Benchmarks</RootNamespace>
+    <AssemblyName>Axrone.Animation.Benchmarks</AssemblyName>
+    <Description>Microbenchmarks for Axrone.Animation sampling and blending.</Description>
+    <IsPackable>false</IsPackable>
+    <!-- BenchmarkDotNet emits IL that reflects over these types; trimming would break the harness. -->
+    <IsTrimmable>false</IsTrimmable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1052: static holder types — benchmark fixtures are conventionally plain static classes -->
+    <NoWarn>$(NoWarn);CA1052</NoWarn>
+    <!-- CA1515: make types internal — BenchmarkSwitcher discovers fixtures through public types -->
+    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <!-- CA1001/CA1063: disposable fields without the full pattern — BenchmarkSwitcher requires
+         non-sealed fixtures; teardown runs deterministically in GlobalCleanup -->
+    <NoWarn>$(NoWarn);CA1001;CA1063</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Animation.csproj" />
+  </ItemGroup>
+
+</Project>
