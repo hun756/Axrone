@@ -625,3 +625,83 @@ public sealed class DirectMotionNode : MotionNode
         }
     }
 }
+
+/// <summary>Rest-relative additive layer over a base motion, weighted by a parameter.</summary>
+public sealed class AdditiveMotionNode : MotionNode
+{
+    /// <inheritdoc/>
+    public override MotionKind Kind => MotionKind.Additive;
+
+    /// <summary>Base motion.</summary>
+    public MotionNode BaseChild { get; }
+
+    /// <summary>Additive motion.</summary>
+    public MotionNode AdditiveChild { get; }
+
+    /// <summary>Weight parameter name.</summary>
+    public string WeightParameter { get; }
+
+    /// <summary>Creates an additive node.</summary>
+    public AdditiveMotionNode(MotionNode baseChild, MotionNode additiveChild, string weightParameter)
+    {
+        ArgumentNullException.ThrowIfNull(baseChild);
+        ArgumentNullException.ThrowIfNull(additiveChild);
+        ArgumentNullException.ThrowIfNull(weightParameter);
+        BaseChild = baseChild;
+        AdditiveChild = additiveChild;
+        WeightParameter = weightParameter;
+    }
+
+    /// <inheritdoc/>
+    public override float GetDuration() => BaseChild.GetDuration();
+
+    /// <inheritdoc/>
+    public override void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth)
+    {
+        ArgumentNullException.ThrowIfNull(outFrame);
+        ArgumentNullException.ThrowIfNull(arena);
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (depth >= AnimationConstants.MaxBlendDepth)
+        {
+            AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
+        }
+
+        float weight = FastMath.Clamp01(parameters.GetFloat(WeightParameter));
+        if (weight <= 0.0f)
+        {
+            BaseChild.Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
+        }
+
+        AnimationFrame baseFrame = arena.Alloc();
+        AnimationFrame additiveFrame = arena.Alloc();
+
+        BaseChild.Evaluate(normalizedTime, baseFrame, arena, rig, parameters, depth + 1);
+        AdditiveChild.Evaluate(normalizedTime, additiveFrame, arena, rig, parameters, depth + 1);
+
+        BlendingKernels.ApplyAdditiveFrame(outFrame, baseFrame, additiveFrame, rig, weight);
+
+        arena.Free();
+        arena.Free();
+    }
+
+    /// <inheritdoc/>
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    {
+        BaseChild.ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        if (layerWeight <= 0.0f)
+        {
+            return;
+        }
+
+        BaseChild.CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+        AdditiveChild.CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+    }
+}
