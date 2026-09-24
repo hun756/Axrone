@@ -65,6 +65,125 @@ public sealed partial class ChunkJsonSerializerContext : JsonSerializerContext
 {
 }
 
+/// <summary>One chunk fetch request.</summary>
+public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload);
+
+/// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
+public sealed class StreamingScheduler
+{
+    private readonly HashSet<string> _loadedChunks = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _requestedChunks = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _failedChunks = new(StringComparer.Ordinal);
+    private readonly Lock _gate = new();
+
+    /// <summary>Marks a chunk loaded.</summary>
+    public void MarkLoaded(string chunkId)
+    {
+        ArgumentNullException.ThrowIfNull(chunkId);
+        lock (_gate)
+        {
+            _requestedChunks.Remove(chunkId);
+            _loadedChunks.Add(chunkId);
+        }
+    }
+
+    /// <summary>Marks a chunk failed (eligible for retry after reset).</summary>
+    public void MarkFailed(string chunkId)
+    {
+        ArgumentNullException.ThrowIfNull(chunkId);
+        lock (_gate)
+        {
+            _requestedChunks.Remove(chunkId);
+            _failedChunks.Add(chunkId);
+        }
+    }
+
+    /// <summary>Forgets all chunk states.</summary>
+    public void Reset(string chunkId)
+    {
+        ArgumentNullException.ThrowIfNull(chunkId);
+        lock (_gate)
+        {
+            _loadedChunks.Remove(chunkId);
+            _requestedChunks.Remove(chunkId);
+            _failedChunks.Remove(chunkId);
+        }
+    }
+
+    private static void InsertSorted(Collection<ChunkRequest> requests, ChunkRequest request)
+    {
+        int index = 0;
+        while (index < requests.Count && CompareRequests(requests[index], request) <= 0)
+        {
+            index++;
+        }
+
+        requests.Insert(index, request);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int CompareRequests(ChunkRequest a, ChunkRequest b)
+    {
+        if (a.IsPreload != b.IsPreload)
+        {
+            return a.IsPreload ? 1 : -1;
+        }
+
+        int byWeight = b.Weight.CompareTo(a.Weight);
+        if (byWeight != 0)
+        {
+            return byWeight;
+        }
+
+        return a.StartTime.CompareTo(b.StartTime);
+    }
+
+    /// <summary>
+    /// Appends active and preload chunk requests to a caller-owned collection,
+    /// kept sorted (active first, then weight, then start). No per-call allocation
+    /// beyond the interpolated chunk ids.
+    /// </summary>
+    public void Schedule(
+        ReadOnlySpan<(ClipId Clip, float Time, float Weight)> activities,
+        float chunkDuration,
+        float preloadWindow,
+        Collection<ChunkRequest> outRequests)
+    {
+        ArgumentNullException.ThrowIfNull(outRequests);
+        if (chunkDuration <= 0.0f)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.StreamingChunkIncompatible, "Chunk duration must be positive.");
+        }
+
+        lock (_gate)
+        {
+            for (int i = 0; i < activities.Length; i++)
+            {
+                (ClipId clip, float time, float weight) = activities[i];
+                int currentIndex = (int)(time / chunkDuration);
+                string activeId = $"{clip.Value}:v:{currentIndex}";
+
+                if (!_loadedChunks.Contains(activeId) && !_requestedChunks.Contains(activeId) && !_failedChunks.Contains(activeId))
+                {
+                    InsertSorted(outRequests, new ChunkRequest(activeId, clip, currentIndex * chunkDuration, weight, false));
+                    _requestedChunks.Add(activeId);
+                }
+
+                int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
+                if (preloadIndex != currentIndex)
+                {
+                    string preloadId = $"{clip.Value}:v:{preloadIndex}";
+                    if (!_loadedChunks.Contains(preloadId) && !_requestedChunks.Contains(preloadId) && !_failedChunks.Contains(preloadId))
+                    {
+                        InsertSorted(outRequests, new ChunkRequest(preloadId, clip, preloadIndex * chunkDuration, weight * 0.5f, true));
+                        _requestedChunks.Add(preloadId);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// <summary>Chunk codec: bytes to payload with version and shape validation.</summary>
 public static class ChunkCodec
 {
