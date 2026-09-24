@@ -106,10 +106,98 @@ public sealed class Rig
             WriteRestPose(i, bone);
         }
 
-        _rootIndices = Array.Empty<int>();
-        _children = Array.Empty<int[]>();
-        _evaluationOrder = Array.Empty<int>();
+        _children = new int[BoneCount][];
+        var roots = new List<int>();
+        var childLists = new List<int>[BoneCount];
+        for (int i = 0; i < BoneCount; i++)
+        {
+            childLists[i] = new List<int>();
+            if (_parents[i] == -1)
+            {
+                roots.Add(i);
+            }
+        }
+
+        for (int i = 0; i < BoneCount; i++)
+        {
+            int parent = _parents[i];
+            if (parent != -1)
+            {
+                childLists[parent].Add(i);
+            }
+        }
+
+        for (int i = 0; i < BoneCount; i++)
+        {
+            _children[i] = childLists[i].ToArray();
+        }
+
+        _rootIndices = roots.ToArray();
+        _evaluationOrder = BuildEvaluationOrder(_parents, _children, _rootIndices, _boneNames);
         InverseBindMatrices = null;
+    }
+
+    /// <summary>
+    /// Parent-first order via iterative DFS with explicit stacks: no recursion depth
+    /// risk, no closure allocations. Detects cycles and orphaned subtrees.
+    /// </summary>
+    private static int[] BuildEvaluationOrder(int[] parents, int[][] children, int[] roots, string[] boneNames)
+    {
+        int boneCount = parents.Length;
+        var order = new int[boneCount];
+        int written = 0;
+        var state = new byte[boneCount];
+        var stack = new int[boneCount];
+        var childCursor = new int[boneCount];
+
+        for (int r = 0; r < roots.Length; r++)
+        {
+            int root = roots[r];
+            if (state[root] != 0)
+            {
+                continue;
+            }
+
+            int depth = 0;
+            stack[depth] = root;
+            state[root] = 1;
+
+            while (depth >= 0)
+            {
+                int current = stack[depth];
+                if (childCursor[current] < children[current].Length)
+                {
+                    int child = children[current][childCursor[current]++];
+                    if (state[child] == 1)
+                    {
+                        AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigCycleDetected, $"Cycle detected at bone '{boneNames[child]}'.");
+                    }
+
+                    if (state[child] == 0)
+                    {
+                        state[child] = 1;
+                        stack[++depth] = child;
+                    }
+                }
+                else
+                {
+                    state[current] = 2;
+                    order[written++] = current;
+                    depth--;
+                }
+            }
+        }
+
+        for (int i = 0; i < boneCount; i++)
+        {
+            if (state[i] == 0)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigInvalidParent, $"Unconnected bone tree detected: '{boneNames[i]}'.");
+            }
+        }
+
+        Array.Reverse(order);
+        return order;
     }
 
     private void WriteRestPose(int index, BoneInfo bone)
