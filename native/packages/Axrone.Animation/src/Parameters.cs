@@ -170,4 +170,57 @@ public sealed class ParameterStore
     /// <summary>Clears all triggers (frame boundary).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ClearTriggers() => Array.Clear(_triggers, 0, _triggers.Length);
+
+    /// <summary>Evaluates a transition condition against current values.</summary>
+    public bool EvaluateCondition(in ParameterCondition condition)
+    {
+        int index = ResolveIndex(condition.ParameterName);
+        ParameterType type = _types[index];
+
+        switch (type)
+        {
+            case ParameterType.Float:
+                float fValue = _floats[index];
+                return condition.Operator switch
+                {
+                    ConditionOperator.Equal => MathF.Abs(fValue - condition.Threshold) <= AnimationConstants.SoaEpsilon,
+                    ConditionOperator.NotEqual => MathF.Abs(fValue - condition.Threshold) > AnimationConstants.SoaEpsilon,
+                    ConditionOperator.GreaterThan => fValue > condition.Threshold,
+                    ConditionOperator.GreaterThanOrEqual => fValue >= condition.Threshold,
+                    ConditionOperator.LessThan => fValue < condition.Threshold,
+                    ConditionOperator.LessThanOrEqual => fValue <= condition.Threshold,
+                    _ => false,
+                };
+
+            case ParameterType.Int:
+                int iValue = _ints[index];
+                int iThreshold = (int)condition.Threshold;
+                return condition.Operator switch
+                {
+                    ConditionOperator.Equal => iValue == iThreshold,
+                    ConditionOperator.NotEqual => iValue != iThreshold,
+                    ConditionOperator.GreaterThan => iValue > iThreshold,
+                    ConditionOperator.GreaterThanOrEqual => iValue >= iThreshold,
+                    ConditionOperator.LessThan => iValue < iThreshold,
+                    ConditionOperator.LessThanOrEqual => iValue <= iThreshold,
+                    _ => false,
+                };
+
+            case ParameterType.Bool:
+                bool bValue = _bools[index] != 0;
+                bool expected = condition.Threshold > 0.5f;
+                return condition.Operator switch
+                {
+                    ConditionOperator.Equal => bValue == expected,
+                    ConditionOperator.NotEqual => bValue != expected,
+                    _ => false,
+                };
+
+            case ParameterType.Trigger:
+                return _triggers[index] != 0;
+
+            default:
+                return false;
+        }
+    }
 }
