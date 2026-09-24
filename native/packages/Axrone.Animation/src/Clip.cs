@@ -327,4 +327,92 @@ public sealed class AnimationClip
         ArgumentNullException.ThrowIfNull(newChannels);
         _channels = newChannels;
     }
+
+    /// <summary>Wraps or clamps time to the clip range.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public float WrapClipTime(float time, bool isLooping)
+    {
+        if (Duration <= AnimationConstants.SoaEpsilon)
+        {
+            return 0.0f;
+        }
+
+        if (!isLooping)
+        {
+            return Math.Clamp(time, 0.0f, Duration);
+        }
+
+        return FastMath.WrapTime(time, Duration);
+    }
+
+    /// <summary>Samples all channels into a frame.</summary>
+    [SkipLocalsInit]
+    public void Sample(float time, AnimationFrame outFrame, bool isLooping = true)
+    {
+        ArgumentNullException.ThrowIfNull(outFrame);
+        float t = WrapClipTime(time, isLooping);
+        Span<float> component = stackalloc float[4];
+
+        Span<Vector3> translations = outFrame.GetTranslations();
+        Span<Quaternion> rotations = outFrame.GetRotations();
+        Span<Vector3> scales = outFrame.GetScales();
+
+        for (int i = 0; i < _channels.Length; i++)
+        {
+            AnimationChannel channel = _channels[i];
+            channel.Sample(t, component);
+
+            switch (channel.Target)
+            {
+                case ChannelTarget.Translation:
+                    translations[channel.BoneIndex] = new Vector3(component[0], component[1], component[2]);
+                    break;
+                case ChannelTarget.Rotation:
+                    rotations[channel.BoneIndex] = new Quaternion(component[0], component[1], component[2], component[3]);
+                    break;
+                case ChannelTarget.Scale:
+                    scales[channel.BoneIndex] = new Vector3(component[0], component[1], component[2]);
+                    break;
+                case ChannelTarget.Curve:
+                    if (channel.TargetCurveId.HasValue)
+                    {
+                        outFrame.Curves.Write(channel.TargetCurveId.Value, component[0]);
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Collects events in (prev, cur], splitting across loop wraps.</summary>
+    public void CollectEvents(float prevTime, float curTime, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        if (Duration <= 0.0f || _events.Length == 0)
+        {
+            return;
+        }
+
+        if (curTime >= prevTime)
+        {
+            CollectEventsRange(prevTime, curTime, outEvents);
+        }
+        else
+        {
+            CollectEventsRange(prevTime, Duration, outEvents);
+            CollectEventsRange(0.0f, curTime, outEvents);
+        }
+    }
+
+    private void CollectEventsRange(float start, float end, ICollection<ClipEvent> outEvents)
+    {
+        for (int i = 0; i < _events.Length; i++)
+        {
+            ClipEvent evt = _events[i];
+            if (evt.Time > start && evt.Time <= end)
+            {
+                outEvents.Add(evt);
+            }
+        }
+    }
 }
