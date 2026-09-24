@@ -296,4 +296,37 @@ public sealed class StateMachineInstance
 
         return true;
     }
+
+    /// <summary>Evaluates the current (possibly transitioning) motion into a frame.</summary>
+    public void Evaluate(AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters)
+    {
+        ArgumentNullException.ThrowIfNull(outFrame);
+        ArgumentNullException.ThrowIfNull(arena);
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        if (_activeTransition == null)
+        {
+            _states[CurrentStateIndex].RootMotion.Evaluate(StateNormalizedTime, outFrame, arena, rig, parameters, 0);
+            return;
+        }
+
+        AnimationFrame sourceFrame = arena.Alloc();
+        AnimationFrame targetFrame = arena.Alloc();
+
+        _states[_transitionSourceStateIndex].RootMotion.Evaluate(StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
+        _states[_activeTransition.TargetStateIndex].RootMotion.Evaluate(_targetNormalizedTime, targetFrame, arena, rig, parameters, 0);
+
+        BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, FastMath.Clamp01(_transitionProgress));
+
+        arena.Free();
+        arena.Free();
+    }
+
+    /// <summary>Root-joint delta for the current state over the last update.</summary>
+    public void ExtractRootDelta(Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        _states[CurrentStateIndex].RootMotion.ComputeRootDelta(PreviousNormalizedTime, StateNormalizedTime, rig, out deltaPos, out deltaRot);
+    }
 }
