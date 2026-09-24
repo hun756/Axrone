@@ -1,5 +1,7 @@
 namespace Axrone.Animation;
 
+using Axrone.Simd;
+
 /// <summary>Branch-lean quaternion and time math for the animation hot path.</summary>
 public static class FastMath
 {
@@ -174,6 +176,57 @@ public static class FastMath
         output[13] = 0.0f;
         output[14] = 0.0f;
         output[15] = 1.0f;
+    }
+
+    /// <summary>
+    /// Vector lerp with tiered width selection through the SIMD runtime, so forced-scalar
+    /// test overrides apply here too.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void VectorizedLerp(ReadOnlySpan<float> from, ReadOnlySpan<float> to, float alpha, Span<float> destination)
+    {
+        nuint length = (nuint)destination.Length;
+        nuint i = 0;
+
+        if (SimdRuntime.IsSupported(SimdFeature.Vector256HardwareAccelerated) && length >= (nuint)Vector256<float>.Count)
+        {
+            Vector256<float> vAlpha = Vector256.Create(alpha);
+            nuint simdBias = length - (length % (nuint)Vector256<float>.Count);
+
+            ref float rFrom = ref MemoryMarshal.GetReference(from);
+            ref float rTo = ref MemoryMarshal.GetReference(to);
+            ref float rDst = ref MemoryMarshal.GetReference(destination);
+
+            for (; i < simdBias; i += (nuint)Vector256<float>.Count)
+            {
+                Vector256<float> v0 = Vector256.LoadUnsafe(ref rFrom, i);
+                Vector256<float> v1 = Vector256.LoadUnsafe(ref rTo, i);
+                Vector256<float> res = v0 + (vAlpha * (v1 - v0));
+                res.StoreUnsafe(ref rDst, i);
+            }
+        }
+        else if (SimdRuntime.IsSupported(SimdFeature.Vector128HardwareAccelerated) && length >= (nuint)Vector128<float>.Count)
+        {
+            Vector128<float> vAlpha = Vector128.Create(alpha);
+            nuint simdBias = length - (length % (nuint)Vector128<float>.Count);
+
+            ref float rFrom = ref MemoryMarshal.GetReference(from);
+            ref float rTo = ref MemoryMarshal.GetReference(to);
+            ref float rDst = ref MemoryMarshal.GetReference(destination);
+
+            for (; i < simdBias; i += (nuint)Vector128<float>.Count)
+            {
+                Vector128<float> v0 = Vector128.LoadUnsafe(ref rFrom, i);
+                Vector128<float> v1 = Vector128.LoadUnsafe(ref rTo, i);
+                Vector128<float> res = v0 + (vAlpha * (v1 - v0));
+                res.StoreUnsafe(ref rDst, i);
+            }
+        }
+
+        for (; i < length; i++)
+        {
+            destination[(int)i] = from[(int)i] + (alpha * (to[(int)i] - from[(int)i]));
+        }
     }
 
     /// <summary>Row-major 4x4 product.</summary>
