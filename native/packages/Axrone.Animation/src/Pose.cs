@@ -208,3 +208,57 @@ public sealed class AnimationFrame
         Curves.Clear();
     }
 }
+
+/// <summary>
+/// Stack-disciplined scratch frame pool: preallocated frames handed out LIFO and
+/// reclaimed in reverse, so nested blend evaluation never touches the GC.
+/// </summary>
+public sealed class FrameArena
+{
+    private readonly AnimationFrame[] _pool;
+    private int _stackPointer;
+
+    /// <summary>Preallocates scratch frames.</summary>
+    public FrameArena(int boneCount, Dictionary<CurveId, int> curveLayout, int capacity = 32)
+    {
+        ArgumentNullException.ThrowIfNull(curveLayout);
+        if (capacity <= 0)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.EvaluationDepthOverflow, "Arena capacity must be positive.");
+        }
+
+        _pool = new AnimationFrame[capacity];
+        for (int i = 0; i < capacity; i++)
+        {
+            _pool[i] = new AnimationFrame(boneCount, curveLayout);
+        }
+
+        _stackPointer = 0;
+    }
+
+    /// <summary>Rents the next scratch frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AnimationFrame Alloc()
+    {
+        if (_stackPointer >= _pool.Length)
+        {
+            AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "FrameArena scratch frame exhausted.");
+        }
+
+        return _pool[_stackPointer++];
+    }
+
+    /// <summary>Returns the most recent frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Free()
+    {
+        if (_stackPointer > 0)
+        {
+            _stackPointer--;
+        }
+    }
+
+    /// <summary>Releases all frames at once (frame boundary).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Reset() => _stackPointer = 0;
+}
