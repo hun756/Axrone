@@ -509,21 +509,21 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref float dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
 
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<float>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<float>.Count)
         {
             Vector512<float> one = Vector512<float>.One;
             nuint step = (nuint)Vector512<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (one / Vector512.Sqrt(Vector512.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
         }
-        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<float>.Count)
+        if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<float>.Count)
         {
             Vector256<float> one = Vector256<float>.One;
             nuint step = (nuint)Vector256<float>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (one / Vector256.Sqrt(Vector256.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
         }
-        if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<float>.Count)
+        if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<float>.Count)
         {
             Vector128<float> one = Vector128<float>.One;
             nuint step = (nuint)Vector128<float>.Count, limit = length - step + 1;
@@ -542,21 +542,21 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref double dst = ref MemoryMarshal.GetReference(destination);
         nuint i = 0;
 
-        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<double>.Count)
+        if (SimdRuntime.UseVector512Path && length >= (nuint)Vector512<double>.Count)
         {
             Vector512<double> one = Vector512<double>.One;
             nuint step = (nuint)Vector512<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (one / Vector512.Sqrt(Vector512.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
         }
-        if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<double>.Count)
+        if (SimdRuntime.UseVector256Path && length >= (nuint)Vector256<double>.Count)
         {
             Vector256<double> one = Vector256<double>.One;
             nuint step = (nuint)Vector256<double>.Count, limit = length - step + 1;
             for (; i < limit; i += step)
                 (one / Vector256.Sqrt(Vector256.LoadUnsafe(in src, i))).StoreUnsafe(ref dst, i);
         }
-        if (Vector128.IsHardwareAccelerated && length >= (nuint)Vector128<double>.Count)
+        if (SimdRuntime.UseVector128Path && length >= (nuint)Vector128<double>.Count)
         {
             Vector128<double> one = Vector128<double>.One;
             nuint step = (nuint)Vector128<double>.Count, limit = length - step + 1;
@@ -1414,7 +1414,7 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref float r = ref MemoryMarshal.GetReference(right);
         ref float d = ref MemoryMarshal.GetReference(destination);
 
-        if (Vector128.IsHardwareAccelerated)
+        if (SimdRuntime.UseVector128Path)
         {
             Vector128<float> l0 = Vector128.LoadUnsafe(in l, 0);
             Vector128<float> l1 = Vector128.LoadUnsafe(in l, 4);
@@ -1453,7 +1453,7 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ref double r = ref MemoryMarshal.GetReference(right);
         ref double d = ref MemoryMarshal.GetReference(destination);
 
-        if (Vector128.IsHardwareAccelerated)
+        if (SimdRuntime.UseVector128Path)
         {
             Vector128<double> l0 = Vector128.LoadUnsafe(in l, 0);
             Vector128<double> l1 = Vector128.LoadUnsafe(in l, 2);
