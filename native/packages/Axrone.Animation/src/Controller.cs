@@ -88,6 +88,7 @@ public sealed class AnimationController : IDisposable
     public void Update(float deltaTime, ICollection<ClipEvent> outEvents, out Vector3 rootMotionDeltaPos, out Quaternion rootMotionDeltaRot)
     {
         ArgumentNullException.ThrowIfNull(outEvents);
+        long startTimestamp = Stopwatch.GetTimestamp();
         outEvents.Clear();
         Arena.Reset();
 
@@ -139,6 +140,9 @@ public sealed class AnimationController : IDisposable
         }
 
         Parameters.ClearTriggers();
+
+        AnimationTelemetry.RecordFrameEvaluated();
+        AnimationTelemetry.RecordEvaluationLatency(Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
     }
 
     /// <inheritdoc/>

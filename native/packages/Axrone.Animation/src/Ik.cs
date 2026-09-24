@@ -64,8 +64,10 @@ public static class IkSolvers
         }
         else
         {
+            int iterations = 0;
             for (int iter = 0; iter < maxIterations; iter++)
             {
+                iterations++;
                 if (Vector3.DistanceSquared(scratchPositions[count - 1], targetPos) <= precision * precision)
                 {
                     break;
@@ -83,6 +85,8 @@ public static class IkSolvers
                     scratchPositions[i + 1] = ReachToward(scratchPositions[i], scratchPositions[i + 1], BoneLength(worldT, chainBoneIndices, i));
                 }
             }
+
+            AnimationTelemetry.RecordIkIterations(iterations);
         }
 
         WriteBackRotations(rig, frame, worldT, worldR, chainBoneIndices, scratchPositions);
@@ -166,8 +170,10 @@ public static class IkSolvers
         float precisionSq = MathF.Max(precision, AnimationConstants.IkPrecisionFloor);
         precisionSq *= precisionSq;
 
+        int iterations = 0;
         for (int iter = 0; iter < maxIterations; iter++)
         {
+            iterations++;
             BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
             if (Vector3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
             {
@@ -196,5 +202,7 @@ public static class IkSolvers
                 localR[bone] = FastMath.Slerp(localR[bone], targetLocal, w);
             }
         }
+
+        AnimationTelemetry.RecordIkIterations(iterations);
     }
 }
