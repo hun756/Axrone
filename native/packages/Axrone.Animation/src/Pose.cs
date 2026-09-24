@@ -131,3 +131,80 @@ public readonly record struct CurveStore
         src.Slice(0, len).CopyTo(dst);
     }
 }
+
+/// <summary>
+/// Local-space pose frame: SoA translation/rotation/scale buffer plus curves.
+/// Managed backing pooled by arenas — zero steady-state allocation after warmup.
+/// </summary>
+public sealed class AnimationFrame
+{
+    private readonly float[] _poseBuffer;
+
+    /// <summary>Bone count.</summary>
+    public int BoneCount { get; }
+
+    /// <summary>Curve channels.</summary>
+    public CurveStore Curves { get; }
+
+    /// <summary>Creates a frame.</summary>
+    public AnimationFrame(int boneCount, Dictionary<CurveId, int> curveLayout)
+    {
+        ArgumentNullException.ThrowIfNull(curveLayout);
+        if (boneCount <= 0)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigEmptyBones, "Frame requires at least one bone.");
+        }
+
+        BoneCount = boneCount;
+        _poseBuffer = new float[boneCount * 10];
+        Curves = new CurveStore(curveLayout);
+    }
+
+    /// <summary>Translations as Vector3 lanes over the buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Span<Vector3> GetTranslations() =>
+        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(0, BoneCount * 3));
+
+    /// <summary>Rotations as Quaternion lanes over the buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Span<Quaternion> GetRotations() =>
+        MemoryMarshal.Cast<float, Quaternion>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
+
+    /// <summary>Scales as Vector3 lanes over the buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Span<Vector3> GetScales() =>
+        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
+
+    /// <summary>Translations, read-only.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<Vector3> ReadTranslations() =>
+        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(0, BoneCount * 3));
+
+    /// <summary>Rotations, read-only.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<Quaternion> ReadRotations() =>
+        MemoryMarshal.Cast<float, Quaternion>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
+
+    /// <summary>Scales, read-only.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<Vector3> ReadScales() =>
+        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
+
+    /// <summary>Deep-copies pose and curves.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void CopyFrom(AnimationFrame source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        source._poseBuffer.AsSpan().CopyTo(_poseBuffer.AsSpan());
+        Curves.CopyFrom(source.Curves);
+    }
+
+    /// <summary>Restores the rig rest pose and clears curves.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ResetToRest(Rig rig)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        rig.RestPoseBuffer.AsSpan().CopyTo(_poseBuffer.AsSpan());
+        Curves.Clear();
+    }
+}
