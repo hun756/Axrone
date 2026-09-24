@@ -134,4 +134,67 @@ public static class IkSolvers
             localR[bone] = newLocal;
         }
     }
+
+    /// <summary>
+    /// Cyclic Coordinate Descent with per-joint from-to corrections blended by weight.
+    /// Recomputes world transforms as it descends so each joint sees fresh tips.
+    /// </summary>
+    [SkipLocalsInit]
+    public static void SolveCcd(
+        Rig rig,
+        AnimationFrame frame,
+        ReadOnlySpan<int> chainBoneIndices,
+        Vector3 targetPos,
+        float weight = 1.0f,
+        int maxIterations = AnimationConstants.IkDefaultMaxIterations,
+        float precision = AnimationConstants.IkDefaultPrecision)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (chainBoneIndices.Length < 2 || weight <= 0.0f)
+        {
+            return;
+        }
+
+        float w = FastMath.Clamp01(weight);
+        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
+        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
+        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+
+        Span<Quaternion> localR = frame.GetRotations();
+        int tipBone = chainBoneIndices[chainBoneIndices.Length - 1];
+        float precisionSq = MathF.Max(precision, AnimationConstants.IkPrecisionFloor);
+        precisionSq *= precisionSq;
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
+            if (Vector3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
+            {
+                break;
+            }
+
+            for (int i = chainBoneIndices.Length - 2; i >= 0; i--)
+            {
+                int bone = chainBoneIndices[i];
+                BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
+
+                Vector3 toTip = worldT[tipBone] - worldT[bone];
+                Vector3 toTarget = targetPos - worldT[bone];
+                if (toTip.LengthSquared() < AnimationConstants.SoaEpsilon
+                    || toTarget.LengthSquared() < AnimationConstants.SoaEpsilon)
+                {
+                    continue;
+                }
+
+                Quaternion deltaWorld = FastMath.QuaternionFromTo(toTip, toTarget);
+                int parent = rig.Parents[bone];
+                Quaternion parentWorld = parent != -1 ? worldR[parent] : Quaternion.Identity;
+
+                Quaternion localDelta = FastMath.Multiply(FastMath.Multiply(parentWorld, deltaWorld), FastMath.Invert(parentWorld));
+                Quaternion targetLocal = FastMath.Normalize(FastMath.Multiply(localDelta, localR[bone]));
+                localR[bone] = FastMath.Slerp(localR[bone], targetLocal, w);
+            }
+        }
+    }
 }
