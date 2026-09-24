@@ -18,6 +18,8 @@
     <!-- CA1032: Standard exception ctors — every animation failure must carry a code;
          parameterless/message-only ctors would violate that invariant -->
     <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1720: Float/Int member names — Unity/TS domain parity, intentional -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
