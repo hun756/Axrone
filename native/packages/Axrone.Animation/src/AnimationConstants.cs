@@ -33,10 +33,7 @@ public static class AnimationConstants
     /// <summary>Default IK iteration cap.</summary>
     public const int IkDefaultMaxIterations = 12;
 
-    /// <summary>Motion-matching trajectory penalty for missing data.</summary>
-    public const float MissingTrajectoryPenalty = 10.0f;
-
-    /// <summary>Motion-matching facing penalty for missing data.</summary>
+    /// <summary>Motion-matching facing penalty for degenerate directions.</summary>
     public const float MissingFacingPenalty = 5.0f;
 
     /// <summary>Foot-contact weight floor inside the contact window.</summary>
