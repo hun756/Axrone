@@ -287,3 +287,130 @@ public static class ChunkCodec
         return merged.ToArray();
     }
 }
+
+/// <summary>Linear keyframe reduction: drops interior keys a straight line predicts.</summary>
+public static class KeyframeOptimizer
+{
+    /// <summary>Optimizes a clip with per-lane tolerances.</summary>
+    public static AnimationClip Optimize(
+        AnimationClip source,
+        float positionTolerance = AnimationConstants.KeyframePosTol,
+        float rotationTolerance = AnimationConstants.KeyframeRotTol,
+        float scaleTolerance = AnimationConstants.KeyframeScaleTol)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        var translations = new List<AnimationChannel>();
+        var rotations = new List<AnimationChannel>();
+        var scales = new List<AnimationChannel>();
+        var curves = new List<AnimationChannel>();
+
+        foreach (AnimationChannel channel in source.Channels)
+        {
+            float tolerance = channel.Target switch
+            {
+                ChannelTarget.Translation => positionTolerance,
+                ChannelTarget.Rotation => rotationTolerance,
+                ChannelTarget.Scale => scaleTolerance,
+                ChannelTarget.Curve => AnimationConstants.KeyframeCurveTol,
+                _ => positionTolerance,
+            };
+
+            AnimationChannel reduced = Reduce(channel, tolerance);
+            switch (channel.Target)
+            {
+                case ChannelTarget.Translation: translations.Add(reduced); break;
+                case ChannelTarget.Rotation: rotations.Add(reduced); break;
+                case ChannelTarget.Scale: scales.Add(reduced); break;
+                default: curves.Add(reduced); break;
+            }
+        }
+
+        var merged = new List<AnimationChannel>(translations.Count + rotations.Count + scales.Count + curves.Count);
+        merged.AddRange(translations);
+        merged.AddRange(rotations);
+        merged.AddRange(scales);
+        merged.AddRange(curves);
+
+        return new AnimationClip(
+            source.Id,
+            source.Duration,
+            merged.ToArray(),
+            [.. source.Events],
+            [.. source.FootContacts],
+            source.Tags);
+    }
+
+    private static AnimationChannel Reduce(AnimationChannel channel, float tolerance)
+    {
+        if (channel.Interpolation != InterpolationMode.Linear)
+        {
+            return channel;
+        }
+
+        ReadOnlySpan<float> times = channel.KeyTimes;
+        ReadOnlySpan<float> values = channel.KeyValues;
+        if (times.Length <= 2)
+        {
+            return channel;
+        }
+
+        int stride = channel.Stride;
+        var newTimes = new List<float>(times.Length) { times[0] };
+        var newValues = new List<float>(values.Length);
+        for (int c = 0; c < stride; c++)
+        {
+            newValues.Add(values[c]);
+        }
+
+        int anchor = 0;
+        for (int i = 1; i < times.Length - 1; i++)
+        {
+            float t0 = times[anchor];
+            float t1 = times[i];
+            float t2 = times[i + 1];
+
+            if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
+            {
+                PushKey(times, values, stride, i, newTimes, newValues);
+                anchor = i;
+                continue;
+            }
+
+            float factor = (t1 - t0) / (t2 - t0);
+            bool deviate = false;
+            for (int s = 0; s < stride; s++)
+            {
+                float v0 = values[(anchor * stride) + s];
+                float actual = values[(i * stride) + s];
+                float v2 = values[((i + 1) * stride) + s];
+                float predicted = v0 + (factor * (v2 - v0));
+                if (MathF.Abs(actual - predicted) > tolerance)
+                {
+                    deviate = true;
+                    break;
+                }
+            }
+
+            if (deviate)
+            {
+                PushKey(times, values, stride, i, newTimes, newValues);
+                anchor = i;
+            }
+        }
+
+        PushKey(times, values, stride, times.Length - 1, newTimes, newValues);
+        return new AnimationChannel(channel.BoneIndex, channel.Target, channel.Interpolation, newTimes.ToArray(), newValues.ToArray(), channel.TargetCurveId);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void PushKey(ReadOnlySpan<float> times, ReadOnlySpan<float> values, int stride, int index, List<float> outTimes, List<float> outValues)
+    {
+        outTimes.Add(times[index]);
+        int baseOffset = index * stride;
+        for (int s = 0; s < stride; s++)
+        {
+            outValues.Add(values[baseOffset + s]);
+        }
+    }
+}
