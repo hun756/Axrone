@@ -6,9 +6,9 @@ using System.Diagnostics.Metrics;
 public static class AnimationTelemetry
 {
     private static readonly Meter s_meter = new("Axrone.Animation", "1.0.0");
-    private static readonly Counter<ulong> s_framesEvaluated = s_meter.CreateCounter<ulong>("animation.frames_evaluated");
-    private static readonly Counter<ulong> s_clipsSampled = s_meter.CreateCounter<ulong>("animation.clips_sampled");
-    private static readonly Counter<ulong> s_ikIterations = s_meter.CreateCounter<ulong>("animation.ik_iterations");
+    private static readonly Counter<long> s_framesEvaluated = s_meter.CreateCounter<long>("animation.frames_evaluated");
+    private static readonly Counter<long> s_clipsSampled = s_meter.CreateCounter<long>("animation.clips_sampled");
+    private static readonly Counter<long> s_ikIterations = s_meter.CreateCounter<long>("animation.ik_iterations");
     private static readonly Histogram<double> s_evaluationLatencyMs = s_meter.CreateHistogram<double>("animation.eval_latency_ms");
 
     /// <summary>Records one composed frame.</summary>
@@ -21,7 +21,7 @@ public static class AnimationTelemetry
 
     /// <summary>Records IK iterations.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void RecordIkIterations(int iterations) => s_ikIterations.Add((ulong)Math.Max(0, iterations));
+    public static void RecordIkIterations(int iterations) => s_ikIterations.Add(Math.Max(0, iterations));
 
     /// <summary>Records evaluation latency.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
