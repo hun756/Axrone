@@ -14,6 +14,10 @@ public enum MergeMode
     ReplaceRange = 1,
 }
 
+// CA1002/CA2227: DTO collection shape is dictated by the source-generated JSON
+// serializer (mutable lists required both directions); not a domain API choice.
+#pragma warning disable CA1002, CA2227
+
 /// <summary>Serializable track payload.</summary>
 public sealed class ChunkTrackDto
 {
@@ -27,10 +31,10 @@ public sealed class ChunkTrackDto
     public byte Interpolation { get; set; }
 
     /// <summary>Key times.</summary>
-    public Collection<float> KeyTimes { get; } = new();
+    public List<float> KeyTimes { get; set; } = new();
 
     /// <summary>Key values.</summary>
-    public Collection<float> KeyValues { get; } = new();
+    public List<float> KeyValues { get; set; } = new();
 }
 
 /// <summary>Serializable chunk payload.</summary>
@@ -55,8 +59,10 @@ public sealed class ChunkPayloadDto
     public float Duration { get; set; }
 
     /// <summary>Tracks.</summary>
-    public Collection<ChunkTrackDto> Tracks { get; } = new();
+    public List<ChunkTrackDto> Tracks { get; set; } = new();
 }
+
+#pragma warning restore CA1002, CA2227
 
 /// <summary>Source-generated JSON context (AOT-safe, no reflection).</summary>
 [JsonSerializable(typeof(ChunkPayloadDto))]
