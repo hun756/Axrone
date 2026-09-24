@@ -113,4 +113,81 @@ public static class FastMath
         float m = time % duration;
         return m < 0.0f ? m + duration : m;
     }
+
+    /// <summary>Rotates a vector without building a matrix.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vector3 RotateVector(in Quaternion q, in Vector3 v)
+    {
+        Vector3 qv = new(q.X, q.Y, q.Z);
+        Vector3 t = 2.0f * Vector3.Cross(qv, v);
+        return v + (q.W * t) + Vector3.Cross(qv, t);
+    }
+
+    /// <summary>Hamilton product.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quaternion Multiply(in Quaternion a, in Quaternion b)
+    {
+        return new Quaternion(
+            (a.W * b.X) + (a.X * b.W) + (a.Y * b.Z) - (a.Z * b.Y),
+            (a.W * b.Y) - (a.X * b.Z) + (a.Y * b.W) + (a.Z * b.X),
+            (a.W * b.Z) + (a.X * b.Y) - (a.Y * b.X) + (a.Z * b.W),
+            (a.W * b.W) - (a.X * b.X) - (a.Y * b.Y) - (a.Z * b.Z));
+    }
+
+    /// <summary>Conjugate (unit-quaternion inverse).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quaternion Invert(in Quaternion q)
+    {
+        return new Quaternion(-q.X, -q.Y, -q.Z, q.W);
+    }
+
+    /// <summary>Composes a column-major TRS matrix.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void ComposeTransformMatrix(in Vector3 translation, in Quaternion rotation, in Vector3 scale, Span<float> output)
+    {
+        float xx = rotation.X * rotation.X;
+        float yy = rotation.Y * rotation.Y;
+        float zz = rotation.Z * rotation.Z;
+        float xy = rotation.X * rotation.Y;
+        float xz = rotation.X * rotation.Z;
+        float yz = rotation.Y * rotation.Z;
+        float wx = rotation.W * rotation.X;
+        float wy = rotation.W * rotation.Y;
+        float wz = rotation.W * rotation.Z;
+
+        output[0] = (1.0f - (2.0f * (yy + zz))) * scale.X;
+        output[1] = (2.0f * (xy - wz)) * scale.Y;
+        output[2] = (2.0f * (xz + wy)) * scale.Z;
+        output[3] = translation.X;
+
+        output[4] = (2.0f * (xy + wz)) * scale.X;
+        output[5] = (1.0f - (2.0f * (xx + zz))) * scale.Y;
+        output[6] = (2.0f * (yz - wx)) * scale.Z;
+        output[7] = translation.Y;
+
+        output[8] = (2.0f * (xz - wy)) * scale.X;
+        output[9] = (2.0f * (yz + wx)) * scale.Y;
+        output[10] = (1.0f - (2.0f * (xx + yy))) * scale.Z;
+        output[11] = translation.Z;
+
+        output[12] = 0.0f;
+        output[13] = 0.0f;
+        output[14] = 0.0f;
+        output[15] = 1.0f;
+    }
+
+    /// <summary>Row-major 4x4 product.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void MultiplyMatrix4x4(ReadOnlySpan<float> a, ReadOnlySpan<float> b, Span<float> dest)
+    {
+        for (int r = 0; r < 4; r++)
+        {
+            int r4 = r * 4;
+            float a0 = a[r4], a1 = a[r4 + 1], a2 = a[r4 + 2], a3 = a[r4 + 3];
+            dest[r4] = (a0 * b[0]) + (a1 * b[4]) + (a2 * b[8]) + (a3 * b[12]);
+            dest[r4 + 1] = (a0 * b[1]) + (a1 * b[5]) + (a2 * b[9]) + (a3 * b[13]);
+            dest[r4 + 2] = (a0 * b[2]) + (a1 * b[6]) + (a2 * b[10]) + (a3 * b[14]);
+            dest[r4 + 3] = (a0 * b[3]) + (a1 * b[7]) + (a2 * b[11]) + (a3 * b[15]);
+        }
+    }
 }
