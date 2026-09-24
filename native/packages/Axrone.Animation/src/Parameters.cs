@@ -55,10 +55,11 @@ public sealed class ParameterStore
     private readonly byte[] _triggers;
 
     /// <summary>Creates a store; duplicate names are rejected.</summary>
-    public ParameterStore(Dictionary<string, ParameterType> definitions)
+    public ParameterStore(IEnumerable<KeyValuePair<string, ParameterType>> definitions)
     {
         ArgumentNullException.ThrowIfNull(definitions);
-        int count = definitions.Count;
+        var materialized = new List<KeyValuePair<string, ParameterType>>(definitions);
+        int count = materialized.Count;
         _nameToIndex = new Dictionary<string, int>(count, StringComparer.Ordinal);
         _types = new ParameterType[count];
         _floats = new float[count];
@@ -67,7 +68,7 @@ public sealed class ParameterStore
         _triggers = new byte[count];
 
         int index = 0;
-        foreach (KeyValuePair<string, ParameterType> definition in definitions)
+        foreach (KeyValuePair<string, ParameterType> definition in materialized)
         {
             if (!_nameToIndex.TryAdd(definition.Key, index))
             {
