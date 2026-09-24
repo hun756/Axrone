@@ -123,3 +123,53 @@ public sealed class ResolutionException : AnimationException
     {
     }
 }
+
+/// <summary>Blend-tree evaluation faulted.</summary>
+public sealed class EvaluationException : AnimationException
+{
+    /// <summary>Creates an evaluation failure.</summary>
+    public EvaluationException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>Channel sampling faulted.</summary>
+public sealed class SamplingException : AnimationException
+{
+    /// <summary>Creates a sampling failure.</summary>
+    public SamplingException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>State machine transition or parameter faulted.</summary>
+public sealed class StateMachineException : AnimationException
+{
+    /// <summary>Creates a state machine failure.</summary>
+    public StateMachineException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>Retargeting mapping or application faulted.</summary>
+public sealed class RetargetingException : AnimationException
+{
+    /// <summary>Creates a retargeting failure.</summary>
+    public RetargetingException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>IK solve faulted.</summary>
+public sealed class IkException : AnimationException
+{
+    /// <summary>Creates an IK failure.</summary>
+    public IkException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
