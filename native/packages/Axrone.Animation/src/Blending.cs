@@ -111,4 +111,103 @@ public static class BlendingKernels
             dst[i] = (baseC[i] * (1.0f - t)) + (overC[i] * t);
         }
     }
+
+    /// <summary>
+    /// Normalized weighted average over N frames with hemisphere-consistent
+    /// quaternion accumulation. Zero total weight falls back to rest.
+    /// </summary>
+    [SkipLocalsInit]
+    public static void BlendWeightedFrames(AnimationFrame target, ReadOnlySpan<AnimationFrame> frames, ReadOnlySpan<float> weights, Rig rig)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(rig);
+
+        float totalWeight = 0.0f;
+        int validCount = 0;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            if (weights[i] > 0.0f)
+            {
+                totalWeight += weights[i];
+                validCount++;
+            }
+        }
+
+        if (totalWeight <= AnimationConstants.BlendEpsilon || validCount == 0)
+        {
+            target.ResetToRest(rig);
+            return;
+        }
+
+        int boneCount = target.BoneCount;
+        Span<Vector3> dstT = target.GetTranslations();
+        Span<Quaternion> dstR = target.GetRotations();
+        Span<Vector3> dstS = target.GetScales();
+
+        dstT.Clear();
+        dstS.Clear();
+
+        for (int b = 0; b < boneCount; b++)
+        {
+            Vector3 accT = Vector3.Zero;
+            Vector3 accS = Vector3.Zero;
+            Vector4 accQ = Vector4.Zero;
+            Quaternion reference = Quaternion.Identity;
+            bool first = true;
+
+            for (int i = 0; i < frames.Length; i++)
+            {
+                float w = weights[i];
+                if (w <= 0.0f)
+                {
+                    continue;
+                }
+
+                AnimationFrame frame = frames[i];
+                accT += frame.ReadTranslations()[b] * w;
+                accS += frame.ReadScales()[b] * w;
+
+                Quaternion q = frame.ReadRotations()[b];
+                if (first)
+                {
+                    reference = q;
+                    first = false;
+                }
+
+                float dot = (q.X * reference.X) + (q.Y * reference.Y) + (q.Z * reference.Z) + (q.W * reference.W);
+                Vector4 lane = new(q.X, q.Y, q.Z, q.W);
+                accQ += dot < 0.0f ? -lane * w : lane * w;
+            }
+
+            float invWeight = 1.0f / totalWeight;
+            dstT[b] = accT * invWeight;
+            dstS[b] = accS * invWeight;
+            dstR[b] = Quaternion.Normalize(new Quaternion(accQ.X, accQ.Y, accQ.Z, accQ.W));
+        }
+
+        Span<float> dstC = target.Curves.AsSpan();
+        dstC.Clear();
+        float invTotal = 1.0f / totalWeight;
+
+        for (int i = 0; i < frames.Length; i++)
+        {
+            float w = weights[i];
+            if (w <= 0.0f)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<float> channels = frames[i].Curves.AsSpan();
+            int count = Math.Min(dstC.Length, channels.Length);
+            for (int c = 0; c < count; c++)
+            {
+                dstC[c] += channels[c] * w;
+            }
+        }
+
+        for (int c = 0; c < dstC.Length; c++)
+        {
+            dstC[c] *= invTotal;
+        }
+    }
 }
