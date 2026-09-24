@@ -65,8 +65,13 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         _lifecycleState.Reset();
         _lifecycleState.Add(StateActive);
         _activeCount.Reset();
-        _enqueuePos.Reset();
         _dequeuePos.Reset();
+
+        // The freelist starts pre-filled: cells already carry sequence i + 1 as if
+        // N enqueues ran, so the enqueue cursor must start at N to stay in phase.
+        // Starting it at zero deadlocks the first free in an infinite spin.
+        _enqueuePos.Reset();
+        _enqueuePos.Add(_capacity);
 
         unsafe
         {
@@ -93,17 +98,6 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
                 controls[i] = PackControlWord(1, (ushort)DescriptorStatus.Free, 0);
             }
         }
-    }
-
-    /// <summary>Vyukov MPMC queue cell.</summary>
-    [StructLayout(LayoutKind.Explicit, Size = 16)]
-    private struct MpmcQueueCell
-    {
-        [FieldOffset(0)]
-        public long Sequence;
-
-        [FieldOffset(8)]
-        public uint SlotIndex;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -515,15 +509,19 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             return;
         }
 
+        // AlignedAlloc blocks must pair with AlignedFree — plain Free corrupts the heap.
         unsafe
         {
-            NativeMemory.Free((void*)_controlWords);
-            NativeMemory.Free((void*)_queueCells);
-            NativeMemory.Free((void*)_descriptorStorage);
+            NativeMemory.AlignedFree((void*)_controlWords);
+            NativeMemory.AlignedFree((void*)_queueCells);
+            NativeMemory.AlignedFree((void*)_descriptorStorage);
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Drains then releases. Blocks until every live descriptor is freed — free
+    /// everything first, or teardown waits forever by design (never dangle).
+    /// </summary>
     public void Dispose()
     {
         Complete();
@@ -562,4 +560,15 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
     {
         ReleaseUnmanagedMemory();
     }
+}
+
+/// <summary>Vyukov MPMC freelist cell. Top-level because generic owners forbid explicit layout on nested types.</summary>
+[StructLayout(LayoutKind.Explicit, Size = 16)]
+internal struct MpmcQueueCell
+{
+    [FieldOffset(0)]
+    public long Sequence;
+
+    [FieldOffset(8)]
+    public uint SlotIndex;
 }
