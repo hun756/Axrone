@@ -522,3 +522,147 @@ internal static class GenericVectorProber
         return new FeatureBitmask256(0UL, 0UL, 0UL, p3);
     }
 }
+
+/// <summary>Architecture detection and baseline classification.</summary>
+internal static class TopologyClassifier
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static SimdArchitecture DetectArchitecture()
+    {
+        Architecture arch = RuntimeInformation.ProcessArchitecture;
+        return arch switch
+        {
+            Architecture.X86 => SimdArchitecture.X86,
+            Architecture.X64 => SimdArchitecture.X64,
+            Architecture.Arm => SimdArchitecture.Arm,
+            Architecture.Arm64 => SimdArchitecture.Arm64,
+            Architecture.Wasm => SimdArchitecture.Wasm,
+            Architecture.LoongArch64 => SimdArchitecture.LoongArch64,
+            Architecture.RiscV64 => SimdArchitecture.RiscV64,
+            _ => SimdArchitecture.Unknown,
+        };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static SimdIsaLevel ClassifyLevel(SimdArchitecture arch, FeatureBitmask256 mask)
+    {
+        if (arch is SimdArchitecture.X64 or SimdArchitecture.X86)
+        {
+            if (mask.Contains(SimdFeature.Avx10v2))
+            {
+                return SimdIsaLevel.X86_64_Avx10_2;
+            }
+
+            if (mask.Contains(SimdFeature.Avx10v1))
+            {
+                return SimdIsaLevel.X86_64_Avx10_1;
+            }
+
+            if (mask.Contains(SimdFeature.Avx512F) &&
+                mask.Contains(SimdFeature.Avx512BW) &&
+                mask.Contains(SimdFeature.Avx512CD) &&
+                mask.Contains(SimdFeature.Avx512DQ) &&
+                mask.Contains(SimdFeature.Avx512VL))
+            {
+                return SimdIsaLevel.X86_64_V4;
+            }
+
+            if (mask.Contains(SimdFeature.Avx) &&
+                mask.Contains(SimdFeature.Avx2) &&
+                mask.Contains(SimdFeature.Bmi1) &&
+                mask.Contains(SimdFeature.Bmi2) &&
+                mask.Contains(SimdFeature.Fma))
+            {
+                return SimdIsaLevel.X86_64_V3;
+            }
+
+            if (mask.Contains(SimdFeature.Sse3) &&
+                mask.Contains(SimdFeature.Ssse3) &&
+                mask.Contains(SimdFeature.Sse41) &&
+                mask.Contains(SimdFeature.Sse42) &&
+                mask.Contains(SimdFeature.Popcnt))
+            {
+                return SimdIsaLevel.X86_64_V2;
+            }
+
+            if (mask.Contains(SimdFeature.Sse) && mask.Contains(SimdFeature.Sse2))
+            {
+                return SimdIsaLevel.X86_64_V1;
+            }
+        }
+        else if (arch is SimdArchitecture.Arm64)
+        {
+            if (mask.Contains(SimdFeature.ArmSve2))
+            {
+                return SimdIsaLevel.Arm64_V9_0;
+            }
+
+            if (mask.Contains(SimdFeature.AdvSimd) &&
+                mask.Contains(SimdFeature.ArmDp) &&
+                mask.Contains(SimdFeature.ArmCrc32))
+            {
+                return SimdIsaLevel.Arm64_V8_2;
+            }
+
+            if (mask.Contains(SimdFeature.AdvSimd))
+            {
+                return SimdIsaLevel.Arm64_V8_0;
+            }
+        }
+
+        return SimdIsaLevel.Generic;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static SimdRegisterWidth ResolveMaxRegisterWidth(FeatureBitmask256 mask)
+    {
+        if (mask.Contains(SimdFeature.Vector512HardwareAccelerated) || mask.Contains(SimdFeature.Avx512F))
+        {
+            return SimdRegisterWidth.Bits512;
+        }
+
+        if (mask.Contains(SimdFeature.Vector256HardwareAccelerated) ||
+            mask.Contains(SimdFeature.Avx2) ||
+            mask.Contains(SimdFeature.LoongArchLasx))
+        {
+            return SimdRegisterWidth.Bits256;
+        }
+
+        if (mask.Contains(SimdFeature.Vector128HardwareAccelerated) ||
+            mask.Contains(SimdFeature.AdvSimd) ||
+            mask.Contains(SimdFeature.WasmPackedSimd) ||
+            mask.Contains(SimdFeature.LoongArchLsx) ||
+            mask.Contains(SimdFeature.Sse2))
+        {
+            return SimdRegisterWidth.Bits128;
+        }
+
+        if (mask.Contains(SimdFeature.Vector64HardwareAccelerated))
+        {
+            return SimdRegisterWidth.Bits64;
+        }
+
+        return SimdRegisterWidth.None;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static SimdAlignment ResolveAlignment(SimdRegisterWidth registerWidth)
+    {
+        if (registerWidth >= SimdRegisterWidth.Bits512)
+        {
+            return SimdAlignment.Byte64;
+        }
+
+        if (registerWidth >= SimdRegisterWidth.Bits256)
+        {
+            return SimdAlignment.Byte32;
+        }
+
+        if (registerWidth >= SimdRegisterWidth.Bits128)
+        {
+            return SimdAlignment.Byte16;
+        }
+
+        return SimdAlignment.None;
+    }
+}
