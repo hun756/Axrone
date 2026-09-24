@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
+[Collection("SimdRuntime")]
 public class SimdCapabilitiesTests
 {
     private static byte[] PatternBytes(int length, byte needle, int every)
