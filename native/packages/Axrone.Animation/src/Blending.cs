@@ -210,4 +210,64 @@ public static class BlendingKernels
             dstC[c] *= invTotal;
         }
     }
+
+    /// <summary>
+    /// Additive blend: rest-relative deltas scaled by alpha onto the base pose.
+    /// Rotation deltas ride the rest-inverse sandwich with slerp-scaled magnitude.
+    /// </summary>
+    [SkipLocalsInit]
+    public static void ApplyAdditiveFrame(AnimationFrame target, AnimationFrame baseFrame, AnimationFrame additiveFrame, Rig rig, float alpha)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(baseFrame);
+        ArgumentNullException.ThrowIfNull(additiveFrame);
+        ArgumentNullException.ThrowIfNull(rig);
+
+        float a = FastMath.Clamp01(alpha);
+        int boneCount = target.BoneCount;
+
+        ReadOnlySpan<Vector3> baseT = baseFrame.ReadTranslations();
+        ReadOnlySpan<Quaternion> baseR = baseFrame.ReadRotations();
+        ReadOnlySpan<Vector3> baseS = baseFrame.ReadScales();
+
+        ReadOnlySpan<Vector3> addT = additiveFrame.ReadTranslations();
+        ReadOnlySpan<Quaternion> addR = additiveFrame.ReadRotations();
+        ReadOnlySpan<Vector3> addS = additiveFrame.ReadScales();
+
+        ReadOnlySpan<float> rest = rig.RestPoseBuffer;
+        int rotBase = boneCount * 3;
+        int scaleBase = boneCount * 7;
+
+        Span<Vector3> dstT = target.GetTranslations();
+        Span<Quaternion> dstR = target.GetRotations();
+        Span<Vector3> dstS = target.GetScales();
+
+        for (int i = 0; i < boneCount; i++)
+        {
+            int tOff = i * 3;
+            int rOff = rotBase + (i * 4);
+            int sOff = scaleBase + (i * 3);
+
+            Vector3 restT = new(rest[tOff], rest[tOff + 1], rest[tOff + 2]);
+            Quaternion restR = new(rest[rOff], rest[rOff + 1], rest[rOff + 2], rest[rOff + 3]);
+            Vector3 restS = new(rest[sOff], rest[sOff + 1], rest[sOff + 2]);
+
+            dstT[i] = baseT[i] + ((addT[i] - restT) * a);
+            dstS[i] = baseS[i] + ((addS[i] - restS) * a);
+
+            Quaternion invRest = Quaternion.Inverse(restR);
+            Quaternion delta = Quaternion.Concatenate(invRest, addR[i]);
+            Quaternion scaledDelta = FastMath.Slerp(Quaternion.Identity, delta, a);
+            dstR[i] = Quaternion.Normalize(baseR[i] * scaledDelta);
+        }
+
+        Span<float> dstC = target.Curves.AsSpan();
+        ReadOnlySpan<float> baseC = baseFrame.Curves.AsSpan();
+        ReadOnlySpan<float> addC = additiveFrame.Curves.AsSpan();
+        int curveCount = Math.Min(dstC.Length, Math.Min(baseC.Length, addC.Length));
+        for (int i = 0; i < curveCount; i++)
+        {
+            dstC[i] = baseC[i] + (addC[i] * a);
+        }
+    }
 }
