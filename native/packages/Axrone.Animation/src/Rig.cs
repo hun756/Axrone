@@ -134,7 +134,43 @@ public sealed class Rig
 
         _rootIndices = roots.ToArray();
         _evaluationOrder = BuildEvaluationOrder(_parents, _children, _rootIndices, _boneNames);
-        InverseBindMatrices = null;
+        InverseBindMatrices = BuildInverseBindMatrices(bones);
+    }
+
+    /// <summary>Bone index by ordinal name, -1 when absent.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int FindBoneIndex(string name) =>
+        _nameToIndex.TryGetValue(name, out int index) ? index : -1;
+
+    private static float[]? BuildInverseBindMatrices(ReadOnlySpan<BoneInfo> bones)
+    {
+        bool custom = false;
+        for (int i = 0; i < bones.Length; i++)
+        {
+            if (bones[i].InverseBindMatrix.HasValue)
+            {
+                custom = true;
+                break;
+            }
+        }
+
+        if (!custom)
+        {
+            return null;
+        }
+
+        var matrices = new float[bones.Length * 16];
+        for (int i = 0; i < bones.Length; i++)
+        {
+            Matrix4x4 m = bones[i].InverseBindMatrix ?? Matrix4x4.Identity;
+            int off = i * 16;
+            matrices[off] = m.M11; matrices[off + 1] = m.M21; matrices[off + 2] = m.M31; matrices[off + 3] = m.M41;
+            matrices[off + 4] = m.M12; matrices[off + 5] = m.M22; matrices[off + 6] = m.M32; matrices[off + 7] = m.M42;
+            matrices[off + 8] = m.M13; matrices[off + 9] = m.M23; matrices[off + 10] = m.M33; matrices[off + 11] = m.M43;
+            matrices[off + 12] = m.M14; matrices[off + 13] = m.M24; matrices[off + 14] = m.M34; matrices[off + 15] = m.M44;
+        }
+
+        return matrices;
     }
 
     /// <summary>
