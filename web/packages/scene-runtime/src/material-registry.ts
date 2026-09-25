@@ -199,20 +199,36 @@ const createTextureSlots = (
     let nextUnit = 0;
 
     for (const [uniformName, binding] of assignments) {
-        let resolvedUnit = binding.unit;
-        if (resolvedUnit === undefined || usedUnits.has(resolvedUnit)) {
-            while (usedUnits.has(nextUnit)) {
-                nextUnit += 1;
+        if (binding.unit !== undefined) {
+            if (!Number.isInteger(binding.unit) || binding.unit < 0) {
+                throw new Error(
+                    `Invalid texture unit ${String(binding.unit)} for uniform '${uniformName}' in material '${material.id}'`
+                );
             }
-            resolvedUnit = nextUnit;
+            if (usedUnits.has(binding.unit)) {
+                throw new Error(
+                    `Duplicate texture unit ${String(binding.unit)} for uniform '${uniformName}' in material '${material.id}'`
+                );
+            }
+            usedUnits.add(binding.unit);
+            slots.push(
+                Object.freeze({
+                    uniformName,
+                    binding,
+                    resolvedUnit: binding.unit,
+                })
+            );
+            continue;
         }
-
-        usedUnits.add(resolvedUnit);
+        while (usedUnits.has(nextUnit)) {
+            nextUnit += 1;
+        }
+        usedUnits.add(nextUnit);
         slots.push(
             Object.freeze({
                 uniformName,
                 binding,
-                resolvedUnit,
+                resolvedUnit: nextUnit,
             })
         );
     }
@@ -220,14 +236,59 @@ const createTextureSlots = (
     return Object.freeze(slots);
 };
 
+export const SCENE_SPRITE_MAIN_TEXTURE_UNIFORM = 'u_MainTex';
+
+export const SCENE_SPRITE_VIEW_PROJECTION_UNIFORM = 'u_ViewProjection';
+
+export const SCENE_SPRITE_REQUIRED_UNIFORM_NAMES = Object.freeze([
+    SCENE_SPRITE_MAIN_TEXTURE_UNIFORM,
+    SCENE_SPRITE_VIEW_PROJECTION_UNIFORM,
+] as const);
+
+export const isSceneSpriteUniformNames = (uniformNames: readonly string[]): boolean =>
+    uniformNames.includes(SCENE_SPRITE_MAIN_TEXTURE_UNIFORM) &&
+    uniformNames.includes(SCENE_SPRITE_VIEW_PROJECTION_UNIFORM);
+
+export const resolveSceneSpriteMaterialBinding = (
+    material: Pick<SceneMaterialResource, 'id' | 'textureBindings'>
+): SceneMaterialTextureBinding => {
+    const binding = material.textureBindings.get(SCENE_SPRITE_MAIN_TEXTURE_UNIFORM);
+    if (!binding) {
+        throw new Error(
+            `Sprite material '${material.id}' is missing required texture binding '${SCENE_SPRITE_MAIN_TEXTURE_UNIFORM}'`
+        );
+    }
+    if (!binding.textureId) {
+        throw new Error(
+            `Sprite material '${material.id}' has empty texture id for '${SCENE_SPRITE_MAIN_TEXTURE_UNIFORM}'`
+        );
+    }
+    return binding;
+};
+
 export const normalizeSceneTextureBinding = (
     binding: SceneTextureBindingDefinition
 ): SceneMaterialTextureBinding => {
     if (typeof binding === 'string') {
+        if (!binding) {
+            throw new Error('Sprite material texture binding requires a non-empty texture id');
+        }
         return {
             textureId: binding,
             samplerId: null,
         };
+    }
+
+    if (!binding.textureId) {
+        throw new Error('Sprite material texture binding requires a non-empty texture id');
+    }
+    if (
+        binding.unit !== undefined &&
+        (!Number.isInteger(binding.unit) || binding.unit < 0)
+    ) {
+        throw new Error(
+            `Invalid texture unit ${String(binding.unit)} for texture '${binding.textureId}'`
+        );
     }
 
     return {
@@ -602,6 +663,9 @@ export class SceneMaterialRegistry {
         const material = this._resources.get(id);
         if (!material) {
             return false;
+        }
+        if (!name) {
+            throw new Error(`Sprite material '${id}' requires a non-empty texture slot name`);
         }
 
         material.textureBindings.set(name, normalizeSceneTextureBinding(binding));

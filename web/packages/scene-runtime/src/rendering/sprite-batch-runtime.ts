@@ -3,6 +3,7 @@ import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_VERTEX_STRIDE,
     Render2DSpriteBatchBuilder,
+    isRender2DSpriteUniformNames,
     type Render2DRectLike,
     type Render2DSpriteMask,
     type Render2DSpriteBatchBuildResult,
@@ -13,7 +14,7 @@ import {
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { SpriteMask } from '../components/sprite-mask';
 import { SceneMeshError } from '../errors';
-import { resolveSceneMaterialPass } from '../material-registry';
+import { resolveSceneMaterialPass, resolveSceneSpriteMaterialBinding } from '../material-registry';
 import { SceneDirectGlPassGuard } from './internal/render-state-guard';
 import type { SceneMaterialTextureUniformSetter } from '../material-texture-binder';
 import type { SceneRenderFrameState } from './render-frame-state';
@@ -194,9 +195,15 @@ export class SceneSpriteBatchRuntime {
 
         this._submissions.length = 0;
         this._submissionRendererIds.length = 0;
+        const warnings: string[] = [];
+        let skippedSpriteCount = 0;
         for (const item of items) {
             const source = this._resolveSource(item.renderer);
             if (!source) {
+                skippedSpriteCount += 1;
+                warnings.push(
+                    `sprite '${item.renderer.id}' skipped: missing material and texture source`
+                );
                 continue;
             }
 
@@ -207,6 +214,8 @@ export class SceneSpriteBatchRuntime {
                 params.viewportHeight
             );
             if (maskState === null) {
+                skippedSpriteCount += 1;
+                warnings.push(`sprite '${item.renderer.id}' skipped: unresolved mask state`);
                 continue;
             }
 
@@ -240,19 +249,23 @@ export class SceneSpriteBatchRuntime {
         }
 
         if (this._submissions.length === 0) {
-            return SceneSpriteBatchRuntime._EMPTY_STATS;
+            return Object.freeze({
+                drawnSpriteCount: 0,
+                spriteBatchCount: 0,
+                skippedSpriteCount,
+                warnings: Object.freeze(warnings),
+            });
         }
 
         let allowedSpriteCount = this._submissions.length;
-        let skippedSpriteCount = 0;
-        const warnings: string[] = [];
 
         if (params.transparentBudget && allowedSpriteCount > params.transparentBudget.remaining) {
             allowedSpriteCount = Math.max(0, Math.floor(params.transparentBudget.remaining));
-            skippedSpriteCount = this._submissions.length - allowedSpriteCount;
-            if (skippedSpriteCount > 0) {
+            const budgetSkipped = this._submissions.length - allowedSpriteCount;
+            skippedSpriteCount += budgetSkipped;
+            if (budgetSkipped > 0) {
                 warnings.push(
-                    `transparent primitive budget exceeded at ${params.transparentBudget.total}; skipped ${skippedSpriteCount} sprite submissions`
+                    `transparent primitive budget exceeded at ${params.transparentBudget.total}; skipped ${budgetSkipped} sprite submissions`
                 );
             }
         }
@@ -303,18 +316,25 @@ export class SceneSpriteBatchRuntime {
             this._upload(buildResult);
 
             this._options.gl.bindVertexArray(this._vertexArray);
+            let drawnBatchCount = 0;
+            let failedSpriteCount = 0;
             for (const batch of buildResult.batches) {
                 this._applyClipRect(batch.key.clipRect, params.viewportWidth, params.viewportHeight);
-                this._drawBatch(batch, indexType, params);
+                const completed = this._drawBatch(batch, indexType, params, warnings);
+                if (completed) {
+                    drawnBatchCount += 1;
+                } else {
+                    failedSpriteCount += batch.spriteCount;
+                }
             }
             this._options.gl.bindVertexArray(null);
             this._resetClipRect();
             this._resetMaskState();
 
             return Object.freeze({
-                drawnSpriteCount: buildResult.spriteCount,
-                spriteBatchCount: buildResult.batches.length,
-                skippedSpriteCount,
+                drawnSpriteCount: buildResult.spriteCount - failedSpriteCount,
+                spriteBatchCount: drawnBatchCount,
+                skippedSpriteCount: skippedSpriteCount + failedSpriteCount,
                 warnings: Object.freeze(warnings),
             });
         });
@@ -474,38 +494,69 @@ export class SceneSpriteBatchRuntime {
     private _drawBatch(
         batch: Render2DSpriteBatchRange,
         indexType: number,
-        params: SceneSpriteBatchRuntimeRenderParams
-    ): void {
+        params: SceneSpriteBatchRuntimeRenderParams,
+        warnings: string[]
+    ): boolean {
         if (batch.key.source.kind === 'material') {
-            this._drawMaterialBatch(batch, indexType, params);
-            return;
+            return this._drawMaterialBatch(batch, indexType, params, warnings);
         }
 
-        this._drawTextureBatch(batch, indexType, params);
+        return this._drawTextureBatch(batch, indexType, params, warnings);
     }
 
     private _drawMaterialBatch(
         batch: Render2DSpriteBatchRange,
         indexType: number,
-        params: SceneSpriteBatchRuntimeRenderParams
-    ): void {
+        params: SceneSpriteBatchRuntimeRenderParams,
+        warnings: string[]
+    ): boolean {
         if (batch.key.source.kind !== 'material') {
-            return;
+            return false;
         }
 
-        const material = this._options.resources.materials.get(batch.key.source.materialId);
+        const materialId = batch.key.source.materialId;
+        const material = this._options.resources.materials.get(materialId);
         if (!material) {
-            return;
+            warnings.push(`sprite batch skipped: missing material '${materialId}'`);
+            return false;
         }
 
         const materialPass = resolveSceneMaterialPass(material, params.renderPass.materialPassId);
         if (params.renderPass.materialPassId !== null && !materialPass) {
-            return;
+            warnings.push(
+                `sprite batch skipped: missing pass '${params.renderPass.materialPassId}' for material '${materialId}'`
+            );
+            return false;
         }
 
         const shader = this._options.resources.shaders.get(material.shaderId);
-        if (!shader || !this._isSpriteShader(shader)) {
-            return;
+        if (!shader) {
+            warnings.push(
+                `sprite batch skipped: missing shader '${material.shaderId}' for material '${materialId}'`
+            );
+            return false;
+        }
+        if (!this._isSpriteShader(shader)) {
+            warnings.push(
+                `sprite batch skipped: shader '${material.shaderId}' missing required sprite uniforms for material '${materialId}'`
+            );
+            return false;
+        }
+
+        let spriteTextureId: string;
+        try {
+            spriteTextureId = resolveSceneSpriteMaterialBinding(material).textureId;
+        } catch {
+            warnings.push(
+                `sprite batch skipped: material '${materialId}' missing required texture binding 'u_MainTex'`
+            );
+            return false;
+        }
+        if (!this._options.resources.textures.get(spriteTextureId)) {
+            warnings.push(
+                `sprite batch skipped: missing texture '${spriteTextureId}' for material '${materialId}'`
+            );
+            return false;
         }
 
         this._options.renderStateApplier.apply(shader, params.renderPass, materialPass);
@@ -546,21 +597,31 @@ export class SceneSpriteBatchRuntime {
             vertexCount: 0,
         });
         this._options.materialTextureBinder.unbind();
+        return true;
     }
 
     private _drawTextureBatch(
         batch: Render2DSpriteBatchRange,
         indexType: number,
-        params: SceneSpriteBatchRuntimeRenderParams
-    ): void {
+        params: SceneSpriteBatchRuntimeRenderParams,
+        warnings: string[]
+    ): boolean {
         if (batch.key.source.kind !== 'texture') {
-            return;
+            return false;
         }
 
-        const texture = this._options.resources.textures.get(batch.key.source.textureId);
+        const textureId = batch.key.source.textureId;
+        const texture = this._options.resources.textures.get(textureId);
         const shader = this._defaultShader;
-        if (!texture || !shader) {
-            return;
+        if (!texture) {
+            warnings.push(`sprite batch skipped: missing texture '${textureId}'`);
+            return false;
+        }
+        if (!shader) {
+            warnings.push(
+                `sprite batch skipped: missing default sprite shader for texture '${textureId}'`
+            );
+            return false;
         }
 
         this._options.renderStateApplier.apply(shader, params.renderPass, null);
@@ -588,6 +649,7 @@ export class SceneSpriteBatchRuntime {
         this._options.gl.bindSampler(0, null);
         this._options.gl.activeTexture(this._options.gl.TEXTURE0);
         this._options.gl.bindTexture(this._options.gl.TEXTURE_2D, null);
+        return true;
     }
 
     private _resolveMaskState(
@@ -845,7 +907,7 @@ export class SceneSpriteBatchRuntime {
     }
 
     private _isSpriteShader(shader: SceneShaderResource): boolean {
-        return shader.uniformNames.includes('u_ViewProjection');
+        return isRender2DSpriteUniformNames(shader.uniformNames);
     }
 
     private _resolveIndexByteSize(indexType: number): number {
