@@ -21,9 +21,6 @@ public static class AnimationConstants
     /// <summary>Blend1D child count at or below which linear scan beats binary search.</summary>
     public const int Blend1DLinearScanLimit = 8;
 
-    /// <summary>IK solver convergence epsilon (squared-distance domain).</summary>
-    public const float IkConvergenceEpsilon = 1e-8f;
-
     /// <summary>IK precision lower bound.</summary>
     public const float IkPrecisionFloor = 1e-5f;
 

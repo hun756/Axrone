@@ -385,6 +385,7 @@ public sealed class AnimationClip
     public void Sample(float time, AnimationFrame outFrame, bool isLooping = true)
     {
         ArgumentNullException.ThrowIfNull(outFrame);
+        AnimationTelemetry.RecordClipSampled();
         float t = WrapClipTime(time, isLooping);
         Span<float> component = stackalloc float[4];
 

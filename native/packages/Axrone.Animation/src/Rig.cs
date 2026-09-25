@@ -65,7 +65,15 @@ public sealed class Rig
 
     /// <summary>Children of a bone.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<int> GetChildren(int boneIndex) => _children[boneIndex];
+    public ReadOnlySpan<int> GetChildren(int boneIndex)
+    {
+        if ((uint)boneIndex >= (uint)BoneCount)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, $"Bone index {boneIndex} out of range.");
+        }
+
+        return _children[boneIndex];
+    }
 
     /// <summary>Validates and freezes a skeleton.</summary>
     public Rig(RigId id, ReadOnlySpan<BoneInfo> bones)
