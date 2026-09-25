@@ -27,7 +27,7 @@ public static class FastMath
     public static Quaternion Normalize(in Quaternion q)
     {
         float lenSq = (q.X * q.X) + (q.Y * q.Y) + (q.Z * q.Z) + (q.W * q.W);
-        if (lenSq < 1e-15f)
+        if (lenSq < AnimationConstants.QuaternionDegenerateLengthSq)
         {
             return Quaternion.Identity;
         }

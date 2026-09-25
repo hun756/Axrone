@@ -117,6 +117,10 @@ public sealed class RetargetProfile
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(targetFrame);
+        if (sourceFrame.BoneCount != SourceRig.BoneCount || targetFrame.BoneCount != TargetRig.BoneCount)
+        {
+            AnimationThrowHelper.ThrowRetargeting(AnimationErrorCode.RetargetingIncompatibleLayout, "Retarget frames do not match their rigs.");
+        }
 
         ReadOnlySpan<Vector3> sourceT = sourceFrame.ReadTranslations();
         ReadOnlySpan<Quaternion> sourceR = sourceFrame.ReadRotations();

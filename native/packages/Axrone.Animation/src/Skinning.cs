@@ -8,6 +8,14 @@ public static class SkinningPalette
     public static void ComputePalette(ReadOnlySpan<float> jointWorldMatrices, ReadOnlySpan<float> inverseBindMatrices, ReadOnlySpan<float> inverseMeshMatrix, Span<float> outPalette)
     {
         int boneCount = jointWorldMatrices.Length / 16;
+        if (boneCount == 0
+            || outPalette.Length < boneCount * 16
+            || (!inverseBindMatrices.IsEmpty && inverseBindMatrices.Length < boneCount * 16)
+            || inverseMeshMatrix.Length < 16)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Skinning palette inputs are undersized.");
+        }
+
         Span<float> composed = stackalloc float[16];
 
         for (int b = 0; b < boneCount; b++)
@@ -32,6 +40,12 @@ public static class SkinningPalette
     public static void ComputeFromWorldPose(Rig rig, ReadOnlySpan<Vector3> worldT, ReadOnlySpan<Quaternion> worldR, ReadOnlySpan<Vector3> worldS, Span<float> outPalette)
     {
         ArgumentNullException.ThrowIfNull(rig);
+        if (worldT.Length < rig.BoneCount || worldR.Length < rig.BoneCount || worldS.Length < rig.BoneCount
+            || outPalette.Length < rig.BoneCount * 16)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "World-pose skinning inputs are undersized.");
+        }
+
         Span<float> jointWorld = stackalloc float[16];
 
         for (int b = 0; b < rig.BoneCount; b++)

@@ -62,18 +62,24 @@ public sealed class AnimationChannel
     /// </summary>
     public int CurveSlot { get; internal set; } = -1;
 
-    /// <summary>Creates a channel; validates the time/value packing.</summary>
+    /// <summary>
+    /// Creates a channel; validates target, bone range, ascending finite times,
+    /// and the time/value packing. Anything malformed fails here — sampling trusts.
+    /// </summary>
     public AnimationChannel(int boneIndex, ChannelTarget target, InterpolationMode interpolation, float[] times, float[] values, CurveId? curveId = null)
     {
         ArgumentNullException.ThrowIfNull(times);
         ArgumentNullException.ThrowIfNull(values);
 
-        BoneIndex = boneIndex;
-        Target = target;
-        Interpolation = interpolation;
-        _keyTimes = times;
-        _keyValues = values;
-        TargetCurveId = curveId;
+        if (boneIndex < 0 && target != ChannelTarget.Curve)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Channel bone index {boneIndex} is negative.");
+        }
+
+        if ((uint)target > (uint)ChannelTarget.Curve)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Unknown channel target '{target}'.");
+        }
 
         int componentCount = target switch
         {
@@ -81,8 +87,27 @@ public sealed class AnimationChannel
             ChannelTarget.Rotation => 4,
             ChannelTarget.Scale => 3,
             ChannelTarget.Curve => 1,
-            _ => 3,
+            _ => throw new UnreachableException(),
         };
+
+        float previous = float.NegativeInfinity;
+        for (int i = 0; i < times.Length; i++)
+        {
+            float t = times[i];
+            if (!float.IsFinite(t) || t < previous)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Channel times must be finite and ascending (index {i}).");
+            }
+
+            previous = t;
+        }
+
+        BoneIndex = boneIndex;
+        Target = target;
+        Interpolation = interpolation;
+        _keyTimes = times;
+        _keyValues = values;
+        TargetCurveId = curveId;
 
         Stride = interpolation == InterpolationMode.CubicSpline ? componentCount * 3 : componentCount;
 
@@ -237,7 +262,7 @@ public readonly record struct FootContact(float StartTime, float EndTime, int Bo
 
         float n = (time - StartTime) / duration;
         float ramp = MathF.Min(n, 1.0f - n);
-        return MathF.Min(1.0f, MathF.Max(AnimationConstants.FootWeightFloor, ramp * 4.0f));
+        return MathF.Min(1.0f, MathF.Max(AnimationConstants.FootWeightFloor, ramp * AnimationConstants.FootEdgeRampGain));
     }
 }
 
@@ -353,6 +378,11 @@ public sealed class AnimationClip
                 }
             }
 
+            if (channel.Target == ChannelTarget.Curve && !channel.TargetCurveId.HasValue)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Curve channel {i} in '{Id}' names no curve.");
+            }
+
             if (context.CurveLayout is not null
                 && channel.Target == ChannelTarget.Curve
                 && channel.TargetCurveId.HasValue
@@ -422,6 +452,9 @@ public sealed class AnimationClip
                         }
                     }
 
+                    break;
+                default:
+                    AnimationThrowHelper.ThrowUnreachable();
                     break;
             }
         }

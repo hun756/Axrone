@@ -213,7 +213,7 @@ public sealed class StateMachineInstance
         AnimationState current = _states[CurrentStateIndex];
         float motionDuration = MotionDispatcher.GetDuration(current.RootMotion);
         float effectiveSpeed = MathF.Abs(current.Speed) > AnimationConstants.SoaEpsilon ? current.Speed : 1.0f;
-        float stateDuration = MathF.Max(motionDuration / effectiveSpeed, 1e-6f);
+        float stateDuration = MathF.Max(motionDuration / effectiveSpeed, AnimationConstants.MinStateDuration);
 
         PreviousNormalizedTime = StateNormalizedTime;
         StateNormalizedTime += deltaTime / stateDuration;
@@ -245,7 +245,7 @@ public sealed class StateMachineInstance
         AnimationState target = _states[active.TargetStateIndex];
         float targetMotionDuration = MotionDispatcher.GetDuration(target.RootMotion);
         float targetSpeed = MathF.Abs(target.Speed) > AnimationConstants.SoaEpsilon ? target.Speed : 1.0f;
-        float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, 1e-6f);
+        float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, AnimationConstants.MinStateDuration);
 
         _targetNormalizedTime += deltaTime / targetDuration;
         _transitionProgress += _transitionDurationSec > AnimationConstants.SoaEpsilon ? deltaTime / _transitionDurationSec : 1.0f;
@@ -255,7 +255,7 @@ public sealed class StateMachineInstance
             StateTransition? interrupt = CheckTransitions(current, parameters);
             if (interrupt != null && interrupt.TargetStateIndex != active.TargetStateIndex)
             {
-                if (_transitionProgress >= 0.5f)
+                if (_transitionProgress >= AnimationConstants.TransitionInterruptThreshold)
                 {
                     _transitionSourceStateIndex = active.TargetStateIndex;
                 }

@@ -300,7 +300,8 @@ public sealed class ParameterStore
 
             case ParameterType.Bool:
                 bool bValue = _bools[index] != 0;
-                bool expected = condition.Threshold > 0.5f;
+                bool expected = condition.Threshold > AnimationConstants.BoolConditionThreshold;
+                // Ordering operators are unsatisfiable for flags (never an error).
                 return condition.Operator switch
                 {
                     ConditionOperator.Equal => bValue == expected,
@@ -312,6 +313,7 @@ public sealed class ParameterStore
                 return _triggers[index] != 0;
 
             default:
+                AnimationThrowHelper.ThrowStateMachine(AnimationErrorCode.StateMachineTypeMismatch, $"Unknown parameter type '{type}'.");
                 return false;
         }
     }

@@ -65,4 +65,51 @@ public class TaxonomyTests
         children.Should().Throw<ValidationException>()
             .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
     }
+
+    private static readonly float[] s_keyTime = new float[] { 0.0f };
+    private static readonly float[] s_keyTranslation = new float[] { 0, 0, 0 };
+    private static readonly float[] s_keyValue = new float[] { 0 };
+    private static readonly float[] s_unorderedTimes = new float[] { 1.0f, 0.0f };
+    private static readonly float[] s_unorderedValues = new float[] { 0, 0, 0, 1, 0, 0 };
+
+    [Fact]
+    public void Channel_MalformedDataThrowsAtConstruction()
+    {
+        Action negativeBone = () => _ = new AnimationChannel(
+            -1, ChannelTarget.Translation, InterpolationMode.Linear, s_keyTime, s_keyTranslation);
+        negativeBone.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationClipMismatch);
+
+        Action unknownTarget = () => _ = new AnimationChannel(
+            0, (ChannelTarget)99, InterpolationMode.Linear, s_keyTime, s_keyValue);
+        unknownTarget.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationClipMismatch);
+
+        Action unordered = () => _ = new AnimationChannel(
+            0, ChannelTarget.Translation, InterpolationMode.Linear, s_unorderedTimes, s_unorderedValues);
+        unordered.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationClipDegenerateData);
+    }
+
+    [Fact]
+    public void Skinning_UndersizedInputsThrowValidation()
+    {
+        Action palette = () => SkinningPalette.ComputePalette(
+            new float[16], ReadOnlySpan<float>.Empty, new float[16], new float[15]);
+        palette.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+    }
+
+    [Fact]
+    public void Retarget_MismatchedFramesThrowRetargeting()
+    {
+        Rig rig = TwoBone();
+        var profile = new RetargetProfile(rig, rig);
+        var small = new AnimationFrame(1, new Dictionary<CurveId, int>());
+        var frame = new AnimationFrame(rig.BoneCount, new Dictionary<CurveId, int>());
+
+        Action retarget = () => profile.RetargetFrame(small, frame);
+        retarget.Should().Throw<RetargetingException>()
+            .Where(ex => ex.Code == AnimationErrorCode.RetargetingIncompatibleLayout);
+    }
 }

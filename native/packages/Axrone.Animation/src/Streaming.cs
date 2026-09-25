@@ -186,7 +186,7 @@ public sealed class StreamingScheduler
                     var preloadKey = new ChunkKey(clip, preloadIndex);
                     if (!_loadedChunks.Contains(preloadKey) && !_requestedChunks.Contains(preloadKey) && !_failedChunks.Contains(preloadKey))
                     {
-                        InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * 0.5f, true, preloadKey));
+                        InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * AnimationConstants.PreloadWeightFactor, true, preloadKey));
                         _requestedChunks.Add(preloadKey);
                     }
                 }
@@ -318,13 +318,15 @@ public static class KeyframeOptimizer
 
         foreach (AnimationChannel channel in source.Channels)
         {
+            // Channels are target-validated at construction; the default arms are
+            // provably unreachable and fail loud instead of silently miscoding.
             float tolerance = channel.Target switch
             {
                 ChannelTarget.Translation => positionTolerance,
                 ChannelTarget.Rotation => rotationTolerance,
                 ChannelTarget.Scale => scaleTolerance,
                 ChannelTarget.Curve => AnimationConstants.KeyframeCurveTol,
-                _ => positionTolerance,
+                _ => throw new UnreachableException(),
             };
 
             AnimationChannel reduced = Reduce(channel, tolerance);
@@ -333,7 +335,8 @@ public static class KeyframeOptimizer
                 case ChannelTarget.Translation: translations.Add(reduced); break;
                 case ChannelTarget.Rotation: rotations.Add(reduced); break;
                 case ChannelTarget.Scale: scales.Add(reduced); break;
-                default: curves.Add(reduced); break;
+                case ChannelTarget.Curve: curves.Add(reduced); break;
+                default: AnimationThrowHelper.ThrowUnreachable(); break;
             }
         }
 
