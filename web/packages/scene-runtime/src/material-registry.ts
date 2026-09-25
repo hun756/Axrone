@@ -200,7 +200,7 @@ const createTextureSlots = (
 
     for (const [uniformName, binding] of assignments) {
         let resolvedUnit = binding.unit;
-        if (resolvedUnit === undefined) {
+        if (resolvedUnit === undefined || usedUnits.has(resolvedUnit)) {
             while (usedUnits.has(nextUnit)) {
                 nextUnit += 1;
             }
@@ -613,6 +613,127 @@ export class SceneMaterialRegistry {
                     ...(definition.textures ?? {}),
                     [name]: cloneTextureBinding(binding),
                 },
+            });
+        }
+
+        this._handles.set(id, toHandle(material));
+        this._textureSlots.set(id, createTextureSlots(material));
+        this._observables?._notifyTextureChanged(id, name);
+
+        return true;
+    }
+
+    removeTexture(id: string, name: string): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        if (!material.textureBindings.has(name)) {
+            return false;
+        }
+        material.textureBindings.delete(name);
+        const definition = this._definitions.get(id);
+        if (definition?.textures && name in definition.textures) {
+            const { [name]: _removed, ...remaining } = definition.textures;
+            this._definitions.set(id, {
+                ...definition,
+                textures: remaining,
+            });
+        }
+        this._handles.set(id, toHandle(material));
+        this._textureSlots.set(id, createTextureSlots(material));
+        this._observables?._notifyTextureChanged(id, name);
+        return true;
+    }
+
+    replaceTextureOverrides(
+        id: string,
+        overrides: Readonly<Record<string, SceneTextureBindingDefinition | null | undefined>>
+    ): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+        for (const [name, binding] of Object.entries(overrides)) {
+            if (binding === null || binding === undefined) {
+                this.removeTexture(id, name);
+            } else {
+                this.setTexture(id, name, binding);
+            }
+        }
+        return true;
+    }
+
+    replaceTextures(
+        id: string,
+        textures: Readonly<Record<string, SceneTextureBindingDefinition>>
+    ): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+
+        const nextBindings = new Map<string, SceneMaterialTextureBinding>();
+        const nextDefinitionTextures: Record<string, SceneTextureBindingDefinition> = {};
+        for (const [name, binding] of Object.entries(textures)) {
+            nextBindings.set(name, normalizeSceneTextureBinding(binding));
+            nextDefinitionTextures[name] = cloneTextureBinding(binding);
+        }
+
+        const previousNames = new Set(material.textureBindings.keys());
+        material.textureBindings.clear();
+        for (const [name, binding] of nextBindings) {
+            material.textureBindings.set(name, binding);
+        }
+
+        const definition = this._definitions.get(id);
+        if (definition) {
+            this._definitions.set(id, {
+                ...definition,
+                textures: nextDefinitionTextures,
+            });
+        }
+
+        this._handles.set(id, toHandle(material));
+        this._textureSlots.set(id, createTextureSlots(material));
+
+        if (this._observables) {
+            const notified = new Set<string>();
+            for (const name of previousNames) {
+                if (!nextBindings.has(name)) {
+                    this._observables._notifyTextureChanged(id, name);
+                    notified.add(name);
+                }
+            }
+            for (const name of nextBindings.keys()) {
+                if (!notified.has(name)) {
+                    this._observables._notifyTextureChanged(id, name);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    clearTexture(id: string, name: string): boolean {
+        const material = this._resources.get(id);
+        if (!material) {
+            return false;
+        }
+
+        if (!material.textureBindings.has(name)) {
+            return false;
+        }
+
+        material.textureBindings.delete(name);
+
+        const definition = this._definitions.get(id);
+        if (definition && definition.textures) {
+            const nextTextures = { ...definition.textures };
+            delete nextTextures[name];
+            this._definitions.set(id, {
+                ...definition,
+                textures: nextTextures,
             });
         }
 
