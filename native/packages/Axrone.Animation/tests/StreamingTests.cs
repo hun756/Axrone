@@ -39,13 +39,13 @@ public class StreamingTests
         decoded.Tracks.Count.Should().Be(1);
 
         Action corrupt = () => ChunkCodec.Decode("not json"u8);
-        corrupt.Should().Throw<SamplingException>()
+        corrupt.Should().Throw<StreamingException>()
             .Where(e => e.Code == AnimationErrorCode.StreamingChunkCorrupt);
 
         var badVersion = new ChunkPayloadDto { Version = 99, ClipId = "walk" };
         byte[] badJson = JsonSerializer.SerializeToUtf8Bytes(badVersion, ChunkJsonSerializerContext.Default.ChunkPayloadDto);
         Action version = () => ChunkCodec.Decode(badJson);
-        version.Should().Throw<SamplingException>()
+        version.Should().Throw<StreamingException>()
             .Where(e => e.Code == AnimationErrorCode.StreamingChunkIncompatible);
     }
 
@@ -94,7 +94,7 @@ public class StreamingTests
         scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, outRequests: again);
         again.Should().BeEmpty();
 
-        scheduler.MarkLoaded(outRequests[0].ChunkId);
+        scheduler.MarkLoaded(outRequests[0].Key);
         var third = new Collection<ChunkRequest>();
         scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, outRequests: third);
         third.Should().BeEmpty();

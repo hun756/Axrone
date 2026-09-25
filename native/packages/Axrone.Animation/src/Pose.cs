@@ -124,7 +124,7 @@ public readonly record struct CurveStore
     {
         if ((uint)handle.Slot >= (uint)_values.Length)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.SamplingOutOfBounds, $"Curve slot {handle.Slot} out of range.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Curve slot {handle.Slot} out of range.");
         }
 
         return handle.Slot;

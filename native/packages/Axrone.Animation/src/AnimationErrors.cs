@@ -83,6 +83,9 @@ public enum AnimationErrorCode
 
     /// <summary>Curve id does not resolve to a channel slot.</summary>
     ResolutionCurveNotFound = 26,
+
+    /// <summary>Argument violates its contract (range, null, or foreign handle).</summary>
+    ValidationInvalidArgument = 27,
 }
 
 /// <summary>Base animation failure carrying a machine-readable code.</summary>
@@ -172,6 +175,16 @@ public sealed class IkException : AnimationException
 {
     /// <summary>Creates an IK failure.</summary>
     public IkException(AnimationErrorCode code, string message)
+        : base(code, message)
+    {
+    }
+}
+
+/// <summary>Streaming ingest, codec, or schedule faulted.</summary>
+public sealed class StreamingException : AnimationException
+{
+    /// <summary>Creates a streaming failure.</summary>
+    public StreamingException(AnimationErrorCode code, string message)
         : base(code, message)
     {
     }

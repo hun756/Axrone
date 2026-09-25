@@ -72,47 +72,51 @@ public sealed partial class ChunkJsonSerializerContext : JsonSerializerContext
 }
 
 /// <summary>One chunk fetch request.</summary>
-public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload);
+public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload, ChunkKey Key);
+
+/// <summary>
+/// Allocation-free chunk identity: (clip, version). The scheduler tracks these
+/// by value and only materializes the string id for genuinely new requests —
+/// steady-state scheduling allocates nothing.
+/// </summary>
+public readonly record struct ChunkKey(ClipId Clip, int Version);
 
 /// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
 public sealed class StreamingScheduler
 {
-    private readonly HashSet<string> _loadedChunks = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _requestedChunks = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _failedChunks = new(StringComparer.Ordinal);
+    private readonly HashSet<ChunkKey> _loadedChunks = new();
+    private readonly HashSet<ChunkKey> _requestedChunks = new();
+    private readonly HashSet<ChunkKey> _failedChunks = new();
     private readonly Lock _gate = new();
 
     /// <summary>Marks a chunk loaded.</summary>
-    public void MarkLoaded(string chunkId)
+    public void MarkLoaded(ChunkKey key)
     {
-        ArgumentNullException.ThrowIfNull(chunkId);
         lock (_gate)
         {
-            _requestedChunks.Remove(chunkId);
-            _loadedChunks.Add(chunkId);
+            _requestedChunks.Remove(key);
+            _loadedChunks.Add(key);
         }
     }
 
     /// <summary>Marks a chunk failed (eligible for retry after reset).</summary>
-    public void MarkFailed(string chunkId)
+    public void MarkFailed(ChunkKey key)
     {
-        ArgumentNullException.ThrowIfNull(chunkId);
         lock (_gate)
         {
-            _requestedChunks.Remove(chunkId);
-            _failedChunks.Add(chunkId);
+            _requestedChunks.Remove(key);
+            _failedChunks.Add(key);
         }
     }
 
     /// <summary>Forgets all chunk states.</summary>
-    public void Reset(string chunkId)
+    public void Reset(ChunkKey key)
     {
-        ArgumentNullException.ThrowIfNull(chunkId);
         lock (_gate)
         {
-            _loadedChunks.Remove(chunkId);
-            _requestedChunks.Remove(chunkId);
-            _failedChunks.Remove(chunkId);
+            _loadedChunks.Remove(key);
+            _requestedChunks.Remove(key);
+            _failedChunks.Remove(key);
         }
     }
 
@@ -146,8 +150,9 @@ public sealed class StreamingScheduler
 
     /// <summary>
     /// Appends active and preload chunk requests to a caller-owned collection,
-    /// kept sorted (active first, then weight, then start). No per-call allocation
-    /// beyond the interpolated chunk ids.
+    /// kept sorted (active first, then weight, then start). Steady-state calls
+    /// allocate nothing: membership probes use the by-value key, and the string
+    /// id materializes only for genuinely new requests.
     /// </summary>
     public void Schedule(
         ReadOnlySpan<(ClipId Clip, float Time, float Weight)> activities,
@@ -158,7 +163,7 @@ public sealed class StreamingScheduler
         ArgumentNullException.ThrowIfNull(outRequests);
         if (chunkDuration <= 0.0f)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.StreamingChunkIncompatible, "Chunk duration must be positive.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Chunk duration must be positive.");
         }
 
         lock (_gate)
@@ -167,22 +172,22 @@ public sealed class StreamingScheduler
             {
                 (ClipId clip, float time, float weight) = activities[i];
                 int currentIndex = (int)(time / chunkDuration);
-                string activeId = $"{clip.Value}:v:{currentIndex}";
+                var activeKey = new ChunkKey(clip, currentIndex);
 
-                if (!_loadedChunks.Contains(activeId) && !_requestedChunks.Contains(activeId) && !_failedChunks.Contains(activeId))
+                if (!_loadedChunks.Contains(activeKey) && !_requestedChunks.Contains(activeKey) && !_failedChunks.Contains(activeKey))
                 {
-                    InsertSorted(outRequests, new ChunkRequest(activeId, clip, currentIndex * chunkDuration, weight, false));
-                    _requestedChunks.Add(activeId);
+                    InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{currentIndex}", clip, currentIndex * chunkDuration, weight, false, activeKey));
+                    _requestedChunks.Add(activeKey);
                 }
 
                 int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
                 if (preloadIndex != currentIndex)
                 {
-                    string preloadId = $"{clip.Value}:v:{preloadIndex}";
-                    if (!_loadedChunks.Contains(preloadId) && !_requestedChunks.Contains(preloadId) && !_failedChunks.Contains(preloadId))
+                    var preloadKey = new ChunkKey(clip, preloadIndex);
+                    if (!_loadedChunks.Contains(preloadKey) && !_requestedChunks.Contains(preloadKey) && !_failedChunks.Contains(preloadKey))
                     {
-                        InsertSorted(outRequests, new ChunkRequest(preloadId, clip, preloadIndex * chunkDuration, weight * 0.5f, true));
-                        _requestedChunks.Add(preloadId);
+                        InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * 0.5f, true, preloadKey));
+                        _requestedChunks.Add(preloadKey);
                     }
                 }
             }
@@ -203,23 +208,23 @@ public static class ChunkCodec
         }
         catch (JsonException ex)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, $"Chunk JSON corrupt: {ex.Message}");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, $"Chunk JSON corrupt: {ex.Message}");
             throw new UnreachableException();
         }
 
         if (payload == null)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, "Chunk JSON decoded to null.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk JSON decoded to null.");
         }
 
         if (payload.Version != 1)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, $"Unsupported chunk version {payload.Version}.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, $"Unsupported chunk version {payload.Version}.");
         }
 
         if (string.IsNullOrWhiteSpace(payload.ClipId))
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, "Chunk clip id missing.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk clip id missing.");
         }
 
         foreach (ChunkTrackDto track in payload.Tracks)
@@ -235,13 +240,13 @@ public static class ChunkCodec
 
             if (components < 0)
             {
-                AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, $"Unknown channel target {track.Target}.");
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, $"Unknown channel target {track.Target}.");
             }
 
             int stride = track.Interpolation == (byte)InterpolationMode.CubicSpline ? components * 3 : components;
             if (track.KeyTimes.Count * stride != track.KeyValues.Count)
             {
-                AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, "Chunk track stride mismatch.");
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, "Chunk track stride mismatch.");
             }
         }
 

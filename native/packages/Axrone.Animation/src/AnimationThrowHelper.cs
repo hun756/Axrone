@@ -57,6 +57,12 @@ public static class AnimationThrowHelper
     public static void ThrowSampling(AnimationErrorCode code, string message) =>
         throw new SamplingException(code, message);
 
+    /// <summary>Throws a streaming failure.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowStreaming(AnimationErrorCode code, string message) =>
+        throw new StreamingException(code, message);
+
     /// <summary>Throws for unreachable branches.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -53,11 +53,12 @@ public class HandleTests
         ParameterStore store = CreateParameters();
         var foreign = new ParameterHandle(999);
         Action read = () => store.GetFloat(in foreign);
-        read.Should().Throw<StateMachineException>()
-            .Where(ex => ex.Code == AnimationErrorCode.StateMachineParameterNotFound);
+        read.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
 
         Action invalid = () => store.GetFloat(in ParameterHandle.Invalid);
-        invalid.Should().Throw<StateMachineException>();
+        invalid.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
     }
 
     [Fact]
@@ -90,7 +91,7 @@ public class HandleTests
         CurveStore store = CreateCurves();
         var foreign = new CurveHandle(999);
         Action write = () => store.Write(in foreign, 1.0f);
-        write.Should().Throw<SamplingException>()
-            .Where(ex => ex.Code == AnimationErrorCode.SamplingOutOfBounds);
+        write.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
     }
 }

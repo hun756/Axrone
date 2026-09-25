@@ -69,7 +69,7 @@ public sealed class Rig
     {
         if ((uint)boneIndex >= (uint)BoneCount)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, $"Bone index {boneIndex} out of range.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Bone index {boneIndex} out of range.");
         }
 
         return _children[boneIndex];

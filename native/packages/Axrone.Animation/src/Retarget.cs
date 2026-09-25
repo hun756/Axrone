@@ -77,7 +77,7 @@ public sealed class RetargetProfile
         {
             for (int i = 0; i < sourceRig.BoneCount; i++)
             {
-                _sourceToTargetMap[i] = targetRig.FindBoneIndex(sourceRig.BoneNames[i].ToString());
+                _sourceToTargetMap[i] = targetRig.FindBoneIndex(sourceRig.BoneNames[i]);
             }
         }
 

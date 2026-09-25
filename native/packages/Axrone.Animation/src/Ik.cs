@@ -20,9 +20,14 @@ public static class IkSolvers
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(frame);
-        if (chainBoneIndices.Length < 2 || scratchPositions.Length < chainBoneIndices.Length)
+        if (chainBoneIndices.Length < 2)
         {
-            return;
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "FABRIK chain requires at least two bones.");
+        }
+
+        if (scratchPositions.Length < chainBoneIndices.Length)
+        {
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "FABRIK scratch is smaller than the chain.");
         }
 
         int scratchBones = rig.BoneCount;
@@ -159,7 +164,12 @@ public static class IkSolvers
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(frame);
-        if (chainBoneIndices.Length < 2 || weight <= 0.0f)
+        if (chainBoneIndices.Length < 2)
+        {
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "CCD chain requires at least two bones.");
+        }
+
+        if (weight <= 0.0f)
         {
             return;
         }

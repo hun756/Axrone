@@ -140,7 +140,7 @@ public sealed class ParameterStore
     {
         if ((uint)handle.Index >= (uint)_types.Length)
         {
-            AnimationThrowHelper.ThrowStateMachine(AnimationErrorCode.StateMachineParameterNotFound, $"Parameter handle {handle.Index} out of range.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Parameter handle {handle.Index} out of range.");
         }
 
         return handle.Index;
