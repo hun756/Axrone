@@ -38,8 +38,19 @@ public enum ConditionOperator
     LessThanOrEqual = 5,
 }
 
-/// <summary>Single transition condition against a named parameter.</summary>
-public readonly record struct ParameterCondition(string ParameterName, ConditionOperator Operator, float Threshold);
+/// <summary>
+/// Single transition condition against a named parameter. The name is the
+/// authoring identity; <see cref="StateMachineInstance.Bind"/> resolves it to
+/// a handle once, and evaluation prefers the handle (no hashing per check).
+/// </summary>
+public record struct ParameterCondition(string ParameterName, ConditionOperator Operator, float Threshold)
+{
+    /// <summary>Bind-time resolved slot.</summary>
+    internal ParameterHandle ResolvedHandle { get; set; }
+
+    /// <summary>Whether the handle was resolved.</summary>
+    internal bool IsResolved { get; set; }
+}
 
 /// <summary>
 /// Typed parameter bank over parallel arrays. Ints ride their own lane (no float
@@ -252,7 +263,10 @@ public sealed class ParameterStore
     /// <summary>Evaluates a transition condition against current values.</summary>
     public bool EvaluateCondition(in ParameterCondition condition)
     {
-        int index = ResolveIndex(condition.ParameterName);
+        ParameterHandle handle = condition.ResolvedHandle;
+        int index = condition.IsResolved
+            ? RequireHandle(in handle)
+            : ResolveIndex(condition.ParameterName);
         ParameterType type = _types[index];
 
         switch (type)

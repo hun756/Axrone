@@ -37,6 +37,12 @@ public abstract class MotionNode
     /// <summary>Evaluates into a frame; depth guards recursion.</summary>
     public abstract void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth);
 
+    /// <summary>
+    /// Resolves string/dictionary lookups to handles once (bind time). Partial:
+    /// resolves whichever context parts are present. Idempotent.
+    /// </summary>
+    public abstract void Bind(in MotionBindingContext context);
+
     /// <summary>Root-joint delta between two normalized times.</summary>
     public abstract void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot);
 
@@ -62,6 +68,9 @@ public sealed class ClipMotionNode : MotionNode
         ArgumentNullException.ThrowIfNull(clip);
         Clip = clip;
     }
+
+    /// <inheritdoc/>
+    public override void Bind(in MotionBindingContext context) => Clip.Bind(in context);
 
     /// <inheritdoc/>
     public override float GetDuration()
@@ -196,6 +205,8 @@ public sealed class Blend1DMotionNode : MotionNode
 
     private readonly float[] _thresholds;
     private readonly MotionNode[] _children;
+    private ParameterHandle _parameterHandle;
+    private bool _parameterBound;
 
     /// <summary>Driving parameter name.</summary>
     public string ParameterName { get; }
@@ -224,6 +235,22 @@ public sealed class Blend1DMotionNode : MotionNode
         {
             _thresholds[i] = entries[i].Threshold;
             _children[i] = entries[i].Child;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void Bind(in MotionBindingContext context)
+    {
+        if (context.Parameters is not null)
+        {
+            _parameterHandle = context.Parameters.ResolveHandle(ParameterName);
+            _parameterBound = true;
+        }
+
+        MotionNode[] children = _children;
+        for (int i = 0; i < children.Length; i++)
+        {
+            children[i].Bind(in context);
         }
     }
 
@@ -295,7 +322,9 @@ public sealed class Blend1DMotionNode : MotionNode
             AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
         }
 
-        float paramValue = parameters.GetFloat(ParameterName);
+        float paramValue = _parameterBound
+            ? parameters.GetFloat(in _parameterHandle)
+            : parameters.GetFloat(ParameterName);
         Blend1DSegment segment = FindSegment(paramValue);
 
         if (segment.Index0 == segment.Index1 || segment.Weight <= 0.0f)
@@ -356,6 +385,9 @@ public sealed class Blend2DMotionNode : MotionNode
 {
     private readonly Vector2[] _positions;
     private readonly MotionNode[] _children;
+    private ParameterHandle _parameterXHandle;
+    private ParameterHandle _parameterYHandle;
+    private bool _parametersBound;
 
     /// <inheritdoc/>
     public override MotionKind Kind => MotionKind.Blend2D;
@@ -395,6 +427,23 @@ public sealed class Blend2DMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
+    public override void Bind(in MotionBindingContext context)
+    {
+        if (context.Parameters is not null)
+        {
+            _parameterXHandle = context.Parameters.ResolveHandle(ParameterX);
+            _parameterYHandle = context.Parameters.ResolveHandle(ParameterY);
+            _parametersBound = true;
+        }
+
+        MotionNode[] children = _children;
+        for (int i = 0; i < children.Length; i++)
+        {
+            children[i].Bind(in context);
+        }
+    }
+
+    /// <inheritdoc/>
     public override float GetDuration()
     {
         if (_children.Length == 0)
@@ -424,7 +473,9 @@ public sealed class Blend2DMotionNode : MotionNode
             AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
         }
 
-        Vector2 input = new(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
+        Vector2 input = _parametersBound
+            ? new Vector2(parameters.GetFloat(in _parameterXHandle), parameters.GetFloat(in _parameterYHandle))
+            : new Vector2(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
         Span<float> weights = stackalloc float[_positions.Length];
 
         for (int i = 0; i < _positions.Length; i++)
@@ -495,6 +546,8 @@ public sealed class DirectMotionNode : MotionNode
 {
     private readonly string[] _parameterNames;
     private readonly MotionNode[] _children;
+    private ParameterHandle[] _parameterHandles = Array.Empty<ParameterHandle>();
+    private bool _parametersBound;
 
     /// <inheritdoc/>
     public override MotionKind Kind => MotionKind.Direct;
@@ -520,6 +573,28 @@ public sealed class DirectMotionNode : MotionNode
         {
             _parameterNames[i] = entries[i].Parameter;
             _children[i] = entries[i].Child;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void Bind(in MotionBindingContext context)
+    {
+        if (context.Parameters is not null)
+        {
+            ParameterHandle[] handles = new ParameterHandle[_parameterNames.Length];
+            for (int i = 0; i < _parameterNames.Length; i++)
+            {
+                handles[i] = context.Parameters.ResolveHandle(_parameterNames[i]);
+            }
+
+            _parameterHandles = handles;
+            _parametersBound = true;
+        }
+
+        MotionNode[] children = _children;
+        for (int i = 0; i < children.Length; i++)
+        {
+            children[i].Bind(in context);
         }
     }
 
@@ -552,9 +627,12 @@ public sealed class DirectMotionNode : MotionNode
         int activeCount = 0;
         int singleIndex = -1;
 
+        ParameterHandle[] handles = _parameterHandles;
+        bool bound = _parametersBound && handles.Length == _children.Length;
         for (int i = 0; i < _children.Length; i++)
         {
-            float w = MathF.Max(0.0f, parameters.GetFloat(_parameterNames[i]));
+            float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
+            float w = MathF.Max(0.0f, raw);
             weights[i] = w;
             if (w > 0.0f)
             {
@@ -641,6 +719,9 @@ public sealed class AdditiveMotionNode : MotionNode
     /// <summary>Weight parameter name.</summary>
     public string WeightParameter { get; }
 
+    private ParameterHandle _weightHandle;
+    private bool _weightBound;
+
     /// <summary>Creates an additive node.</summary>
     public AdditiveMotionNode(MotionNode baseChild, MotionNode additiveChild, string weightParameter)
     {
@@ -650,6 +731,19 @@ public sealed class AdditiveMotionNode : MotionNode
         BaseChild = baseChild;
         AdditiveChild = additiveChild;
         WeightParameter = weightParameter;
+    }
+
+    /// <inheritdoc/>
+    public override void Bind(in MotionBindingContext context)
+    {
+        if (context.Parameters is not null)
+        {
+            _weightHandle = context.Parameters.ResolveHandle(WeightParameter);
+            _weightBound = true;
+        }
+
+        BaseChild.Bind(in context);
+        AdditiveChild.Bind(in context);
     }
 
     /// <inheritdoc/>
@@ -667,7 +761,9 @@ public sealed class AdditiveMotionNode : MotionNode
             AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
         }
 
-        float weight = FastMath.Clamp01(parameters.GetFloat(WeightParameter));
+        float weight = FastMath.Clamp01(_weightBound
+            ? parameters.GetFloat(in _weightHandle)
+            : parameters.GetFloat(WeightParameter));
         if (weight <= 0.0f)
         {
             BaseChild.Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);

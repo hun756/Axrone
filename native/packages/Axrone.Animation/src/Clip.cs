@@ -56,6 +56,12 @@ public sealed class AnimationChannel
     /// <summary>Target curve for curve channels.</summary>
     public CurveId? TargetCurveId { get; }
 
+    /// <summary>
+    /// Bind-time resolved curve slot; -1 until <see cref="AnimationClip.Bind"/>
+    /// resolves it. Sampling falls back to dictionary lookup while unbound.
+    /// </summary>
+    public int CurveSlot { get; internal set; } = -1;
+
     /// <summary>Creates a channel; validates the time/value packing.</summary>
     public AnimationChannel(int boneIndex, ChannelTarget target, InterpolationMode interpolation, float[] times, float[] values, CurveId? curveId = null)
     {
@@ -321,11 +327,40 @@ public sealed class AnimationClip
         }
     }
 
-    /// <summary>Replaces channels (streaming merge).</summary>
+    /// <summary>Replaces channels (streaming merge). New channels start unbound.</summary>
     public void RebuildChannels(AnimationChannel[] newChannels)
     {
         ArgumentNullException.ThrowIfNull(newChannels);
         _channels = newChannels;
+    }
+
+    /// <summary>
+    /// Binds curve slots against a layout and validates bone indices against a
+    /// rig. Missing curve ids stay unbound (sampling fails loudly with a code);
+    /// out-of-range bones fail here, never mid-frame. Idempotent.
+    /// </summary>
+    public void Bind(in MotionBindingContext context)
+    {
+        AnimationChannel[] channels = _channels;
+        for (int i = 0; i < channels.Length; i++)
+        {
+            AnimationChannel channel = channels[i];
+            if (context.Rig is not null && channel.Target != ChannelTarget.Curve)
+            {
+                if ((uint)channel.BoneIndex >= (uint)context.Rig.BoneCount)
+                {
+                    AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Channel {i} bone index {channel.BoneIndex} out of range for '{Id}'.");
+                }
+            }
+
+            if (context.CurveLayout is not null
+                && channel.Target == ChannelTarget.Curve
+                && channel.TargetCurveId.HasValue
+                && context.CurveLayout.TryGetValue(channel.TargetCurveId.Value, out int slot))
+            {
+                channel.CurveSlot = slot;
+            }
+        }
     }
 
     /// <summary>Wraps or clamps time to the clip range.</summary>
@@ -376,7 +411,14 @@ public sealed class AnimationClip
                 case ChannelTarget.Curve:
                     if (channel.TargetCurveId.HasValue)
                     {
-                        outFrame.Curves.Write(channel.TargetCurveId.Value, component[0]);
+                        if (channel.CurveSlot >= 0)
+                        {
+                            outFrame.Curves.Write(new CurveHandle(channel.CurveSlot), component[0]);
+                        }
+                        else
+                        {
+                            outFrame.Curves.Write(channel.TargetCurveId.Value, component[0]);
+                        }
                     }
 
                     break;

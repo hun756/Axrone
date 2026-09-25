@@ -39,6 +39,19 @@ public sealed class StateTransition
         Duration = duration;
         _conditions = conditions ?? Array.Empty<ParameterCondition>();
     }
+
+    /// <summary>Resolves guard conditions against a store (bind time, idempotent).</summary>
+    internal void BindConditions(ParameterStore parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        for (int i = 0; i < _conditions.Length; i++)
+        {
+            ParameterCondition condition = _conditions[i];
+            condition.ResolvedHandle = parameters.ResolveHandle(condition.ParameterName);
+            condition.IsResolved = true;
+            _conditions[i] = condition;
+        }
+    }
 }
 
 /// <summary>State: motion plus speed plus outgoing transitions.</summary>
@@ -73,6 +86,7 @@ public sealed class StateMachineInstance
 {
     private readonly AnimationState[] _states;
     private readonly StateTransition[] _anyStateTransitions;
+    private ParameterStore? _boundParameters;
 
     private StateTransition? _activeTransition;
     private int _transitionSourceStateIndex;
@@ -143,11 +157,58 @@ public sealed class StateMachineInstance
         _targetNormalizedTime = offset;
     }
 
+    /// <summary>
+    /// Binds motions and guard conditions to whichever context parts are present.
+    /// Idempotent; re-running overwrites the same handles.
+    /// </summary>
+    public void Bind(in MotionBindingContext context)
+    {
+        if (context.Parameters is not null)
+        {
+            BindConditions(context.Parameters);
+            _boundParameters = context.Parameters;
+        }
+
+        if (context.Parameters is not null || context.CurveLayout is not null || context.Rig is not null)
+        {
+            for (int i = 0; i < _states.Length; i++)
+            {
+                _states[i].RootMotion.Bind(in context);
+            }
+        }
+    }
+
+    private void BindConditions(ParameterStore parameters)
+    {
+        for (int i = 0; i < _anyStateTransitions.Length; i++)
+        {
+            _anyStateTransitions[i].BindConditions(parameters);
+        }
+
+        for (int i = 0; i < _states.Length; i++)
+        {
+            foreach (StateTransition transition in _states[i].Transitions)
+            {
+                transition.BindConditions(parameters);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureBound(ParameterStore parameters)
+    {
+        if (!ReferenceEquals(_boundParameters, parameters))
+        {
+            Bind(new MotionBindingContext(parameters, null, null));
+        }
+    }
+
     /// <summary>Advances time, starts due transitions, and drives the active blend.</summary>
     public void Update(float deltaTime, ParameterStore parameters, ICollection<ClipEvent> outEvents, float layerWeight)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(outEvents);
+        EnsureBound(parameters);
 
         AnimationState current = _states[CurrentStateIndex];
         float motionDuration = current.RootMotion.GetDuration();
@@ -304,6 +365,7 @@ public sealed class StateMachineInstance
         ArgumentNullException.ThrowIfNull(arena);
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(parameters);
+        EnsureBound(parameters);
 
         if (_activeTransition == null)
         {
