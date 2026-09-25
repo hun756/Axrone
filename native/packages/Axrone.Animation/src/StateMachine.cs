@@ -211,7 +211,7 @@ public sealed class StateMachineInstance
         EnsureBound(parameters);
 
         AnimationState current = _states[CurrentStateIndex];
-        float motionDuration = current.RootMotion.GetDuration();
+        float motionDuration = MotionDispatcher.GetDuration(current.RootMotion);
         float effectiveSpeed = MathF.Abs(current.Speed) > AnimationConstants.SoaEpsilon ? current.Speed : 1.0f;
         float stateDuration = MathF.Max(motionDuration / effectiveSpeed, 1e-6f);
 
@@ -236,14 +236,14 @@ public sealed class StateMachineInstance
             }
         }
 
-        current.RootMotion.CollectEvents(PreviousNormalizedTime, StateNormalizedTime, layerWeight, outEvents);
+        MotionDispatcher.CollectEvents(current.RootMotion, PreviousNormalizedTime, StateNormalizedTime, layerWeight, outEvents);
     }
 
     private void AdvanceTransition(float deltaTime, ParameterStore parameters, AnimationState current, float stateDuration)
     {
         StateTransition active = _activeTransition!;
         AnimationState target = _states[active.TargetStateIndex];
-        float targetMotionDuration = target.RootMotion.GetDuration();
+        float targetMotionDuration = MotionDispatcher.GetDuration(target.RootMotion);
         float targetSpeed = MathF.Abs(target.Speed) > AnimationConstants.SoaEpsilon ? target.Speed : 1.0f;
         float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, 1e-6f);
 
@@ -369,15 +369,15 @@ public sealed class StateMachineInstance
 
         if (_activeTransition == null)
         {
-            _states[CurrentStateIndex].RootMotion.Evaluate(StateNormalizedTime, outFrame, arena, rig, parameters, 0);
+            MotionDispatcher.Evaluate(_states[CurrentStateIndex].RootMotion, StateNormalizedTime, outFrame, arena, rig, parameters, 0);
             return;
         }
 
         AnimationFrame sourceFrame = arena.Alloc();
         AnimationFrame targetFrame = arena.Alloc();
 
-        _states[_transitionSourceStateIndex].RootMotion.Evaluate(StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
-        _states[_activeTransition.TargetStateIndex].RootMotion.Evaluate(_targetNormalizedTime, targetFrame, arena, rig, parameters, 0);
+        MotionDispatcher.Evaluate(_states[_transitionSourceStateIndex].RootMotion, StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
+        MotionDispatcher.Evaluate(_states[_activeTransition.TargetStateIndex].RootMotion, _targetNormalizedTime, targetFrame, arena, rig, parameters, 0);
 
         BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, FastMath.Clamp01(_transitionProgress));
 
@@ -389,6 +389,6 @@ public sealed class StateMachineInstance
     public void ExtractRootDelta(Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
     {
         ArgumentNullException.ThrowIfNull(rig);
-        _states[CurrentStateIndex].RootMotion.ComputeRootDelta(PreviousNormalizedTime, StateNormalizedTime, rig, out deltaPos, out deltaRot);
+        MotionDispatcher.ComputeRootDelta(_states[CurrentStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out deltaPos, out deltaRot);
     }
 }

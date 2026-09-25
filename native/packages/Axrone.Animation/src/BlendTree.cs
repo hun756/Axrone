@@ -304,7 +304,7 @@ public sealed class Blend1DMotionNode : MotionNode
         float sum = 0.0f;
         for (int i = 0; i < Children.Length; i++)
         {
-            sum += Children[i].GetDuration();
+            sum += MotionDispatcher.GetDuration(Children[i]);
         }
 
         return sum / Children.Length;
@@ -329,21 +329,21 @@ public sealed class Blend1DMotionNode : MotionNode
 
         if (segment.Index0 == segment.Index1 || segment.Weight <= 0.0f)
         {
-            Children[segment.Index0].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            MotionDispatcher.Evaluate(Children[segment.Index0], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
             return;
         }
 
         if (segment.Weight >= 1.0f)
         {
-            Children[segment.Index1].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            MotionDispatcher.Evaluate(Children[segment.Index1], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
             return;
         }
 
         AnimationFrame frame0 = arena.Alloc();
         AnimationFrame frame1 = arena.Alloc();
 
-        Children[segment.Index0].Evaluate(normalizedTime, frame0, arena, rig, parameters, depth + 1);
-        Children[segment.Index1].Evaluate(normalizedTime, frame1, arena, rig, parameters, depth + 1);
+        MotionDispatcher.Evaluate(Children[segment.Index0], normalizedTime, frame0, arena, rig, parameters, depth + 1);
+        MotionDispatcher.Evaluate(Children[segment.Index1], normalizedTime, frame1, arena, rig, parameters, depth + 1);
 
         BlendingKernels.BlendFrame(outFrame, frame0, frame1, segment.Weight);
 
@@ -361,7 +361,7 @@ public sealed class Blend1DMotionNode : MotionNode
             return;
         }
 
-        Children[0].ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+        MotionDispatcher.ComputeRootDelta(Children[0], prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
     }
 
     /// <inheritdoc/>
@@ -375,7 +375,7 @@ public sealed class Blend1DMotionNode : MotionNode
 
         for (int i = 0; i < Children.Length; i++)
         {
-            Children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+            MotionDispatcher.CollectEvents(Children[i], prevNormTime, curNormTime, layerWeight, outEvents);
         }
     }
 }
@@ -454,7 +454,7 @@ public sealed class Blend2DMotionNode : MotionNode
         float sum = 0.0f;
         for (int i = 0; i < _children.Length; i++)
         {
-            sum += _children[i].GetDuration();
+            sum += MotionDispatcher.GetDuration(_children[i]);
         }
 
         return sum / _children.Length;
@@ -483,7 +483,7 @@ public sealed class Blend2DMotionNode : MotionNode
             float distanceSq = Vector2.DistanceSquared(input, _positions[i]);
             if (distanceSq <= AnimationConstants.BlendDistanceEpsilonSq)
             {
-                _children[i].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+                MotionDispatcher.Evaluate(_children[i], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
                 return;
             }
 
@@ -496,7 +496,7 @@ public sealed class Blend2DMotionNode : MotionNode
             for (int i = 0; i < _children.Length; i++)
             {
                 scratchFrames[i] = arena.Alloc();
-                _children[i].Evaluate(normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
+                MotionDispatcher.Evaluate(_children[i], normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
             }
 
             BlendingKernels.BlendWeightedFrames(outFrame, scratchFrames.AsSpan(0, _children.Length), weights, rig);
@@ -522,7 +522,7 @@ public sealed class Blend2DMotionNode : MotionNode
             return;
         }
 
-        _children[0].ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+        MotionDispatcher.ComputeRootDelta(_children[0], prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
     }
 
     /// <inheritdoc/>
@@ -536,7 +536,7 @@ public sealed class Blend2DMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, outEvents);
         }
     }
 }
@@ -604,7 +604,7 @@ public sealed class DirectMotionNode : MotionNode
         float max = 0.0f;
         for (int i = 0; i < _children.Length; i++)
         {
-            max = MathF.Max(max, _children[i].GetDuration());
+            max = MathF.Max(max, MotionDispatcher.GetDuration(_children[i]));
         }
 
         return max;
@@ -649,7 +649,7 @@ public sealed class DirectMotionNode : MotionNode
 
         if (activeCount == 1)
         {
-            _children[singleIndex].Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            MotionDispatcher.Evaluate(_children[singleIndex], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
             return;
         }
 
@@ -659,7 +659,7 @@ public sealed class DirectMotionNode : MotionNode
             for (int i = 0; i < _children.Length; i++)
             {
                 scratchFrames[i] = arena.Alloc();
-                _children[i].Evaluate(normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
+                MotionDispatcher.Evaluate(_children[i], normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
             }
 
             BlendingKernels.BlendWeightedFrames(outFrame, scratchFrames.AsSpan(0, _children.Length), weights, rig);
@@ -685,7 +685,7 @@ public sealed class DirectMotionNode : MotionNode
             return;
         }
 
-        _children[0].ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+        MotionDispatcher.ComputeRootDelta(_children[0], prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
     }
 
     /// <inheritdoc/>
@@ -699,7 +699,7 @@ public sealed class DirectMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, outEvents);
         }
     }
 }
@@ -747,7 +747,7 @@ public sealed class AdditiveMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override float GetDuration() => BaseChild.GetDuration();
+    public override float GetDuration() => MotionDispatcher.GetDuration(BaseChild);
 
     /// <inheritdoc/>
     public override void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth)
@@ -766,15 +766,15 @@ public sealed class AdditiveMotionNode : MotionNode
             : parameters.GetFloat(WeightParameter));
         if (weight <= 0.0f)
         {
-            BaseChild.Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            MotionDispatcher.Evaluate(BaseChild, normalizedTime, outFrame, arena, rig, parameters, depth + 1);
             return;
         }
 
         AnimationFrame baseFrame = arena.Alloc();
         AnimationFrame additiveFrame = arena.Alloc();
 
-        BaseChild.Evaluate(normalizedTime, baseFrame, arena, rig, parameters, depth + 1);
-        AdditiveChild.Evaluate(normalizedTime, additiveFrame, arena, rig, parameters, depth + 1);
+        MotionDispatcher.Evaluate(BaseChild, normalizedTime, baseFrame, arena, rig, parameters, depth + 1);
+        MotionDispatcher.Evaluate(AdditiveChild, normalizedTime, additiveFrame, arena, rig, parameters, depth + 1);
 
         BlendingKernels.ApplyAdditiveFrame(outFrame, baseFrame, additiveFrame, rig, weight);
 
@@ -785,7 +785,7 @@ public sealed class AdditiveMotionNode : MotionNode
     /// <inheritdoc/>
     public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
     {
-        BaseChild.ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+        MotionDispatcher.ComputeRootDelta(BaseChild, prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
     }
 
     /// <inheritdoc/>
@@ -797,7 +797,7 @@ public sealed class AdditiveMotionNode : MotionNode
             return;
         }
 
-        BaseChild.CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-        AdditiveChild.CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
+        MotionDispatcher.CollectEvents(BaseChild, prevNormTime, curNormTime, layerWeight, outEvents);
+        MotionDispatcher.CollectEvents(AdditiveChild, prevNormTime, curNormTime, layerWeight, outEvents);
     }
 }
