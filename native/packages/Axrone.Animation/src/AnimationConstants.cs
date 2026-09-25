@@ -47,4 +47,17 @@ public static class AnimationConstants
 
     /// <summary>Keyframe reduction tolerance for curves.</summary>
     public const float KeyframeCurveTol = 1e-4f;
+
+    /// <summary>
+    /// Bone count at or below which world-transform scratch lives on the stack
+    /// (~10KB for the T/R/S triple). Larger rigs rent from the pool instead of
+    /// risking a stack overflow.
+    /// </summary>
+    public const int MaxStackScratchBones = 256;
+
+    /// <summary>
+    /// Blend child count at or below which evaluation scratch lives on the stack.
+    /// Larger fan-outs rent from the pool.
+    /// </summary>
+    public const int MaxStackScratchFrames = 64;
 }

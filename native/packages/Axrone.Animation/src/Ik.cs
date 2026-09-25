@@ -25,9 +25,13 @@ public static class IkSolvers
             return;
         }
 
-        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+        int scratchBones = rig.BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
         BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
 
         int count = chainBoneIndices.Length;
@@ -161,9 +165,13 @@ public static class IkSolvers
         }
 
         float w = FastMath.Clamp01(weight);
-        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+        int scratchBones = rig.BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
 
         Span<Quaternion> localR = frame.GetRotations();
         ReadOnlySpan<Vector3> locT = frame.ReadTranslations();

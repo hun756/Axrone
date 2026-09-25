@@ -159,9 +159,13 @@ public sealed class Rig
             AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, "Output matrix palette too small.");
         }
 
-        Span<Vector3> worldT = stackalloc Vector3[BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[BoneCount];
+        int scratchBones = BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
 
         ReadOnlySpan<float> buf = RestPoseBuffer;
         int rBase = BoneCount * 3;

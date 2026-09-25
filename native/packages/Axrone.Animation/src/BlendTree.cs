@@ -476,39 +476,49 @@ public sealed class Blend2DMotionNode : MotionNode
         Vector2 input = _parametersBound
             ? new Vector2(parameters.GetFloat(in _parameterXHandle), parameters.GetFloat(in _parameterYHandle))
             : new Vector2(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
-        Span<float> weights = stackalloc float[_positions.Length];
-
-        for (int i = 0; i < _positions.Length; i++)
-        {
-            float distanceSq = Vector2.DistanceSquared(input, _positions[i]);
-            if (distanceSq <= AnimationConstants.BlendDistanceEpsilonSq)
-            {
-                MotionDispatcher.Evaluate(_children[i], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
-                return;
-            }
-
-            weights[i] = 1.0f / MathF.Sqrt(distanceSq);
-        }
-
-        AnimationFrame[] scratchFrames = ArrayPool<AnimationFrame>.Shared.Rent(_children.Length);
+        int childCount = _children.Length;
+        // Holder must be a managed array (stackalloc forbids reference types);
+        // weights are unmanaged and honor the stack budget.
+        AnimationFrame[] holder = ArrayPool<AnimationFrame>.Shared.Rent(childCount);
+        bool weightsPooled = childCount > AnimationConstants.MaxStackScratchFrames;
+        float[]? rentedWeights = weightsPooled ? ArrayPool<float>.Shared.Rent(childCount) : null;
+        Span<float> weights = rentedWeights is not null
+            ? rentedWeights.AsSpan(0, childCount)
+            : stackalloc float[childCount];
         try
         {
-            for (int i = 0; i < _children.Length; i++)
+            for (int i = 0; i < _positions.Length; i++)
             {
-                scratchFrames[i] = arena.Alloc();
-                MotionDispatcher.Evaluate(_children[i], normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
+                float distanceSq = Vector2.DistanceSquared(input, _positions[i]);
+                if (distanceSq <= AnimationConstants.BlendDistanceEpsilonSq)
+                {
+                    MotionDispatcher.Evaluate(_children[i], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+                    return;
+                }
+
+                weights[i] = 1.0f / MathF.Sqrt(distanceSq);
             }
 
-            BlendingKernels.BlendWeightedFrames(outFrame, scratchFrames.AsSpan(0, _children.Length), weights, rig);
+            for (int i = 0; i < childCount; i++)
+            {
+                holder[i] = arena.Alloc();
+                MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
+            }
 
-            for (int i = 0; i < _children.Length; i++)
+            BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
+
+            for (int i = 0; i < childCount; i++)
             {
                 arena.Free();
             }
         }
         finally
         {
-            ArrayPool<AnimationFrame>.Shared.Return(scratchFrames);
+            ArrayPool<AnimationFrame>.Shared.Return(holder);
+            if (rentedWeights is not null)
+            {
+                ArrayPool<float>.Shared.Return(rentedWeights);
+            }
         }
     }
 
@@ -623,13 +633,21 @@ public sealed class DirectMotionNode : MotionNode
             AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
         }
 
-        Span<float> weights = stackalloc float[_children.Length];
+        int childCount = _children.Length;
+        // Holder must be a managed array (stackalloc forbids reference types);
+        // weights are unmanaged and honor the stack budget.
+        AnimationFrame[] holder = ArrayPool<AnimationFrame>.Shared.Rent(childCount);
+        bool weightsPooled = childCount > AnimationConstants.MaxStackScratchFrames;
+        float[]? rentedWeights = weightsPooled ? ArrayPool<float>.Shared.Rent(childCount) : null;
+        Span<float> weights = rentedWeights is not null
+            ? rentedWeights.AsSpan(0, childCount)
+            : stackalloc float[childCount];
         int activeCount = 0;
         int singleIndex = -1;
 
         ParameterHandle[] handles = _parameterHandles;
-        bool bound = _parametersBound && handles.Length == _children.Length;
-        for (int i = 0; i < _children.Length; i++)
+        bool bound = _parametersBound && handles.Length == childCount;
+        for (int i = 0; i < childCount; i++)
         {
             float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
             float w = MathF.Max(0.0f, raw);
@@ -653,25 +671,28 @@ public sealed class DirectMotionNode : MotionNode
             return;
         }
 
-        AnimationFrame[] scratchFrames = ArrayPool<AnimationFrame>.Shared.Rent(_children.Length);
         try
         {
-            for (int i = 0; i < _children.Length; i++)
+            for (int i = 0; i < childCount; i++)
             {
-                scratchFrames[i] = arena.Alloc();
-                MotionDispatcher.Evaluate(_children[i], normalizedTime, scratchFrames[i], arena, rig, parameters, depth + 1);
+                holder[i] = arena.Alloc();
+                MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
             }
 
-            BlendingKernels.BlendWeightedFrames(outFrame, scratchFrames.AsSpan(0, _children.Length), weights, rig);
+            BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
 
-            for (int i = 0; i < _children.Length; i++)
+            for (int i = 0; i < childCount; i++)
             {
                 arena.Free();
             }
         }
         finally
         {
-            ArrayPool<AnimationFrame>.Shared.Return(scratchFrames);
+            ArrayPool<AnimationFrame>.Shared.Return(holder);
+            if (rentedWeights is not null)
+            {
+                ArrayPool<float>.Shared.Return(rentedWeights);
+            }
         }
     }
 
