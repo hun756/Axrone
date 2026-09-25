@@ -21,6 +21,12 @@ public static class AnimationThrowHelper
     public static void ThrowResolution(AnimationErrorCode code, string message) =>
         throw new ResolutionException(code, message);
 
+    /// <summary>Throws when a curve id resolves to no channel slot.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCurveNotFound(CurveId curve) =>
+        throw new ResolutionException(AnimationErrorCode.ResolutionCurveNotFound, $"Curve '{curve}' missing.");
+
     /// <summary>Throws an evaluation failure.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -80,6 +80,9 @@ public enum AnimationErrorCode
 
     /// <summary>Streaming chunk incompatible with clip.</summary>
     StreamingChunkIncompatible = 25,
+
+    /// <summary>Curve id does not resolve to a channel slot.</summary>
+    ResolutionCurveNotFound = 26,
 }
 
 /// <summary>Base animation failure carrying a machine-readable code.</summary>

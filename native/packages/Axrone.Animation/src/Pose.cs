@@ -93,17 +93,58 @@ public readonly record struct CurveStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Span<float> AsSpan() => _values.AsSpan();
 
+    /// <summary>Resolves an id to a runtime slot once (bind time).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CurveHandle ResolveHandle(CurveId id)
+    {
+        if (!_offsets.TryGetValue(id, out int offset))
+        {
+            AnimationThrowHelper.ThrowCurveNotFound(id);
+        }
+
+        return new CurveHandle(offset);
+    }
+
+    /// <summary>Tries to resolve an id to a runtime slot.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryResolveHandle(CurveId id, out CurveHandle handle)
+    {
+        if (_offsets.TryGetValue(id, out int offset))
+        {
+            handle = new CurveHandle(offset);
+            return true;
+        }
+
+        handle = CurveHandle.Invalid;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int RequireSlot(in CurveHandle handle)
+    {
+        if ((uint)handle.Slot >= (uint)_values.Length)
+        {
+            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.SamplingOutOfBounds, $"Curve slot {handle.Slot} out of range.");
+        }
+
+        return handle.Slot;
+    }
+
     /// <summary>Reads a channel; unknown ids fail loudly.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float Read(CurveId id)
     {
         if (!_offsets.TryGetValue(id, out int offset))
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.ResolutionBoneNotFound, $"Curve '{id}' missing.");
+            AnimationThrowHelper.ThrowCurveNotFound(id);
         }
 
         return _values[offset];
     }
+
+    /// <summary>Reads a channel by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public float Read(in CurveHandle handle) => _values[RequireSlot(in handle)];
 
     /// <summary>Writes a channel; unknown ids fail loudly.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -111,11 +152,15 @@ public readonly record struct CurveStore
     {
         if (!_offsets.TryGetValue(id, out int offset))
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.ResolutionBoneNotFound, $"Curve '{id}' missing.");
+            AnimationThrowHelper.ThrowCurveNotFound(id);
         }
 
         _values[offset] = value;
     }
+
+    /// <summary>Writes a channel by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Write(in CurveHandle handle, float value) => _values[RequireSlot(in handle)] = value;
 
     /// <summary>Clears all channels.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
