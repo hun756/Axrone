@@ -71,8 +71,47 @@ public sealed partial class ChunkJsonSerializerContext : JsonSerializerContext
 {
 }
 
-/// <summary>One chunk fetch request.</summary>
-public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload, ChunkKey Key);
+/// <summary>
+/// One chunk fetch request, self-ordering: active before preload, then weight
+/// descending, then start time. The scheduler relies on this for sorted output.
+/// </summary>
+public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload, ChunkKey Key)
+    : IComparable<ChunkRequest>
+{
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(ChunkRequest other)
+    {
+        if (IsPreload != other.IsPreload)
+        {
+            return IsPreload ? 1 : -1;
+        }
+
+        int byWeight = other.Weight.CompareTo(Weight);
+        if (byWeight != 0)
+        {
+            return byWeight;
+        }
+
+        return StartTime.CompareTo(other.StartTime);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) <= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) >= 0;
+}
 
 /// <summary>
 /// Allocation-free chunk identity: (clip, version). The scheduler tracks these
@@ -204,32 +243,25 @@ public sealed class StreamingScheduler
     private bool IsSchedulable(ChunkKey key) =>
         !_states.TryGetValue(key, out ChunkStatus status) || status == ChunkStatus.Unrequested;
 
-    private static void InsertSorted(Collection<ChunkRequest> requests, ChunkRequest request)
+    /// <summary>Binary-search insertion point (shifts still cost O(n); search is O(log n)).</summary>
+    private static void InsertSorted(Collection<ChunkRequest> requests, in ChunkRequest request)
     {
-        int index = 0;
-        while (index < requests.Count && CompareRequests(requests[index], request) <= 0)
+        int low = 0;
+        int high = requests.Count - 1;
+        while (low <= high)
         {
-            index++;
+            int mid = low + ((high - low) >> 1);
+            if (requests[mid].CompareTo(request) <= 0)
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
         }
 
-        requests.Insert(index, request);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CompareRequests(ChunkRequest a, ChunkRequest b)
-    {
-        if (a.IsPreload != b.IsPreload)
-        {
-            return a.IsPreload ? 1 : -1;
-        }
-
-        int byWeight = b.Weight.CompareTo(a.Weight);
-        if (byWeight != 0)
-        {
-            return byWeight;
-        }
-
-        return a.StartTime.CompareTo(b.StartTime);
+        requests.Insert(low, request);
     }
 
     /// <summary>
