@@ -30,6 +30,9 @@ public enum RetargetRotationMode
 /// </summary>
 public readonly record struct RetargetBinding(int SourceIndex, int TargetIndex, float LengthRatio, Quaternion RotationOffset);
 
+/// <summary>Explicit source-to-target bone name pair.</summary>
+public readonly record struct ExplicitBoneMapping(string Source, string Target);
+
 /// <summary>
 /// Precomputed cross-rig mapping: name (or explicit) bone pairs with rotation
 /// offsets and rest-length ratios resolved once at construction.
@@ -56,8 +59,14 @@ public sealed class RetargetProfile
     /// <summary>Rotation policy.</summary>
     public RetargetRotationMode RotationMode { get; init; } = RetargetRotationMode.Offset;
 
-    /// <summary>Builds a profile with explicit or name-matched mappings.</summary>
+    /// <summary>Builds a profile with explicit tuple mappings or name matching.</summary>
     public RetargetProfile(Rig sourceRig, Rig targetRig, (string Source, string Target)[]? explicitMappings = null)
+        : this(sourceRig, targetRig, ConvertTupleMappings(explicitMappings))
+    {
+    }
+
+    /// <summary>Builds a profile with explicit struct mappings or name matching.</summary>
+    public RetargetProfile(Rig sourceRig, Rig targetRig, params ReadOnlySpan<ExplicitBoneMapping> explicitMappings)
     {
         ArgumentNullException.ThrowIfNull(sourceRig);
         ArgumentNullException.ThrowIfNull(targetRig);
@@ -69,12 +78,12 @@ public sealed class RetargetProfile
         _rotationOffsets = new Quaternion[sourceRig.BoneCount];
         _lengthRatios = new float[sourceRig.BoneCount];
 
-        if (explicitMappings != null && explicitMappings.Length > 0)
+        if (!explicitMappings.IsEmpty)
         {
-            foreach ((string source, string target) in explicitMappings)
+            foreach (ExplicitBoneMapping mapping in explicitMappings)
             {
-                BoneHandle sourceIndex = sourceRig.FindBoneIndex(source);
-                BoneHandle targetIndex = targetRig.FindBoneIndex(target);
+                BoneHandle sourceIndex = sourceRig.FindBoneIndex(mapping.Source);
+                BoneHandle targetIndex = targetRig.FindBoneIndex(mapping.Target);
                 if (sourceIndex.IsValid && targetIndex.IsValid)
                 {
                     _sourceToTargetMap[sourceIndex.Index] = targetIndex.Index;
@@ -129,6 +138,22 @@ public sealed class RetargetProfile
                 _bindings[bindingIndex++] = new RetargetBinding(s, t, _lengthRatios[s], _rotationOffsets[s]);
             }
         }
+    }
+
+    private static ExplicitBoneMapping[] ConvertTupleMappings((string Source, string Target)[]? mappings)
+    {
+        if (mappings is null || mappings.Length == 0)
+        {
+            return Array.Empty<ExplicitBoneMapping>();
+        }
+
+        var converted = new ExplicitBoneMapping[mappings.Length];
+        for (int i = 0; i < mappings.Length; i++)
+        {
+            converted[i] = new ExplicitBoneMapping(mappings[i].Source, mappings[i].Target);
+        }
+
+        return converted;
     }
 
     /// <summary>Mapped-only bindings in source order.</summary>

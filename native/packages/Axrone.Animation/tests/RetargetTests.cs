@@ -101,6 +101,14 @@ public class RetargetTests
     }
 
     [Fact]
+    public void ExplicitStructMapping_WorksLikeTuples()
+    {
+        var profile = new RetargetProfile(SourceRig(), ScaledTargetRig(), new ExplicitBoneMapping("arm", "arm"));
+        profile.SourceToTargetMap.ToArray().Should().Equal(-1, 1);
+        profile.Bindings.Length.Should().Be(1);
+    }
+
+    [Fact]
     public void ZeroMappings_Throw()
     {
         var other = new Rig(new RigId("other"), [
