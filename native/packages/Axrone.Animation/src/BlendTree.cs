@@ -46,6 +46,10 @@ public abstract class MotionNode
     /// <summary>Root-joint delta between two normalized times.</summary>
     public abstract void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot);
 
+    /// <summary>Collects clip events into a zero-allocation sink.</summary>
+    public abstract void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
+        where TSink : struct, IClipEventSink;
+
     /// <summary>Collects clip events in the interval, scaled by layer weight.</summary>
     public abstract void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents);
 }
@@ -171,9 +175,8 @@ public sealed class ClipMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    public override void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (layerWeight <= 0.0f)
         {
             return;
@@ -182,7 +185,15 @@ public sealed class ClipMotionNode : MotionNode
         float duration = Clip.Duration;
         float t0 = MapTime(prevNormTime, duration);
         float t1 = MapTime(curNormTime, duration);
-        Clip.CollectEvents(t0, t1, outEvents);
+        Clip.CollectEvents(t0, t1, ref sink);
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -365,9 +376,8 @@ public sealed class Blend1DMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    public override void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (layerWeight <= 0.0f)
         {
             return;
@@ -375,8 +385,16 @@ public sealed class Blend1DMotionNode : MotionNode
 
         for (int i = 0; i < Children.Length; i++)
         {
-            MotionDispatcher.CollectEvents(Children[i], prevNormTime, curNormTime, layerWeight, outEvents);
+            Children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
         }
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 }
 
@@ -536,9 +554,8 @@ public sealed class Blend2DMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    public override void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (layerWeight <= 0.0f)
         {
             return;
@@ -546,8 +563,16 @@ public sealed class Blend2DMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, outEvents);
+            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
         }
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 }
 
@@ -710,9 +735,8 @@ public sealed class DirectMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    public override void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (layerWeight <= 0.0f)
         {
             return;
@@ -720,8 +744,16 @@ public sealed class DirectMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, outEvents);
+            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
         }
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 }
 
@@ -810,15 +842,22 @@ public sealed class AdditiveMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    public override void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (layerWeight <= 0.0f)
         {
             return;
         }
 
-        MotionDispatcher.CollectEvents(BaseChild, prevNormTime, curNormTime, layerWeight, outEvents);
-        MotionDispatcher.CollectEvents(AdditiveChild, prevNormTime, curNormTime, layerWeight, outEvents);
+        BaseChild.CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+        AdditiveChild.CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+    }
+
+    /// <inheritdoc/>
+    public override void CollectEvents(float prevNormTime, float curNormTime, float layerWeight, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 }

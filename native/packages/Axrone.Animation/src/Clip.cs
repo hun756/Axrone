@@ -460,10 +460,10 @@ public sealed class AnimationClip
         }
     }
 
-    /// <summary>Collects events in (prev, cur], splitting across loop wraps.</summary>
-    public void CollectEvents(float prevTime, float curTime, ICollection<ClipEvent> outEvents)
+    /// <summary>Collects events in (prev, cur] into a zero-allocation sink.</summary>
+    public void CollectEvents<TSink>(float prevTime, float curTime, ref TSink sink)
+        where TSink : struct, IClipEventSink
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (Duration <= 0.0f || _events.Length == 0)
         {
             return;
@@ -471,23 +471,32 @@ public sealed class AnimationClip
 
         if (curTime >= prevTime)
         {
-            CollectEventsRange(prevTime, curTime, outEvents);
+            CollectEventsRange(prevTime, curTime, ref sink);
         }
         else
         {
-            CollectEventsRange(prevTime, Duration, outEvents);
-            CollectEventsRange(0.0f, curTime, outEvents);
+            CollectEventsRange(prevTime, Duration, ref sink);
+            CollectEventsRange(0.0f, curTime, ref sink);
         }
     }
 
-    private void CollectEventsRange(float start, float end, ICollection<ClipEvent> outEvents)
+    /// <summary>Collects events in (prev, cur] into a collection.</summary>
+    public void CollectEvents(float prevTime, float curTime, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevTime, curTime, ref adapter);
+    }
+
+    private void CollectEventsRange<TSink>(float start, float end, ref TSink sink)
+        where TSink : struct, IClipEventSink
     {
         for (int i = 0; i < _events.Length; i++)
         {
             ClipEvent evt = _events[i];
             if (evt.Time > start && evt.Time <= end)
             {
-                outEvents.Add(evt);
+                sink.Emit(in evt);
             }
         }
     }
