@@ -24,6 +24,9 @@ public class ErrorTests
         var framebuffer = new GLFramebufferException("incomplete", GLFramebufferErrorCode.IncompleteFramebuffer, 0x8CDD);
         framebuffer.FramebufferCode.Should().Be(GLFramebufferErrorCode.IncompleteFramebuffer);
         framebuffer.Status.Should().Be(0x8CDD);
+
+        var texture = new GLTextureException("unknown", TextureErrorCode.FormatNotSupported);
+        texture.TextureCode.Should().Be(TextureErrorCode.FormatNotSupported);
     }
 
     [Fact]
@@ -40,5 +43,14 @@ public class ErrorTests
         Action executor = () => ThrowHelper.ThrowExecutorNotFound("Shadow");
         executor.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.ExecutorNotFound);
+    }
+
+    [Fact]
+    public void ThrowUnknownTextureFormat_ThrowsCodedException()
+    {
+        Action unknownFormat = () => ThrowHelper.ThrowUnknownTextureFormat("Bogus");
+
+        unknownFormat.Should().Throw<GLTextureException>()
+            .Where(ex => ex.TextureCode == TextureErrorCode.FormatNotSupported);
     }
 }

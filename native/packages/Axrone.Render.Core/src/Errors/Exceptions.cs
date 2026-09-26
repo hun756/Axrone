@@ -149,6 +149,28 @@ public class GLFramebufferException : GLException
 }
 
 /// <summary>
+/// Exception for GL texture errors.
+/// </summary>
+public class GLTextureException : GLException
+{
+    /// <summary>
+    /// Gets the texture error code.
+    /// </summary>
+    public TextureErrorCode TextureCode { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GLTextureException"/> class.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="code">The texture error code.</param>
+    public GLTextureException(string message, TextureErrorCode code)
+        : base(message, GLContextErrorCode.InvalidOperation)
+    {
+        TextureCode = code;
+    }
+}
+
+/// <summary>
 /// Helper class for throwing exceptions with proper JIT optimization.
 /// All methods are marked with [DoesNotReturn] and [MethodImpl(NoInlining)]
 /// to allow the JIT to inline the calling code without exception handling overhead.
@@ -266,6 +288,16 @@ public static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowIncompleteFramebuffer(uint status) =>
         throw new GLFramebufferException($"INCOMPLETE_FRAMEBUFFER: 0x{status:X4}", GLFramebufferErrorCode.IncompleteFramebuffer, status);
+
+    /// <summary>Throws an unknown texture format exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowUnknownTextureFormat(string formatName)
+    {
+        ArgumentNullException.ThrowIfNull(formatName);
+        throw new GLTextureException($"Unknown texture format: '{formatName}'", TextureErrorCode.FormatNotSupported);
+    }
 
     /// <summary>Throws an executor not found exception.</summary>
     [DoesNotReturn]
