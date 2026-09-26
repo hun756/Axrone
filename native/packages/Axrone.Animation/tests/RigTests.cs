@@ -19,8 +19,11 @@ public class RigTests
         rig.RootIndices.ToArray().Should().Equal(0);
         rig.GetChildren(0).ToArray().Should().Equal(1);
         rig.GetChildren(2).ToArray().Should().BeEmpty();
-        rig.FindBoneIndex("tip").Should().Be(2);
-        rig.FindBoneIndex("ghost").Should().Be(-1);
+        rig.FindBoneIndex("tip").Should().Be(new BoneHandle(2));
+        rig.FindBoneIndex("tip").Index.Should().Be(2);
+        rig.FindBoneIndex("ghost").Should().Be(BoneHandle.Invalid);
+        BoneHandle root = rig.FindBoneIndex("root");
+        rig.GetChildren(root).ToArray().Should().Equal(1);
     }
 
     [Fact]

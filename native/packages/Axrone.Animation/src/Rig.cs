@@ -69,14 +69,14 @@ public sealed class Rig
 
     /// <summary>Children of a bone.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<int> GetChildren(int boneIndex)
+    public ReadOnlySpan<int> GetChildren(BoneHandle bone)
     {
-        if ((uint)boneIndex >= (uint)BoneCount)
+        if ((uint)bone.Index >= (uint)BoneCount)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Bone index {boneIndex} out of range.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Bone index {bone.Index} out of range.");
         }
 
-        return _children[boneIndex];
+        return _children[bone.Index];
     }
 
     /// <summary>Validates and freezes a skeleton.</summary>
@@ -150,10 +150,10 @@ public sealed class Rig
         _restWorldMatrices = BuildRestWorldMatrices();
     }
 
-    /// <summary>Bone index by ordinal name, -1 when absent.</summary>
+    /// <summary>Bone handle by ordinal name, invalid when absent.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int FindBoneIndex(string name) =>
-        _nameToIndex.TryGetValue(name, out int index) ? index : -1;
+    public BoneHandle FindBoneIndex(string name) =>
+        _nameToIndex.TryGetValue(name, out int index) ? new BoneHandle(index) : BoneHandle.Invalid;
 
     /// <summary>
     /// Copies the precomputed rest-pose world matrix palette (16 floats per bone).

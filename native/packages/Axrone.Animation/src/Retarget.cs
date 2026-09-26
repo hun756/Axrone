@@ -65,11 +65,11 @@ public sealed class RetargetProfile
         {
             foreach ((string source, string target) in explicitMappings)
             {
-                int sourceIndex = sourceRig.FindBoneIndex(source);
-                int targetIndex = targetRig.FindBoneIndex(target);
-                if (sourceIndex != -1 && targetIndex != -1)
+                BoneHandle sourceIndex = sourceRig.FindBoneIndex(source);
+                BoneHandle targetIndex = targetRig.FindBoneIndex(target);
+                if (sourceIndex.IsValid && targetIndex.IsValid)
                 {
-                    _sourceToTargetMap[sourceIndex] = targetIndex;
+                    _sourceToTargetMap[sourceIndex.Index] = targetIndex.Index;
                 }
             }
         }
@@ -77,7 +77,7 @@ public sealed class RetargetProfile
         {
             for (int i = 0; i < sourceRig.BoneCount; i++)
             {
-                _sourceToTargetMap[i] = targetRig.FindBoneIndex(sourceRig.BoneNames[i]);
+                _sourceToTargetMap[i] = targetRig.FindBoneIndex(sourceRig.BoneNames[i]).Index;
             }
         }
 
