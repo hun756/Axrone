@@ -77,9 +77,78 @@ public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float 
 /// <summary>
 /// Allocation-free chunk identity: (clip, version). The scheduler tracks these
 /// by value and only materializes the string id for genuinely new requests —
-/// steady-state scheduling allocates nothing.
+/// steady-state scheduling allocates nothing. Formats as <c>clip:v:index</c>
+/// into char or UTF-8 spans without transcoding.
 /// </summary>
-public readonly record struct ChunkKey(ClipId Clip, int Version);
+public readonly record struct ChunkKey(ClipId Clip, int Version) : ISpanFormattable, IUtf8SpanFormattable
+{
+    /// <summary>Separator between clip and version.</summary>
+    private static ReadOnlySpan<char> Separator => ":v:";
+
+    /// <inheritdoc/>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        ReadOnlySpan<char> separator = Separator;
+        if (!Clip.TryFormat(destination, out int clipWritten, format, provider))
+        {
+            return false;
+        }
+
+        if (destination.Length < clipWritten + separator.Length)
+        {
+            return false;
+        }
+
+        separator.CopyTo(destination[clipWritten..]);
+        int offset = clipWritten + separator.Length;
+        if (!Version.TryFormat(destination[offset..], out int versionWritten, format, provider))
+        {
+            return false;
+        }
+
+        charsWritten = offset + versionWritten;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[64];
+        return TryFormat(buffer, out int written, format, formatProvider)
+            ? new string(buffer[..written])
+            : $"{Clip.Value}:v:{Version}";
+    }
+
+    /// <inheritdoc/>
+    public override string ToString() => ToString(null, null);
+
+    /// <inheritdoc/>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        if (!Clip.TryFormat(utf8Destination, out int clipWritten, format, provider))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> separator = ":v:"u8;
+        if (utf8Destination.Length < clipWritten + separator.Length)
+        {
+            return false;
+        }
+
+        separator.CopyTo(utf8Destination[clipWritten..]);
+        int offset = clipWritten + separator.Length;
+        if (!System.Buffers.Text.Utf8Formatter.TryFormat(Version, utf8Destination[offset..], out int versionWritten))
+        {
+            return false;
+        }
+
+        bytesWritten = offset + versionWritten;
+        return true;
+    }
+}
 
 /// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
 public sealed class StreamingScheduler

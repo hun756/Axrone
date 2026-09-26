@@ -101,6 +101,29 @@ public class StreamingTests
     }
 
     [Fact]
+    public void ChunkKey_FormatsWithoutAllocating()
+    {
+        var key = new ChunkKey(new ClipId("walk"), 3);
+
+        Span<char> chars = stackalloc char[32];
+        key.TryFormat(chars, out int written).Should().BeTrue();
+        new string(chars[..written]).Should().Be("walk:v:3");
+        key.ToString().Should().Be("walk:v:3");
+
+        Span<byte> utf8 = stackalloc byte[32];
+        key.TryFormat(utf8, out int bytesWritten).Should().BeTrue();
+        System.Text.Encoding.UTF8.GetString(utf8[..bytesWritten]).Should().Be("walk:v:3");
+
+        Span<char> tiny = stackalloc char[2];
+        key.TryFormat(tiny, out _).Should().BeFalse();
+
+        var clip = new ClipId("run");
+        Span<char> clipChars = stackalloc char[8];
+        clip.TryFormat(clipChars, out int clipWritten).Should().BeTrue();
+        new string(clipChars[..clipWritten]).Should().Be("run");
+    }
+
+    [Fact]
     public void Optimizer_DropsCollinearKeys()
     {
         AnimationClip clip = LinearClip();
