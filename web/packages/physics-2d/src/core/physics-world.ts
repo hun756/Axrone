@@ -112,7 +112,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     private readonly _shapeStore: PhysicsWorld2DShapeStore;
     private readonly _constraintStore: PhysicsWorld2DConstraintStore;
     private readonly _shapeProxyMap = new Map<ShapeId, number>();
-    private readonly _shapePreviousCenter = new Map<ShapeId, { x: number; y: number }>();
+    private readonly _shapePreviousCenter = new Map<ShapeId, IVec2Like>();
     private readonly _contactPairCache = new Map<number, ContactId>();
     /**
      * Counter-based index: tracks how many constraints with `collideConnected=false`
@@ -125,7 +125,7 @@ export class PhysicsWorld2D implements IPhysicsWorld2D {
     /** Static shapes whose AABB needs recomputation. */
     private readonly _staticAabbDirty = new Set<ShapeId>();
     /** Previous transform for kinematic bodies — detects actual movement. (P1-4) */
-    private readonly _kinematicPrevPos = new Map<BodyId, { x: number; y: number }>();
+    private readonly _kinematicPrevPos = new Map<BodyId, IVec2Like>();
     private readonly _kinematicPrevRot = new Map<BodyId, number>();
 
     private _autoClearForces = true;

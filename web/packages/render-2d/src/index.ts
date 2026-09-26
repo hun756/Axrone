@@ -33,7 +33,6 @@ export type {
     Render2DSpriteSubmission,
     Render2DSpriteTextureSource,
     Render2DTextureReference,
-    Render2DVec2Like,
 } from './types';
 export {
     asRender2DMaterialReference,
