@@ -1,6 +1,7 @@
 import type { UIAsset, WidgetId, WidgetPatch } from '@axrone/ui/types';
 import { UIRuntime, deserializeUIAsset } from '@axrone/ui/runtime';
 import { resolveCanvasScale, mapViewportPointToCanvas } from '@axrone/ui/layout';
+import type { IVec2Like } from '@axrone/numeric';
 import { buttonFeedbackController, checkboxToggleController, sliderController, dropdownController, tooltipHostController, toggleSwitchController, radioGroupController, segmentedController, dragController, tabViewController, editBoxController } from '@axrone/ui/controls';
 import { UIHost, setSceneUIWidgetRefResolver } from '@axrone/scene-runtime/scene-facade';
 // Re-export UIHost so the module namespace (imported via __AXRONE_RUNTIME__.modules)
@@ -251,7 +252,7 @@ const connectScreenOverlayInput = <TPayload>(
 ): (() => void) => {
     const target = input.target;
 
-    const toReferencePoint = (event: UIHostPointerEventLike): { x: number; y: number } | null => {
+    const toReferencePoint = (event: UIHostPointerEventLike): IVec2Like | null => {
         const rect = target.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) {
             return null;
@@ -420,7 +421,7 @@ const connectUIHostInput = <TPayload>(
         return connectScreenOverlayInput(runtime, scene, input);
     }
 
-    const toReferencePoint = (event: UIHostPointerEventLike): { x: number; y: number } => {
+    const toReferencePoint = (event: UIHostPointerEventLike): IVec2Like => {
         const rect = target.getBoundingClientRect();
         const viewport = getViewportSize();
         const cssToVpScaleX = rect.width > 0 ? viewport.width / rect.width : 1;

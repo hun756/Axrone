@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, WidgetId } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { clamp } from '@axrone/numeric';
+import type { IVec2Like } from '@axrone/numeric';
 import { asString, asNumber, asBoolean } from './internals';
 
 /**
@@ -42,7 +43,7 @@ export interface DragControllerState {
     startY: number;
     offsetX: number;
     offsetY: number;
-    originalPosition: { x: number; y: number } | null;
+    originalPosition: IVec2Like | null;
 }
 
 type DragContext = WidgetControllerContext<
