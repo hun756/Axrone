@@ -111,9 +111,41 @@ public sealed class GLProgram : IGLResource, IDisposable
         if (IsDisposed)
             ThrowHelper.ThrowProgramDisposed();
 
-        // Note: Full reflection would use GetActiveUniform, but for simplicity
-        // we'll use a dictionary that can be populated as uniforms are queried
-        return new Dictionary<string, int>().ToFrozenDictionary();
+        _context.GL.GetProgram(Id, GLConst.ActiveUniforms, out int count);
+        if (count <= 0)
+        {
+            return new Dictionary<string, int>().ToFrozenDictionary();
+        }
+
+        _context.GL.GetProgram(Id, GLConst.ActiveUniformMaxLength, out int maxLength);
+        if (maxLength <= 0)
+        {
+            maxLength = 1;
+        }
+
+        var locations = new Dictionary<string, int>(count, StringComparer.Ordinal);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(maxLength);
+        try
+        {
+            for (uint i = 0; (int)i < count; i++)
+            {
+                _context.GL.GetActiveUniform(Id, i, buffer.AsSpan(0, maxLength), out int length, out int size, out uint type);
+                if (length <= 0)
+                {
+                    continue;
+                }
+
+                string name = System.Text.Encoding.UTF8.GetString(buffer.AsSpan(0, length));
+                int location = _context.GL.GetUniformLocation(Id, name);
+                locations[name] = location;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return locations.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     private FrozenDictionary<string, int> ReflectAttributes()
@@ -121,7 +153,41 @@ public sealed class GLProgram : IGLResource, IDisposable
         if (IsDisposed)
             ThrowHelper.ThrowProgramDisposed();
 
-        return new Dictionary<string, int>().ToFrozenDictionary();
+        _context.GL.GetProgram(Id, GLConst.ActiveAttributes, out int count);
+        if (count <= 0)
+        {
+            return new Dictionary<string, int>().ToFrozenDictionary();
+        }
+
+        _context.GL.GetProgram(Id, GLConst.ActiveAttributeMaxLength, out int maxLength);
+        if (maxLength <= 0)
+        {
+            maxLength = 1;
+        }
+
+        var locations = new Dictionary<string, int>(count, StringComparer.Ordinal);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(maxLength);
+        try
+        {
+            for (uint i = 0; (int)i < count; i++)
+            {
+                _context.GL.GetActiveAttrib(Id, i, buffer.AsSpan(0, maxLength), out int length, out int size, out uint type);
+                if (length <= 0)
+                {
+                    continue;
+                }
+
+                string name = System.Text.Encoding.UTF8.GetString(buffer.AsSpan(0, length));
+                int location = _context.GL.GetAttribLocation(Id, name);
+                locations[name] = location;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return locations.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     /// <inheritdoc/>

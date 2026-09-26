@@ -12,6 +12,9 @@ public sealed unsafe class MockGLApi : IGLApi
     private readonly ConcurrentDictionary<string, int> _locations = new(StringComparer.Ordinal);
     private readonly HashSet<string> _extensions = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _callLog = new(256);
+    private readonly ConcurrentDictionary<uint, uint> _boundBuffers = new();
+    private readonly ConcurrentDictionary<uint, (string Name, int Size, uint Type)[]> _activeUniforms = new();
+    private readonly ConcurrentDictionary<uint, (string Name, int Size, uint Type)[]> _activeAttribs = new();
 
     /// <summary>
     /// Gets the call log for verification.
@@ -100,7 +103,11 @@ public sealed unsafe class MockGLApi : IGLApi
         Log($"DeleteBuffer({buffer})");
     }
 
-    public void BindBuffer(uint target, uint buffer) => Log($"BindBuffer({target}, {buffer})");
+    public void BindBuffer(uint target, uint buffer)
+    {
+        _boundBuffers[target] = buffer;
+        Log($"BindBuffer({target}, {buffer})");
+    }
 
     public void BufferData(uint target, nuint size, void* data, uint usage)
     {
@@ -112,7 +119,11 @@ public sealed unsafe class MockGLApi : IGLApi
             {
                 Buffer.MemoryCopy(data, dst, size, size);
             }
-            _bufferStorage[_idCounter] = arr;
+
+            if (_boundBuffers.TryGetValue(target, out uint bufferId) && bufferId != 0)
+            {
+                _bufferStorage[bufferId] = arr;
+            }
         }
     }
 
@@ -238,7 +249,7 @@ public sealed unsafe class MockGLApi : IGLApi
     public void BlitFramebuffer(int srcX0, int srcY0, int srcX1, int srcY1, int dstX0, int dstY0, int dstX1, int dstY1, uint mask, uint filter) =>
         Log($"BlitFramebuffer({srcX0}, {srcY0}, {srcX1}, {srcY1}, {dstX0}, {dstY0}, {dstX1}, {dstY1}, {mask}, {filter})");
 
-    public void DrawBuffers(ReadOnlySpan<uint> bufs) => Log($"DrawBuffers({bufs.Length})");
+    public void DrawBuffers(ReadOnlySpan<uint> bufs) => Log($"DrawBuffers({bufs.Length}) [{string.Join(", ", bufs.ToArray())}]");
     public void ReadPixels(int x, int y, uint width, uint height, uint format, uint type, void* data) =>
         Log($"ReadPixels({x}, {y}, {width}, {height})");
 
@@ -311,7 +322,26 @@ public sealed unsafe class MockGLApi : IGLApi
     public void GetProgram(uint program, uint pname, out int parameters)
     {
         Log($"GetProgram({program}, {pname})");
-        parameters = 1; // Success
+        switch (pname)
+        {
+            case 0x8B86: // GL_ACTIVE_UNIFORMS
+                parameters = _activeUniforms.TryGetValue(program, out var uniforms) ? uniforms.Length : 0;
+                break;
+            case 0x8B89: // GL_ACTIVE_ATTRIBUTES
+                parameters = _activeAttribs.TryGetValue(program, out var attribs) ? attribs.Length : 0;
+                break;
+            case 0x8B87: // GL_ACTIVE_UNIFORM_MAX_LENGTH
+                _activeUniforms.TryGetValue(program, out var u);
+                parameters = GetMaxNameLength(u);
+                break;
+            case 0x8B8A: // GL_ACTIVE_ATTRIBUTE_MAX_LENGTH
+                _activeAttribs.TryGetValue(program, out var a);
+                parameters = GetMaxNameLength(a);
+                break;
+            default:
+                parameters = 1; // Success
+                break;
+        }
     }
 
     public string GetProgramInfoLog(uint program)
@@ -353,6 +383,82 @@ public sealed unsafe class MockGLApi : IGLApi
 
     public void UniformBlockBinding(uint program, uint uniformBlockIndex, uint uniformBlockBinding) =>
         Log($"UniformBlockBinding({program}, {uniformBlockIndex}, {uniformBlockBinding})");
+
+    /// <summary>
+    /// Configures canned active uniforms for a program.
+    /// </summary>
+    /// <param name="program">The program id.</param>
+    /// <param name="uniforms">The uniform metadata.</param>
+    public void SetActiveUniforms(uint program, (string Name, int Size, uint Type)[] uniforms)
+    {
+        ArgumentNullException.ThrowIfNull(uniforms);
+        _activeUniforms[program] = uniforms;
+    }
+
+    /// <summary>
+    /// Configures canned active attributes for a program.
+    /// </summary>
+    /// <param name="program">The program id.</param>
+    /// <param name="attribs">The attribute metadata.</param>
+    public void SetActiveAttribs(uint program, (string Name, int Size, uint Type)[] attribs)
+    {
+        ArgumentNullException.ThrowIfNull(attribs);
+        _activeAttribs[program] = attribs;
+    }
+
+    public void GetActiveUniform(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type)
+    {
+        if (!_activeUniforms.TryGetValue(program, out var uniforms) || index >= (uint)uniforms.Length || nameBuffer.IsEmpty)
+        {
+            length = 0;
+            size = 0;
+            type = 0;
+            return;
+        }
+
+        var entry = uniforms[(int)index];
+        int written = System.Text.Encoding.UTF8.GetBytes(entry.Name.AsSpan(), nameBuffer);
+        length = written;
+        size = entry.Size;
+        type = entry.Type;
+    }
+
+    public void GetActiveAttrib(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type)
+    {
+        if (!_activeAttribs.TryGetValue(program, out var attribs) || index >= (uint)attribs.Length || nameBuffer.IsEmpty)
+        {
+            length = 0;
+            size = 0;
+            type = 0;
+            return;
+        }
+
+        var entry = attribs[(int)index];
+        int written = System.Text.Encoding.UTF8.GetBytes(entry.Name.AsSpan(), nameBuffer);
+        length = written;
+        size = entry.Size;
+        type = entry.Type;
+    }
+
+    private static int GetMaxNameLength((string Name, int Size, uint Type)[]? entries)
+    {
+        if (entries is null || entries.Length == 0)
+        {
+            return 0;
+        }
+
+        int max = 0;
+        foreach (var entry in entries)
+        {
+            int byteCount = System.Text.Encoding.UTF8.GetByteCount(entry.Name ?? string.Empty);
+            if (byteCount > max)
+            {
+                max = byteCount;
+            }
+        }
+
+        return max + 1;
+    }
 
     // ========================================================================
     // Uniform Operations

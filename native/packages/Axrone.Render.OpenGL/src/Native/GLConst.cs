@@ -186,6 +186,12 @@ public static class GLConst
     public const uint CompileStatus = 0x8B81;
     public const uint LinkStatus = 0x8B82;
 
+    // Program reflection
+    public const uint ActiveUniforms = 0x8B86;
+    public const uint ActiveUniformMaxLength = 0x8B87;
+    public const uint ActiveAttributes = 0x8B89;
+    public const uint ActiveAttributeMaxLength = 0x8B8A;
+
     // S3TC / RGTC / BPTC compressed formats
     public const uint CompressedRgbS3tcDxt1 = 0x83F0;
     public const uint CompressedRgbaS3tcDxt1 = 0x83F1;

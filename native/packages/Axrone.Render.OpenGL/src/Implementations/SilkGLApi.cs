@@ -291,6 +291,40 @@ public sealed unsafe class SilkGLApi : IGLApi
         _gl.GetUniformBlockIndex(program, uniformBlockName);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void GetActiveUniform(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type)
+    {
+        if (nameBuffer.IsEmpty)
+        {
+            length = 0;
+            size = 0;
+            type = 0;
+            return;
+        }
+
+        _gl.GetActiveUniform(program, index, (uint)nameBuffer.Length, out uint nameLength, out int activeSize, out GLEnum activeType, out nameBuffer[0]);
+        length = (int)nameLength;
+        size = activeSize;
+        type = (uint)activeType;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void GetActiveAttrib(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type)
+    {
+        if (nameBuffer.IsEmpty)
+        {
+            length = 0;
+            size = 0;
+            type = 0;
+            return;
+        }
+
+        _gl.GetActiveAttrib(program, index, (uint)nameBuffer.Length, out uint nameLength, out int activeSize, out GLEnum activeType, out nameBuffer[0]);
+        length = (int)nameLength;
+        size = activeSize;
+        type = (uint)activeType;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void UniformBlockBinding(uint program, uint uniformBlockIndex, uint uniformBlockBinding) =>
         _gl.UniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding);
 
