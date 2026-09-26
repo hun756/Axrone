@@ -218,18 +218,108 @@ public static class ThrowHelper
     public static void ThrowAlignmentViolation(int offset, int elemSize) =>
         throw new GLBufferException($"Byte offset ({offset}) must be a multiple of element size ({elemSize})", GLBufferErrorCode.AlignmentViolation);
 
-    /// <summary>Throws a buffer factory disposed exception.</summary>
+    /// <summary>Throws a shader compile failed exception.</summary>
     [DoesNotReturn]
     [StackTraceHidden]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowBufferFactoryDisposed() =>
-        throw new GLBufferException("BufferFactory has been disposed", GLBufferErrorCode.FactoryDisposed);
+    public static void ThrowShaderCompileFailed(string infoLog) =>
+        throw new GLShaderException($"SHADER_COMPILE_FAILED: {infoLog}", GLShaderErrorCode.ShaderCompileFailed, infoLog);
 
-    /// <summary>Throws a buffer disposed exception.</summary>
+    /// <summary>Throws a shader link failed exception.</summary>
     [DoesNotReturn]
     [StackTraceHidden]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowBufferDisposed() =>
-        throw new GLBufferException("BUFFER_ALREADY_DISPOSED", GLBufferErrorCode.BufferAlreadyDisposed);
+    public static void ThrowShaderLinkFailed(string infoLog) =>
+        throw new GLShaderException($"SHADER_LINK_FAILED: {infoLog}", GLShaderErrorCode.ShaderLinkFailed, infoLog);
+
+    /// <summary>Throws a program disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowProgramDisposed() =>
+        throw new GLShaderException("PROGRAM_DISPOSED", GLShaderErrorCode.ProgramDisposed);
+
+    /// <summary>Throws a batch overflow exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBatchOverflow() =>
+        throw new GLShaderException("BATCH_OVERFLOW", GLShaderErrorCode.BatchOverflow);
+
+    /// <summary>Throws an incomplete framebuffer exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowIncompleteFramebuffer(uint status) =>
+        throw new GLFramebufferException($"INCOMPLETE_FRAMEBUFFER: 0x{status:X4}", GLFramebufferErrorCode.IncompleteFramebuffer, status);
+
+    /// <summary>Throws an executor not found exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowExecutorNotFound(string kind) =>
+        throw new RenderException($"No render pass executor is registered for pass kind '{kind}'", RenderErrorCode.ExecutorNotFound);
+
+    /// <summary>Throws an out of memory exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowOutOfMemory(string message) =>
+        throw new GLException(message, GLContextErrorCode.OutOfMemory);
+
+    /// <summary>Throws an object disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposed(string objectName) =>
+        throw new ObjectDisposedException(objectName);
+
+    /// <summary>Throws an argument null exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentNull(string paramName) =>
+        throw new ArgumentNullException(paramName);
+
+    /// <summary>Throws an argument out of range exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentOutOfRange(string paramName, object? actualValue = null, string? message = null) =>
+        throw new ArgumentOutOfRangeException(paramName, actualValue, message);
+
+    /// <summary>Throws an invalid argument exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidArgument(string message) =>
+        throw new ArgumentException(message);
+
+    /// <summary>Throws a not implemented exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNotImplemented(string? message = null) =>
+        throw new NotImplementedException(message);
+
+    /// <summary>Throws an unsupported operation exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowUnsupportedOperation(string message) =>
+        throw new NotSupportedException(message);
+
+    /// <summary>Throws an invalid operation exception with context error code.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidValue(string message) =>
+        throw new GLException(message, GLContextErrorCode.InvalidValue);
+
+    /// <summary>Generic throw helper for render errors with resource context.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void Throw(RenderErrorCode code, string message, string context) =>
+        throw new RenderException($"{context}: {message}", code);
 }
-
