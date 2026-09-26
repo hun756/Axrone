@@ -14,6 +14,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: byte-backed GPU enums — compact descriptors matching GL field widths, intentional -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1720: UInt8/16/32 member names — GL index-type parity, intentional -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1032: standard exception ctors — every render failure must carry a code -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup Label="PublicApi">
     <InternalsVisibleTo Include="Axrone.Render.Core.Tests" />
     <InternalsVisibleTo Include="Axrone.Render.OpenGL" />
