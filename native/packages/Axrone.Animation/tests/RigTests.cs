@@ -44,6 +44,36 @@ public class RigTests
     }
 
     [Fact]
+    public void EvaluatePose_ComposesLivePoseToPalette()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        var locals = new LocalTransform[3];
+        locals[0] = LocalTransform.Identity;
+        locals[1] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
+        locals[2] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
+
+        var palette = new Matrix4x4[3];
+        rig.EvaluatePose(locals, palette);
+
+        // Column-major lane: translation rides M14/M24/M34.
+        palette[0].M24.Should().BeApproximately(0.0f, 1e-6f);
+        palette[1].M24.Should().BeApproximately(1.0f, 1e-6f);
+        palette[2].M24.Should().BeApproximately(2.0f, 1e-6f);
+
+        Action shortLocals = () => rig.EvaluatePose(Array.Empty<LocalTransform>(), palette);
+        shortLocals.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.SamplingOutOfBounds);
+    }
+
+    [Fact]
+    public void LocalTransform_SanitizesInConstructor()
+    {
+        var degenerate = new LocalTransform(Vector3.Zero, new Quaternion(0, 0, 0, 0), Vector3.Zero);
+        degenerate.Rotation.Should().Be(Quaternion.Identity);
+        degenerate.Scale.Should().Be(Vector3.One);
+    }
+
+    [Fact]
     public void EmptyRig_Throws()
     {
         Action build = () => { _ = new Rig(new RigId("empty"), []); };

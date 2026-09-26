@@ -143,6 +143,28 @@ public static class FastMath
         return new Quaternion(-q.X, -q.Y, -q.Z, q.W);
     }
 
+    /// <summary>
+    /// Concatenates a local transform onto its parent world transform: the single
+    /// home for hierarchy composition (forward kinematics, subtree refresh, pose
+    /// evaluation all route here, so the math cannot drift between call sites).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void ConcatenateLocal(
+        in Vector3 parentTranslation,
+        in Quaternion parentRotation,
+        in Vector3 parentScale,
+        in Vector3 localTranslation,
+        in Quaternion localRotation,
+        in Vector3 localScale,
+        out Vector3 outTranslation,
+        out Quaternion outRotation,
+        out Vector3 outScale)
+    {
+        outScale = parentScale * localScale;
+        outRotation = Normalize(parentRotation * localRotation);
+        outTranslation = parentTranslation + Vector3.Transform(localTranslation * parentScale, parentRotation);
+    }
+
     /// <summary>Composes a column-major TRS matrix.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ComposeTransformMatrix(in Vector3 translation, in Quaternion rotation, in Vector3 scale, Span<float> output)

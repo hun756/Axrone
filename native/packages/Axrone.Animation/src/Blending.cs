@@ -28,9 +28,7 @@ public static class BlendingKernels
             }
             else
             {
-                worldS[b] = worldS[p] * locS[b];
-                worldR[b] = Quaternion.Normalize(worldR[p] * locR[b]);
-                worldT[b] = worldT[p] + Vector3.Transform(locT[b] * worldS[p], worldR[p]);
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], locT[b], locR[b], locS[b], out worldT[b], out worldR[b], out worldS[b]);
             }
         }
     }

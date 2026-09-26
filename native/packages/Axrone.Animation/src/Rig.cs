@@ -171,6 +171,59 @@ public sealed class Rig
     }
 
     /// <summary>
+    /// Evaluates a live local-pose buffer into a world matrix palette: hierarchy
+    /// compose in evaluation order, direct element composition per bone (no matrix
+    /// temporaries). The render-ready counterpart to frame-based sampling.
+    /// </summary>
+    [SkipLocalsInit]
+    public void EvaluatePose(ReadOnlySpan<LocalTransform> localTransforms, Span<Matrix4x4> outWorldPalette)
+    {
+        if (localTransforms.Length < BoneCount)
+        {
+            AnimationThrowHelper.ThrowPaletteTooSmall(localTransforms.Length, BoneCount);
+        }
+
+        if (outWorldPalette.Length < BoneCount)
+        {
+            AnimationThrowHelper.ThrowPaletteTooSmall(outWorldPalette.Length, BoneCount);
+        }
+
+        int scratchBones = BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
+
+        Span<float> matrixLane = stackalloc float[16];
+        for (int i = 0; i < _evaluationOrder.Length; i++)
+        {
+            int b = _evaluationOrder[i];
+            int p = _parents[b];
+            ref readonly LocalTransform local = ref localTransforms[b];
+
+            if (p == -1)
+            {
+                worldT[b] = local.Translation;
+                worldR[b] = local.Rotation;
+                worldS[b] = local.Scale;
+            }
+            else
+            {
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], local.Translation, local.Rotation, local.Scale, out worldT[b], out worldR[b], out worldS[b]);
+            }
+
+            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], matrixLane);
+            outWorldPalette[b] = new Matrix4x4(
+                matrixLane[0], matrixLane[1], matrixLane[2], matrixLane[3],
+                matrixLane[4], matrixLane[5], matrixLane[6], matrixLane[7],
+                matrixLane[8], matrixLane[9], matrixLane[10], matrixLane[11],
+                matrixLane[12], matrixLane[13], matrixLane[14], matrixLane[15]);
+        }
+    }
+
+    /// <summary>
     /// Composes rest-pose world matrices once (construction): same formulas as the
     /// per-frame forward kinematics, so results match live evaluation bit-for-bit.
     /// </summary>
@@ -210,9 +263,7 @@ public sealed class Rig
             }
             else
             {
-                worldS[b] = worldS[p] * locS;
-                worldR[b] = Quaternion.Normalize(worldR[p] * locR);
-                worldT[b] = worldT[p] + Vector3.Transform(locT * worldS[p], worldR[p]);
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], locT, locR, locS, out worldT[b], out worldR[b], out worldS[b]);
             }
 
             FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], palette.AsSpan(b * 16, 16));
