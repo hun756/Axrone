@@ -65,8 +65,15 @@ public sealed class ChunkPayloadDto
 #pragma warning restore CA1002, CA2227
 
 /// <summary>Source-generated JSON context (AOT-safe, no reflection).</summary>
+[JsonSourceGenerationOptions(
+    WriteIndented = false,
+    DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+    GenerationMode = JsonSourceGenerationMode.Default,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified)]
 [JsonSerializable(typeof(ChunkPayloadDto))]
 [JsonSerializable(typeof(ChunkTrackDto))]
+[JsonSerializable(typeof(List<ChunkTrackDto>))]
+[JsonSerializable(typeof(List<float>))]
 public sealed partial class ChunkJsonSerializerContext : JsonSerializerContext
 {
 }
