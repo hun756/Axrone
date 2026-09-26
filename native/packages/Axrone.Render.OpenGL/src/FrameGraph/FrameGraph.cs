@@ -72,121 +72,176 @@ public sealed class FrameGraph : IDisposable
             }
         }
 
+        int passCount = _passes.Count;
         // 2. Build writer -> readers edges from resource writes/reads.
         // A reader depends on every writer of the resources it reads (self excluded).
-        var edges = new Dictionary<int, List<int>>();
-        var inDegree = new Dictionary<int, int>();
+        // NOTE (alloc): edges stays Dictionary<int, List<int>> by design. Pass indices are
+        // dense 0..N-1, but adjacency is sparse and variable-length with Contains-dedup per
+        // writer; pooling the inner lists would retain pooled buffers across compiles and add
+        // length bookkeeping for no steady-state win (Compile runs on mutation only, the result
+        // is cached in _sortedPasses and reused by Execute). The per-compile scratch that scales
+        // with N (Queue backing array, sorted List backing array + ToArray copy, inDegree
+        // dictionary) is removed below via a rented inDegree array + ArrayPool<int> ring queue
+        // + GC.AllocateUninitializedArray direct fill instead.
+        var edges = new Dictionary<int, List<int>>(passCount);
 
-        for (int i = 0; i < _passes.Count; i++)
+        int enabledPassCount = 0;
+        for (int i = 0; i < passCount; i++)
         {
-            if (!_passes[i].IsEnabled)
-                continue;
-
-            inDegree[i] = 0;
+            if (_passes[i].IsEnabled)
+            {
+                enabledPassCount++;
+            }
         }
 
-        for (int i = 0; i < _passes.Count; i++)
+        if (enabledPassCount == 0)
         {
-            if (!_passes[i].IsEnabled)
-                continue;
+            _sortedPasses = Array.Empty<RenderPass>();
+            return;
+        }
 
-            ReadOnlySpan<string> writes = _passes[i].GetWrittenResources();
-            for (int w = 0; w < writes.Length; w++)
+        // inDegree is indexed directly by pass index (indices are dense 0..N-1):
+        // -1 = disabled pass (never emitted), otherwise the remaining dependency count.
+        // Seeding in ascending index order preserves the original Dictionary insertion
+        // (ascending) + Queue FIFO emission order bit-identically.
+        int[] inDegree = ArrayPool<int>.Shared.Rent(passCount);
+        try
+        {
+            // Ring queue storage: each pass index is enqueued at most once, so capacity
+            // passCount suffices; head/tail wrap as a ring and preserve Queue<T> FIFO order.
+            int[] queueStorage = ArrayPool<int>.Shared.Rent(passCount);
+            try
             {
-                string resourceName = writes[w];
-
-                // Track transient resource
-                if (!_transientResources.TryGetValue(resourceName, out FrameGraphResource? fgResource))
+                for (int i = 0; i < passCount; i++)
                 {
-                    fgResource = new FrameGraphResource(resourceName);
-                    _transientResources[resourceName] = fgResource;
+                    inDegree[i] = _passes[i].IsEnabled ? 0 : -1;
                 }
 
-                fgResource.FirstWritePass = i;
-
-                // Find all passes that read this resource
-                for (int j = 0; j < _passes.Count; j++)
+                for (int i = 0; i < _passes.Count; i++)
                 {
-                    if (i == j || !_passes[j].IsEnabled)
+                    if (!_passes[i].IsEnabled)
                         continue;
 
-                    ReadOnlySpan<string> reads = _passes[j].GetReadResources();
-                    for (int r = 0; r < reads.Length; r++)
+                    ReadOnlySpan<string> writes = _passes[i].GetWrittenResources();
+                    for (int w = 0; w < writes.Length; w++)
                     {
-                        if (string.Equals(reads[r], resourceName, StringComparison.OrdinalIgnoreCase))
+                        string resourceName = writes[w];
+
+                        // Track transient resource
+                        if (!_transientResources.TryGetValue(resourceName, out FrameGraphResource? fgResource))
                         {
-                            if (!edges.TryGetValue(i, out List<int>? readers))
-                            {
-                                readers = new List<int>(4);
-                                edges[i] = readers;
-                            }
+                            fgResource = new FrameGraphResource(resourceName);
+                            _transientResources[resourceName] = fgResource;
+                        }
 
-                            if (!readers.Contains(j))
-                            {
-                                readers.Add(j);
-                                fgResource.LastReadPass = j;
+                        fgResource.FirstWritePass = i;
 
-                                if (!inDegree.TryGetValue(j, out int degree))
+                        // Find all passes that read this resource
+                        for (int j = 0; j < _passes.Count; j++)
+                        {
+                            if (i == j || !_passes[j].IsEnabled)
+                                continue;
+
+                            ReadOnlySpan<string> reads = _passes[j].GetReadResources();
+                            for (int r = 0; r < reads.Length; r++)
+                            {
+                                if (string.Equals(reads[r], resourceName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    degree = 0;
-                                }
+                                    if (!edges.TryGetValue(i, out List<int>? readers))
+                                    {
+                                        readers = new List<int>(4);
+                                        edges[i] = readers;
+                                    }
 
-                                inDegree[j] = degree + 1;
+                                    if (!readers.Contains(j))
+                                    {
+                                        readers.Add(j);
+                                        fgResource.LastReadPass = j;
+                                        inDegree[j]++;
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
 
-        // 3. Kahn's algorithm: emit zero-in-degree passes, release their readers.
-        var queue = new Queue<int>();
-        foreach (int index in inDegree.Keys)
-        {
-            if (inDegree[index] == 0)
-            {
-                queue.Enqueue(index);
-            }
-        }
-
-        var sorted = new List<RenderPass>(_passes.Count);
-        while (queue.Count > 0)
-        {
-            int current = queue.Dequeue();
-            sorted.Add(_passes[current]);
-
-            if (!edges.TryGetValue(current, out List<int>? readers))
-            {
-                continue;
-            }
-
-            for (int n = 0; n < readers.Count; n++)
-            {
-                int reader = readers[n];
-                int remaining = inDegree[reader] - 1;
-                inDegree[reader] = remaining;
-                if (remaining == 0)
+                // 3. Kahn's algorithm: emit zero-in-degree passes, release their readers.
+                // Direct-fill into the final array (length = enabledPassCount, known up front).
+                RenderPass[] sorted = GC.AllocateUninitializedArray<RenderPass>(enabledPassCount);
+                int queueHead = 0;
+                int queueTail = 0;
+                int queueCount = 0;
+                for (int i = 0; i < passCount; i++)
                 {
-                    queue.Enqueue(reader);
+                    if (inDegree[i] == 0)
+                    {
+                        queueStorage[queueTail] = i;
+                        queueTail++;
+                        if (queueTail >= passCount)
+                        {
+                            queueTail = 0;
+                        }
+
+                        queueCount++;
+                    }
                 }
+
+                int sortedCount = 0;
+                while (queueCount > 0)
+                {
+                    int current = queueStorage[queueHead];
+                    queueHead++;
+                    if (queueHead >= passCount)
+                    {
+                        queueHead = 0;
+                    }
+
+                    queueCount--;
+                    sorted[sortedCount] = _passes[current];
+                    sortedCount++;
+
+                    if (!edges.TryGetValue(current, out List<int>? readers))
+                    {
+                        continue;
+                    }
+
+                    for (int n = 0; n < readers.Count; n++)
+                    {
+                        int reader = readers[n];
+                        int remaining = inDegree[reader] - 1;
+                        inDegree[reader] = remaining;
+                        if (remaining == 0)
+                        {
+                            queueStorage[queueTail] = reader;
+                            queueTail++;
+                            if (queueTail >= passCount)
+                            {
+                                queueTail = 0;
+                            }
+
+                            queueCount++;
+                        }
+                    }
+                }
+
+                // 4. Detect cycles
+                if (sortedCount != enabledPassCount)
+                {
+                    ThrowHelper.Throw(RenderErrorCode.GraphCycleDetected, "Frame graph contains cycles and cannot be executed", nameof(FrameGraph));
+                }
+
+                // 5. Store sorted order
+                _sortedPasses = sorted;
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(queueStorage);
             }
         }
-
-        // 4. Detect cycles
-        int enabledPassCount = 0;
-        for (int i = 0; i < _passes.Count; i++)
+        finally
         {
-            if (_passes[i].IsEnabled)
-                enabledPassCount++;
+            ArrayPool<int>.Shared.Return(inDegree);
         }
-
-        if (sorted.Count != enabledPassCount)
-        {
-            ThrowHelper.Throw(RenderErrorCode.GraphCycleDetected, "Frame graph contains cycles and cannot be executed", nameof(FrameGraph));
-        }
-
-        // 5. Store sorted order
-        _sortedPasses = sorted.ToArray();
     }
 
     /// <summary>
