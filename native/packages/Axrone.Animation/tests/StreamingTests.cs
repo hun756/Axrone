@@ -145,6 +145,26 @@ public class StreamingTests
     }
 
     [Fact]
+    public void ScheduleSpan_WritesSortedWithoutAllocating()
+    {
+        var scheduler = new StreamingScheduler();
+        (ClipId Clip, float Time, float Weight)[] activities = [(new ClipId("walk"), 1.0f, 1.0f)];
+        var destination = new ChunkRequest[4];
+
+        int written = scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, destination);
+        written.Should().Be(2);
+        destination[0].IsPreload.Should().BeFalse();
+        destination[1].IsPreload.Should().BeTrue();
+
+        var repeat = new ChunkRequest[4];
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, repeat).Should().Be(0);
+
+        var tiny = new ChunkRequest[1];
+        var fresh = new StreamingScheduler();
+        fresh.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, tiny).Should().Be(1);
+    }
+
+    [Fact]
     public void Optimizer_DropsCollinearKeys()
     {
         AnimationClip clip = LinearClip();

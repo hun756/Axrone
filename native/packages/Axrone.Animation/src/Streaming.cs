@@ -309,6 +309,66 @@ public sealed class StreamingScheduler
             }
         }
     }
+
+    /// <summary>
+    /// Zero-allocation batch scheduling into a caller-owned span. Appends unsorted,
+    /// sorts the written prefix once, and returns the count — no heap, no wrappers.
+    /// Truncates (never overflows) when the destination is too small.
+    /// </summary>
+    public int Schedule(
+        ReadOnlySpan<(ClipId Clip, float Time, float Weight)> activities,
+        float chunkDuration,
+        float preloadWindow,
+        Span<ChunkRequest> destination)
+    {
+        if (chunkDuration <= 0.0f)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Chunk duration must be positive.");
+        }
+
+        int written = 0;
+        lock (_gate)
+        {
+            for (int i = 0; i < activities.Length; i++)
+            {
+                (ClipId clip, float time, float weight) = activities[i];
+                int currentIndex = (int)(time / chunkDuration);
+                var activeKey = new ChunkKey(clip, currentIndex);
+
+                if (IsSchedulable(activeKey))
+                {
+                    if (written < destination.Length)
+                    {
+                        destination[written++] = new ChunkRequest($"{clip.Value}:v:{currentIndex}", clip, currentIndex * chunkDuration, weight, false, activeKey);
+                    }
+
+                    _states[activeKey] = ChunkStatus.Requested;
+                }
+
+                int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
+                if (preloadIndex != currentIndex)
+                {
+                    var preloadKey = new ChunkKey(clip, preloadIndex);
+                    if (IsSchedulable(preloadKey))
+                    {
+                        if (written < destination.Length)
+                        {
+                            destination[written++] = new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * AnimationConstants.PreloadWeightFactor, true, preloadKey);
+                        }
+
+                        _states[preloadKey] = ChunkStatus.Requested;
+                    }
+                }
+            }
+        }
+
+        if (written > 1)
+        {
+            destination[..written].Sort();
+        }
+
+        return written;
+    }
 }
 
 /// <summary>Chunk codec: bytes to payload with version and shape validation.</summary>
