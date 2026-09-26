@@ -35,6 +35,7 @@ public sealed class Rig
     private readonly int[] _rootIndices;
     private readonly int[][] _children;
     private readonly Dictionary<string, int> _nameToIndex;
+    private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _spanLookup;
 
     internal readonly float[] RestPoseBuffer;
     internal readonly float[]? InverseBindMatrices;
@@ -93,6 +94,7 @@ public sealed class Rig
         _parents = new int[BoneCount];
         RestPoseBuffer = new float[BoneCount * 10];
         _nameToIndex = new Dictionary<string, int>(BoneCount, StringComparer.Ordinal);
+        _spanLookup = _nameToIndex.GetAlternateLookup<ReadOnlySpan<char>>();
 
         for (int i = 0; i < BoneCount; i++)
         {
@@ -154,6 +156,13 @@ public sealed class Rig
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public BoneHandle FindBoneIndex(string name) =>
         _nameToIndex.TryGetValue(name, out int index) ? new BoneHandle(index) : BoneHandle.Invalid;
+
+    /// <summary>Bone handle by span, invalid when absent — no string allocation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public BoneHandle FindBoneIndex(ReadOnlySpan<char> name) =>
+        name.IsEmpty
+            ? BoneHandle.Invalid
+            : _spanLookup.TryGetValue(name, out int index) ? new BoneHandle(index) : BoneHandle.Invalid;
 
     /// <summary>
     /// Copies the precomputed rest-pose world matrix palette (16 floats per bone).

@@ -24,6 +24,10 @@ public class RigTests
         rig.FindBoneIndex("ghost").Should().Be(BoneHandle.Invalid);
         BoneHandle root = rig.FindBoneIndex("root");
         rig.GetChildren(root).ToArray().Should().Equal(1);
+
+        rig.FindBoneIndex("tip".AsSpan()).Should().Be(new BoneHandle(2));
+        rig.FindBoneIndex("ghost".AsSpan()).Should().Be(BoneHandle.Invalid);
+        rig.FindBoneIndex(ReadOnlySpan<char>.Empty).Should().Be(BoneHandle.Invalid);
     }
 
     [Fact]
