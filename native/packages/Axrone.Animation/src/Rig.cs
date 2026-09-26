@@ -171,6 +171,21 @@ public sealed class Rig
     }
 
     /// <summary>
+    /// Runs a zero-allocation palette visitor over the rest world matrices.
+    /// Constrained static dispatch: no boxing, no interface call, context may
+    /// be a ref struct (stack-only accumulators welcome).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void AcceptPalette<TVisitor, TContext>(ref TContext context)
+        where TVisitor : struct, IRigPaletteVisitor<TContext>
+        where TContext : allows ref struct
+    {
+        TVisitor visitor = default;
+        ReadOnlySpan<Matrix4x4> matrices = MemoryMarshal.Cast<float, Matrix4x4>(_restWorldMatrices.AsSpan(0, BoneCount * 16));
+        visitor.Visit(ref context, matrices);
+    }
+
+    /// <summary>
     /// Evaluates a live local-pose buffer into a world matrix palette: hierarchy
     /// compose in evaluation order, direct element composition per bone (no matrix
     /// temporaries). The render-ready counterpart to frame-based sampling.

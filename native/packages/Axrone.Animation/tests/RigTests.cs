@@ -76,6 +76,36 @@ public class RigTests
         degenerate.Scale.Should().Be(Vector3.One);
     }
 
+    private struct TranslationBoundsVisitor : IRigPaletteVisitor<BoundsAccumulator>
+    {
+        public void Visit(ref BoundsAccumulator context, ReadOnlySpan<Matrix4x4> worldMatrices)
+        {
+            for (int i = 0; i < worldMatrices.Length; i++)
+            {
+                Vector3 t = new(worldMatrices[i].M14, worldMatrices[i].M24, worldMatrices[i].M34);
+                context.Min = Vector3.Min(context.Min, t);
+                context.Max = Vector3.Max(context.Max, t);
+            }
+        }
+    }
+
+    private struct BoundsAccumulator
+    {
+        public Vector3 Min;
+        public Vector3 Max;
+    }
+
+    [Fact]
+    public void AcceptPalette_RunsZeroAllocVisitor()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        var bounds = new BoundsAccumulator { Min = new Vector3(float.MaxValue), Max = new Vector3(float.MinValue) };
+        rig.AcceptPalette<TranslationBoundsVisitor, BoundsAccumulator>(ref bounds);
+
+        bounds.Min.Should().Be(new Vector3(0.0f, 0.0f, 0.0f));
+        bounds.Max.Should().Be(new Vector3(0.0f, 2.0f, 0.0f));
+    }
+
     [Fact]
     public void EmptyRig_Throws()
     {
