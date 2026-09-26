@@ -610,19 +610,30 @@ public static class KeyframeOptimizer
 
                 float factor = (t1 - t0) / (t2 - t0);
                 bool deviate = false;
-                int anchorOffset = anchor * stride;
-                int iOffset = i * stride;
-                int nextOffset = (i + 1) * stride;
-                for (int s = 0; s < stride; s++)
+                if (Vector128.IsHardwareAccelerated && stride == 4)
                 {
-                    float v0 = Unsafe.Add(ref valuesRef, anchorOffset + s);
-                    float actual = Unsafe.Add(ref valuesRef, iOffset + s);
-                    float v2 = Unsafe.Add(ref valuesRef, nextOffset + s);
-                    float predicted = v0 + (factor * (v2 - v0));
-                    if (MathF.Abs(actual - predicted) > tolerance)
+                    Vector128<float> v0 = Vector128.LoadUnsafe(ref valuesRef, (nuint)(anchor * stride));
+                    Vector128<float> actual = Vector128.LoadUnsafe(ref valuesRef, (nuint)(i * stride));
+                    Vector128<float> v2 = Vector128.LoadUnsafe(ref valuesRef, (nuint)((i + 1) * stride));
+                    Vector128<float> predicted = v0 + (Vector128.Create(factor) * (v2 - v0));
+                    deviate = Vector128.GreaterThanAny(Vector128.Abs(actual - predicted), Vector128.Create(tolerance));
+                }
+                else
+                {
+                    int anchorOffset = anchor * stride;
+                    int iOffset = i * stride;
+                    int nextOffset = (i + 1) * stride;
+                    for (int s = 0; s < stride; s++)
                     {
-                        deviate = true;
-                        break;
+                        float v0 = Unsafe.Add(ref valuesRef, anchorOffset + s);
+                        float actual = Unsafe.Add(ref valuesRef, iOffset + s);
+                        float v2 = Unsafe.Add(ref valuesRef, nextOffset + s);
+                        float predicted = v0 + (factor * (v2 - v0));
+                        if (MathF.Abs(actual - predicted) > tolerance)
+                        {
+                            deviate = true;
+                            break;
+                        }
                     }
                 }
 
