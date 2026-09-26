@@ -580,61 +580,76 @@ public static class KeyframeOptimizer
         }
 
         int stride = channel.Stride;
-        var newTimes = new List<float>(times.Length) { times[0] };
-        var newValues = new List<float>(values.Length);
-        for (int c = 0; c < stride; c++)
+        float[] rentedTimes = ArrayPool<float>.Shared.Rent(times.Length);
+        float[] rentedValues = ArrayPool<float>.Shared.Rent(values.Length);
+
+        try
         {
-            newValues.Add(values[c]);
-        }
+            rentedTimes[0] = times[0];
+            values.Slice(0, stride).CopyTo(rentedValues);
+            int outKeyCount = 1;
+            int anchor = 0;
 
-        int anchor = 0;
-        for (int i = 1; i < times.Length - 1; i++)
-        {
-            float t0 = times[anchor];
-            float t1 = times[i];
-            float t2 = times[i + 1];
-
-            if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
+            for (int i = 1; i < times.Length - 1; i++)
             {
-                PushKey(times, values, stride, i, newTimes, newValues);
-                anchor = i;
-                continue;
-            }
+                float t0 = times[anchor];
+                float t1 = times[i];
+                float t2 = times[i + 1];
 
-            float factor = (t1 - t0) / (t2 - t0);
-            bool deviate = false;
-            for (int s = 0; s < stride; s++)
-            {
-                float v0 = values[(anchor * stride) + s];
-                float actual = values[(i * stride) + s];
-                float v2 = values[((i + 1) * stride) + s];
-                float predicted = v0 + (factor * (v2 - v0));
-                if (MathF.Abs(actual - predicted) > tolerance)
+                if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
                 {
-                    deviate = true;
-                    break;
+                    PushKey(times, values, stride, i, rentedTimes, rentedValues, outKeyCount++);
+                    anchor = i;
+                    continue;
+                }
+
+                float factor = (t1 - t0) / (t2 - t0);
+                bool deviate = false;
+                for (int s = 0; s < stride; s++)
+                {
+                    float v0 = values[(anchor * stride) + s];
+                    float actual = values[(i * stride) + s];
+                    float v2 = values[((i + 1) * stride) + s];
+                    float predicted = v0 + (factor * (v2 - v0));
+                    if (MathF.Abs(actual - predicted) > tolerance)
+                    {
+                        deviate = true;
+                        break;
+                    }
+                }
+
+                if (deviate)
+                {
+                    PushKey(times, values, stride, i, rentedTimes, rentedValues, outKeyCount++);
+                    anchor = i;
                 }
             }
 
-            if (deviate)
-            {
-                PushKey(times, values, stride, i, newTimes, newValues);
-                anchor = i;
-            }
-        }
+            PushKey(times, values, stride, times.Length - 1, rentedTimes, rentedValues, outKeyCount++);
 
-        PushKey(times, values, stride, times.Length - 1, newTimes, newValues);
-        return new AnimationChannel(channel.BoneIndex, channel.Target, channel.Interpolation, newTimes.ToArray(), newValues.ToArray(), channel.TargetCurveId);
+            if (outKeyCount == times.Length)
+            {
+                return channel;
+            }
+
+            var finalTimes = GC.AllocateUninitializedArray<float>(outKeyCount);
+            var finalValues = GC.AllocateUninitializedArray<float>(outKeyCount * stride);
+            rentedTimes.AsSpan(0, outKeyCount).CopyTo(finalTimes);
+            rentedValues.AsSpan(0, outKeyCount * stride).CopyTo(finalValues);
+
+            return new AnimationChannel(channel.BoneIndex, channel.Target, channel.Interpolation, finalTimes, finalValues, channel.TargetCurveId);
+        }
+        finally
+        {
+            ArrayPool<float>.Shared.Return(rentedTimes);
+            ArrayPool<float>.Shared.Return(rentedValues);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void PushKey(ReadOnlySpan<float> times, ReadOnlySpan<float> values, int stride, int index, List<float> outTimes, List<float> outValues)
+    private static void PushKey(ReadOnlySpan<float> times, ReadOnlySpan<float> values, int stride, int keyIndex, Span<float> outTimes, Span<float> outValues, int writePos)
     {
-        outTimes.Add(times[index]);
-        int baseOffset = index * stride;
-        for (int s = 0; s < stride; s++)
-        {
-            outValues.Add(values[baseOffset + s]);
-        }
+        outTimes[writePos] = times[keyIndex];
+        values.Slice(keyIndex * stride, stride).CopyTo(outValues.Slice(writePos * stride, stride));
     }
 }
