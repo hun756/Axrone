@@ -179,4 +179,46 @@ public static class GLConst
 
     // None
     public const uint None = 0;
+
+    // S3TC / RGTC / BPTC compressed formats
+    public const uint CompressedRgbS3tcDxt1 = 0x83F0;
+    public const uint CompressedRgbaS3tcDxt1 = 0x83F1;
+    public const uint CompressedRgbaS3tcDxt3 = 0x83F2;
+    public const uint CompressedRgbaS3tcDxt5 = 0x83F3;
+    public const uint CompressedRedRgtc1 = 0x8DBB;
+    public const uint CompressedSignedRedRgtc1 = 0x8DBC;
+    public const uint CompressedRgRgtc2 = 0x8DBD;
+    public const uint CompressedSignedRgRgtc2 = 0x8DBE;
+    public const uint CompressedRgbBptcUnsignedFloat = 0x8E8F;
+    public const uint CompressedRgbBptcSignedFloat = 0x8E8E;
+    public const uint CompressedRgbaBptcUnorm = 0x8E8C;
+    public const uint CompressedSrgbAlphaBptcUnorm = 0x8E8D;
+
+    // ETC2 / EAC compressed formats
+    public const uint CompressedR11Eac = 0x9270;
+    public const uint CompressedSignedR11Eac = 0x9271;
+    public const uint CompressedRg11Eac = 0x9272;
+    public const uint CompressedSignedRg11Eac = 0x9273;
+    public const uint CompressedRgb8Etc2 = 0x9274;
+    public const uint CompressedSrgb8Etc2 = 0x9275;
+    public const uint CompressedRgb8PunchthroughAlpha1Etc2 = 0x9276;
+    public const uint CompressedSrgb8PunchthroughAlpha1Etc2 = 0x9277;
+    public const uint CompressedRgba8Etc2Eac = 0x9278;
+    public const uint CompressedSrgb8Alpha8Etc2Eac = 0x9279;
+
+    // ASTC 2D LDR formats
+    public const uint CompressedRgbaAstc4x4 = 0x93B0;
+    public const uint CompressedRgbaAstc5x4 = 0x93B1;
+    public const uint CompressedRgbaAstc5x5 = 0x93B2;
+    public const uint CompressedRgbaAstc6x5 = 0x93B3;
+    public const uint CompressedRgbaAstc6x6 = 0x93B4;
+    public const uint CompressedRgbaAstc8x5 = 0x93B5;
+    public const uint CompressedRgbaAstc8x6 = 0x93B6;
+    public const uint CompressedRgbaAstc8x8 = 0x93B7;
+    public const uint CompressedRgbaAstc10x5 = 0x93B8;
+    public const uint CompressedRgbaAstc10x6 = 0x93B9;
+    public const uint CompressedRgbaAstc10x8 = 0x93BA;
+    public const uint CompressedRgbaAstc10x10 = 0x93BB;
+    public const uint CompressedRgbaAstc12x10 = 0x93BC;
+    public const uint CompressedRgbaAstc12x12 = 0x93BD;
 }
