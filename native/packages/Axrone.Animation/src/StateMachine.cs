@@ -84,15 +84,27 @@ public sealed class AnimationState
 /// <summary>Live state machine: time advance, transition arbitration, evaluation.</summary>
 public sealed class StateMachineInstance
 {
+    /// <summary>
+    /// In-flight blend snapshot: plain values, no references, no null states.
+    /// Copied from the triggering transition at start; completion reads it back.
+    /// </summary>
+    private struct ActiveTransitionData
+    {
+        public int SourceStateIndex;
+        public int TargetStateIndex;
+        public float Progress;
+        public float DurationSec;
+        public float TargetNormalizedTime;
+        public bool HasFixedDuration;
+        public bool CanInterrupt;
+        public bool IsActive;
+    }
+
     private readonly AnimationState[] _states;
     private readonly StateTransition[] _anyStateTransitions;
     private ParameterStore? _boundParameters;
 
-    private StateTransition? _activeTransition;
-    private int _transitionSourceStateIndex;
-    private float _transitionProgress;
-    private float _transitionDurationSec;
-    private float _targetNormalizedTime;
+    private ActiveTransitionData _activeTransition;
 
     /// <summary>Current state index.</summary>
     public int CurrentStateIndex { get; private set; }
@@ -102,6 +114,13 @@ public sealed class StateMachineInstance
 
     /// <summary>Previous normalized time (event window).</summary>
     public float PreviousNormalizedTime { get; private set; }
+
+    /// <summary>Whether a blend is currently in flight.</summary>
+    public bool HasActiveTransition
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _activeTransition.IsActive;
+    }
 
     /// <summary>Creates an instance over states with any-state edges and an entry.</summary>
     public StateMachineInstance(AnimationState[] states, StateTransition[] anyStateTransitions, int entryStateIndex)
@@ -134,7 +153,7 @@ public sealed class StateMachineInstance
         CurrentStateIndex = stateIndex;
         StateNormalizedTime = normalizedTime;
         PreviousNormalizedTime = normalizedTime;
-        _activeTransition = null;
+        _activeTransition = default;
     }
 
     /// <summary>Starts a manual cross-fade.</summary>
@@ -145,16 +164,22 @@ public sealed class StateMachineInstance
             AnimationThrowHelper.ThrowValidation(AnimationErrorCode.StateMachineInvalidTransition, "Cross-fade target out of range.");
         }
 
-        if (targetStateIndex == CurrentStateIndex && _activeTransition == null)
+        if (targetStateIndex == CurrentStateIndex && !_activeTransition.IsActive)
         {
             return;
         }
 
-        _activeTransition = new StateTransition(targetStateIndex, duration) { Offset = offset, HasFixedDuration = true, CanInterrupt = true };
-        _transitionSourceStateIndex = CurrentStateIndex;
-        _transitionProgress = 0.0f;
-        _transitionDurationSec = duration;
-        _targetNormalizedTime = offset;
+        _activeTransition = new ActiveTransitionData
+        {
+            IsActive = true,
+            SourceStateIndex = CurrentStateIndex,
+            TargetStateIndex = targetStateIndex,
+            Progress = 0.0f,
+            DurationSec = duration,
+            TargetNormalizedTime = offset,
+            HasFixedDuration = true,
+            CanInterrupt = true,
+        };
     }
 
     /// <summary>
@@ -219,7 +244,7 @@ public sealed class StateMachineInstance
         PreviousNormalizedTime = StateNormalizedTime;
         StateNormalizedTime += deltaTime / stateDuration;
 
-        if (_activeTransition != null)
+        if (_activeTransition.IsActive)
         {
             AdvanceTransition(deltaTime, parameters, current, stateDuration);
         }
@@ -228,11 +253,17 @@ public sealed class StateMachineInstance
             StateTransition? next = CheckTransitions(current, parameters);
             if (next != null)
             {
-                _activeTransition = next;
-                _transitionSourceStateIndex = CurrentStateIndex;
-                _transitionProgress = 0.0f;
-                _transitionDurationSec = next.HasFixedDuration ? next.Duration : next.Duration * stateDuration;
-                _targetNormalizedTime = next.Offset;
+                _activeTransition = new ActiveTransitionData
+                {
+                    IsActive = true,
+                    SourceStateIndex = CurrentStateIndex,
+                    TargetStateIndex = next.TargetStateIndex,
+                    Progress = 0.0f,
+                    DurationSec = next.HasFixedDuration ? next.Duration : next.Duration * stateDuration,
+                    TargetNormalizedTime = next.Offset,
+                    HasFixedDuration = next.HasFixedDuration,
+                    CanInterrupt = next.CanInterrupt,
+                };
                 ConsumeTransitionTriggers(next, parameters);
             }
         }
@@ -250,41 +281,46 @@ public sealed class StateMachineInstance
 
     private void AdvanceTransition(float deltaTime, ParameterStore parameters, AnimationState current, float stateDuration)
     {
-        StateTransition active = _activeTransition!;
+        ActiveTransitionData active = _activeTransition;
         AnimationState target = _states[active.TargetStateIndex];
         float targetMotionDuration = MotionDispatcher.GetDuration(target.RootMotion);
         float targetSpeed = MathF.Abs(target.Speed) > AnimationConstants.SoaEpsilon ? target.Speed : 1.0f;
         float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, AnimationConstants.MinStateDuration);
 
-        _targetNormalizedTime += deltaTime / targetDuration;
-        _transitionProgress += _transitionDurationSec > AnimationConstants.SoaEpsilon ? deltaTime / _transitionDurationSec : 1.0f;
+        active.TargetNormalizedTime += deltaTime / targetDuration;
+        active.Progress += active.DurationSec > AnimationConstants.SoaEpsilon ? deltaTime / active.DurationSec : 1.0f;
 
         if (active.CanInterrupt)
         {
             StateTransition? interrupt = CheckTransitions(current, parameters);
             if (interrupt != null && interrupt.TargetStateIndex != active.TargetStateIndex)
             {
-                if (_transitionProgress >= AnimationConstants.TransitionInterruptThreshold)
+                if (active.Progress >= AnimationConstants.TransitionInterruptThreshold)
                 {
-                    _transitionSourceStateIndex = active.TargetStateIndex;
+                    active.SourceStateIndex = active.TargetStateIndex;
                 }
 
-                _activeTransition = interrupt;
-                _transitionProgress = 0.0f;
-                _transitionDurationSec = interrupt.HasFixedDuration ? interrupt.Duration : interrupt.Duration * stateDuration;
-                _targetNormalizedTime = interrupt.Offset;
+                active.TargetStateIndex = interrupt.TargetStateIndex;
+                active.Progress = 0.0f;
+                active.DurationSec = interrupt.HasFixedDuration ? interrupt.Duration : interrupt.Duration * stateDuration;
+                active.TargetNormalizedTime = interrupt.Offset;
+                active.HasFixedDuration = interrupt.HasFixedDuration;
+                active.CanInterrupt = interrupt.CanInterrupt;
+                _activeTransition = active;
                 ConsumeTransitionTriggers(interrupt, parameters);
                 return;
             }
         }
 
-        if (_transitionProgress >= 1.0f)
+        if (active.Progress >= 1.0f)
         {
             CurrentStateIndex = active.TargetStateIndex;
-            StateNormalizedTime = _targetNormalizedTime;
-            PreviousNormalizedTime = _targetNormalizedTime;
-            _activeTransition = null;
+            StateNormalizedTime = active.TargetNormalizedTime;
+            PreviousNormalizedTime = active.TargetNormalizedTime;
+            active.IsActive = false;
         }
+
+        _activeTransition = active;
     }
 
     private static void ConsumeTransitionTriggers(StateTransition transition, ParameterStore parameters)
@@ -376,7 +412,8 @@ public sealed class StateMachineInstance
         ArgumentNullException.ThrowIfNull(parameters);
         EnsureBound(parameters);
 
-        if (_activeTransition == null)
+        ActiveTransitionData active = _activeTransition;
+        if (!active.IsActive)
         {
             MotionDispatcher.Evaluate(_states[CurrentStateIndex].RootMotion, StateNormalizedTime, outFrame, arena, rig, parameters, 0);
             return;
@@ -385,10 +422,10 @@ public sealed class StateMachineInstance
         AnimationFrame sourceFrame = arena.Alloc();
         AnimationFrame targetFrame = arena.Alloc();
 
-        MotionDispatcher.Evaluate(_states[_transitionSourceStateIndex].RootMotion, StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
-        MotionDispatcher.Evaluate(_states[_activeTransition.TargetStateIndex].RootMotion, _targetNormalizedTime, targetFrame, arena, rig, parameters, 0);
+        MotionDispatcher.Evaluate(_states[active.SourceStateIndex].RootMotion, StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
+        MotionDispatcher.Evaluate(_states[active.TargetStateIndex].RootMotion, active.TargetNormalizedTime, targetFrame, arena, rig, parameters, 0);
 
-        BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, FastMath.Clamp01(_transitionProgress));
+        BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, FastMath.Clamp01(active.Progress));
 
         arena.Free();
         arena.Free();
