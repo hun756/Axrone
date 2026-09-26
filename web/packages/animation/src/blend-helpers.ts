@@ -1,6 +1,7 @@
 import type { AnimationParameterStore } from './parameters';
 import { BLEND_EPSILON, BLEND_DISTANCE_EPSILON_SQ, BLEND1D_LINEAR_SCAN_LIMIT } from './blend-types';
 import type { AnimationMotionEvaluationContext } from './blend-scratch';
+import type { IVec2Like } from '@axrone/numeric';
 
 export const resolveMotionTime = (
     normalizedTime: number,
@@ -119,7 +120,7 @@ export const resolveBlend1DAlpha = (
 export const computeBlend2DWeights = (
     x: number,
     y: number,
-    children: readonly { readonly x: number; readonly y: number }[],
+    children: readonly Readonly<IVec2Like>[],
     outWeights: number[]
 ): void => {
     const safeX = Number.isFinite(x) ? x : 0;
@@ -151,7 +152,7 @@ export const computeBlend2DWeights = (
 export const resolveBlend2DWeightsWithContext = (
     x: number,
     y: number,
-    children: readonly { readonly x: number; readonly y: number }[],
+    children: readonly Readonly<IVec2Like>[],
     context: AnimationMotionEvaluationContext,
     depth: number
 ): number[] => {
