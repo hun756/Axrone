@@ -4,7 +4,7 @@ import { Component } from '@axrone/ecs-runtime';
 import type { ComponentConstructor } from '@axrone/ecs-runtime';
 import { Transform, getComponentPropertyMetadata } from '@axrone/ecs-runtime';
 import type { PropertyMetadata, PropertyTypeId, PropertyTypeReference } from '@axrone/ecs-runtime';
-import { Vec2, Vec3 } from '@axrone/numeric';
+import { Rect, Vec2, Vec3 } from '@axrone/numeric';
 import { PrefabNodeBinding } from '@axrone/scene-prefab';
 import type { SceneComponentTypeResolver } from './component-catalog';
 import { SceneLifecycleError } from './errors';
@@ -104,6 +104,19 @@ const resolveVec3Fallback = (value: unknown): readonly [number, number, number] 
     return [asNumber(objectValue.x, 0), asNumber(objectValue.y, 0), asNumber(objectValue.z, 0)];
 };
 
+const resolveRectFallback = (value: unknown): readonly [number, number, number, number] => {
+    if (value instanceof Rect) {
+        return [value.x, value.y, value.width, value.height];
+    }
+
+    if (Array.isArray(value)) {
+        return [asNumber(value[0], 0), asNumber(value[1], 0), asNumber(value[2], 0), asNumber(value[3], 0)];
+    }
+
+    const objectValue = asRecord(value);
+    return [asNumber(objectValue.x, 0), asNumber(objectValue.y, 0), asNumber(objectValue.width, 0), asNumber(objectValue.height, 0)];
+};
+
 const toVec2 = (value: unknown, fallback: unknown): Vec2 => {
     if (value instanceof Vec2) {
         return value;
@@ -137,6 +150,30 @@ const toVec3 = (value: unknown, fallback: unknown): Vec3 => {
         asNumber(objectValue.x, fallbackX),
         asNumber(objectValue.y, fallbackY),
         asNumber(objectValue.z, fallbackZ),
+    );
+};
+
+const toRect = (value: unknown, fallback: unknown): Rect => {
+    if (value instanceof Rect) {
+        return value;
+    }
+
+    const [fallbackX, fallbackY, fallbackWidth, fallbackHeight] = resolveRectFallback(fallback);
+    if (Array.isArray(value)) {
+        return new Rect(
+            asNumber(value[0], fallbackX),
+            asNumber(value[1], fallbackY),
+            asNumber(value[2], fallbackWidth),
+            asNumber(value[3], fallbackHeight),
+        );
+    }
+
+    const objectValue = asRecord(value);
+    return new Rect(
+        asNumber(objectValue.x, fallbackX),
+        asNumber(objectValue.y, fallbackY),
+        asNumber(objectValue.width, fallbackWidth),
+        asNumber(objectValue.height, fallbackHeight),
     );
 };
 
@@ -175,6 +212,10 @@ const normalizePropertyTypeId = (
         return 'vec3';
     }
 
+    if (type === Rect) {
+        return 'rect';
+    }
+
     if (typeof type === 'function') {
         const name = type.name.toLowerCase();
         if (name === 'actor' || name === 'entity') {
@@ -191,6 +232,10 @@ const normalizePropertyTypeId = (
 
         if (name === 'vec3') {
             return 'vec3';
+        }
+
+        if (name === 'rect' || name === 'rectangle') {
+            return 'rect';
         }
 
         if (type.prototype instanceof Component) {
@@ -216,6 +261,9 @@ const normalizePropertyTypeId = (
         case 'vec3':
         case 'vector3':
             return 'vec3';
+        case 'rect':
+        case 'rectangle':
+            return 'rect';
         case 'actor':
         case 'entity':
             return 'entity';
@@ -617,6 +665,8 @@ export class ScenePrefabRuntime {
                 return toVec2(value, fallbackValue);
             case 'vec3':
                 return toVec3(value, fallbackValue);
+            case 'rect':
+                return toRect(value, fallbackValue);
             case 'entity':
                 return this._resolveActorReference(value, createdByNodeId, createdActors) ?? null;
             case 'transform': {
@@ -671,6 +721,10 @@ export class ScenePrefabRuntime {
 
         if (currentValue instanceof Vec3) {
             return toVec3(value, currentValue);
+        }
+
+        if (currentValue instanceof Rect) {
+            return toRect(value, currentValue);
         }
 
         if (typeof currentValue === 'number') {
