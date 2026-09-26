@@ -385,7 +385,7 @@ public sealed class Blend1DMotionNode : MotionNode
 
         for (int i = 0; i < Children.Length; i++)
         {
-            Children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+            MotionDispatcher.CollectEvents(Children[i], prevNormTime, curNormTime, layerWeight, ref sink);
         }
     }
 
@@ -563,7 +563,7 @@ public sealed class Blend2DMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, ref sink);
         }
     }
 
@@ -744,7 +744,7 @@ public sealed class DirectMotionNode : MotionNode
 
         for (int i = 0; i < _children.Length; i++)
         {
-            _children[i].CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+            MotionDispatcher.CollectEvents(_children[i], prevNormTime, curNormTime, layerWeight, ref sink);
         }
     }
 
@@ -849,8 +849,8 @@ public sealed class AdditiveMotionNode : MotionNode
             return;
         }
 
-        BaseChild.CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
-        AdditiveChild.CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+        MotionDispatcher.CollectEvents(BaseChild, prevNormTime, curNormTime, layerWeight, ref sink);
+        MotionDispatcher.CollectEvents(AdditiveChild, prevNormTime, curNormTime, layerWeight, ref sink);
     }
 
     /// <inheritdoc/>

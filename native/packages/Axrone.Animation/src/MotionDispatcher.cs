@@ -84,7 +84,41 @@ public static class MotionDispatcher
         }
     }
 
-    /// <summary>Collects a node's clip events.</summary>
+    /// <summary>Collects a node's clip events into a zero-allocation sink.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void CollectEvents<TSink>(
+        MotionNode node,
+        float prevNormTime,
+        float curNormTime,
+        float layerWeight,
+        ref TSink sink)
+        where TSink : struct, IClipEventSink
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        switch (node.Kind)
+        {
+            case MotionKind.Clip:
+                ((ClipMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
+            case MotionKind.Blend1D:
+                ((Blend1DMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
+            case MotionKind.Blend2D:
+                ((Blend2DMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
+            case MotionKind.Direct:
+                ((DirectMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
+            case MotionKind.Additive:
+                ((AdditiveMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
+            default:
+                AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
+                break;
+        }
+    }
+
+    /// <summary>Collects a node's clip events into a collection.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void CollectEvents(
         MotionNode node,
@@ -93,28 +127,9 @@ public static class MotionDispatcher
         float layerWeight,
         ICollection<ClipEvent> outEvents)
     {
-        ArgumentNullException.ThrowIfNull(node);
-        switch (node.Kind)
-        {
-            case MotionKind.Clip:
-                ((ClipMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-                break;
-            case MotionKind.Blend1D:
-                ((Blend1DMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-                break;
-            case MotionKind.Blend2D:
-                ((Blend2DMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-                break;
-            case MotionKind.Direct:
-                ((DirectMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-                break;
-            case MotionKind.Additive:
-                ((AdditiveMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, outEvents);
-                break;
-            default:
-                AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
-                break;
-        }
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(node, prevNormTime, curNormTime, layerWeight, ref adapter);
     }
 
     /// <summary>Reads a node's wall-clock duration.</summary>
