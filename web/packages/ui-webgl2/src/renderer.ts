@@ -27,6 +27,7 @@ import { createProgram } from './shader-source';
 import { QUAD_VERTEX_SOURCE, QUAD_FRAGMENT_SOURCE, TEXT_VERTEX_SOURCE, TEXT_FRAGMENT_SOURCE, IMAGE_VERTEX_SOURCE, IMAGE_FRAGMENT_SOURCE } from './shaders';
 import { UNIT_QUAD, writeBlendedColor, writeStrokeColor } from './webgl-utils';
 import { resolveSliceSpans, sliceImageCommand, createSliceSpanTriple, ZERO_RADII } from './nine-slice';
+import { Rect } from '@axrone/numeric';
 import {
     GL_STATE_FRAMEBUFFER,
     GL_STATE_VIEWPORT,
@@ -117,18 +118,6 @@ interface TexturePage {
  * are imported from ./gl-state so that world-quad and world-surface share the
  * same definitions.
  */
-
-const sameClipRect = (stored: RectLike | null, incoming: RectLike | null): boolean => {
-    if (stored === null || incoming === null) {
-        return stored === null && incoming === null;
-    }
-    return (
-        stored.x === incoming.x &&
-        stored.y === incoming.y &&
-        stored.width === incoming.width &&
-        stored.height === incoming.height
-    );
-};
 
 const createGlyphPageKey = (entry: GlyphAtlasEntry): number =>
     (entry.faceId as number) * 65536 + (entry.page as number);
@@ -367,7 +356,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     // text must remain batched to draw AFTER all quads in the
                     // same clip region. Flushing text before quads causes the
                     // quads to overdraw the text (invisible labels on fills).
-                    if (!sameClipRect(this.activeQuadClip, command.clip)) {
+                    if (this.activeQuadClip !== (command.clip ?? null) && !Rect.equals(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
                     }
@@ -402,7 +391,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     }
                     // NOTE: Do NOT flush text here — strokes share the quad
                     // pipeline and text must draw after them.
-                    if (!this.activeQuadClip || !sameClipRect(this.activeQuadClip, command.clip)) {
+                    if (!this.activeQuadClip || !Rect.equals(this.activeQuadClip, command.clip)) {
                         this.flushQuadBatch(frame.viewportHeight);
                         this.activeQuadClip = command.clip ?? null;
                     }
@@ -847,7 +836,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (
             (this.activeImageTexture !== null && this.activeImageTexture !== texture) ||
             (this.activeImageSampler !== sampler) ||
-            (this.activeImageClip !== null && !sameClipRect(this.activeImageClip, command.clip))
+            (this.activeImageClip !== null && this.activeImageClip !== (command.clip ?? null) && !Rect.equals(this.activeImageClip, command.clip))
         ) {
             this.flushImageBatch(frame.viewportHeight);
         }
@@ -897,7 +886,7 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
         if (this.activeTextPageKey !== null && this.activeTextPageKey !== pageKey) {
             return false;
         }
-        if (this.activeTextClip !== null && !sameClipRect(this.activeTextClip, command.clip)) {
+        if (this.activeTextClip !== null && this.activeTextClip !== (command.clip ?? null) && !Rect.equals(this.activeTextClip, command.clip)) {
             return false;
         }
         const page = this.ensureGlyphPage(entry);
