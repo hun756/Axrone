@@ -233,6 +233,18 @@ public unsafe interface IGLApi
     /// <summary>Gets the index of a uniform block.</summary>
     uint GetUniformBlockIndex(uint program, string uniformBlockName);
 
+    /// <summary>
+    /// Queries an active uniform's metadata. The name is written UTF-8 into
+    /// <paramref name="nameBuffer"/> (no transcoding allocation on the GL side).
+    /// </summary>
+    void GetActiveUniform(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type);
+
+    /// <summary>
+    /// Queries an active attribute's metadata. The name is written UTF-8 into
+    /// <paramref name="nameBuffer"/> (no transcoding allocation on the GL side).
+    /// </summary>
+    void GetActiveAttrib(uint program, uint index, Span<byte> nameBuffer, out int length, out int size, out uint type);
+
     /// <summary>Binds a uniform block to a binding point.</summary>
     void UniformBlockBinding(uint program, uint uniformBlockIndex, uint uniformBlockBinding);
 
