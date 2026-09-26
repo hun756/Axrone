@@ -38,6 +38,7 @@ public sealed class Rig
 
     internal readonly float[] RestPoseBuffer;
     internal readonly float[]? InverseBindMatrices;
+    private readonly float[] _restWorldMatrices;
 
     /// <summary>Rig identity.</summary>
     public RigId Id { get; }
@@ -62,6 +63,9 @@ public sealed class Rig
 
     /// <summary>Packed inverse bind matrices, or empty when absent.</summary>
     public ReadOnlySpan<float> InverseBind => InverseBindMatrices;
+
+    /// <summary>Precomputed rest-pose world matrices (16 floats per bone).</summary>
+    public ReadOnlySpan<float> RestWorldMatrices => _restWorldMatrices;
 
     /// <summary>Children of a bone.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -143,6 +147,7 @@ public sealed class Rig
         _rootIndices = roots.ToArray();
         _evaluationOrder = BuildEvaluationOrder(_parents, _children, _rootIndices, _boneNames);
         InverseBindMatrices = BuildInverseBindMatrices(bones);
+        _restWorldMatrices = BuildRestWorldMatrices();
     }
 
     /// <summary>Bone index by ordinal name, -1 when absent.</summary>
@@ -150,8 +155,11 @@ public sealed class Rig
     public int FindBoneIndex(string name) =>
         _nameToIndex.TryGetValue(name, out int index) ? index : -1;
 
-    /// <summary>Composes the rest-pose world matrix palette (16 floats per bone).</summary>
-    [SkipLocalsInit]
+    /// <summary>
+    /// Copies the precomputed rest-pose world matrix palette (16 floats per bone).
+    /// Composition runs once at construction; per-call cost is a single memcpy.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CreateRestMatrixPalette(Span<float> outPalette)
     {
         if (outPalette.Length < BoneCount * 16)
@@ -159,6 +167,17 @@ public sealed class Rig
             AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, "Output matrix palette too small.");
         }
 
+        _restWorldMatrices.AsSpan(0, BoneCount * 16).CopyTo(outPalette);
+    }
+
+    /// <summary>
+    /// Composes rest-pose world matrices once (construction): same formulas as the
+    /// per-frame forward kinematics, so results match live evaluation bit-for-bit.
+    /// </summary>
+    [SkipLocalsInit]
+    private float[] BuildRestWorldMatrices()
+    {
+        var palette = new float[BoneCount * 16];
         int scratchBones = BoneCount;
         using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
             ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
@@ -196,8 +215,10 @@ public sealed class Rig
                 worldT[b] = worldT[p] + Vector3.Transform(locT * worldS[p], worldR[p]);
             }
 
-            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], outPalette.Slice(b * 16, 16));
+            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], palette.AsSpan(b * 16, 16));
         }
+
+        return palette;
     }
 
     private static float[]? BuildInverseBindMatrices(ReadOnlySpan<BoneInfo> bones)

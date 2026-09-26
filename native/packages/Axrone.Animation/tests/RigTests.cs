@@ -24,6 +24,26 @@ public class RigTests
     }
 
     [Fact]
+    public void RestPalette_MatchesLiveKinematics()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        Span<float> palette = stackalloc float[3 * 16];
+        rig.CreateRestMatrixPalette(palette);
+
+        // Chain: root at origin, mid/tip offset +1Y each with identity rotation/scale.
+        // ComposeTransformMatrix layout carries translation in elements 3/7/11.
+        palette[3].Should().BeApproximately(0.0f, 1e-6f);
+        palette[7].Should().BeApproximately(0.0f, 1e-6f);
+        palette[11].Should().BeApproximately(0.0f, 1e-6f);
+        palette[16 + 7].Should().BeApproximately(1.0f, 1e-6f);
+        palette[32 + 7].Should().BeApproximately(2.0f, 1e-6f);
+
+        // RestWorldMatrices view exposes the same bytes without copying.
+        rig.RestWorldMatrices.Length.Should().Be(3 * 16);
+        rig.RestWorldMatrices[32 + 7].Should().BeApproximately(2.0f, 1e-6f);
+    }
+
+    [Fact]
     public void EmptyRig_Throws()
     {
         Action build = () => { _ = new Rig(new RigId("empty"), []); };
