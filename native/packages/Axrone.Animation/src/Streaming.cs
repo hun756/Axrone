@@ -150,12 +150,26 @@ public readonly record struct ChunkKey(ClipId Clip, int Version) : ISpanFormatta
     }
 }
 
+/// <summary>Fetch lifecycle of one chunk.</summary>
+public enum ChunkStatus
+{
+    /// <summary>Never requested (or reset).</summary>
+    Unrequested = 0,
+
+    /// <summary>Requested, awaiting load.</summary>
+    Requested = 1,
+
+    /// <summary>Loaded; never rescheduled.</summary>
+    Loaded = 2,
+
+    /// <summary>Failed; rescheduled only after reset.</summary>
+    Failed = 3,
+}
+
 /// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
 public sealed class StreamingScheduler
 {
-    private readonly HashSet<ChunkKey> _loadedChunks = new();
-    private readonly HashSet<ChunkKey> _requestedChunks = new();
-    private readonly HashSet<ChunkKey> _failedChunks = new();
+    private readonly Dictionary<ChunkKey, ChunkStatus> _states = new();
     private readonly Lock _gate = new();
 
     /// <summary>Marks a chunk loaded.</summary>
@@ -163,8 +177,7 @@ public sealed class StreamingScheduler
     {
         lock (_gate)
         {
-            _requestedChunks.Remove(key);
-            _loadedChunks.Add(key);
+            _states[key] = ChunkStatus.Loaded;
         }
     }
 
@@ -173,8 +186,7 @@ public sealed class StreamingScheduler
     {
         lock (_gate)
         {
-            _requestedChunks.Remove(key);
-            _failedChunks.Add(key);
+            _states[key] = ChunkStatus.Failed;
         }
     }
 
@@ -183,11 +195,14 @@ public sealed class StreamingScheduler
     {
         lock (_gate)
         {
-            _loadedChunks.Remove(key);
-            _requestedChunks.Remove(key);
-            _failedChunks.Remove(key);
+            _states.Remove(key);
         }
     }
+
+    /// <summary>Whether a key is eligible for (re)scheduling.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsSchedulable(ChunkKey key) =>
+        !_states.TryGetValue(key, out ChunkStatus status) || status == ChunkStatus.Unrequested;
 
     private static void InsertSorted(Collection<ChunkRequest> requests, ChunkRequest request)
     {
@@ -243,20 +258,20 @@ public sealed class StreamingScheduler
                 int currentIndex = (int)(time / chunkDuration);
                 var activeKey = new ChunkKey(clip, currentIndex);
 
-                if (!_loadedChunks.Contains(activeKey) && !_requestedChunks.Contains(activeKey) && !_failedChunks.Contains(activeKey))
+                if (IsSchedulable(activeKey))
                 {
                     InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{currentIndex}", clip, currentIndex * chunkDuration, weight, false, activeKey));
-                    _requestedChunks.Add(activeKey);
+                    _states[activeKey] = ChunkStatus.Requested;
                 }
 
                 int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
                 if (preloadIndex != currentIndex)
                 {
                     var preloadKey = new ChunkKey(clip, preloadIndex);
-                    if (!_loadedChunks.Contains(preloadKey) && !_requestedChunks.Contains(preloadKey) && !_failedChunks.Contains(preloadKey))
+                    if (IsSchedulable(preloadKey))
                     {
                         InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * AnimationConstants.PreloadWeightFactor, true, preloadKey));
-                        _requestedChunks.Add(preloadKey);
+                        _states[preloadKey] = ChunkStatus.Requested;
                     }
                 }
             }

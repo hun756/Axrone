@@ -101,6 +101,27 @@ public class StreamingTests
     }
 
     [Fact]
+    public void Scheduler_FailedChunksWaitForReset()
+    {
+        var scheduler = new StreamingScheduler();
+        var first = new Collection<ChunkRequest>();
+        (ClipId Clip, float Time, float Weight)[] activities = [(new ClipId("walk"), 1.0f, 1.0f)];
+
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, first);
+        first.Should().HaveCount(1);
+
+        scheduler.MarkFailed(first[0].Key);
+        var second = new Collection<ChunkRequest>();
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, second);
+        second.Should().BeEmpty();
+
+        scheduler.Reset(first[0].Key);
+        var third = new Collection<ChunkRequest>();
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, third);
+        third.Should().HaveCount(1);
+    }
+
+    [Fact]
     public void ChunkKey_FormatsWithoutAllocating()
     {
         var key = new ChunkKey(new ClipId("walk"), 3);
