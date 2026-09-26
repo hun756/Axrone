@@ -44,4 +44,94 @@ public class TextureFormatTests
         TextureFormats.Get(TextureFormat.Rgba8).Should().Be(TextureFormats.Get(TextureFormat.Rgba8));
         TextureFormats.Get(TextureFormat.Rgba8).Should().NotBe(TextureFormats.Get(TextureFormat.Bc1Rgb));
     }
+
+    [Fact]
+    public void Formats_Get_R8_ReturnsValidFormatInfo()
+    {
+        TextureFormatInfo info = TextureFormats.Get(TextureFormat.R8);
+
+        info.InternalFormat.Should().BeGreaterThan(0u);
+        info.BytesPerPixel.Should().Be(1);
+        info.IsCompressed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Formats_Get_Rgba8_HasCorrectBytesPerPixel()
+    {
+        TextureFormats.Get(TextureFormat.Rgba8).BytesPerPixel.Should().Be(4);
+    }
+
+    [Fact]
+    public void Formats_Get_Depth24Stencil8_IsDepthAndStencil()
+    {
+        TextureFormatInfo info = TextureFormats.Get(TextureFormat.Depth24Stencil8);
+
+        info.IsDepth.Should().BeTrue();
+        info.IsStencil.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Formats_Get_Rgba16f_IsFloatFormat()
+    {
+        TextureFormats.Get(TextureFormat.Rgba16f).IsFloat.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Formats_Get_UnknownFormat_ThrowsArgumentException()
+    {
+        Action get = () => TextureFormats.Get((TextureFormat)9999);
+
+        get.Should().Throw<ArgumentException>()
+            .WithMessage("*Unknown texture format*");
+    }
+
+    [Fact]
+    public void Formats_MaxMipLevels_ScalesWithSize()
+    {
+        TextureFormats.MaxMipLevels(1024, 1024).Should().Be(11);
+        TextureFormats.MaxMipLevels(256, 256).Should().Be(9);
+        TextureFormats.MaxMipLevels(1, 1).Should().Be(1);
+    }
+
+    [Fact]
+    public void FormatInfo_R8_IsFilterableRenderTarget()
+    {
+        TextureFormatInfo info = TextureFormats.Get(TextureFormat.R8);
+
+        info.IsFilterable.Should().BeTrue();
+        info.IsRenderTarget.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FormatInfo_Rgba8_IsFilterable()
+    {
+        TextureFormats.Get(TextureFormat.Rgba8).IsFilterable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FormatInfo_Rgba16f_IsRenderTarget()
+    {
+        TextureFormats.Get(TextureFormat.Rgba16f).IsRenderTarget.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FormatInfo_ComputeMipByteSize_Rgba8_CorrectSize()
+    {
+        TextureFormats.Get(TextureFormat.Rgba8).ComputeMipByteSize(256, 256).Should().Be(256 * 256 * 4);
+    }
+
+    [Fact]
+    public void Formats_Get_R16f_IsFloatFormat()
+    {
+        TextureFormats.Get(TextureFormat.R16f).IsFloat.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Formats_Get_Depth16_IsDepthOnly()
+    {
+        TextureFormatInfo info = TextureFormats.Get(TextureFormat.Depth16);
+
+        info.IsDepth.Should().BeTrue();
+        info.IsStencil.Should().BeFalse();
+    }
 }
