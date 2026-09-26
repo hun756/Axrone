@@ -147,3 +147,89 @@ public class GLFramebufferException : GLException
         Status = status;
     }
 }
+
+/// <summary>
+/// Helper class for throwing exceptions with proper JIT optimization.
+/// All methods are marked with [DoesNotReturn] and [MethodImpl(NoInlining)]
+/// to allow the JIT to inline the calling code without exception handling overhead.
+/// </summary>
+public static class ThrowHelper
+{
+    /// <summary>Throws a context lost exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowContextLost() =>
+        throw new GLException("CONTEXT_LOST", GLContextErrorCode.ContextLost);
+
+    /// <summary>Throws a context disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowContextDisposed() =>
+        throw new GLException("CONTEXT_ALREADY_DISPOSED", GLContextErrorCode.ContextAlreadyDisposed);
+
+    /// <summary>Throws an invalid operation exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidOperation(string message) =>
+        throw new GLException(message, GLContextErrorCode.InvalidOperation);
+
+    /// <summary>Throws an extension not supported exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowExtensionNotSupported(string extension) =>
+        throw new GLException($"EXTENSION_NOT_SUPPORTED: {extension}", GLContextErrorCode.ExtensionNotSupported);
+
+    /// <summary>Throws an offset negative exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowOffsetNegative() =>
+        throw new GLBufferException("Offset cannot be negative", GLBufferErrorCode.InvalidOffset);
+
+    /// <summary>Throws a buffer bounds exceeded exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferBoundsExceeded() =>
+        throw new GLBufferException("Offset and length exceed buffer bounds", GLBufferErrorCode.BoundsExceeded);
+
+    /// <summary>Throws a source range exceeded exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSourceRangeExceeded() =>
+        throw new GLBufferException("Source range exceeds data bounds", GLBufferErrorCode.BoundsExceeded);
+
+    /// <summary>Throws a destination range exceeded exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDestRangeExceeded() =>
+        throw new GLBufferException("Destination range exceeds buffer bounds", GLBufferErrorCode.BoundsExceeded);
+
+    /// <summary>Throws an alignment violation exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowAlignmentViolation(int offset, int elemSize) =>
+        throw new GLBufferException($"Byte offset ({offset}) must be a multiple of element size ({elemSize})", GLBufferErrorCode.AlignmentViolation);
+
+    /// <summary>Throws a buffer factory disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferFactoryDisposed() =>
+        throw new GLBufferException("BufferFactory has been disposed", GLBufferErrorCode.FactoryDisposed);
+
+    /// <summary>Throws a buffer disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferDisposed() =>
+        throw new GLBufferException("BUFFER_ALREADY_DISPOSED", GLBufferErrorCode.BufferAlreadyDisposed);
+}
+
