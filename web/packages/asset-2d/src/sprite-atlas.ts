@@ -51,7 +51,7 @@ export interface SpriteAtlasFrame {
     readonly region: Readonly<Asset2DRectLike>;
     readonly sourceSize: Readonly<Asset2DSizeLike>;
     readonly uvRect: Readonly<Asset2DRectLike>;
-    readonly pivot: Readonly<Readonly<IVec2Like>>;
+    readonly pivot: Readonly<IVec2Like>;
     readonly sliceBorder: Readonly<Asset2DBorderLike> | null;
     readonly durationMs: number | null;
 }
@@ -93,7 +93,7 @@ export class Asset2DValidationError extends Asset2DError {
     }
 }
 
-const freezeVec2 = (value: Readonly<IVec2Like>): Readonly<Readonly<IVec2Like>> =>
+const freezeVec2 = (value: Readonly<IVec2Like>): Readonly<IVec2Like> =>
     Object.freeze({ x: value.x, y: value.y });
 
 const freezeSize = (value: Asset2DSizeLike): Readonly<Asset2DSizeLike> =>
