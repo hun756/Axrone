@@ -332,4 +332,124 @@ public sealed class GLStateCache
     // Vertex Array Operations
     // ========================================================================
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindVertexArray(uint array)
+    {
+        if (_isInvalidated || BoundVertexArray != array)
+        {
+            BoundVertexArray = array;
+            _gl.BindVertexArray(array);
+            // VAO bind also affects element buffer binding
+            BoundElementBuffer = uint.MaxValue;
+        }
+    }
+
+    // ========================================================================
+    // Program Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void UseProgram(uint program)
+    {
+        if (_isInvalidated || BoundProgram != program)
+        {
+            BoundProgram = program;
+            _gl.UseProgram(program);
+        }
+    }
+
+    // ========================================================================
+    // Framebuffer Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindFramebuffer(uint target, uint framebuffer)
+    {
+        if (target == 0x8D40) // GL_FRAMEBUFFER
+        {
+            if (_isInvalidated || BoundReadFramebuffer != framebuffer || BoundDrawFramebuffer != framebuffer)
+            {
+                BoundReadFramebuffer = framebuffer;
+                BoundDrawFramebuffer = framebuffer;
+                _gl.BindFramebuffer(target, framebuffer);
+            }
+        }
+        else if (target == 0x8CA8) // GL_READ_FRAMEBUFFER
+        {
+            if (_isInvalidated || BoundReadFramebuffer != framebuffer)
+            {
+                BoundReadFramebuffer = framebuffer;
+                _gl.BindFramebuffer(target, framebuffer);
+            }
+        }
+        else if (target == 0x8CA9) // GL_DRAW_FRAMEBUFFER
+        {
+            if (_isInvalidated || BoundDrawFramebuffer != framebuffer)
+            {
+                BoundDrawFramebuffer = framebuffer;
+                _gl.BindFramebuffer(target, framebuffer);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindRenderbuffer(uint renderbuffer)
+    {
+        if (_isInvalidated || BoundRenderbuffer != renderbuffer)
+        {
+            BoundRenderbuffer = renderbuffer;
+            _gl.BindRenderbuffer(0x8D41, renderbuffer); // GL_RENDERBUFFER
+        }
+    }
+
+    // ========================================================================
+    // Texture Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ActiveTexture(uint unitIndex)
+    {
+        if (_isInvalidated || ActiveUnit != unitIndex)
+        {
+            ActiveUnit = unitIndex;
+            _gl.ActiveTexture(0x84C0 + unitIndex); // GL_TEXTURE0 + unitIndex
+        }
+    }
+
+    /// <summary>
+    /// Binds a texture to the currently active texture unit with the given target.
+    /// Does NOT change the active unit — caller must set it first if needed.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindTexture(uint target, uint texture)
+    {
+        // Direct bind on the active unit; no unit-level caching for arbitrary targets
+        _gl.BindTexture(target, texture);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindTexture2D(uint unitIndex, uint texture)
+    {
+        if (unitIndex >= 32) return;
+
+        ActiveTexture(unitIndex);
+
+        if (_isInvalidated || _boundTextures2D[unitIndex] != texture)
+        {
+            _boundTextures2D[unitIndex] = texture;
+            _gl.BindTexture(0x0DE1, texture); // GL_TEXTURE_2D
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BindSampler(uint unitIndex, uint sampler)
+    {
+        if (unitIndex >= 32) return;
+
+        if (_isInvalidated || _boundSamplers[unitIndex] != sampler)
+        {
+            _boundSamplers[unitIndex] = sampler;
+            _gl.BindSampler(unitIndex, sampler);
+        }
+    }
 }
