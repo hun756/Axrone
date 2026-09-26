@@ -1,6 +1,6 @@
 import type { Asset2DBorderLike, SpriteAtlasFrame } from '@axrone/asset-2d';
 import { Component, script } from '@axrone/ecs-runtime';
-import { Color, Vec2 } from '@axrone/numeric';
+import { Color, Rect, Vec2 } from '@axrone/numeric';
 import type { IColorLike } from '@axrone/numeric';
 import type {
     Render2DRectLike,
@@ -120,20 +120,10 @@ const toRect = (
     }
 
     if (isTuple4(value)) {
-        return {
-            x: Number(value[0] ?? fallback.x),
-            y: Number(value[1] ?? fallback.y),
-            width: Number(value[2] ?? fallback.width),
-            height: Number(value[3] ?? fallback.height),
-        };
+        return Rect.fromArray(value);
     }
 
-    return {
-        x: Number(value.x),
-        y: Number(value.y),
-        width: Number(value.width),
-        height: Number(value.height),
-    };
+    return Rect.from(value);
 };
 
 const toBorder = (
