@@ -218,6 +218,20 @@ public static class ThrowHelper
     public static void ThrowAlignmentViolation(int offset, int elemSize) =>
         throw new GLBufferException($"Byte offset ({offset}) must be a multiple of element size ({elemSize})", GLBufferErrorCode.AlignmentViolation);
 
+    /// <summary>Throws a buffer factory disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferFactoryDisposed() =>
+        throw new GLBufferException("BufferFactory has been disposed", GLBufferErrorCode.FactoryDisposed);
+
+    /// <summary>Throws a buffer disposed exception.</summary>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferDisposed() =>
+        throw new GLBufferException("BUFFER_ALREADY_DISPOSED", GLBufferErrorCode.BufferAlreadyDisposed);
+
     /// <summary>Throws a shader compile failed exception.</summary>
     [DoesNotReturn]
     [StackTraceHidden]
