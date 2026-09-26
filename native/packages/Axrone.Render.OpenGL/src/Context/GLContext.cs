@@ -295,23 +295,27 @@ public sealed class GLResourceRegistry
     /// </summary>
     internal void DisposeAll()
     {
-        List<Exception>? failures = null;
+        IGLResource[] snapshot;
         lock (_syncRoot)
         {
-            for (int i = _resources.Count - 1; i >= 0; i--)
-            {
-                try
-                {
-                    _resources[i].Dispose();
-                }
-                catch (Exception ex)
-                {
-                    failures ??= new List<Exception>(1);
-                    failures.Add(ex);
-                }
-            }
-
+            snapshot = _resources.ToArray();
             _resources.Clear();
+        }
+
+        // Snapshot first: resource Dispose calls reenter via Unregister, which
+        // would shift a live-index walk out of range mid-loop.
+        List<Exception>? failures = null;
+        for (int i = snapshot.Length - 1; i >= 0; i--)
+        {
+            try
+            {
+                snapshot[i].Dispose();
+            }
+            catch (Exception ex)
+            {
+                failures ??= new List<Exception>(1);
+                failures.Add(ex);
+            }
         }
 
         if (failures is not null)
