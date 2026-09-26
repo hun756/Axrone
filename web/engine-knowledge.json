@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-21T17:29:36.541Z",
+  "generatedAt": "2026-09-26T11:08:05.014Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -746,7 +746,6 @@
         "Asset2DImportSchema",
         "Asset2DRectLike",
         "Asset2DSizeLike",
-        "Asset2DVec2Like",
         "AssetAfterImportStageContext",
         "AssetBeforeImportStageContext",
         "AssetBinaryCodec",
@@ -3050,6 +3049,10 @@
         "QuatComparisonMode",
         "QuatEqualityComparer",
         "RAD_TO_DEG",
+        "Rect",
+        "RectComparer",
+        "RectComparisonMode",
+        "RectEqualityComparer",
         "SOA_EPSILON",
         "SOA_SLERP_THRESHOLD",
         "SOLVER_EPSILON",
@@ -4199,10 +4202,14 @@
         "RENDER_2D_SPRITE_FLOAT_STRIDE",
         "RENDER_2D_SPRITE_FRAGMENT_SOURCE",
         "RENDER_2D_SPRITE_INDICES_PER_QUAD",
+        "RENDER_2D_SPRITE_MAIN_TEXTURE_UNIFORM",
+        "RENDER_2D_SPRITE_MATERIAL_CONTRACT",
+        "RENDER_2D_SPRITE_REQUIRED_UNIFORM_NAMES",
         "RENDER_2D_SPRITE_UNIFORM_NAMES",
         "RENDER_2D_SPRITE_VERTEX_SOURCE",
         "RENDER_2D_SPRITE_VERTEX_STRIDE",
         "RENDER_2D_SPRITE_VERTICES_PER_QUAD",
+        "RENDER_2D_SPRITE_VIEW_PROJECTION_UNIFORM",
         "Render2DBorderLike",
         "Render2DCapacityError",
         "Render2DColorLike",
@@ -4226,13 +4233,13 @@
         "Render2DSpriteTextureSource",
         "Render2DTextureReference",
         "Render2DValidationError",
-        "Render2DVec2Like",
         "asRender2DMaterialReference",
         "asRender2DTextureReference",
         "getRender2DCapability",
         "getRender2DSpriteSourceKey",
         "isRender2DSpriteMaterialSource",
-        "isRender2DSpriteTextureSource"
+        "isRender2DSpriteTextureSource",
+        "isRender2DSpriteUniformNames"
       ],
       "typeExports": [
         "PackedRender2DColor",
@@ -4255,8 +4262,7 @@
         "Render2DSpriteSourceKey",
         "Render2DSpriteSubmission",
         "Render2DSpriteTextureSource",
-        "Render2DTextureReference",
-        "Render2DVec2Like"
+        "Render2DTextureReference"
       ],
       "hasDefaultExport": false,
       "subpaths": [
@@ -4278,10 +4284,15 @@
             "RENDER_2D_SPRITE_FLOAT_STRIDE",
             "RENDER_2D_SPRITE_FRAGMENT_SOURCE",
             "RENDER_2D_SPRITE_INDICES_PER_QUAD",
+            "RENDER_2D_SPRITE_MAIN_TEXTURE_UNIFORM",
+            "RENDER_2D_SPRITE_MATERIAL_CONTRACT",
+            "RENDER_2D_SPRITE_REQUIRED_UNIFORM_NAMES",
             "RENDER_2D_SPRITE_UNIFORM_NAMES",
             "RENDER_2D_SPRITE_VERTEX_SOURCE",
             "RENDER_2D_SPRITE_VERTEX_STRIDE",
-            "RENDER_2D_SPRITE_VERTICES_PER_QUAD"
+            "RENDER_2D_SPRITE_VERTICES_PER_QUAD",
+            "RENDER_2D_SPRITE_VIEW_PROJECTION_UNIFORM",
+            "isRender2DSpriteUniformNames"
           ],
           "typeExports": []
         },
@@ -4314,8 +4325,7 @@
             "Render2DSpriteSourceKey",
             "Render2DSpriteSubmission",
             "Render2DSpriteTextureSource",
-            "Render2DTextureReference",
-            "Render2DVec2Like"
+            "Render2DTextureReference"
           ]
         }
       ]
@@ -8280,7 +8290,8 @@
         "serializeStroke",
         "stringifyPaint",
         "stringifyShape",
-        "triangulateEarClipping"
+        "triangulateEarClipping",
+        "triangulatePolygonWithHoles"
       ],
       "typeExports": [
         "CircleShape",
@@ -8674,15 +8685,19 @@
       "exports": [
         "ArrayTween",
         "Easing",
+        "EventFanOut",
         "Interpolation",
+        "MAX_SPRING_DT",
         "ObjectTween",
         "PrimitiveTween",
+        "RafLoop",
         "Spring",
         "SpringSimulation",
         "TWEEN",
         "Timeline",
         "TweenChain",
         "TweenCore",
+        "TweenDispatcher",
         "TweenFactory",
         "TweenGroup",
         "TweenSystem",
@@ -8691,6 +8706,7 @@
         "from",
         "fromTo",
         "group",
+        "nextTweenId",
         "spring",
         "timeline",
         "to",
@@ -8704,8 +8720,11 @@
         "ITween",
         "SpringConfig",
         "SpringEventMap",
+        "SpringEventType",
+        "SpringStep",
         "TimelineEventMap",
         "TimelineOptions",
+        "TweenChainEvent",
         "TweenChainEventMap",
         "TweenConfig",
         "TweenEventCallback",
@@ -8725,6 +8744,7 @@
         "TweenableVec2",
         "TweenableVec3",
         "TweenableVec4",
+        "UnsubscribeFn",
         "UpdateCallback",
         "VoidCallback"
       ],
@@ -9153,7 +9173,6 @@
         "UIWidgetPatch",
         "UIWindowFocusEvent",
         "UVRect",
-        "Vec2Like",
         "ViewportString",
         "WidgetConfig",
         "WidgetController",
@@ -9571,7 +9590,6 @@
             "UITextInputEvent",
             "UIWindowFocusEvent",
             "UVRect",
-            "Vec2Like",
             "ViewportString",
             "WidgetConfig",
             "WidgetEventContext",
@@ -9627,6 +9645,7 @@
         "WebGL2UIRenderer",
         "WebGL2UIRendererOptions",
         "WebGL2UIRendererStatistics",
+        "__testConnectUIHostInput",
         "attachUIOverlayToScene",
         "bindUIHostToScene",
         "bindUIHostToWorld",
@@ -9843,6 +9862,7 @@
             "SceneVertexAttribute",
             "UIHost",
             "UIWidgetRef",
+            "__testConnectUIHostInput",
             "bindAnimationStreamingBridge",
             "bindUIHostToScene",
             "bindUIHostToWorld",
@@ -10474,6 +10494,11 @@
       "name": "__state_brand",
       "package": "@axrone/memory",
       "kind": "const"
+    },
+    {
+      "name": "__testConnectUIHostInput",
+      "package": "@axrone/ui-webgl2",
+      "kind": "unknown"
     },
     {
       "name": "__value_brand",
@@ -12153,7 +12178,7 @@
     {
       "name": "Asset2DRectLike",
       "package": "@axrone/asset-2d",
-      "kind": "interface"
+      "kind": "type"
     },
     {
       "name": "Asset2DSizeLike",
@@ -12164,11 +12189,6 @@
       "name": "Asset2DValidationError",
       "package": "@axrone/asset-2d",
       "kind": "class"
-    },
-    {
-      "name": "Asset2DVec2Like",
-      "package": "@axrone/asset-2d",
-      "kind": "interface"
     },
     {
       "name": "AssetAfterImportStageContext",
@@ -19711,6 +19731,11 @@
       "kind": "class"
     },
     {
+      "name": "EventFanOut",
+      "package": "@axrone/tween",
+      "kind": "class"
+    },
+    {
       "name": "EventGroup",
       "package": "@axrone/event",
       "kind": "class"
@@ -24288,7 +24313,7 @@
     {
       "name": "InputVector2",
       "package": "@axrone/input",
-      "kind": "interface"
+      "kind": "type"
     },
     {
       "name": "InputVector2ActionDefinition",
@@ -25866,6 +25891,11 @@
       "kind": "unknown"
     },
     {
+      "name": "isRender2DSpriteUniformNames",
+      "package": "@axrone/render-2d",
+      "kind": "unknown"
+    },
+    {
       "name": "isRenderPipelineError",
       "package": "@axrone/render-core",
       "kind": "unknown"
@@ -27331,6 +27361,11 @@
       "kind": "unknown"
     },
     {
+      "name": "MAX_SPRING_DT",
+      "package": "@axrone/tween",
+      "kind": "const"
+    },
+    {
       "name": "MAX_TEXTURE_UNITS",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -27799,6 +27834,11 @@
       "name": "never",
       "package": "@axrone/memory",
       "kind": "const"
+    },
+    {
+      "name": "nextTweenId",
+      "package": "@axrone/tween",
+      "kind": "function"
     },
     {
       "name": "NodeId",
@@ -29481,6 +29521,11 @@
       "kind": "unknown"
     },
     {
+      "name": "RafLoop",
+      "package": "@axrone/tween",
+      "kind": "class"
+    },
+    {
       "name": "rand",
       "package": "@axrone/random",
       "kind": "const"
@@ -29946,6 +29991,11 @@
       "kind": "unknown"
     },
     {
+      "name": "Rect",
+      "package": "@axrone/numeric",
+      "kind": "class"
+    },
+    {
       "name": "RectangleShape",
       "package": "@axrone/shapes-2d",
       "kind": "unknown"
@@ -29954,6 +30004,21 @@
       "name": "RectangleShapeInput",
       "package": "@axrone/shapes-2d",
       "kind": "unknown"
+    },
+    {
+      "name": "RectComparer",
+      "package": "@axrone/numeric",
+      "kind": "class"
+    },
+    {
+      "name": "RectComparisonMode",
+      "package": "@axrone/numeric",
+      "kind": "enum"
+    },
+    {
+      "name": "RectEqualityComparer",
+      "package": "@axrone/numeric",
+      "kind": "class"
     },
     {
       "name": "RectLike",
@@ -30101,6 +30166,21 @@
       "kind": "unknown"
     },
     {
+      "name": "RENDER_2D_SPRITE_MAIN_TEXTURE_UNIFORM",
+      "package": "@axrone/render-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_MATERIAL_CONTRACT",
+      "package": "@axrone/render-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_REQUIRED_UNIFORM_NAMES",
+      "package": "@axrone/render-2d",
+      "kind": "unknown"
+    },
+    {
       "name": "RENDER_2D_SPRITE_UNIFORM_NAMES",
       "package": "@axrone/render-2d",
       "kind": "unknown"
@@ -30117,6 +30197,11 @@
     },
     {
       "name": "RENDER_2D_SPRITE_VERTICES_PER_QUAD",
+      "package": "@axrone/render-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_VIEW_PROJECTION_UNIFORM",
       "package": "@axrone/render-2d",
       "kind": "unknown"
     },
@@ -30307,11 +30392,6 @@
     },
     {
       "name": "Render2DValidationError",
-      "package": "@axrone/render-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "Render2DVec2Like",
       "package": "@axrone/render-2d",
       "kind": "unknown"
     },
@@ -36661,6 +36741,11 @@
       "kind": "type"
     },
     {
+      "name": "SpringEventType",
+      "package": "@axrone/tween",
+      "kind": "type"
+    },
+    {
       "name": "SpringJoint2D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -36684,6 +36769,11 @@
       "name": "SpringSimulation",
       "package": "@axrone/tween",
       "kind": "class"
+    },
+    {
+      "name": "SpringStep",
+      "package": "@axrone/tween",
+      "kind": "interface"
     },
     {
       "name": "SpriteAnimationClip",
@@ -38026,6 +38116,11 @@
       "kind": "const"
     },
     {
+      "name": "triangulatePolygonWithHoles",
+      "package": "@axrone/shapes-2d",
+      "kind": "const"
+    },
+    {
       "name": "tryAsync",
       "package": "@axrone/memory",
       "kind": "const"
@@ -38171,6 +38266,11 @@
       "kind": "class"
     },
     {
+      "name": "TweenChainEvent",
+      "package": "@axrone/tween",
+      "kind": "type"
+    },
+    {
       "name": "TweenChainEventMap",
       "package": "@axrone/tween",
       "kind": "type"
@@ -38182,6 +38282,11 @@
     },
     {
       "name": "TweenCore",
+      "package": "@axrone/tween",
+      "kind": "class"
+    },
+    {
+      "name": "TweenDispatcher",
       "package": "@axrone/tween",
       "kind": "class"
     },
@@ -38886,6 +38991,11 @@
       "kind": "type"
     },
     {
+      "name": "UnsubscribeFn",
+      "package": "@axrone/tween",
+      "kind": "type"
+    },
+    {
       "name": "UnwrapAll",
       "package": "@axrone/memory",
       "kind": "type"
@@ -39104,11 +39214,6 @@
       "name": "Vec2EqualityComparer",
       "package": "@axrone/numeric",
       "kind": "class"
-    },
-    {
-      "name": "Vec2Like",
-      "package": "@axrone/ui",
-      "kind": "unknown"
     },
     {
       "name": "Vec3",
@@ -39900,6 +40005,12 @@
       "kind": "const",
       "code": "declare const __state_brand: unique symbol;",
       "package": "@axrone/memory"
+    },
+    {
+      "name": "__testConnectUIHostInput",
+      "kind": "const",
+      "code": "declare const __testConnectUIHostInput: <TPayload>(runtime: UIRuntime<TPayload>, scene: SceneUIOverlayTarget, input: UIHostInputOptions, getViewportSize?: () => { width: number; height: number; }",
+      "package": "@axrone/ui-webgl2"
     },
     {
       "name": "__value_brand",
@@ -41878,7 +41989,7 @@
     {
       "name": "computeBlend2DWeights",
       "kind": "const",
-      "code": "declare const computeBlend2DWeights: (x: number, y: number, children: readonly { readonly x: number; readonly y: number; }",
+      "code": "declare const computeBlend2DWeights: (x: number, y: number, children: readonly Readonly<IVec2Like>[], outWeights: number[]) => void;",
       "package": "@axrone/animation"
     },
     {
@@ -43696,7 +43807,7 @@
     {
       "name": "DEFAULT_OPTIONS",
       "kind": "const",
-      "code": "declare const DEFAULT_OPTIONS: Readonly<{ captureRejections: false; maxListeners: number; weakReferences: false; concurrencyLimit: number; bufferSize: number; gcIntervalMs: number; bufferOverflow: \"drop-oldest\"; metrics: false; }",
+      "code": "declare const DEFAULT_OPTIONS: Readonly<{ captureRejections: false; maxListeners: number; weakReferences: false; concurrencyLimit: number; bufferSize: number; gcIntervalMs: number; bufferOverflow: \"throw\"; metrics: true; }",
       "package": "@axrone/event"
     },
     {
@@ -44080,7 +44191,7 @@
     {
       "name": "DynamicAABBTree2D",
       "kind": "class",
-      "code": "declare class DynamicAABBTree2D<TUserData = ShapeId> { constructor(initialCapacity?: number); createProxy(aabb: AABB2D, userData: TUserData): number; destroyProxy(proxyId: number): void; moveProxy(proxyId: number, aabb: AABB2D, displacement: {; x: number; y: number; query(callback: (proxyId: number…",
+      "code": "declare class DynamicAABBTree2D<TUserData = ShapeId> { constructor(initialCapacity?: number); createProxy(aabb: AABB2D, userData: TUserData): number; destroyProxy(proxyId: number): void; moveProxy(proxyId: number, aabb: AABB2D, displacement: IVec2Like): boolean; query(callback: (proxyId: number) =>…",
       "package": "@axrone/physics-2d"
     },
     {
@@ -44328,6 +44439,12 @@
       "kind": "class",
       "code": "declare class EventError extends BaseError { constructor(message: string, options?: ErrorOptions); … }",
       "package": "@axrone/event"
+    },
+    {
+      "name": "EventFanOut",
+      "kind": "class",
+      "code": "declare class EventFanOut<TEventMap extends Record<string, unknown>> { clear(): void; … }",
+      "package": "@axrone/tween"
     },
     {
       "name": "EventGroup",
@@ -46586,6 +46703,12 @@
       "package": "@axrone/render-2d"
     },
     {
+      "name": "isRender2DSpriteUniformNames",
+      "kind": "const",
+      "code": "declare const isRender2DSpriteUniformNames: (uniformNames: readonly string[]) => boolean;",
+      "package": "@axrone/render-2d"
+    },
+    {
       "name": "isRenderPipelineError",
       "kind": "const",
       "code": "declare const isRenderPipelineError: (value: unknown) => value is RenderPipelineError;",
@@ -47186,6 +47309,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "MAX_SPRING_DT",
+      "kind": "const",
+      "code": "declare const MAX_SPRING_DT = 0.064;",
+      "package": "@axrone/tween"
+    },
+    {
       "name": "MAX_TEXTURE_UNITS",
       "kind": "const",
       "code": "declare const MAX_TEXTURE_UNITS = 32;",
@@ -47460,6 +47589,12 @@
       "kind": "const",
       "code": "declare const never: <T = never>() => ILazyAsync<T>;",
       "package": "@axrone/memory"
+    },
+    {
+      "name": "nextTweenId",
+      "kind": "function",
+      "code": "declare function nextTweenId(): number;",
+      "package": "@axrone/tween"
     },
     {
       "name": "NoiseError",
@@ -48040,7 +48175,7 @@
     {
       "name": "PrimitiveTween",
       "kind": "class",
-      "code": "declare class PrimitiveTween extends TweenCore<number> { constructor(object: number, config?: TweenConfig<number>); … }",
+      "code": "declare class PrimitiveTween extends TweenCore<number> { constructor(object: number, config?: TweenConfig<number>); from(properties: DeepPartial<number>): this; to(properties: DeepPartial<number>, duration?: number): this; getValue(): number; … }",
       "package": "@axrone/tween"
     },
     {
@@ -48242,6 +48377,12 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "RafLoop",
+      "kind": "class",
+      "code": "declare class RafLoop { constructor(step: () => boolean, immediate?: boolean); get isRunning(): boolean; start(): void; stop(): void; … }",
+      "package": "@axrone/tween"
+    },
+    {
       "name": "rand",
       "kind": "const",
       "code": "declare const rand: Random;",
@@ -48440,6 +48581,30 @@
       "package": "@axrone/hash"
     },
     {
+      "name": "Rect",
+      "kind": "class",
+      "code": "declare class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable { x: number; y: number; width: number; height: number; constructor(x?: number, y?: number, width?: number, height?: number); get right(): number; get bottom(): number; get centerX(): number; get centerY(): number; … }",
+      "package": "@axrone/numeric"
+    },
+    {
+      "name": "RectComparer",
+      "kind": "class",
+      "code": "declare class RectComparer implements Comparer<Rect> { constructor(mode?: RectComparisonMode); compare(a: Readonly<Rect>, b: Readonly<Rect>): CompareResult; … }",
+      "package": "@axrone/numeric"
+    },
+    {
+      "name": "RectComparisonMode",
+      "kind": "enum",
+      "code": "declare enum RectComparisonMode { LEXICOGRAPHIC = 0, AREA = 1 }",
+      "package": "@axrone/numeric"
+    },
+    {
+      "name": "RectEqualityComparer",
+      "kind": "class",
+      "code": "declare class RectEqualityComparer implements EqualityComparer<Rect> { constructor(epsilon?: number); equals(a: Readonly<Rect>, b: Readonly<Rect>): boolean; hash(obj: Readonly<Rect>): number; … }",
+      "package": "@axrone/numeric"
+    },
+    {
       "name": "reflect",
       "kind": "const",
       "code": "declare const reflect: (effect: RenderShaderEffectDefinition) => ShaderEffectReflection;",
@@ -48530,6 +48695,24 @@
       "package": "@axrone/render-2d"
     },
     {
+      "name": "RENDER_2D_SPRITE_MAIN_TEXTURE_UNIFORM",
+      "kind": "const",
+      "code": "declare const RENDER_2D_SPRITE_MAIN_TEXTURE_UNIFORM = \"u_MainTex\";",
+      "package": "@axrone/render-2d"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_MATERIAL_CONTRACT",
+      "kind": "const",
+      "code": "declare const RENDER_2D_SPRITE_MATERIAL_CONTRACT: Readonly<{ shaderId: \"Render2D/Sprite\"; mainTextureUniform: \"u_MainTex\"; viewProjectionUniform: \"u_ViewProjection\"; requiredUniforms: readonly [\"u_MainTex\", \"u_ViewProjection\"]; }",
+      "package": "@axrone/render-2d"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_REQUIRED_UNIFORM_NAMES",
+      "kind": "const",
+      "code": "declare const RENDER_2D_SPRITE_REQUIRED_UNIFORM_NAMES: readonly [\"u_MainTex\", \"u_ViewProjection\"];",
+      "package": "@axrone/render-2d"
+    },
+    {
       "name": "RENDER_2D_SPRITE_UNIFORM_NAMES",
       "kind": "const",
       "code": "declare const RENDER_2D_SPRITE_UNIFORM_NAMES: readonly string[];",
@@ -48551,6 +48734,12 @@
       "name": "RENDER_2D_SPRITE_VERTICES_PER_QUAD",
       "kind": "const",
       "code": "declare const RENDER_2D_SPRITE_VERTICES_PER_QUAD = 4;",
+      "package": "@axrone/render-2d"
+    },
+    {
+      "name": "RENDER_2D_SPRITE_VIEW_PROJECTION_UNIFORM",
+      "kind": "const",
+      "code": "declare const RENDER_2D_SPRITE_VIEW_PROJECTION_UNIFORM = \"u_ViewProjection\";",
       "package": "@axrone/render-2d"
     },
     {
@@ -48802,7 +48991,7 @@
     {
       "name": "resolveBlend2DWeightsWithContext",
       "kind": "const",
-      "code": "declare const resolveBlend2DWeightsWithContext: (x: number, y: number, children: readonly { readonly x: number; readonly y: number; }",
+      "code": "declare const resolveBlend2DWeightsWithContext: (x: number, y: number, children: readonly Readonly<IVec2Like>[], context: AnimationMotionEvaluationContext, depth: number) => number[];",
       "package": "@axrone/animation"
     },
     {
@@ -49474,7 +49663,7 @@
     {
       "name": "SceneLightingUniformBinder",
       "kind": "class",
-      "code": "declare class SceneLightingUniformBinder { constructor(_writer: SceneUniformWriteTarget); apply(shader: SceneShaderResource, renderer: Pick<MeshRenderer, 'receiveLighting'>, lighting: SceneLightingState): void; … }",
+      "code": "declare class SceneLightingUniformBinder { constructor(_writer: SceneUniformWriteTarget); apply(shader: SceneShaderResource, renderer: Pick<MeshRenderer, 'receiveLighting'>, lighting: SceneLightingState, precomputedValues?: LightingUniformValueMap): void; … }",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -50338,7 +50527,7 @@
     {
       "name": "Spring",
       "kind": "class",
-      "code": "declare class Spring<T extends TweenableValue> extends EventEmitter<SpringEventMap<T>> { constructor(initial: T, config?: SpringConfig); setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; setTarget(target: DeepPartial<T>): this; getCurrent(): T; start(): this; updateManual(deltaTime: …",
+      "code": "declare class Spring<T extends TweenableValue> implements IGroupable { constructor(initial: T, config?: SpringConfig); setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; setTarget(target: DeepPartial<T>): this; getCurrent(): T; start(time?: number): this; updateManual(deltaTime: numbe…",
       "package": "@axrone/tween"
     },
     {
@@ -50356,7 +50545,7 @@
     {
       "name": "SpringSimulation",
       "kind": "class",
-      "code": "declare class SpringSimulation { constructor(config?: SpringConfig); update(position: number, velocity: number, target: number, dt: number): [number, number, boolean]; … }",
+      "code": "declare class SpringSimulation { constructor(config?: SpringConfig); update(position: number, velocity: number, target: number, dt: number): [number, number, boolean]; stepInto(position: number, velocity: number, target: number, dt: number, out: SpringStep): void; … }",
       "package": "@axrone/tween"
     },
     {
@@ -50740,7 +50929,7 @@
     {
       "name": "Timeline",
       "kind": "class",
-      "code": "declare class Timeline extends EventEmitter<TimelineEventMap> implements ITimeline { constructor(); setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; isPlaying(): boolean; getStatus(): 'idle' | 'running' | 'paused' | 'completed'; add(tween: IGroupable, options?: TimelineOptions): thi…",
+      "code": "declare class Timeline implements ITimeline { constructor(); setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; isPlaying(): boolean; getStatus(): TweenStatus; add(tween: IGroupable, options?: TimelineOptions): this; start(time?: number): this; stop(): this; pause(): this; … }",
       "package": "@axrone/tween"
     },
     {
@@ -50894,6 +51083,12 @@
       "package": "@axrone/shapes-2d"
     },
     {
+      "name": "triangulatePolygonWithHoles",
+      "kind": "const",
+      "code": "declare const triangulatePolygonWithHoles: (outer: Float32Array, holes: ReadonlyArray<Float32Array>) => TriangulatedPolygonWithHoles;",
+      "package": "@axrone/shapes-2d"
+    },
+    {
       "name": "tryAsync",
       "kind": "const",
       "code": "declare const tryAsync: <T>(promiseFactory: () => Promise<T>) => ILazyAsync<T | Error>;",
@@ -50986,13 +51181,19 @@
     {
       "name": "TweenChain",
       "kind": "class",
-      "code": "declare class TweenChain extends EventEmitter<TweenChainEventMap> implements IGroupable { constructor(); isPlaying(): boolean; getStatus(): 'idle' | 'running' | 'paused' | 'completed'; getTotalDuration(): number; add(tween: IGroupable): this; start(time?: number): this; stop(): this; pause(): this;…",
+      "code": "declare class TweenChain implements IGroupable { isPlaying(): boolean; getStatus(): TweenStatus; getTotalDuration(): number; add(tween: IGroupable): this; start(time?: number): this; stop(): this; pause(): this; resume(): this; update(time?: number): this; … }",
       "package": "@axrone/tween"
     },
     {
       "name": "TweenCore",
       "kind": "class",
       "code": "declare abstract class TweenCore<T> implements ITween<T> { constructor(object: T, config?: TweenConfig<T>); isPlaying(): boolean; getStatus(): TweenStatus; getDuration(): number; getTotalDuration(): number; from(properties: DeepPartial<T>): this; to(properties: DeepPartial<T>, duration?: number): t…",
+      "package": "@axrone/tween"
+    },
+    {
+      "name": "TweenDispatcher",
+      "kind": "class",
+      "code": "declare class TweenDispatcher<T> { onUpdate(listener: TweenEventCallback<T>): void; offUpdate(listener?: TweenEventCallback<T>): void; hasUpdate(): boolean; emitUpdate(tween: ITween<T>, elapsed: number): void; on(event: TweenEventType, listener: TweenEventCallback<T>): void; off(event: TweenEventTy…",
       "package": "@axrone/tween"
     },
     {
@@ -51004,13 +51205,13 @@
     {
       "name": "TweenGroup",
       "kind": "class",
-      "code": "declare class TweenGroup { add(tween: IGroupable): this; remove(tween: IGroupable): this; start(time?: number): this; stop(): this; pause(): this; resume(): this; update(time?: number): this; dispose(): void; … }",
+      "code": "declare class TweenGroup { constructor(); add(tween: IGroupable): this; remove(tween: IGroupable): this; start(time?: number): this; stop(): this; pause(): this; resume(): this; update(time?: number): this; getSize(): number; … }",
       "package": "@axrone/tween"
     },
     {
       "name": "TweenSystem",
       "kind": "class",
-      "code": "declare class TweenSystem { setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; add(tween: IGroupable): void; remove(tween: IGroupable): void; update(time?: number): boolean; getActiveTweenCount(): number; clear(): void; … }",
+      "code": "declare class TweenSystem { constructor(); setAutoUpdate(enabled: boolean): void; getAutoUpdate(): boolean; setMaxDelta(maxDelta?: number): void; getMaxDelta(): number | undefined; setAutoRemove(enabled: boolean): void; getAutoRemove(): boolean; forEach(member: (tween: IGroupable) => void): void; a…",
       "package": "@axrone/tween"
     },
     {
