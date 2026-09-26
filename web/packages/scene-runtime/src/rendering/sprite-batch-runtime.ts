@@ -1,4 +1,5 @@
 import { Transform, type Actor } from '@axrone/ecs-runtime';
+import { Rect } from '@axrone/numeric';
 import { transformPoint2D } from '@axrone/render-core';
 import {
     RENDER_2D_SPRITE_VERTEX_STRIDE,
@@ -28,40 +29,6 @@ import { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
 import type { SceneUniformWriteTarget } from '../uniform-writer';
 
 const MIN_CLIP_W = 1e-6;
-
-const areClipRectsEqual = (
-    left: Render2DRectLike | null,
-    right: Render2DRectLike | null
-): boolean => {
-    if (!left || !right) {
-        return left == null && right == null;
-    }
-
-    return (
-        left.x === right.x &&
-        left.y === right.y &&
-        left.width === right.width &&
-        left.height === right.height
-    );
-};
-
-const intersectClipRects = (
-    left: Render2DRectLike,
-    right: Render2DRectLike
-): Render2DRectLike | null => {
-    const x = Math.max(left.x, right.x);
-    const y = Math.max(left.y, right.y);
-    const maxX = Math.min(left.x + left.width, right.x + right.width);
-    const maxY = Math.min(left.y + left.height, right.y + right.height);
-    const width = maxX - x;
-    const height = maxY - y;
-
-    if (width <= 0 || height <= 0) {
-        return null;
-    }
-
-    return { x, y, width, height };
-};
 
 const projectWorldPoint = (
     matrix: ArrayLike<number>,
@@ -682,7 +649,7 @@ export class SceneSpriteBatchRuntime {
                 }
 
                 const nextClipRect = clipRect
-                    ? intersectClipRects(clipRect, maskClipRect)
+                    ? Rect.intersect(clipRect, maskClipRect)
                     : maskClipRect;
                 if (!nextClipRect) {
                     return null;
@@ -850,7 +817,7 @@ export class SceneSpriteBatchRuntime {
             return;
         }
 
-        if (areClipRectsEqual(this._activeClipRect, clampedClipRect)) {
+        if (Rect.equals(this._activeClipRect, clampedClipRect)) {
             return;
         }
 
