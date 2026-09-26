@@ -237,4 +237,221 @@ public unsafe interface IGLApi
     void UniformBlockBinding(uint program, uint uniformBlockIndex, uint uniformBlockBinding);
 
     // ========================================================================
+    // Uniform Operations
+    // ========================================================================
+
+    /// <summary>Sets an integer uniform value.</summary>
+    void Uniform1(int location, int v0);
+
+    /// <summary>Sets a float uniform value.</summary>
+    void Uniform1(int location, float v0);
+
+    /// <summary>Sets a vec2 uniform value.</summary>
+    void Uniform2(int location, float v0, float v1);
+
+    /// <summary>Sets a vec3 uniform value.</summary>
+    void Uniform3(int location, float v0, float v1, float v2);
+
+    /// <summary>Sets a vec4 uniform value.</summary>
+    void Uniform4(int location, float v0, float v1, float v2, float v3);
+
+    /// <summary>Sets a mat4 uniform value.</summary>
+    void UniformMatrix4(int location, uint count, bool transpose, float* value);
+
+    // ========================================================================
+    // State Operations
+    // ========================================================================
+
+    /// <summary>Enables a GL capability.</summary>
+    void Enable(uint cap);
+
+    /// <summary>Disables a GL capability.</summary>
+    void Disable(uint cap);
+
+    /// <summary>Sets the viewport.</summary>
+    void Viewport(int x, int y, uint width, uint height);
+
+    /// <summary>Sets the scissor box.</summary>
+    void Scissor(int x, int y, uint width, uint height);
+
+    /// <summary>Sets the clear color.</summary>
+    void ClearColor(float red, float green, float blue, float alpha);
+
+    /// <summary>Sets the clear depth.</summary>
+    void ClearDepth(double depth);
+
+    /// <summary>Sets the clear stencil.</summary>
+    void ClearStencil(int s);
+
+    /// <summary>Clears buffers to specified values.</summary>
+    void Clear(uint mask);
+
+    /// <summary>Sets the color mask.</summary>
+    void ColorMask(bool red, bool green, bool blue, bool alpha);
+
+    /// <summary>Sets the depth mask.</summary>
+    void DepthMask(bool flag);
+
+    /// <summary>Sets the depth function.</summary>
+    void DepthFunc(uint func);
+
+    /// <summary>Sets the blend function for RGB and alpha separately.</summary>
+    void BlendFuncSeparate(uint srcRGB, uint dstRGB, uint srcAlpha, uint dstAlpha);
+
+    /// <summary>Sets the blend equation for RGB and alpha separately.</summary>
+    void BlendEquationSeparate(uint modeRGB, uint modeAlpha);
+
+    /// <summary>Sets the polygon culling mode.</summary>
+    void CullFace(uint mode);
+
+    /// <summary>Sets the front face winding order.</summary>
+    void FrontFace(uint mode);
+
+    /// <summary>Sets pixel storage modes.</summary>
+    void PixelStore(uint pname, int param);
+
+    /// <summary>Sets the line width.</summary>
+    void LineWidth(float width);
+
+    /// <summary>Sets the polygon offset.</summary>
+    void PolygonOffset(float factor, float units);
+
+    /// <summary>Sets the stencil function.</summary>
+    void StencilFunc(uint func, int reference, uint mask);
+
+    /// <summary>Sets the stencil operation.</summary>
+    void StencilOp(uint sfail, uint dpfail, uint dppass);
+
+    /// <summary>Sets the stencil mask.</summary>
+    void StencilMask(uint mask);
+
+    // ========================================================================
+    // Draw Operations
+    // ========================================================================
+
+    /// <summary>Renders primitives from array data.</summary>
+    void DrawArrays(uint mode, int first, uint count);
+
+    /// <summary>Renders primitives from indexed array data.</summary>
+    void DrawElements(uint mode, uint count, uint type, void* indices);
+
+    /// <summary>Renders multiple instances of primitives from array data.</summary>
+    void DrawArraysInstanced(uint mode, int first, uint count, uint instancecount);
+
+    /// <summary>Renders multiple instances of primitives from indexed array data.</summary>
+    void DrawElementsInstanced(uint mode, uint count, uint type, void* indices, uint instancecount);
+
+    // ========================================================================
+    // Query Operations
+    // ========================================================================
+
+    /// <summary>Generates a query object name.</summary>
+    uint GenQuery();
+
+    /// <summary>Deletes a query object.</summary>
+    void DeleteQuery(uint query);
+
+    /// <summary>Begins a query.</summary>
+    void BeginQuery(uint target, uint query);
+
+    /// <summary>Ends a query.</summary>
+    void EndQuery(uint target);
+
+    /// <summary>Gets a query parameter.</summary>
+    void GetQueryParameter(uint query, uint pname, out int parameters);
+
+    // ========================================================================
+    // Sync Operations
+    // ========================================================================
+
+    /// <summary>Creates a sync object.</summary>
+    nint FenceSync(uint condition, uint flags);
+
+    /// <summary>Deletes a sync object.</summary>
+    void DeleteSync(nint sync);
+
+    /// <summary>Gets a sync parameter.</summary>
+    void GetSync(nint sync, uint pname, out int parameters);
+
+    /// <summary>Waits for a sync object on the client.</summary>
+    uint ClientWaitSync(nint sync, uint flags, ulong timeout);
+
+    /// <summary>Waits for a sync object on the GPU.</summary>
+    void WaitSync(nint sync, uint flags, ulong timeout);
+
+    // ========================================================================
+    // Transform Feedback Operations
+    // ========================================================================
+
+    /// <summary>Generates a transform feedback object name.</summary>
+    uint GenTransformFeedback();
+
+    /// <summary>Deletes a transform feedback object.</summary>
+    void DeleteTransformFeedback(uint transformFeedback);
+
+    /// <summary>Binds a transform feedback object.</summary>
+    void BindTransformFeedback(uint target, uint transformFeedback);
+
+    /// <summary>Specifies varyings for transform feedback.</summary>
+    void TransformFeedbackVaryings(uint program, string[] varyings, uint bufferMode);
+
+    /// <summary>Binds a buffer to a transform feedback binding point.</summary>
+    void BindBufferBase(uint target, uint index, uint buffer);
+
+    /// <summary>Begins transform feedback.</summary>
+    void BeginTransformFeedback(uint primitiveMode);
+
+    /// <summary>Pauses transform feedback.</summary>
+    void PauseTransformFeedback();
+
+    /// <summary>Resumes transform feedback.</summary>
+    void ResumeTransformFeedback();
+
+    /// <summary>Ends transform feedback.</summary>
+    void EndTransformFeedback();
+
+    // ========================================================================
+    // Information Operations
+    // ========================================================================
+
+    /// <summary>Gets an integer parameter.</summary>
+    void GetInteger(uint pname, out int data);
+
+    /// <summary>Gets a string parameter.</summary>
+    string? GetString(uint name);
+
+    /// <summary>Gets an indexed string parameter.</summary>
+    string? GetString(uint name, uint index);
+
+    /// <summary>Gets the current GL error.</summary>
+    uint GetError();
+
+    /// <summary>Sets the debug label for an object.</summary>
+    void ObjectLabel(uint identifier, uint name, uint length, string label);
+
+    /// <summary>Sets the debug label for an object (convenience overload with auto length).</summary>
+    void ObjectLabel(uint identifier, uint name, string label)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        ObjectLabel(identifier, name, (uint)label.Length, label);
+    }
+
+    /// <summary>Flushes all pending GL commands.</summary>
+    void Flush();
+
+    /// <summary>Blocks until all GL commands have completed.</summary>
+    void Finish();
+
+    // ========================================================================
+    // Compute Operations
+    // ========================================================================
+
+    /// <summary>Dispatches a compute shader work group.</summary>
+    void DispatchCompute(uint numGroupsX, uint numGroupsY, uint numGroupsZ);
+
+    /// <summary>Defines a barrier ordering memory transactions.</summary>
+    void MemoryBarrier(uint barriers);
+
+    /// <summary>Binds a level of a texture to an image unit.</summary>
+    void BindImageTexture(uint unit, uint texture, int level, bool layered, int layer, uint access, uint format);
 }
