@@ -101,6 +101,30 @@ public class RetargetTests
     }
 
     [Fact]
+    public void InvalidModes_ThrowAtConstruction()
+    {
+        Action badTranslation = () =>
+        {
+            _ = new RetargetProfile(SourceRig(), ScaledTargetRig())
+            {
+                TranslationMode = (RetargetTranslationMode)99,
+            };
+        };
+        badTranslation.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action badRotation = () =>
+        {
+            _ = new RetargetProfile(SourceRig(), ScaledTargetRig())
+            {
+                RotationMode = (RetargetRotationMode)99,
+            };
+        };
+        badRotation.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+    }
+
+    [Fact]
     public void ExplicitStructMapping_WorksLikeTuples()
     {
         var profile = new RetargetProfile(SourceRig(), ScaledTargetRig(), new ExplicitBoneMapping("arm", "arm"));

@@ -54,10 +54,34 @@ public sealed class RetargetProfile
     public ReadOnlySpan<int> SourceToTargetMap => _sourceToTargetMap;
 
     /// <summary>Translation policy.</summary>
-    public RetargetTranslationMode TranslationMode { get; init; } = RetargetTranslationMode.Scaled;
+    public RetargetTranslationMode TranslationMode
+    {
+        get;
+        init
+        {
+            if ((uint)value > (uint)RetargetTranslationMode.Scaled)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Unknown translation mode '{value}'.");
+            }
+
+            field = value;
+        }
+    } = RetargetTranslationMode.Scaled;
 
     /// <summary>Rotation policy.</summary>
-    public RetargetRotationMode RotationMode { get; init; } = RetargetRotationMode.Offset;
+    public RetargetRotationMode RotationMode
+    {
+        get;
+        init
+        {
+            if ((uint)value > (uint)RetargetRotationMode.Offset)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Unknown rotation mode '{value}'.");
+            }
+
+            field = value;
+        }
+    } = RetargetRotationMode.Offset;
 
     /// <summary>Builds a profile with explicit tuple mappings or name matching.</summary>
     public RetargetProfile(Rig sourceRig, Rig targetRig, (string Source, string Target)[]? explicitMappings = null)
