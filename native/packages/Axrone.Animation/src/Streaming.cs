@@ -429,37 +429,62 @@ public static class ChunkCodec
         return payload;
     }
 
-    /// <summary>Merges a payload into live channels.</summary>
+    /// <summary>
+    /// Merges a payload into live channels. Exact-size outputs (two passes, no
+    /// list over-allocation); key arrays are copied so DTO buffers stay caller-owned.
+    /// </summary>
     public static AnimationChannel[] Merge(AnimationChannel[] baseChannels, ChunkPayloadDto payload, MergeMode mode)
     {
         ArgumentNullException.ThrowIfNull(baseChannels);
         ArgumentNullException.ThrowIfNull(payload);
 
-        var incoming = new List<AnimationChannel>(payload.Tracks.Count);
-        foreach (ChunkTrackDto track in payload.Tracks)
-        {
-            incoming.Add(new AnimationChannel(
-                track.BoneIndex,
-                (ChannelTarget)track.Target,
-                (InterpolationMode)track.Interpolation,
-                [.. track.KeyTimes],
-                [.. track.KeyValues]));
-        }
-
+        List<ChunkTrackDto> tracks = payload.Tracks;
         if (mode == MergeMode.ReplaceAll)
         {
-            return incoming.ToArray();
+            var replaced = GC.AllocateUninitializedArray<AnimationChannel>(tracks.Count);
+            for (int i = 0; i < tracks.Count; i++)
+            {
+                replaced[i] = ToChannel(tracks[i]);
+            }
+
+            return replaced;
         }
 
-        var merged = new List<AnimationChannel>(baseChannels);
-        foreach (AnimationChannel channel in incoming)
+        int addedCount = 0;
+        for (int i = 0; i < tracks.Count; i++)
         {
-            bool replaced = false;
-            for (int i = 0; i < merged.Count; i++)
+            ChunkTrackDto track = tracks[i];
+            bool found = false;
+            for (int j = 0; j < baseChannels.Length; j++)
             {
-                if (merged[i].BoneIndex == channel.BoneIndex && merged[i].Target == channel.Target)
+                if (baseChannels[j].BoneIndex == track.BoneIndex && (byte)baseChannels[j].Target == track.Target)
                 {
-                    merged[i] = channel;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                addedCount++;
+            }
+        }
+
+        var merged = new AnimationChannel[baseChannels.Length + addedCount];
+        Array.Copy(baseChannels, merged, baseChannels.Length);
+
+        int appendIndex = baseChannels.Length;
+        for (int i = 0; i < tracks.Count; i++)
+        {
+            ChunkTrackDto track = tracks[i];
+            AnimationChannel channel = ToChannel(track);
+
+            bool replaced = false;
+            for (int j = 0; j < baseChannels.Length; j++)
+            {
+                if (merged[j].BoneIndex == channel.BoneIndex && merged[j].Target == channel.Target)
+                {
+                    merged[j] = channel;
                     replaced = true;
                     break;
                 }
@@ -467,12 +492,21 @@ public static class ChunkCodec
 
             if (!replaced)
             {
-                merged.Add(channel);
+                merged[appendIndex++] = channel;
             }
         }
 
-        return merged.ToArray();
+        return merged;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AnimationChannel ToChannel(ChunkTrackDto track) =>
+        new(
+            track.BoneIndex,
+            (ChannelTarget)track.Target,
+            (InterpolationMode)track.Interpolation,
+            [.. track.KeyTimes],
+            [.. track.KeyValues]);
 }
 
 /// <summary>Linear keyframe reduction: drops interior keys a straight line predicts.</summary>
