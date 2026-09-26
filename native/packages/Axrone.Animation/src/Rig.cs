@@ -80,13 +80,13 @@ public sealed class Rig
     }
 
     /// <summary>Validates and freezes a skeleton.</summary>
-    public Rig(RigId id, ReadOnlySpan<BoneInfo> bones)
+    public Rig(RigId id, params ReadOnlySpan<BoneInfo> bones)
     {
         Id = id;
         BoneCount = bones.Length;
         if (BoneCount <= 0)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigEmptyBones, "Rig requires at least one bone.");
+            AnimationThrowHelper.ThrowRigEmptyBones();
         }
 
         _boneNames = new string[BoneCount];
@@ -99,12 +99,12 @@ public sealed class Rig
             BoneInfo bone = bones[i];
             if (string.IsNullOrEmpty(bone.Name))
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigDuplicateBoneName, $"Bone {i} has empty name.");
+                AnimationThrowHelper.ThrowRigEmptyBoneName(i);
             }
 
             if (!_nameToIndex.TryAdd(bone.Name, i))
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigDuplicateBoneName, $"Duplicate bone name '{bone.Name}'.");
+                AnimationThrowHelper.ThrowRigDuplicateBoneName(bone.Name);
             }
 
             _boneNames[i] = bone.Name;
@@ -112,7 +112,7 @@ public sealed class Rig
 
             if (bone.ParentIndex >= BoneCount || bone.ParentIndex == i || bone.ParentIndex < -1)
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigInvalidParent, $"Bone {i} ('{bone.Name}') invalid parent {bone.ParentIndex}.");
+                AnimationThrowHelper.ThrowRigInvalidParent(i, bone.Name, bone.ParentIndex);
             }
 
             WriteRestPose(i, bone);
@@ -164,7 +164,7 @@ public sealed class Rig
     {
         if (outPalette.Length < BoneCount * 16)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, "Output matrix palette too small.");
+            AnimationThrowHelper.ThrowPaletteTooSmall(outPalette.Length, BoneCount * 16);
         }
 
         _restWorldMatrices.AsSpan(0, BoneCount * 16).CopyTo(outPalette);
@@ -285,7 +285,7 @@ public sealed class Rig
                     int child = children[current][childCursor[current]++];
                     if (state[child] == 1)
                     {
-                        AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigCycleDetected, $"Cycle detected at bone '{boneNames[child]}'.");
+                        AnimationThrowHelper.ThrowRigCycleDetected(boneNames[child]);
                     }
 
                     if (state[child] == 0)
@@ -307,7 +307,7 @@ public sealed class Rig
         {
             if (state[i] == 0)
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigInvalidParent, $"Unconnected bone tree detected: '{boneNames[i]}'.");
+                AnimationThrowHelper.ThrowRigUnconnectedBone(boneNames[i]);
             }
         }
 
