@@ -159,6 +159,32 @@ public sealed class RetargetProfile
     }
 
     /// <summary>
+    /// Retargets between caller-owned lanes (arena scratch, stack spans) without
+    /// an <see cref="AnimationFrame"/> allocation. A dedicated overload — not a
+    /// generic contract — because ref-struct views cannot satisfy interfaces.
+    /// </summary>
+    public void RetargetView(in AnimationFrameView source, in AnimationFrameView target)
+    {
+        if (source.Translations.Length != SourceRig.BoneCount || target.Translations.Length != TargetRig.BoneCount)
+        {
+            AnimationThrowHelper.ThrowRetargeting(AnimationErrorCode.RetargetingIncompatibleLayout, "Retarget views do not match their rigs.");
+        }
+
+        DispatchCore(
+            _bindings,
+            TranslationMode,
+            RotationMode,
+            source.Translations,
+            source.Rotations,
+            source.Scales,
+            source.Curves,
+            target.Translations,
+            target.Rotations,
+            target.Scales,
+            target.Curves);
+    }
+
+    /// <summary>
     /// Mode-pair dispatch: policies hoisted out of the loop into six branch-free
     /// executors. Unknown combinations fail loudly (modes are init-validated).
     /// </summary>

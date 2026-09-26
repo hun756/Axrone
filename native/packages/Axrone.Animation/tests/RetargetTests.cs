@@ -76,6 +76,31 @@ public class RetargetTests
     }
 
     [Fact]
+    public void RetargetView_WorksOverStackLanes()
+    {
+        var profile = new RetargetProfile(SourceRig(), ScaledTargetRig());
+
+        Span<Vector3> srcT = stackalloc Vector3[2];
+        Span<Quaternion> srcR = stackalloc Quaternion[2];
+        Span<Vector3> srcS = stackalloc Vector3[2];
+        srcR[0] = Quaternion.Identity;
+        srcR[1] = Quaternion.Identity;
+        srcS[0] = Vector3.One;
+        srcS[1] = Vector3.One;
+        srcT[1] = new Vector3(3.0f, 0.0f, 0.0f);
+
+        Span<Vector3> dstT = stackalloc Vector3[2];
+        Span<Quaternion> dstR = stackalloc Quaternion[2];
+        Span<Vector3> dstS = stackalloc Vector3[2];
+
+        var source = new AnimationFrameView(srcT, srcR, srcS);
+        var target = new AnimationFrameView(dstT, dstR, dstS);
+        profile.RetargetView(in source, in target);
+
+        dstT[1].X.Should().BeApproximately(6.0f, 1e-5f);
+    }
+
+    [Fact]
     public void ZeroMappings_Throw()
     {
         var other = new Rig(new RigId("other"), [
