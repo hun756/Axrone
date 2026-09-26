@@ -6,6 +6,18 @@ using FluentAssertions;
 public class FormatMathTests
 {
     [Fact]
+    public void Registry_ResolvesKnownFormats()
+    {
+        GLFormatRegistry.IsFormatSupported("rgba8").Should().BeTrue();
+        GLFormatRegistry.IsFormatSupported("nope").Should().BeFalse();
+        GLFormatRegistry.GetFormat("rgba8").Should().NotBeNull();
+        GLFormatRegistry.SupportedFormats.Should().NotBeEmpty();
+
+        Action unknown = () => GLFormatRegistry.GetFormat("nope");
+        unknown.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void BufferMath_AlignsUp()
     {
         BufferMath.AlignTo(0, 16).Should().Be(0);
