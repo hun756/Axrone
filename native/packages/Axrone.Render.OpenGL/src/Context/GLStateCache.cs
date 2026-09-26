@@ -579,4 +579,238 @@ public sealed class GLStateCache
             // Note: BlendColor not in IGLApi, would need to add it
         }
     }
+
+    // ========================================================================
+    // Stencil State Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilTest(bool enabled)
+    {
+        if (_isInvalidated || StencilTestEnabled != enabled)
+        {
+            StencilTestEnabled = enabled;
+            if (enabled)
+                _gl.Enable(0x0B90); // GL_STENCIL_TEST
+            else
+                _gl.Disable(0x0B90);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilFunc(uint func, int reference, uint mask)
+    {
+        SetStencilFuncSeparate(0x0408, func, reference, mask); // GL_FRONT_AND_BACK
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilFuncSeparate(uint face, uint func, int reference, uint mask)
+    {
+        if (face == 0x0408 || face == 0x0404) // FRONT_AND_BACK or FRONT
+        {
+            if (_isInvalidated || StencilFuncFront != func || StencilRefFront != reference || StencilMaskFront != mask)
+            {
+                StencilFuncFront = func;
+                StencilRefFront = reference;
+                StencilMaskFront = mask;
+                _gl.StencilFunc(func, reference, mask);
+            }
+        }
+
+        if (face == 0x0408 || face == 0x0405) // FRONT_AND_BACK or BACK
+        {
+            if (_isInvalidated || StencilFuncBack != func || StencilRefBack != reference || StencilMaskBack != mask)
+            {
+                StencilFuncBack = func;
+                StencilRefBack = reference;
+                StencilMaskBack = mask;
+                // Note: StencilFuncSeparate not in IGLApi, would need to add it
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilOp(uint sfail, uint dpfail, uint dppass)
+    {
+        SetStencilOpSeparate(0x0408, sfail, dpfail, dppass); // GL_FRONT_AND_BACK
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilOpSeparate(uint face, uint sfail, uint dpfail, uint dppass)
+    {
+        if (face == 0x0408 || face == 0x0404) // FRONT_AND_BACK or FRONT
+        {
+            if (_isInvalidated || StencilSfailFront != sfail || StencilDpfailFront != dpfail || StencilDppassFront != dppass)
+            {
+                StencilSfailFront = sfail;
+                StencilDpfailFront = dpfail;
+                StencilDppassFront = dppass;
+                _gl.StencilOp(sfail, dpfail, dppass);
+            }
+        }
+
+        if (face == 0x0408 || face == 0x0405) // FRONT_AND_BACK or BACK
+        {
+            if (_isInvalidated || StencilSfailBack != sfail || StencilDpfailBack != dpfail || StencilDppassBack != dppass)
+            {
+                StencilSfailBack = sfail;
+                StencilDpfailBack = dpfail;
+                StencilDppassBack = dppass;
+                // Note: StencilOpSeparate not in IGLApi, would need to add it
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStencilMask(uint mask)
+    {
+        if (_isInvalidated || StencilWriteMask != mask)
+        {
+            StencilWriteMask = mask;
+            _gl.StencilMask(mask);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetClearStencil(int s)
+    {
+        if (_isInvalidated || ClearStencil != s)
+        {
+            ClearStencil = s;
+            _gl.ClearStencil(s);
+        }
+    }
+
+    // ========================================================================
+    // Cull State Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetCullFace(bool enabled)
+    {
+        if (_isInvalidated || CullFaceEnabled != enabled)
+        {
+            CullFaceEnabled = enabled;
+            if (enabled)
+                _gl.Enable(0x0B44); // GL_CULL_FACE
+            else
+                _gl.Disable(0x0B44);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetCullMode(uint mode)
+    {
+        if (_isInvalidated || CullMode != mode)
+        {
+            CullMode = mode;
+            _gl.CullFace(mode);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetFrontFace(uint mode)
+    {
+        if (_isInvalidated || FrontFace != mode)
+        {
+            FrontFace = mode;
+            _gl.FrontFace(mode);
+        }
+    }
+
+    // ========================================================================
+    // Color State Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetColorMask(bool r, bool g, bool b, bool a)
+    {
+        if (_isInvalidated || ColorMaskR != r || ColorMaskG != g || ColorMaskB != b || ColorMaskA != a)
+        {
+            ColorMaskR = r;
+            ColorMaskG = g;
+            ColorMaskB = b;
+            ColorMaskA = a;
+            _gl.ColorMask(r, g, b, a);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetClearColor(float r, float g, float b, float a)
+    {
+        if (_isInvalidated || ClearColorR != r || ClearColorG != g || ClearColorB != b || ClearColorA != a)
+        {
+            ClearColorR = r;
+            ClearColorG = g;
+            ClearColorB = b;
+            ClearColorA = a;
+            _gl.ClearColor(r, g, b, a);
+        }
+    }
+
+    // ========================================================================
+    // Polygon Offset Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetPolygonOffsetFill(bool enabled)
+    {
+        if (_isInvalidated || PolygonOffsetFillEnabled != enabled)
+        {
+            PolygonOffsetFillEnabled = enabled;
+            if (enabled)
+                _gl.Enable(0x8037); // GL_POLYGON_OFFSET_FILL
+            else
+                _gl.Disable(0x8037);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetPolygonOffset(float factor, float units)
+    {
+        if (_isInvalidated || PolygonOffsetFactor != factor || PolygonOffsetUnits != units)
+        {
+            PolygonOffsetFactor = factor;
+            PolygonOffsetUnits = units;
+            _gl.PolygonOffset(factor, units);
+        }
+    }
+
+    // ========================================================================
+    // Line Width Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetLineWidth(float width)
+    {
+        if (_isInvalidated || LineWidth != width)
+        {
+            LineWidth = width;
+            _gl.LineWidth(width);
+        }
+    }
+
+    // ========================================================================
+    // Pixel Store Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetUnpackAlignment(int alignment)
+    {
+        if (_isInvalidated || UnpackAlignment != alignment)
+        {
+            UnpackAlignment = alignment;
+            _gl.PixelStore(0x0CF5, alignment); // GL_UNPACK_ALIGNMENT
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetPackAlignment(int alignment)
+    {
+        if (_isInvalidated || PackAlignment != alignment)
+        {
+            PackAlignment = alignment;
+            _gl.PixelStore(0x0D05, alignment); // GL_PACK_ALIGNMENT
+        }
+    }
 }
