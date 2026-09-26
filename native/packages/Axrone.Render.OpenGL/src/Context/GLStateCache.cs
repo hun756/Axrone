@@ -452,4 +452,131 @@ public sealed class GLStateCache
             _gl.BindSampler(unitIndex, sampler);
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetViewport(int x, int y, int width, int height)
+    {
+        if (_isInvalidated || ViewportX != x || ViewportY != y || ViewportWidth != width || ViewportHeight != height)
+        {
+            ViewportX = x;
+            ViewportY = y;
+            ViewportWidth = width;
+            ViewportHeight = height;
+            _gl.Viewport(x, y, (uint)width, (uint)height);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetScissor(int x, int y, int width, int height)
+    {
+        if (_isInvalidated || ScissorX != x || ScissorY != y || ScissorWidth != width || ScissorHeight != height)
+        {
+            ScissorX = x;
+            ScissorY = y;
+            ScissorWidth = width;
+            ScissorHeight = height;
+            _gl.Scissor(x, y, (uint)width, (uint)height);
+        }
+    }
+
+    // ========================================================================
+    // Depth State Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetDepthTest(bool enabled)
+    {
+        if (_isInvalidated || DepthTestEnabled != enabled)
+        {
+            DepthTestEnabled = enabled;
+            if (enabled)
+                _gl.Enable(0x0B71); // GL_DEPTH_TEST
+            else
+                _gl.Disable(0x0B71);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetDepthFunc(uint func)
+    {
+        if (_isInvalidated || DepthFunc != func)
+        {
+            DepthFunc = func;
+            _gl.DepthFunc(func);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetDepthMask(bool mask)
+    {
+        if (_isInvalidated || DepthMask != mask)
+        {
+            DepthMask = mask;
+            _gl.DepthMask(mask);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetClearDepth(double depth)
+    {
+        if (_isInvalidated || ClearDepth != depth)
+        {
+            ClearDepth = depth;
+            _gl.ClearDepth(depth);
+        }
+    }
+
+    // ========================================================================
+    // Blend State Operations
+    // ========================================================================
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetBlend(bool enabled)
+    {
+        if (_isInvalidated || BlendEnabled != enabled)
+        {
+            BlendEnabled = enabled;
+            if (enabled)
+                _gl.Enable(0x0BE2); // GL_BLEND
+            else
+                _gl.Disable(0x0BE2);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetBlendFuncSeparate(uint srcRGB, uint dstRGB, uint srcAlpha, uint dstAlpha)
+    {
+        if (_isInvalidated || BlendSrcRGB != srcRGB || BlendDstRGB != dstRGB ||
+            BlendSrcAlpha != srcAlpha || BlendDstAlpha != dstAlpha)
+        {
+            BlendSrcRGB = srcRGB;
+            BlendDstRGB = dstRGB;
+            BlendSrcAlpha = srcAlpha;
+            BlendDstAlpha = dstAlpha;
+            _gl.BlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetBlendEquationSeparate(uint modeRGB, uint modeAlpha)
+    {
+        if (_isInvalidated || BlendEquationRGB != modeRGB || BlendEquationAlpha != modeAlpha)
+        {
+            BlendEquationRGB = modeRGB;
+            BlendEquationAlpha = modeAlpha;
+            _gl.BlendEquationSeparate(modeRGB, modeAlpha);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetBlendColor(float r, float g, float b, float a)
+    {
+        if (_isInvalidated || BlendColorR != r || BlendColorG != g || BlendColorB != b || BlendColorA != a)
+        {
+            BlendColorR = r;
+            BlendColorG = g;
+            BlendColorB = b;
+            BlendColorA = a;
+            // Note: BlendColor not in IGLApi, would need to add it
+        }
+    }
 }
