@@ -395,7 +395,7 @@ public static class TextureFormats
     {
         if (!_table.TryGetValue(format, out var info))
         {
-            throw new ArgumentException($"Unknown texture format: {format}", nameof(format));
+            ThrowHelper.ThrowUnknownTextureFormat(format.ToString());
         }
 
         return info;

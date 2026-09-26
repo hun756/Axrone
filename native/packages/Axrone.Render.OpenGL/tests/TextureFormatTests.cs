@@ -77,12 +77,12 @@ public class TextureFormatTests
     }
 
     [Fact]
-    public void Formats_Get_UnknownFormat_ThrowsArgumentException()
+    public void Formats_Get_UnknownFormat_ThrowsCodedException()
     {
         Action get = () => TextureFormats.Get((TextureFormat)9999);
 
-        get.Should().Throw<ArgumentException>()
-            .WithMessage("*Unknown texture format*");
+        get.Should().Throw<GLTextureException>()
+            .Where(ex => ex.TextureCode == TextureErrorCode.FormatNotSupported);
     }
 
     [Fact]
