@@ -180,6 +180,12 @@ public static class GLConst
     // None
     public const uint None = 0;
 
+    // Shader stages and compile/link status
+    public const uint FragmentShader = 0x8B30;
+    public const uint VertexShader = 0x8B31;
+    public const uint CompileStatus = 0x8B81;
+    public const uint LinkStatus = 0x8B82;
+
     // S3TC / RGTC / BPTC compressed formats
     public const uint CompressedRgbS3tcDxt1 = 0x83F0;
     public const uint CompressedRgbaS3tcDxt1 = 0x83F1;
