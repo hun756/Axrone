@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="../../Axrone.Render.Core/Axrone.Render.Core.csproj" />
     <ProjectReference Include="../Axrone.Render.OpenGL.csproj" />
+    <ProjectReference Include="../../Axrone.Render.OpenGL.Mock/Axrone.Render.OpenGL.Mock.csproj" />
   </ItemGroup>
 
 </Project>
