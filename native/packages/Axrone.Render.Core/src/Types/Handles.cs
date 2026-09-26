@@ -164,3 +164,110 @@ public readonly record struct GpuVertexArrayHandle(uint Id)
     public bool IsValid => Id != 0;
 }
 
+/// <summary>
+/// Represents a GPU framebuffer handle.
+/// </summary>
+/// <param name="Id">The framebuffer ID.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GpuFramebufferHandle(uint Id)
+{
+    /// <summary>
+    /// Gets a null/invalid framebuffer handle.
+    /// </summary>
+    public static readonly GpuFramebufferHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero ID).
+    /// </summary>
+    public bool IsValid => Id != 0;
+}
+
+/// <summary>
+/// Represents a GPU program handle.
+/// </summary>
+/// <param name="Id">The program ID.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GpuProgramHandle(uint Id)
+{
+    /// <summary>
+    /// Gets a null/invalid program handle.
+    /// </summary>
+    public static readonly GpuProgramHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero ID).
+    /// </summary>
+    public bool IsValid => Id != 0;
+}
+
+/// <summary>
+/// Represents a GPU sampler handle.
+/// </summary>
+/// <param name="Id">The sampler ID.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GpuSamplerHandle(uint Id)
+{
+    /// <summary>
+    /// Gets a null/invalid sampler handle.
+    /// </summary>
+    public static readonly GpuSamplerHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero ID).
+    /// </summary>
+    public bool IsValid => Id != 0;
+}
+
+/// <summary>
+/// Represents a GPU renderbuffer handle.
+/// </summary>
+/// <param name="Id">The renderbuffer ID.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GpuRenderbufferHandle(uint Id)
+{
+    /// <summary>
+    /// Gets a null/invalid renderbuffer handle.
+    /// </summary>
+    public static readonly GpuRenderbufferHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero ID).
+    /// </summary>
+    public bool IsValid => Id != 0;
+}
+
+/// <summary>
+/// Represents a GPU query handle.
+/// </summary>
+/// <param name="Id">The query ID.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GpuQueryHandle(uint Id)
+{
+    /// <summary>
+    /// Gets a null/invalid query handle.
+    /// </summary>
+    public static readonly GpuQueryHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero ID).
+    /// </summary>
+    public bool IsValid => Id != 0;
+}
+
+/// <summary>
+/// Represents a GPU sync handle.
+/// </summary>
+/// <param name="Handle">The sync handle (pointer).</param>
+[StructLayout(LayoutKind.Sequential)]
+public readonly record struct GpuSyncHandle(nint Handle)
+{
+    /// <summary>
+    /// Gets a null/invalid sync handle.
+    /// </summary>
+    public static readonly GpuSyncHandle Null = new(0);
+
+    /// <summary>
+    /// Gets a value indicating whether this handle is valid (non-zero pointer).
+    /// </summary>
+    public bool IsValid => Handle != 0;
+}
