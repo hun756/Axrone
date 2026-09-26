@@ -10,6 +10,8 @@
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVersion>2.8.2</XunitRunnerVersion>
     <CoverletVersion>6.0.4</CoverletVersion>
+    <SilkNetVersion>2.21.0</SilkNetVersion>
+    <MoqVersion>4.20.72</MoqVersion>
   </PropertyGroup>
 
   <ItemGroup Label="TestDependencies">
@@ -22,6 +24,12 @@
 
   <ItemGroup Label="PerformanceDependencies">
     <PackageVersion Include="BenchmarkDotNet" Version="$(BenchmarkDotNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="RenderDependencies">
+    <PackageVersion Include="Silk.NET.OpenGL" Version="$(SilkNetVersion)" />
+    <PackageVersion Include="Silk.NET.Core" Version="$(SilkNetVersion)" />
+    <PackageVersion Include="Moq" Version="$(MoqVersion)" />
   </ItemGroup>
 
 </Project>
