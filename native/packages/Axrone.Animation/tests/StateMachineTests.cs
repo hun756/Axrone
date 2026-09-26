@@ -137,5 +137,13 @@ public class StateMachineTests
 
         machine.Update(0.5f, parameters, events, 1.0f);
         machine.CurrentStateIndex.Should().Be(0);
+
+        machine.ForceState(0, 0.95f);
+        machine.Update(0.2f, parameters, events, 1.0f);
+        machine.HasActiveTransition.Should().BeFalse();
+
+        machine.ForceState(0, 0.85f);
+        machine.Update(0.3f, parameters, events, 1.0f);
+        machine.HasActiveTransition.Should().BeTrue();
     }
 }

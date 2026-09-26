@@ -388,8 +388,9 @@ public sealed class StateMachineInstance
         if (transition.ExitTime.HasValue)
         {
             float exit = transition.ExitTime.Value;
-            float prev = prevNormTime % 1.0f;
-            float cur = curNormTime % 1.0f;
+            // Floor-normalized (not %): negative times still land in [0, 1).
+            float prev = prevNormTime - MathF.Floor(prevNormTime);
+            float cur = curNormTime - MathF.Floor(curNormTime);
             bool crossed = (prev < exit && exit <= cur) || (prev > cur && (exit >= prev || exit <= cur));
             if (!crossed)
             {
