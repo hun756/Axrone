@@ -17,6 +17,10 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1720: Int/Float/Short member names — GL type-name parity, intentional -->
     <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1028: byte-backed GPU enums — compact descriptors matching GL field widths, intentional -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1711: TextureFormatFlags — framework-blessed bitmask naming (cf. BindingFlags) -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
     <!-- CA1031: bulk-dispose must attempt every resource; failures aggregate, never vanish -->
     <NoWarn>$(NoWarn);CA1031</NoWarn>
   </PropertyGroup>
