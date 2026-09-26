@@ -229,3 +229,77 @@ public sealed class RenderPipelineBackend : IDisposable
         }
     }
 }
+/// <summary>
+/// Render resource allocator for creating textures.
+/// </summary>
+public sealed class RenderResourceAllocator : IDisposable
+{
+    private readonly GLContext _context;
+    private readonly Dictionary<string, GLTexture> _allocated = new(StringComparer.OrdinalIgnoreCase);
+    private int _isDisposed;
+
+    /// <summary>
+    /// Gets a value indicating whether the allocator has been disposed.
+    /// </summary>
+    public bool IsDisposed => Volatile.Read(ref _isDisposed) != 0;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RenderResourceAllocator"/> class.
+    /// </summary>
+    /// <param name="context">The GL context.</param>
+    public RenderResourceAllocator(GLContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        _context = context;
+    }
+
+    /// <summary>
+    /// Creates a texture with the specified format.
+    /// </summary>
+    /// <param name="name">The texture name.</param>
+    /// <param name="formatKey">The format key.</param>
+    /// <param name="width">The width.</param>
+    /// <param name="height">The height.</param>
+    /// <returns>A native handle to the texture.</returns>
+    public NativeHandle CreateTexture(string name, string formatKey, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(formatKey);
+        if (IsDisposed)
+            ThrowHelper.ThrowInvalidOperation("Allocator disposed");
+
+        // Present usage → default framebuffer
+        if (name.Contains("present", StringComparison.OrdinalIgnoreCase))
+            return NativeHandle.FromDefaultFramebuffer();
+
+        if (!GLFormatRegistry.TryGetFormat(formatKey, out var desc))
+            ThrowHelper.ThrowInvalidOperation($"Unsupported allocator format key: {formatKey}");
+
+        // Delete previous texture if exists
+        if (_allocated.TryGetValue(name, out var oldTex))
+        {
+            oldTex.Dispose();
+            _allocated.Remove(name);
+        }
+
+        // All standardized internal formats fit in 16 bits, so the narrowing is
+        // lossless for every format the registry can return.
+        var tex = new GLTexture(_context, GLConst.Texture2D, (TextureFormat)desc.InternalFormat, width, height);
+        _allocated[name] = tex;
+
+        return NativeHandle.FromTexture(new GpuTextureHandle(tex.Id, width, height, desc.InternalFormat));
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _isDisposed, 1) == 0)
+        {
+            foreach (var tex in _allocated.Values)
+            {
+                tex.Dispose();
+            }
+            _allocated.Clear();
+        }
+    }
+}
