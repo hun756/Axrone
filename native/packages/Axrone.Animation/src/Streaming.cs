@@ -590,11 +590,16 @@ public static class KeyframeOptimizer
             int outKeyCount = 1;
             int anchor = 0;
 
+            // Raw refs skip per-access bounds checks; all indices derive from the
+            // validated stride packing (ctor-verified), so they cannot overrun.
+            ref float timesRef = ref MemoryMarshal.GetReference(times);
+            ref float valuesRef = ref MemoryMarshal.GetReference(values);
+
             for (int i = 1; i < times.Length - 1; i++)
             {
-                float t0 = times[anchor];
-                float t1 = times[i];
-                float t2 = times[i + 1];
+                float t0 = Unsafe.Add(ref timesRef, anchor);
+                float t1 = Unsafe.Add(ref timesRef, i);
+                float t2 = Unsafe.Add(ref timesRef, i + 1);
 
                 if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
                 {
@@ -605,11 +610,14 @@ public static class KeyframeOptimizer
 
                 float factor = (t1 - t0) / (t2 - t0);
                 bool deviate = false;
+                int anchorOffset = anchor * stride;
+                int iOffset = i * stride;
+                int nextOffset = (i + 1) * stride;
                 for (int s = 0; s < stride; s++)
                 {
-                    float v0 = values[(anchor * stride) + s];
-                    float actual = values[(i * stride) + s];
-                    float v2 = values[((i + 1) * stride) + s];
+                    float v0 = Unsafe.Add(ref valuesRef, anchorOffset + s);
+                    float actual = Unsafe.Add(ref valuesRef, iOffset + s);
+                    float v2 = Unsafe.Add(ref valuesRef, nextOffset + s);
                     float predicted = v0 + (factor * (v2 - v0));
                     if (MathF.Abs(actual - predicted) > tolerance)
                     {
