@@ -193,3 +193,162 @@ public enum TextureUsage : byte
     /// <summary>Compute shader storage texture.</summary>
     Compute = 5
 }
+
+/// <summary>
+/// Buffer usage hints for GPU optimization.
+/// </summary>
+public enum BufferUsage : byte
+{
+    /// <summary>Static draw (uploaded once, drawn many times).</summary>
+    StaticDraw = 0,
+
+    /// <summary>Dynamic draw (updated frequently, drawn many times).</summary>
+    DynamicDraw = 1,
+
+    /// <summary>Stream draw (updated every frame, drawn many times).</summary>
+    StreamDraw = 2,
+
+    /// <summary>Static read (uploaded once, read back frequently).</summary>
+    StaticRead = 3,
+
+    /// <summary>Dynamic read (updated frequently, read back frequently).</summary>
+    DynamicRead = 4,
+
+    /// <summary>Stream read (updated every frame, read back frequently).</summary>
+    StreamRead = 5,
+
+    /// <summary>Static copy (uploaded once, copied frequently).</summary>
+    StaticCopy = 6,
+
+    /// <summary>Dynamic copy (updated frequently, copied frequently).</summary>
+    DynamicCopy = 7,
+
+    /// <summary>Stream copy (updated every frame, copied frequently).</summary>
+    StreamCopy = 8
+}
+
+/// <summary>
+/// Primitive topology for drawing.
+/// </summary>
+public enum PrimitiveTopology : byte
+{
+    /// <summary>Point list.</summary>
+    Points = 0,
+
+    /// <summary>Line list.</summary>
+    Lines = 1,
+
+    /// <summary>Line strip.</summary>
+    LineStrip = 2,
+
+    /// <summary>Triangle list.</summary>
+    Triangles = 3,
+
+    /// <summary>Triangle strip.</summary>
+    TriangleStrip = 4,
+
+    /// <summary>Triangle fan.</summary>
+    TriangleFan = 5,
+
+    /// <summary>Line list with adjacency.</summary>
+    LinesAdjacency = 6,
+
+    /// <summary>Line strip with adjacency.</summary>
+    LineStripAdjacency = 7,
+
+    /// <summary>Triangle list with adjacency.</summary>
+    TrianglesAdjacency = 8,
+
+    /// <summary>Triangle strip with adjacency.</summary>
+    TriangleStripAdjacency = 9,
+
+    /// <summary>Patches (for tessellation).</summary>
+    Patches = 10
+}
+
+/// <summary>
+/// Index buffer data types.
+/// </summary>
+public enum IndexType : byte
+{
+    /// <summary>Unsigned 8-bit integer (not widely supported).</summary>
+    UInt8 = 0,
+
+    /// <summary>Unsigned 16-bit integer.</summary>
+    UInt16 = 1,
+
+    /// <summary>Unsigned 32-bit integer.</summary>
+    UInt32 = 2
+}
+
+/// <summary>
+/// Blend modes for transparency.
+/// </summary>
+public enum BlendMode : byte
+{
+    /// <summary>No blending (opaque).</summary>
+    Opaque = 0,
+
+    /// <summary>Standard alpha blending.</summary>
+    AlphaBlend = 1,
+
+    /// <summary>Additive blending.</summary>
+    Additive = 2,
+
+    /// <summary>Multiplicative blending.</summary>
+    Multiply = 3,
+
+    /// <summary>Screen blending.</summary>
+    Screen = 4,
+
+    /// <summary>Overlay blending.</summary>
+    Overlay = 5
+}
+
+/// <summary>
+/// Face culling modes.
+/// </summary>
+public enum CullMode : byte
+{
+    /// <summary>No culling.</summary>
+    None = 0,
+
+    /// <summary>Cull front faces.</summary>
+    Front = 1,
+
+    /// <summary>Cull back faces.</summary>
+    Back = 2,
+
+    /// <summary>Cull front and back faces.</summary>
+    FrontAndBack = 3
+}
+
+/// <summary>
+/// Depth comparison functions.
+/// </summary>
+public enum DepthFunc : byte
+{
+    /// <summary>Never pass.</summary>
+    Never = 0,
+
+    /// <summary>Pass if less than.</summary>
+    Less = 1,
+
+    /// <summary>Pass if equal.</summary>
+    Equal = 2,
+
+    /// <summary>Pass if less than or equal.</summary>
+    LessEqual = 3,
+
+    /// <summary>Pass if greater than.</summary>
+    Greater = 4,
+
+    /// <summary>Pass if not equal.</summary>
+    NotEqual = 5,
+
+    /// <summary>Pass if greater than or equal.</summary>
+    GreaterEqual = 6,
+
+    /// <summary>Always pass.</summary>
+    Always = 7
+}
