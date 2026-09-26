@@ -23,6 +23,8 @@
     <NoWarn>$(NoWarn);CA1711</NoWarn>
     <!-- CA1031: bulk-dispose must attempt every resource; failures aggregate, never vanish -->
     <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1724: FrameGraph type in FrameGraph namespace — established render-graph naming -->
+    <NoWarn>$(NoWarn);CA1724</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
