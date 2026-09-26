@@ -112,4 +112,107 @@ public static class BufferMath
         return (value & (alignment - 1)) == 0;
     }
 
+    /// <summary>
+    /// Checks if an offset is a multiple of an element size.
+    /// </summary>
+    /// <param name="offset">The offset.</param>
+    /// <param name="elementSize">The element size.</param>
+    /// <returns>True if the offset is a multiple; otherwise, false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsMultipleOf(int offset, int elementSize)
+    {
+        if (elementSize <= 0)
+            ThrowHelper.ThrowInvalidArgument("Element size must be positive");
+
+        return (offset % elementSize) == 0;
+    }
+
+    /// <summary>
+    /// Validates that an offset is a multiple of an element size, throwing if not.
+    /// </summary>
+    /// <param name="offset">The offset.</param>
+    /// <param name="elementSize">The element size.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateAlignment(int offset, int elementSize)
+    {
+        if (!IsMultipleOf(offset, elementSize))
+            ThrowHelper.ThrowAlignmentViolation(offset, elementSize);
+    }
+
+    /// <summary>
+    /// Calculates the number of elements that fit in a byte range.
+    /// </summary>
+    /// <param name="byteLength">The byte length.</param>
+    /// <param name="elementSize">The element size in bytes.</param>
+    /// <returns>The number of elements (floor division).</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CalculateElementCount(int byteLength, int elementSize)
+    {
+        if (elementSize <= 0)
+            ThrowHelper.ThrowInvalidArgument("Element size must be positive");
+
+        return byteLength / elementSize;
+    }
+
+    /// <summary>
+    /// Calculates the byte length for a given number of elements.
+    /// </summary>
+    /// <param name="elementCount">The number of elements.</param>
+    /// <param name="elementSize">The element size in bytes.</param>
+    /// <returns>The byte length.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CalculateByteLength(int elementCount, int elementSize)
+    {
+        if (elementSize <= 0)
+            ThrowHelper.ThrowInvalidArgument("Element size must be positive");
+
+        return elementCount * elementSize;
+    }
+
+    /// <summary>
+    /// Validates that a range [offset, offset + length) is within bounds [0, totalSize).
+    /// </summary>
+    /// <param name="offset">The range start offset.</param>
+    /// <param name="length">The range length.</param>
+    /// <param name="totalSize">The total size.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ValidateRange(int offset, int length, int totalSize)
+    {
+        if (offset < 0)
+            ThrowHelper.ThrowOffsetNegative();
+
+        if (offset + length > totalSize)
+            ThrowHelper.ThrowBufferBoundsExceeded();
+    }
+
+    /// <summary>
+    /// Calculates the next power of 2 greater than or equal to the value.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The next power of 2.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int NextPowerOf2(int value)
+    {
+        if (value <= 0)
+            return 1;
+
+        value--;
+        value |= value >> 1;
+        value |= value >> 2;
+        value |= value >> 4;
+        value |= value >> 8;
+        value |= value >> 16;
+        return value + 1;
+    }
+
+    /// <summary>
+    /// Checks if a value is a power of 2.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>True if the value is a power of 2; otherwise, false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsPowerOf2(int value)
+    {
+        return value > 0 && (value & (value - 1)) == 0;
+    }
 }
