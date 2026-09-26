@@ -203,11 +203,12 @@ public sealed class StateMachineInstance
         }
     }
 
-    /// <summary>Advances time, starts due transitions, and drives the active blend.</summary>
-    public void Update(float deltaTime, ParameterStore parameters, ICollection<ClipEvent> outEvents, float layerWeight)
+    /// <summary>Advances time into a zero-allocation sink.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void Update<TSink>(float deltaTime, ParameterStore parameters, ref TSink outEvents, float layerWeight = 1.0f)
+        where TSink : struct, IClipEventSink
     {
         ArgumentNullException.ThrowIfNull(parameters);
-        ArgumentNullException.ThrowIfNull(outEvents);
         EnsureBound(parameters);
 
         AnimationState current = _states[CurrentStateIndex];
@@ -236,7 +237,15 @@ public sealed class StateMachineInstance
             }
         }
 
-        MotionDispatcher.CollectEvents(current.RootMotion, PreviousNormalizedTime, StateNormalizedTime, layerWeight, outEvents);
+        MotionDispatcher.CollectEvents(current.RootMotion, PreviousNormalizedTime, StateNormalizedTime, layerWeight, ref outEvents);
+    }
+
+    /// <summary>Advances time, starts due transitions, and drives the active blend.</summary>
+    public void Update(float deltaTime, ParameterStore parameters, ICollection<ClipEvent> outEvents, float layerWeight)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        Update(deltaTime, parameters, ref adapter, layerWeight);
     }
 
     private void AdvanceTransition(float deltaTime, ParameterStore parameters, AnimationState current, float stateDuration)
