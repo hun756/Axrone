@@ -11,3 +11,7 @@ global using System.Threading;
 global using Silk.NET.OpenGL;
 global using Axrone.Render.Core;
 global using Axrone.Render.Core.Abstractions;
+global using Axrone.Render.OpenGL.Context;
+global using Axrone.Render.OpenGL.Native;
+global using Axrone.Render.OpenGL.Resources;
+global using Axrone.Render.OpenGL.Texture;
