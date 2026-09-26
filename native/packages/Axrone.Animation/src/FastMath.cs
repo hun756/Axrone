@@ -144,6 +144,24 @@ public static class FastMath
     }
 
     /// <summary>
+    /// Zero-safe general inverse: unit inputs match <see cref="Invert"/> bit-for-bit
+    /// (multiplication by exactly 1.0), while degenerate inputs yield identity
+    /// instead of NaN. For authoring data that may not be normalized.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quaternion InvertSafe(in Quaternion q)
+    {
+        float lenSq = (q.X * q.X) + (q.Y * q.Y) + (q.Z * q.Z) + (q.W * q.W);
+        if (lenSq < AnimationConstants.QuaternionDegenerateLengthSq)
+        {
+            return Quaternion.Identity;
+        }
+
+        float inv = 1.0f / lenSq;
+        return new Quaternion(-q.X * inv, -q.Y * inv, -q.Z * inv, q.W * inv);
+    }
+
+    /// <summary>
     /// Concatenates a local transform onto its parent world transform: the single
     /// home for hierarchy composition (forward kinematics, subtree refresh, pose
     /// evaluation all route here, so the math cannot drift between call sites).

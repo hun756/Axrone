@@ -101,6 +101,25 @@ public class RetargetTests
     }
 
     [Fact]
+    public void NonUnitRestRotation_BuildsWithoutNaN()
+    {
+        var source = new Rig(new RigId("src"), [
+            new BoneInfo { Name = "root", ParentIndex = -1 },
+            new BoneInfo { Name = "arm", ParentIndex = 0, RestRotation = new Quaternion(0, 0, 0, 2.0f) },
+        ]);
+        var profile = new RetargetProfile(source, ScaledTargetRig());
+
+        var sourceFrame = new AnimationFrame(2, NoCurves());
+        var targetFrame = new AnimationFrame(2, NoCurves());
+        profile.RetargetFrame(sourceFrame, targetFrame);
+
+        // Zero source rotation must sanitize to identity, never NaN.
+        Quaternion output = targetFrame.ReadRotations()[1];
+        output.Should().Be(Quaternion.Identity);
+        FastMath.InvertSafe(new Quaternion(0, 0, 0, 0)).Should().Be(Quaternion.Identity);
+    }
+
+    [Fact]
     public void InvalidModes_ThrowAtConstruction()
     {
         Action badTranslation = () =>

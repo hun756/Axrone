@@ -140,7 +140,7 @@ public sealed class RetargetProfile
             int tRot = (targetRig.BoneCount * 3) + (t * 4);
             Quaternion sourceRestR = new(sourceRest[sRot], sourceRest[sRot + 1], sourceRest[sRot + 2], sourceRest[sRot + 3]);
             Quaternion targetRestR = new(targetRest[tRot], targetRest[tRot + 1], targetRest[tRot + 2], targetRest[tRot + 3]);
-            _rotationOffsets[s] = Quaternion.Normalize(targetRestR * Quaternion.Inverse(sourceRestR));
+            _rotationOffsets[s] = Quaternion.Normalize(targetRestR * FastMath.InvertSafe(sourceRestR));
 
             float sourceLen = new Vector3(sourceRest[s * 3], sourceRest[(s * 3) + 1], sourceRest[(s * 3) + 2]).Length();
             float targetLen = new Vector3(targetRest[t * 3], targetRest[(t * 3) + 1], targetRest[(t * 3) + 2]).Length();
@@ -296,7 +296,7 @@ public sealed class RetargetProfile
             int s = binding.SourceIndex;
             int t = binding.TargetIndex;
             targetT[t] = sourceT[s] * binding.LengthRatio;
-            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetR[t] = FastMath.Normalize(binding.RotationOffset * sourceR[s]);
             targetS[t] = sourceS[s];
         }
     }
@@ -317,7 +317,7 @@ public sealed class RetargetProfile
             int s = binding.SourceIndex;
             int t = binding.TargetIndex;
             targetT[t] = sourceT[s];
-            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetR[t] = FastMath.Normalize(binding.RotationOffset * sourceR[s]);
             targetS[t] = sourceS[s];
         }
     }
@@ -337,7 +337,7 @@ public sealed class RetargetProfile
             ref readonly RetargetBinding binding = ref bindings[i];
             int s = binding.SourceIndex;
             int t = binding.TargetIndex;
-            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetR[t] = FastMath.Normalize(binding.RotationOffset * sourceR[s]);
             targetS[t] = sourceS[s];
         }
     }
