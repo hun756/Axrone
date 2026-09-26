@@ -94,6 +94,7 @@ public sealed class StateMachineInstance
         public int TargetStateIndex;
         public float Progress;
         public float DurationSec;
+        public float TargetPreviousNormalizedTime;
         public float TargetNormalizedTime;
         public bool HasFixedDuration;
         public bool CanInterrupt;
@@ -176,6 +177,7 @@ public sealed class StateMachineInstance
             TargetStateIndex = targetStateIndex,
             Progress = 0.0f,
             DurationSec = duration,
+            TargetPreviousNormalizedTime = offset,
             TargetNormalizedTime = offset,
             HasFixedDuration = true,
             CanInterrupt = true,
@@ -260,6 +262,7 @@ public sealed class StateMachineInstance
                     TargetStateIndex = next.TargetStateIndex,
                     Progress = 0.0f,
                     DurationSec = next.HasFixedDuration ? next.Duration : next.Duration * stateDuration,
+                    TargetPreviousNormalizedTime = next.Offset,
                     TargetNormalizedTime = next.Offset,
                     HasFixedDuration = next.HasFixedDuration,
                     CanInterrupt = next.CanInterrupt,
@@ -287,6 +290,7 @@ public sealed class StateMachineInstance
         float targetSpeed = MathF.Abs(target.Speed) > AnimationConstants.SoaEpsilon ? target.Speed : 1.0f;
         float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, AnimationConstants.MinStateDuration);
 
+        active.TargetPreviousNormalizedTime = active.TargetNormalizedTime;
         active.TargetNormalizedTime += deltaTime / targetDuration;
         active.Progress += active.DurationSec > AnimationConstants.SoaEpsilon ? deltaTime / active.DurationSec : 1.0f;
 
@@ -303,6 +307,7 @@ public sealed class StateMachineInstance
                 active.TargetStateIndex = interrupt.TargetStateIndex;
                 active.Progress = 0.0f;
                 active.DurationSec = interrupt.HasFixedDuration ? interrupt.Duration : interrupt.Duration * stateDuration;
+                active.TargetPreviousNormalizedTime = interrupt.Offset;
                 active.TargetNormalizedTime = interrupt.Offset;
                 active.HasFixedDuration = interrupt.HasFixedDuration;
                 active.CanInterrupt = interrupt.CanInterrupt;
@@ -431,10 +436,27 @@ public sealed class StateMachineInstance
         arena.Free();
     }
 
-    /// <summary>Root-joint delta for the current state over the last update.</summary>
+    /// <summary>
+    /// Root-joint delta over the last update. Mid-blend this mixes the source and
+    /// target deltas by transition progress — matching the rendered blend instead
+    /// of snapping to one side.
+    /// </summary>
     public void ExtractRootDelta(Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
     {
         ArgumentNullException.ThrowIfNull(rig);
-        MotionDispatcher.ComputeRootDelta(_states[CurrentStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out deltaPos, out deltaRot);
+
+        ActiveTransitionData active = _activeTransition;
+        if (!active.IsActive)
+        {
+            MotionDispatcher.ComputeRootDelta(_states[CurrentStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out deltaPos, out deltaRot);
+            return;
+        }
+
+        MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out Vector3 sourcePos, out Quaternion sourceRot);
+        MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, out Vector3 targetPos, out Quaternion targetRot);
+
+        float weight = FastMath.Clamp01(active.Progress);
+        deltaPos = Vector3.Lerp(sourcePos, targetPos, weight);
+        deltaRot = FastMath.Slerp(sourceRot, targetRot, weight);
     }
 }
