@@ -24,6 +24,13 @@ public enum RetargetRotationMode
 }
 
 /// <summary>
+/// One dense retarget binding: source/target slots plus precomputed rest-relative
+/// correction. The profile stores only mapped bones contiguously, so application
+/// iterates bindings with no per-bone skip branches.
+/// </summary>
+public readonly record struct RetargetBinding(int SourceIndex, int TargetIndex, float LengthRatio, Quaternion RotationOffset);
+
+/// <summary>
 /// Precomputed cross-rig mapping: name (or explicit) bone pairs with rotation
 /// offsets and rest-length ratios resolved once at construction.
 /// </summary>
@@ -32,6 +39,7 @@ public sealed class RetargetProfile
     private readonly int[] _sourceToTargetMap;
     private readonly Quaternion[] _rotationOffsets;
     private readonly float[] _lengthRatios;
+    private readonly RetargetBinding[] _bindings;
 
     /// <summary>Source rig.</summary>
     public Rig SourceRig { get; }
@@ -110,7 +118,21 @@ public sealed class RetargetProfile
         {
             AnimationThrowHelper.ThrowRetargeting(AnimationErrorCode.RetargetingNoMapping, "Zero bone mappings resolved.");
         }
+
+        _bindings = new RetargetBinding[mappedCount];
+        int bindingIndex = 0;
+        for (int s = 0; s < sourceRig.BoneCount; s++)
+        {
+            int t = _sourceToTargetMap[s];
+            if (t != -1)
+            {
+                _bindings[bindingIndex++] = new RetargetBinding(s, t, _lengthRatios[s], _rotationOffsets[s]);
+            }
+        }
     }
+
+    /// <summary>Mapped-only bindings in source order.</summary>
+    public ReadOnlySpan<RetargetBinding> Bindings => _bindings;
 
     /// <summary>Retargets a source frame onto a target frame, copying curves through.</summary>
     public void RetargetFrame(AnimationFrame sourceFrame, AnimationFrame targetFrame)
@@ -122,49 +144,188 @@ public sealed class RetargetProfile
             AnimationThrowHelper.ThrowRetargeting(AnimationErrorCode.RetargetingIncompatibleLayout, "Retarget frames do not match their rigs.");
         }
 
-        ReadOnlySpan<Vector3> sourceT = sourceFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> sourceR = sourceFrame.ReadRotations();
-        ReadOnlySpan<Vector3> sourceS = sourceFrame.ReadScales();
+        DispatchCore(
+            _bindings,
+            TranslationMode,
+            RotationMode,
+            sourceFrame.ReadTranslations(),
+            sourceFrame.ReadRotations(),
+            sourceFrame.ReadScales(),
+            sourceFrame.Curves.AsSpan(),
+            targetFrame.GetTranslations(),
+            targetFrame.GetRotations(),
+            targetFrame.GetScales(),
+            targetFrame.Curves.AsSpan());
+    }
 
-        Span<Vector3> targetT = targetFrame.GetTranslations();
-        Span<Quaternion> targetR = targetFrame.GetRotations();
-        Span<Vector3> targetS = targetFrame.GetScales();
-
-        for (int s = 0; s < SourceRig.BoneCount; s++)
+    /// <summary>
+    /// Mode-pair dispatch: policies hoisted out of the loop into six branch-free
+    /// executors. Unknown combinations fail loudly (modes are init-validated).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static void DispatchCore(
+        ReadOnlySpan<RetargetBinding> bindings,
+        RetargetTranslationMode translationMode,
+        RetargetRotationMode rotationMode,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        ReadOnlySpan<float> sourceCurves,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS,
+        Span<float> targetCurves)
+    {
+        switch (translationMode, rotationMode)
         {
-            int t = _sourceToTargetMap[s];
-            if (t == -1)
-            {
-                continue;
-            }
-
-            if (TranslationMode == RetargetTranslationMode.Absolute)
-            {
-                targetT[t] = sourceT[s];
-            }
-            else if (TranslationMode == RetargetTranslationMode.Scaled)
-            {
-                targetT[t] = sourceT[s] * _lengthRatios[s];
-            }
-
-            if (RotationMode == RetargetRotationMode.Copy)
-            {
-                targetR[t] = sourceR[s];
-            }
-            else if (RotationMode == RetargetRotationMode.Offset)
-            {
-                targetR[t] = Quaternion.Normalize(_rotationOffsets[s] * sourceR[s]);
-            }
-
-            targetS[t] = sourceS[s];
+            case (RetargetTranslationMode.Scaled, RetargetRotationMode.Offset):
+                ExecuteScaledOffset(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            case (RetargetTranslationMode.Absolute, RetargetRotationMode.Offset):
+                ExecuteAbsoluteOffset(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            case (RetargetTranslationMode.None, RetargetRotationMode.Offset):
+                ExecuteNoneOffset(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            case (RetargetTranslationMode.Scaled, RetargetRotationMode.Copy):
+                ExecuteScaledCopy(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            case (RetargetTranslationMode.Absolute, RetargetRotationMode.Copy):
+                ExecuteAbsoluteCopy(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            case (RetargetTranslationMode.None, RetargetRotationMode.Copy):
+                ExecuteNoneCopy(bindings, sourceT, sourceR, sourceS, targetT, targetR, targetS);
+                break;
+            default:
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Unknown retarget mode pair '{translationMode}/{rotationMode}'.");
+                break;
         }
 
-        Span<float> targetCurves = targetFrame.Curves.AsSpan();
-        ReadOnlySpan<float> sourceCurves = sourceFrame.Curves.AsSpan();
         int curveCount = Math.Min(targetCurves.Length, sourceCurves.Length);
-        for (int i = 0; i < curveCount; i++)
+        sourceCurves.Slice(0, curveCount).CopyTo(targetCurves.Slice(0, curveCount));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteScaledOffset(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
         {
-            targetCurves[i] = sourceCurves[i];
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetT[t] = sourceT[s] * binding.LengthRatio;
+            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetS[t] = sourceS[s];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteAbsoluteOffset(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetT[t] = sourceT[s];
+            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetS[t] = sourceS[s];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteNoneOffset(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetR[t] = Quaternion.Normalize(binding.RotationOffset * sourceR[s]);
+            targetS[t] = sourceS[s];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteScaledCopy(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetT[t] = sourceT[s] * binding.LengthRatio;
+            targetR[t] = sourceR[s];
+            targetS[t] = sourceS[s];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteAbsoluteCopy(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetT[t] = sourceT[s];
+            targetR[t] = sourceR[s];
+            targetS[t] = sourceS[s];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteNoneCopy(
+        ReadOnlySpan<RetargetBinding> bindings,
+        ReadOnlySpan<Vector3> sourceT,
+        ReadOnlySpan<Quaternion> sourceR,
+        ReadOnlySpan<Vector3> sourceS,
+        Span<Vector3> targetT,
+        Span<Quaternion> targetR,
+        Span<Vector3> targetS)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            ref readonly RetargetBinding binding = ref bindings[i];
+            int s = binding.SourceIndex;
+            int t = binding.TargetIndex;
+            targetR[t] = sourceR[s];
+            targetS[t] = sourceS[s];
         }
     }
 }

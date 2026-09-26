@@ -29,6 +29,53 @@ public class RetargetTests
     }
 
     [Fact]
+    public void Bindings_ContainMappedBonesOnly()
+    {
+        var full = new RetargetProfile(SourceRig(), ScaledTargetRig());
+        full.Bindings.Length.Should().Be(2);
+
+        var partial = new RetargetProfile(SourceRig(), ScaledTargetRig(), [("arm", "arm")]);
+        partial.Bindings.Length.Should().Be(1);
+        partial.Bindings[0].SourceIndex.Should().Be(1);
+        partial.Bindings[0].TargetIndex.Should().Be(1);
+        partial.Bindings[0].LengthRatio.Should().BeApproximately(2.0f, 1e-6f);
+    }
+
+    [Fact]
+    public void AllModePairs_ExecuteWithoutThrowing()
+    {
+        Rig source = SourceRig();
+        Rig target = ScaledTargetRig();
+        var translationModes = new RetargetTranslationMode[]
+        {
+            RetargetTranslationMode.None,
+            RetargetTranslationMode.Absolute,
+            RetargetTranslationMode.Scaled,
+        };
+        var rotationModes = new RetargetRotationMode[]
+        {
+            RetargetRotationMode.Copy,
+            RetargetRotationMode.Offset,
+        };
+
+        foreach (RetargetTranslationMode translation in translationModes)
+        {
+            foreach (RetargetRotationMode rotation in rotationModes)
+            {
+                var profile = new RetargetProfile(source, target)
+                {
+                    TranslationMode = translation,
+                    RotationMode = rotation,
+                };
+                var sourceFrame = new AnimationFrame(2, NoCurves());
+                var targetFrame = new AnimationFrame(2, NoCurves());
+                Action retarget = () => profile.RetargetFrame(sourceFrame, targetFrame);
+                retarget.Should().NotThrow();
+            }
+        }
+    }
+
+    [Fact]
     public void ZeroMappings_Throw()
     {
         var other = new Rig(new RigId("other"), [
