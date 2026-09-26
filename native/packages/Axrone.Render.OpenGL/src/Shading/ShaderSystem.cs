@@ -213,3 +213,164 @@ public sealed class GLProgram : IGLResource, IDisposable
     /// <inheritdoc/>
     public override string ToString() => $"GLProgram: Id={Id}";
 }
+
+/// <summary>
+/// High-performance uniform cache using open-addressed hash table.
+/// Eliminates redundant uniform uploads by tracking last-set values.
+/// </summary>
+public sealed class UniformCache
+{
+    private const int Capacity = 8192;
+    private const int Mask = Capacity - 1;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 4)]
+    private struct Entry
+    {
+        public uint ProgramId;
+        public int Location;
+        public uint ValueHash;
+    }
+
+    private readonly Entry[] _entries = new Entry[Capacity];
+
+    /// <summary>
+    /// Checks if a uniform value has changed and updates the cache.
+    /// </summary>
+    /// <param name="programId">The program ID.</param>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="valueHash">The hash of the value.</param>
+    /// <returns>True if the value changed (upload needed); false if unchanged.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CheckAndSet(uint programId, int location, uint valueHash)
+    {
+        int index = (int)((((uint)location * 397) ^ programId) & Mask);
+        ref var entry = ref _entries[index];
+
+        if (entry.ProgramId == programId && entry.Location == location && entry.ValueHash == valueHash)
+            return false;
+
+        entry.ProgramId = programId;
+        entry.Location = location;
+        entry.ValueHash = valueHash;
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the cache.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Clear() => Array.Clear(_entries);
+}
+
+/// <summary>
+/// Shader instance with uniform setting and caching.
+/// </summary>
+public sealed class ShaderInstance
+{
+    private readonly GLContext _context;
+    private readonly UniformCache _cache;
+
+    /// <summary>
+    /// Gets the program.
+    /// </summary>
+    public GLProgram Program { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShaderInstance"/> class.
+    /// </summary>
+    /// <param name="context">The GL context.</param>
+    /// <param name="program">The program.</param>
+    /// <param name="cache">The uniform cache.</param>
+    public ShaderInstance(GLContext context, GLProgram program, UniformCache cache)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(cache);
+
+        _context = context;
+        Program = program;
+        _cache = cache;
+    }
+
+    /// <summary>
+    /// Sets a float uniform.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="value">The value.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetFloat(int location, float value)
+    {
+        if (location < 0)
+            return;
+
+        uint hash = (uint)BitConverter.SingleToInt32Bits(value);
+        if (_cache.CheckAndSet(Program.Id, location, hash))
+        {
+            _context.GL.Uniform1(location, value);
+        }
+    }
+
+    /// <summary>
+    /// Sets an integer uniform.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="value">The value.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetInt(int location, int value)
+    {
+        if (location < 0)
+            return;
+
+        if (_cache.CheckAndSet(Program.Id, location, (uint)value))
+        {
+            _context.GL.Uniform1(location, value);
+        }
+    }
+
+    /// <summary>
+    /// Sets a mat4 uniform.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="matrix">The matrix.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public unsafe void SetMatrix4x4(int location, in System.Numerics.Matrix4x4 matrix)
+    {
+        if (location < 0)
+            return;
+
+        fixed (System.Numerics.Matrix4x4* ptr = &matrix)
+        {
+            float* f = (float*)ptr;
+
+            // Compute FNV-1a hash
+            uint hash = 2166136261u;
+            for (int i = 0; i < 16; i++)
+            {
+                hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(f[i])) * 16777619u;
+            }
+
+            if (_cache.CheckAndSet(Program.Id, location, hash))
+            {
+                _context.GL.UniformMatrix4(location, 1, false, f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Binds the program.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Bind()
+    {
+        _context.State.UseProgram(Program.Id);
+    }
+
+    /// <summary>
+    /// Unbinds the program.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Unbind()
+    {
+        _context.State.UseProgram(0);
+    }
+}
