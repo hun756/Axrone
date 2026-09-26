@@ -1,7 +1,6 @@
 import { assertNever } from './errors';
 import { isFiniteNumber, spreadIfFinite } from './internal';
 import { tuple2 } from '@axrone/utility';
-import type { IVec2Like } from '@axrone/numeric';
 import type { AnimationBlendTreeDefinition, AnimationMotionDefinition } from './types';
 
 export interface AnimationBlendGraphDiagnostic {
@@ -152,7 +151,7 @@ export class AnimationBlend1DGraphBuilder implements AnimationMotionBuilder {
 }
 
 export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
-    private readonly _children: (IVec2Like & { motion: AnimationMotionInput })[] = [];
+    private readonly _children: { x: number; y: number; motion: AnimationMotionInput }[] = [];
 
     constructor(
         private readonly _parameterX: string,
