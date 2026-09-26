@@ -1,8 +1,9 @@
 import { Vec2 } from '@axrone/numeric';
+import type { IVec2Like } from '@axrone/numeric';
 import { Component, script } from '@axrone/ecs-runtime';
-import type { Render2DSizeLike, Render2DVec2Like } from '@axrone/render-2d';
+import type { Render2DSizeLike } from '@axrone/render-2d';
 
-export type SpriteMaskVec2Input = Vec2 | Render2DVec2Like | readonly [number, number];
+export type SpriteMaskVec2Input = Vec2 | Readonly<IVec2Like> | readonly [number, number];
 export type SpriteMaskSizeInput = Vec2 | Render2DSizeLike | readonly [number, number];
 export type SpriteMaskShape = 'rect' | 'circle' | 'rounded-rect';
 

@@ -1,16 +1,15 @@
 import type { Asset2DBorderLike, SpriteAtlasFrame } from '@axrone/asset-2d';
 import { Component, script } from '@axrone/ecs-runtime';
 import { Color, Rect, Vec2 } from '@axrone/numeric';
-import type { IColorLike } from '@axrone/numeric';
+import type { IColorLike, IVec2Like } from '@axrone/numeric';
 import type {
     Render2DRectLike,
     Render2DSizeLike,
-    Render2DVec2Like,
 } from '@axrone/render-2d';
 
 export type SpriteRendererVec2Input =
     | Vec2
-    | Render2DVec2Like
+    | Readonly<IVec2Like>
     | readonly [number, number];
 export type SpriteRendererSizeInput =
     | Vec2
