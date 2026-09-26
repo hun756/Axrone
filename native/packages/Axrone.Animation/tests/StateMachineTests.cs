@@ -120,6 +120,22 @@ public class StateMachineTests
     }
 
     [Fact]
+    public void InvalidAuthoring_ThrowsCodedValidation()
+    {
+        Action nanSpeed = () => { _ = new AnimationState(new StateId("x"), new ClipMotionNode(SlideClip(0.0f))) { Speed = float.NaN }; };
+        nanSpeed.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action negativeDuration = () => { _ = new StateTransition(1, -0.5f); };
+        negativeDuration.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action nanOffset = () => { _ = new StateTransition(1, 0.1f) { Offset = float.NaN }; };
+        nanOffset.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+    }
+
+    [Fact]
     public void ExitTime_GatesTransition()
     {
         var parameters = new ParameterStore(Params());

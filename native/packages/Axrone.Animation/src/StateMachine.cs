@@ -9,10 +9,34 @@ public sealed class StateTransition
     public int TargetStateIndex { get; init; }
 
     /// <summary>Blend duration (seconds when fixed, normalized otherwise).</summary>
-    public float Duration { get; init; }
+    public float Duration
+    {
+        get;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value))
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Transition duration {value} is negative or NaN.");
+            }
+
+            field = value;
+        }
+    }
 
     /// <summary>Destination start offset in normalized time.</summary>
-    public float Offset { get; init; }
+    public float Offset
+    {
+        get;
+        init
+        {
+            if (float.IsNaN(value))
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Transition offset is NaN.");
+            }
+
+            field = value;
+        }
+    }
 
     /// <summary>Normalized exit time gate, when set.</summary>
     public float? ExitTime { get; init; }
@@ -33,11 +57,11 @@ public sealed class StateTransition
     public ReadOnlySpan<ParameterCondition> Conditions => _conditions;
 
     /// <summary>Creates a transition.</summary>
-    public StateTransition(int targetStateIndex, float duration, ParameterCondition[]? conditions = null)
+    public StateTransition(int targetStateIndex, float duration, params ReadOnlySpan<ParameterCondition> conditions)
     {
         TargetStateIndex = targetStateIndex;
         Duration = duration;
-        _conditions = conditions ?? Array.Empty<ParameterCondition>();
+        _conditions = conditions.ToArray();
     }
 
     /// <summary>Resolves guard conditions against a store (bind time, idempotent).</summary>
@@ -66,18 +90,30 @@ public sealed class AnimationState
     public MotionNode RootMotion { get; }
 
     /// <summary>Playback speed.</summary>
-    public float Speed { get; init; } = 1.0f;
+    public float Speed
+    {
+        get;
+        init
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"State speed {value} is NaN or infinite.");
+            }
+
+            field = value;
+        }
+    } = 1.0f;
 
     /// <summary>Outgoing transitions.</summary>
     public ReadOnlySpan<StateTransition> Transitions => _transitions;
 
     /// <summary>Creates a state.</summary>
-    public AnimationState(StateId id, MotionNode motion, StateTransition[]? transitions = null)
+    public AnimationState(StateId id, MotionNode motion, params ReadOnlySpan<StateTransition> transitions)
     {
         ArgumentNullException.ThrowIfNull(motion);
         Id = id;
         RootMotion = motion;
-        _transitions = transitions ?? Array.Empty<StateTransition>();
+        _transitions = transitions.ToArray();
     }
 }
 
