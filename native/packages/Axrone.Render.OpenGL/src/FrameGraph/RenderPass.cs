@@ -38,6 +38,15 @@ public enum FramePassKind
     /// <summary>Framebuffer blit (copy) pass.</summary>
     Blit,
 
+    /// <summary>Depth-only pre-pass that primes the depth buffer for early-Z.</summary>
+    DepthPrepass,
+
+    /// <summary>Skybox/background rendering pass.</summary>
+    Skybox,
+
+    /// <summary>Presentation pass (blit to default framebuffer).</summary>
+    Present,
+
     /// <summary>User-defined custom pass.</summary>
     Custom,
 }
