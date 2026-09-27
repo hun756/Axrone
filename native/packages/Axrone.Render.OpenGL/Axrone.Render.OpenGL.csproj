@@ -35,6 +35,7 @@
     <PackageReference Include="Silk.NET.OpenGL" />
     <PackageReference Include="Silk.NET.Core" />
     <ProjectReference Include="../Axrone.Render.Core/Axrone.Render.Core.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
   </ItemGroup>
 
   <ItemGroup>

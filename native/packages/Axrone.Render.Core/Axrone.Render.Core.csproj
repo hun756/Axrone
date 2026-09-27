@@ -29,6 +29,10 @@
     <InternalsVisibleTo Include="Axrone.Render.OpenGL.Tests" />
   </ItemGroup>
 
+  <ItemGroup Label="Dependencies">
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />
