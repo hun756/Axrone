@@ -106,6 +106,22 @@ public class PostEffectExecutorTests
     }
 
     [Fact]
+    public void Phases_FollowHdrVersusDisplaySplit()
+    {
+        using var context = CreateContext(out _);
+        var program = CreateProgram(context);
+
+        new SsaoPassExecutor("a", program, "d", "n", "o").Phase.Should().Be(PostProcessPhase.BeforeTonemap);
+        new DofPassExecutor("b", program, "i", "d", "o").Phase.Should().Be(PostProcessPhase.BeforeTonemap);
+        new FilmGrainPassExecutor("c", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        new VignettePassExecutor("d", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        new ChromaticAberrationPassExecutor("e", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        new ColorGradingPassExecutor("f", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
+
+        program.Dispose();
+    }
+
+    [Fact]
     public void ColorGrading_DefaultsAreNeutral()
     {
         using var context = CreateContext(out _);

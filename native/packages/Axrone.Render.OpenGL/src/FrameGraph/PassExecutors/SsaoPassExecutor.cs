@@ -183,6 +183,11 @@ public sealed class SsaoPassExecutor : RenderPass
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Gets or sets the post-process phase. HDR-space effects run before tone mapping.
+    /// </summary>
+    public PostProcessPhase Phase { get; set; } = PostProcessPhase.BeforeTonemap;
+
     public override void Validate()
     {
         if (_program.IsDisposed)

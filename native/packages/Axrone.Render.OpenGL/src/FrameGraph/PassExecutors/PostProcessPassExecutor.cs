@@ -55,6 +55,11 @@ public sealed class PostProcessPassExecutor : RenderPass
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Gets or sets the post-process phase. Display-referred effects run after tone mapping.
+    /// </summary>
+    public PostProcessPhase Phase { get; set; } = PostProcessPhase.AfterTonemap;
+
     public override void Validate()
     {
         if (_postProcessProgram.IsDisposed)
