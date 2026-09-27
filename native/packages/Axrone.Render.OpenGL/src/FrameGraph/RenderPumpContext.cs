@@ -8,7 +8,7 @@ namespace Axrone.Render.OpenGL.FrameGraph;
 public readonly ref struct RenderPumpContext
 {
     /// <summary>The GL context owning the registry and state cache.</summary>
-    public readonly Context.GLContext Context;
+    public Context.GLContext Context { get; }
 
     /// <summary>
     /// Creates a pump context.
