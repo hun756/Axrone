@@ -198,36 +198,44 @@ public sealed class GLContextLifecycle
 
 /// <summary>
 /// Manages GPU resource registration, disposal, and context-loss recovery.
-/// Resources are sorted by <see cref="IGLResource.RebuildPriority"/> on rebuild.
+/// Table-driven: a generational <see cref="DescriptorTable{TDescriptor}"/> owns the
+/// lifecycle identity (ABA-safe slot reuse) while the managed <see cref="IGLResource"/>
+/// instances live in a slot-indexed sidecar. Resources are rebuilt in
+/// <see cref="IGLResource.RebuildPriority"/> order and disposed in reverse
+/// registration order. The hot path never touches the registry; all cold-path
+/// mutations serialize on a lock.
 /// </summary>
-public sealed class GLResourceRegistry
+public sealed class GLResourceRegistry : IDisposable
 {
+    private const uint DefaultCapacity = 1024;
+
     private readonly GLContext _context;
-    private readonly List<IGLResource> _resources = new(256);
+    private readonly DescriptorTable<GLResourceNode> _table;
+    private readonly IGLResource?[] _sidecar;
     private readonly Lock _syncRoot = new();
     private int _sequenceCounter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GLResourceRegistry"/> class.
     /// </summary>
-    internal GLResourceRegistry(GLContext context) => _context = context;
-
-    /// <summary>
-    /// Gets the count of registered resources.
-    /// </summary>
-    public int Count
+    internal GLResourceRegistry(GLContext context)
     {
-        get
-        {
-            lock (_syncRoot) return _resources.Count;
-        }
+        _context = context;
+        _table = new DescriptorTable<GLResourceNode>(new DescriptorTableOptions { Capacity = DefaultCapacity });
+        _sidecar = new IGLResource?[_table.Capacity];
     }
 
     /// <summary>
-    /// Registers a resource for lifecycle management.
+    /// Gets the count of registered resources. Lock-free read of the table count.
+    /// </summary>
+    public int Count => (int)_table.ActiveCount;
+
+    /// <summary>
+    /// Registers a resource for lifecycle management and returns its generational handle.
     /// </summary>
     /// <param name="resource">The resource to register.</param>
-    public void Register(IGLResource resource)
+    /// <returns>The generational handle naming this registration.</returns>
+    public DescriptorHandle<GLResourceNode> Register(IGLResource resource)
     {
         ArgumentNullException.ThrowIfNull(resource);
 
@@ -236,13 +244,23 @@ public sealed class GLResourceRegistry
             if (_context.IsDisposed)
                 ThrowHelper.ThrowContextDisposed();
 
-            resource.RegistrySequence = Interlocked.Increment(ref _sequenceCounter);
-            _resources.Add(resource);
+            DescriptorHandle<GLResourceNode> existing = resource.RegistryHandle;
+            if (existing.IsValid && _table.TryGet(in existing, out _))
+                ThrowHelper.ThrowInvalidOperation("Resource is already registered");
+
+            var node = new GLResourceNode(resource.RebuildPriority, Interlocked.Increment(ref _sequenceCounter));
+            if (!_table.TryAllocate(in node, out DescriptorHandle<GLResourceNode> handle))
+                ThrowHelper.ThrowInvalidOperation($"Resource registry exhausted (capacity {_table.Capacity})");
+
+            _table.TrySetStatus(in handle, DescriptorStatus.Active);
+            _sidecar[handle.SlotIndex] = resource;
+            resource.RegistryHandle = handle;
+            return handle;
         }
     }
 
     /// <summary>
-    /// Unregisters a resource from lifecycle management.
+    /// Unregisters a resource from lifecycle management. Stale handles are a no-op.
     /// </summary>
     /// <param name="resource">The resource to unregister.</param>
     public void Unregister(IGLResource resource)
@@ -251,7 +269,42 @@ public sealed class GLResourceRegistry
 
         lock (_syncRoot)
         {
-            _resources.Remove(resource);
+            DescriptorHandle<GLResourceNode> handle = resource.RegistryHandle;
+            if (!handle.IsValid || !_table.TryGet(in handle, out _))
+                return;
+
+            if (!ReferenceEquals(_sidecar[handle.SlotIndex], resource))
+                return; // Slot recycled since: stale handle, fail closed.
+
+            _sidecar[handle.SlotIndex] = null;
+            _table.TryFree(in handle);
+            resource.RegistryHandle = default;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a generational handle to its live resource. Stale handles
+    /// (freed slots, recycled generations) fail closed — no scan, ABA-safe.
+    /// </summary>
+    /// <param name="handle">The handle to resolve.</param>
+    /// <param name="resource">The live resource if the handle is current.</param>
+    /// <returns>True if the handle names a live registration; otherwise, false.</returns>
+    public bool TryResolve(in DescriptorHandle<GLResourceNode> handle, out IGLResource? resource)
+    {
+        lock (_syncRoot)
+        {
+            if (handle.IsValid && _table.TryGet(in handle, out _))
+            {
+                IGLResource? candidate = _sidecar[handle.SlotIndex];
+                if (candidate is not null && candidate.RegistryHandle == handle)
+                {
+                    resource = candidate;
+                    return true;
+                }
+            }
+
+            resource = null;
+            return false;
         }
     }
 
@@ -262,10 +315,15 @@ public sealed class GLResourceRegistry
     {
         lock (_syncRoot)
         {
-            for (int i = 0; i < _resources.Count; i++)
+            IGLResource?[] sidecar = _sidecar;
+            for (nuint i = 0; i < (nuint)sidecar.Length; i++)
             {
-                _resources[i].Invalidate();
-                _resources[i].OnContextLost();
+                IGLResource? resource = sidecar[i];
+                if (resource is not null)
+                {
+                    resource.Invalidate();
+                    resource.OnContextLost();
+                }
             }
         }
     }
@@ -277,50 +335,135 @@ public sealed class GLResourceRegistry
     {
         lock (_syncRoot)
         {
-            // Sort by rebuild priority (lower = rebuilt first)
-            _resources.Sort(static (a, b) => a.RebuildPriority.CompareTo(b.RebuildPriority));
+            int count = (int)_table.ActiveCount;
+            if (count == 0)
+                return;
 
-            for (int i = 0; i < _resources.Count; i++)
+            IGLResource[] batch = ArrayPool<IGLResource>.Shared.Rent(count);
+            try
             {
-                _resources[i].OnContextRestored();
-                _resources[i].Rebuild();
+                int collected = 0;
+                foreach (IGLResource? resource in _sidecar)
+                {
+                    if (resource is not null)
+                        batch[collected++] = resource;
+                }
+
+                // Sort by rebuild priority (lower = rebuilt first)
+                Array.Sort(batch, 0, collected, RebuildPriorityComparer.Instance);
+
+                for (int i = 0; i < collected; i++)
+                {
+                    IGLResource resource = batch[i];
+                    batch[i] = null!;
+                    resource.OnContextRestored();
+                    resource.Rebuild();
+                }
+            }
+            finally
+            {
+                ArrayPool<IGLResource>.Shared.Return(batch);
             }
         }
     }
 
     /// <summary>
-    /// Disposes all registered resources in reverse order. Every resource is
+    /// Disposes all registered resources in reverse registration order (same as
+    /// <see cref="DisposeAll"/>). Prefer disposing the owning <see cref="GLContext"/>.
+    /// </summary>
+    public void Dispose() => DisposeAll();
+
+    /// <summary>
+    /// Disposes all registered resources in reverse registration order. Every resource is
     /// attempted even when predecessors fail; failures surface together instead
-    /// of vanishing into a swallow.
+    /// of vanishing into a swallow. Slots are reclaimed before disposal runs, so
+    /// reentrant <see cref="Unregister"/> calls from resource teardown are safe no-ops.
     /// </summary>
     internal void DisposeAll()
     {
-        IGLResource[] snapshot;
+        DisposalSnapshot[] batch;
+        int collected;
         lock (_syncRoot)
         {
-            snapshot = _resources.ToArray();
-            _resources.Clear();
+            int count = (int)_table.ActiveCount;
+            batch = count == 0 ? [] : ArrayPool<DisposalSnapshot>.Shared.Rent(count);
+            collected = 0;
+            IGLResource?[] sidecar = _sidecar;
+            for (nuint i = 0; i < (nuint)sidecar.Length; i++)
+            {
+                IGLResource? resource = sidecar[i];
+                if (resource is null)
+                    continue;
+
+                DescriptorHandle<GLResourceNode> handle = resource.RegistryHandle;
+                int sequence = 0;
+                if (_table.TryGet(in handle, out GLResourceNode node))
+                    sequence = node.Sequence;
+
+                batch[collected++] = new DisposalSnapshot(resource, handle, sequence);
+                sidecar[i] = null;
+            }
+
+            // Reverse registration order, as before.
+            Array.Sort(batch, 0, collected, DisposalSnapshot.SequenceDescendingComparer.Instance);
+            for (int i = 0; i < collected; i++)
+            {
+                DescriptorHandle<GLResourceNode> handle = batch[i].Handle;
+                _table.TryFree(in handle);
+            }
         }
 
-        // Snapshot first: resource Dispose calls reenter via Unregister, which
-        // would shift a live-index walk out of range mid-loop.
         List<Exception>? failures = null;
-        for (int i = snapshot.Length - 1; i >= 0; i--)
+        for (int i = 0; i < collected; i++)
         {
             try
             {
-                snapshot[i].Dispose();
+                batch[i].Resource.Dispose();
             }
             catch (Exception ex)
             {
                 failures ??= new List<Exception>(1);
                 failures.Add(ex);
             }
+
+            batch[i] = default;
         }
+
+        if (batch.Length > 0)
+            ArrayPool<DisposalSnapshot>.Shared.Return(batch);
+
+        _table.Dispose();
 
         if (failures is not null)
         {
             throw new AggregateException("One or more GPU resources failed to dispose.", failures);
+        }
+    }
+
+    private sealed class RebuildPriorityComparer : IComparer<IGLResource>
+    {
+        public static readonly RebuildPriorityComparer Instance = new();
+
+        public int Compare(IGLResource? x, IGLResource? y)
+        {
+            if (ReferenceEquals(x, y))
+                return 0;
+            if (x is null)
+                return -1;
+            if (y is null)
+                return 1;
+            return x.RebuildPriority.CompareTo(y.RebuildPriority);
+        }
+    }
+
+    private readonly record struct DisposalSnapshot(IGLResource Resource, DescriptorHandle<GLResourceNode> Handle, int Sequence)
+    {
+        public sealed class SequenceDescendingComparer : IComparer<DisposalSnapshot>
+        {
+            public static readonly SequenceDescendingComparer Instance = new();
+
+            public int Compare(DisposalSnapshot x, DisposalSnapshot y) =>
+                y.Sequence.CompareTo(x.Sequence);
         }
     }
 }

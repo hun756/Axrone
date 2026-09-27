@@ -33,7 +33,7 @@ public sealed class GLProgram : IGLResource, IDisposable
     public bool IsDisposed => Volatile.Read(ref _isDisposed) != 0;
 
     /// <inheritdoc/>
-    public int RegistrySequence { get; set; }
+    public DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
     /// <inheritdoc/>
     public int RebuildPriority => 15;

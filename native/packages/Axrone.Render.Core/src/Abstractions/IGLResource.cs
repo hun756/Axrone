@@ -7,8 +7,11 @@ namespace Axrone.Render.Core.Abstractions;
 /// </summary>
 public interface IGLResource : IDisposable
 {
-    /// <summary>Gets the registry sequence number (set when registered).</summary>
-    int RegistrySequence { get; set; }
+    /// <summary>
+    /// Gets the generational registry handle (set when registered, invalid when not).
+    /// Stale handles (freed slots, recycled generations) fail closed on resolve.
+    /// </summary>
+    DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
     /// <summary>Gets the rebuild priority (lower = rebuilt first on context restore).</summary>
     int RebuildPriority { get; }

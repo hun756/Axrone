@@ -68,7 +68,7 @@ public sealed class GLMesh : IGLResource, IDisposable
     public uint Topology { get; }
 
     /// <inheritdoc/>
-    public int RegistrySequence { get; set; }
+    public DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
     /// <inheritdoc/>
     public int RebuildPriority => 20;

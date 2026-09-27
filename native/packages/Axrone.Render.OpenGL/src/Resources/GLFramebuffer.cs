@@ -27,7 +27,7 @@ public sealed class GLFramebuffer : IGLResource, IDisposable
     public string Label { get; private set; }
 
     /// <inheritdoc/>
-    public int RegistrySequence { get; set; }
+    public DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
     /// <inheritdoc/>
     public int RebuildPriority => 40;

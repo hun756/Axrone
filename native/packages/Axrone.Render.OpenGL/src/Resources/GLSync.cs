@@ -52,7 +52,7 @@ public sealed class GLSync : IGLResource, IDisposable
     public string Label { get; }
 
     /// <inheritdoc/>
-    public int RegistrySequence { get; set; }
+    public DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
     /// <inheritdoc/>
     public int RebuildPriority => 55;
