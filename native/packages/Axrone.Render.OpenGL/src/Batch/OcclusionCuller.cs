@@ -25,6 +25,8 @@ namespace Axrone.Render.OpenGL.Batch;
 public sealed class OcclusionCuller : IDisposable
 {
     private const int DefaultQueryCapacity = 16;
+    private const int MaxTrackedMeshes = 4096;
+    private const ulong StaleFrameThreshold = 300;
 
     private readonly GLContext _context;
     private readonly GLQuery[] _queryPool;
@@ -32,6 +34,7 @@ public sealed class OcclusionCuller : IDisposable
     private readonly Dictionary<GLMesh, MeshOcclusionState> _meshStates;
     private GLQuery? _activeQuery;
     private MeshOcclusionState? _activeMesh;
+    private ulong _frameIndex;
     private int _isDisposed;
 
     /// <summary>
@@ -76,7 +79,8 @@ public sealed class OcclusionCuller : IDisposable
 
     /// <summary>
     /// Starts a new frame: clears any query left active by an unbalanced
-    /// <see cref="BeginOcclusion"/> call.
+    /// <see cref="BeginOcclusion"/> call and drops mesh states that have been
+    /// unseen for a long while once tracking grows past its bound.
     /// </summary>
     public void BeginFrame()
     {
@@ -87,6 +91,47 @@ public sealed class OcclusionCuller : IDisposable
 
         _activeQuery = null;
         _activeMesh = null;
+        _frameIndex++;
+
+        if (_meshStates.Count > MaxTrackedMeshes)
+            PruneStaleMeshes(StaleFrameThreshold);
+    }
+
+    /// <summary>
+    /// Drops tracked meshes last seen more than <paramref name="staleThresholdFrames"/>
+    /// frames ago, returning their in-flight queries to the pool. Destroyed meshes
+    /// that the host never untracked stop pinning memory; re-registered meshes start
+    /// visible, which is the safe default.
+    /// </summary>
+    /// <param name="staleThresholdFrames">The unseen-frame age at which a mesh is dropped.</param>
+    public void PruneStaleMeshes(ulong staleThresholdFrames)
+    {
+        if (IsDisposed)
+            ThrowHelper.ThrowInvalidOperation("OcclusionCuller disposed");
+
+        _context.AssertRenderThread();
+
+        List<GLMesh>? stale = null;
+        foreach (var pair in _meshStates)
+        {
+            if (_frameIndex - pair.Value.LastSeenFrame > staleThresholdFrames)
+            {
+                stale ??= new List<GLMesh>();
+                stale.Add(pair.Key);
+            }
+        }
+
+        if (stale is null)
+            return;
+
+        foreach (GLMesh mesh in stale)
+        {
+            if (_meshStates.Remove(mesh, out MeshOcclusionState? state) && state.InFlightQuery is { } inFlight)
+            {
+                ReleaseQuery(inFlight);
+                state.InFlightQuery = null;
+            }
+        }
     }
 
     /// <summary>
@@ -106,6 +151,7 @@ public sealed class OcclusionCuller : IDisposable
         _context.AssertRenderThread();
 
         MeshOcclusionState state = GetOrCreateState(mesh);
+        state.LastSeenFrame = _frameIndex;
 
         if (state.InFlightQuery is { } inFlight)
         {
@@ -171,6 +217,8 @@ public sealed class OcclusionCuller : IDisposable
 
         if (!_meshStates.TryGetValue(mesh, out MeshOcclusionState? state))
             return true;
+
+        state.LastSeenFrame = _frameIndex;
 
         if (state.InFlightQuery is { } inFlight && inFlight.GetResultAvailable())
         {
@@ -246,5 +294,6 @@ public sealed class OcclusionCuller : IDisposable
     {
         public GLQuery? InFlightQuery;
         public bool LastVisible = true;
+        public ulong LastSeenFrame;
     }
 }
