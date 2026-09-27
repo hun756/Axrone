@@ -155,6 +155,13 @@ public unsafe interface IGLApi
     /// <summary>Selects a color buffer for reading.</summary>
     void ReadBuffer(uint mode);
 
+    /// <summary>
+    /// Discards the contents of the named framebuffer attachments. Maps to glInvalidateFramebuffer.
+    /// An empty <paramref name="attachments"/> span is a caller error; nothing is validated here so
+    /// the call stays a single native dispatch.
+    /// </summary>
+    void InvalidateFramebuffer(uint target, ReadOnlySpan<uint> attachments);
+
     // ========================================================================
     // Renderbuffer Operations
     // ========================================================================
@@ -297,6 +304,33 @@ public unsafe interface IGLApi
 
     /// <summary>Clears buffers to specified values.</summary>
     void Clear(uint mask);
+
+    /// <summary>
+    /// Clears a single buffer to the given floating-point clear value. Maps to glClearBufferfv.
+    /// An empty <paramref name="value"/> span is a caller error; nothing is validated here so the
+    /// call stays a single native dispatch.
+    /// </summary>
+    void ClearBufferfv(uint buffer, int drawBuffer, ReadOnlySpan<float> value);
+
+    /// <summary>
+    /// Clears a single buffer to the given signed integer clear value. Maps to glClearBufferiv.
+    /// An empty <paramref name="value"/> span is a caller error; nothing is validated here so the
+    /// call stays a single native dispatch.
+    /// </summary>
+    void ClearBufferiv(uint buffer, int drawBuffer, ReadOnlySpan<int> value);
+
+    /// <summary>
+    /// Clears a single buffer to the given unsigned integer clear value. Maps to glClearBufferuiv.
+    /// An empty <paramref name="value"/> span is a caller error; nothing is validated here so the
+    /// call stays a single native dispatch.
+    /// </summary>
+    void ClearBufferuiv(uint buffer, int drawBuffer, ReadOnlySpan<uint> value);
+
+    /// <summary>
+    /// Clears the combined depth/stencil buffer. Maps to glClearBufferfi. No span is involved and
+    /// no validation is performed, so the call stays a single native dispatch.
+    /// </summary>
+    void ClearBufferfi(uint buffer, int drawBuffer, float depth, int stencil);
 
     /// <summary>Sets the color mask.</summary>
     void ColorMask(bool red, bool green, bool blue, bool alpha);

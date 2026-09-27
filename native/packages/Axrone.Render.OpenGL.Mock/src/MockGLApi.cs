@@ -255,6 +255,9 @@ public sealed unsafe class MockGLApi : IGLApi
 
     public void ReadBuffer(uint mode) => Log($"ReadBuffer({mode})");
 
+    public void InvalidateFramebuffer(uint target, ReadOnlySpan<uint> attachments) =>
+        Log($"InvalidateFramebuffer({target}, {attachments.Length}) [{string.Join(", ", attachments.ToArray())}]");
+
     // ========================================================================
     // Renderbuffer Operations
     // ========================================================================
@@ -486,6 +489,19 @@ public sealed unsafe class MockGLApi : IGLApi
     public void ClearDepth(double depth) => Log($"ClearDepth({depth})");
     public void ClearStencil(int s) => Log($"ClearStencil({s})");
     public void Clear(uint mask) => Log($"Clear({mask})");
+
+    public void ClearBufferfv(uint buffer, int drawBuffer, ReadOnlySpan<float> value) =>
+        Log($"ClearBufferfv({buffer}, {drawBuffer}) [{string.Join(", ", value.ToArray())}]");
+
+    public void ClearBufferiv(uint buffer, int drawBuffer, ReadOnlySpan<int> value) =>
+        Log($"ClearBufferiv({buffer}, {drawBuffer}) [{string.Join(", ", value.ToArray())}]");
+
+    public void ClearBufferuiv(uint buffer, int drawBuffer, ReadOnlySpan<uint> value) =>
+        Log($"ClearBufferuiv({buffer}, {drawBuffer}) [{string.Join(", ", value.ToArray())}]");
+
+    public void ClearBufferfi(uint buffer, int drawBuffer, float depth, int stencil) =>
+        Log($"ClearBufferfi({buffer}, {drawBuffer}, {depth}, {stencil})");
+
     public void ColorMask(bool red, bool green, bool blue, bool alpha) => Log($"ColorMask({red}, {green}, {blue}, {alpha})");
     public void DepthMask(bool flag) => Log($"DepthMask({flag})");
     public void DepthFunc(uint func) => Log($"DepthFunc({func})");

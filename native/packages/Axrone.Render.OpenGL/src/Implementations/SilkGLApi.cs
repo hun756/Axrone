@@ -206,6 +206,18 @@ public sealed unsafe class SilkGLApi : IGLApi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ReadBuffer(uint mode) => _gl.ReadBuffer((ReadBufferMode)mode);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void InvalidateFramebuffer(uint target, ReadOnlySpan<uint> attachments)
+    {
+        unsafe
+        {
+            fixed (uint* ptr = attachments)
+            {
+                _gl.InvalidateFramebuffer((FramebufferTarget)target, (uint)attachments.Length, (GLEnum*)ptr);
+            }
+        }
+    }
+
     // ========================================================================
     // Renderbuffer Operations
     // ========================================================================
@@ -380,6 +392,46 @@ public sealed unsafe class SilkGLApi : IGLApi
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear(uint mask) => _gl.Clear((ClearBufferMask)mask);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearBufferfv(uint buffer, int drawBuffer, ReadOnlySpan<float> value)
+    {
+        unsafe
+        {
+            fixed (float* ptr = value)
+            {
+                _gl.ClearBuffer((GLEnum)buffer, drawBuffer, ptr);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearBufferiv(uint buffer, int drawBuffer, ReadOnlySpan<int> value)
+    {
+        unsafe
+        {
+            fixed (int* ptr = value)
+            {
+                _gl.ClearBuffer((GLEnum)buffer, drawBuffer, ptr);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearBufferuiv(uint buffer, int drawBuffer, ReadOnlySpan<uint> value)
+    {
+        unsafe
+        {
+            fixed (uint* ptr = value)
+            {
+                _gl.ClearBuffer((GLEnum)buffer, drawBuffer, ptr);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearBufferfi(uint buffer, int drawBuffer, float depth, int stencil) =>
+        _gl.ClearBuffer((GLEnum)buffer, drawBuffer, depth, stencil);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ColorMask(bool red, bool green, bool blue, bool alpha) =>
