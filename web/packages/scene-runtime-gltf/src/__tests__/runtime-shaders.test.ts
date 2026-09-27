@@ -10,6 +10,9 @@ import {
     resolveGltfRuntimeShaderId,
 } from '@axrone/scene-runtime-gltf';
 import { GLTF_TOON_SHADER_EFFECT, resolveGltfShaderDefinition } from '../internal/runtime-shaders';
+import { GLTF_TOON_SHADER_EFFECT as GLTF_TOON_SHADER_EFFECT_FROM_TOON_MODULE } from '../internal/gltf-shader-effects-toon';
+import { GLTF_PBR_SHADER_EFFECT as GLTF_PBR_SHADER_EFFECT_FROM_PBR_MODULE } from '../internal/gltf-shader-effects-pbr';
+import { GLTF_UNLIT_SHADER_EFFECT as GLTF_UNLIT_SHADER_EFFECT_FROM_UNLIT_MODULE } from '../internal/gltf-shader-effects-unlit';
 
 describe('scene-runtime glTF shader effects', () => {
     it('builds the built-in unlit shader from structured effect metadata', () => {
@@ -328,6 +331,14 @@ describe('scene-runtime glTF shader effects', () => {
 
             expect(custom.id).toBe('gltf/pbr/custom');
             expect(custom.effect?.id).toBe('gltf/pbr/custom');
+        });
+    });
+
+    describe('runtime-shaders re-exports', () => {
+        it('re-exports the moved shader effects without rebuilding them', () => {
+            expect(GLTF_UNLIT_SHADER_EFFECT).toBe(GLTF_UNLIT_SHADER_EFFECT_FROM_UNLIT_MODULE);
+            expect(GLTF_PBR_SHADER_EFFECT).toBe(GLTF_PBR_SHADER_EFFECT_FROM_PBR_MODULE);
+            expect(GLTF_TOON_SHADER_EFFECT).toBe(GLTF_TOON_SHADER_EFFECT_FROM_TOON_MODULE);
         });
     });
 });
