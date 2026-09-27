@@ -17,8 +17,11 @@ namespace Axrone.Render.OpenGL.Shading;
 /// <para>
 /// Evicted programs are disposed immediately by the pool. The pool does not track outstanding
 /// references: a program that a caller is still using when it is evicted becomes invalid
-/// (its GL name is deleted). Callers are responsible for ensuring evicted programs are no
-/// longer in use.
+/// (its GL name is deleted). The safe usage pattern is to re-acquire every frame through
+/// <see cref="GetOrCreate"/> and never hold a program across frames without re-acquiring:
+/// re-acquired programs stay most-recently-used, so eviction only reclaims programs that
+/// have been unused for at least <see cref="Capacity"/> distinct program requests.
+/// <see cref="EvictionCount"/> exposes how often eviction fired for capacity tuning.
 /// </para>
 /// </remarks>
 public sealed class GLProgramPool : IDisposable
@@ -30,6 +33,7 @@ public sealed class GLProgramPool : IDisposable
     private readonly Dictionary<ulong, CacheEntry> _entries;
     private readonly LinkedList<ulong> _lru;
     private readonly int _capacity;
+    private long _evictionCount;
     private int _isDisposed;
 
     /// <summary>
@@ -41,6 +45,12 @@ public sealed class GLProgramPool : IDisposable
     /// Gets the number of programs currently cached.
     /// </summary>
     public int Count => _entries.Count;
+
+    /// <summary>
+    /// Gets the total number of evictions since creation. A rising count against a
+    /// stable working set means the capacity is undersized for the material variety.
+    /// </summary>
+    public long EvictionCount => Volatile.Read(ref _evictionCount);
 
     /// <summary>
     /// Gets a value indicating whether the pool has been disposed.
@@ -100,6 +110,7 @@ public sealed class GLProgramPool : IDisposable
             _lru.RemoveLast();
             if (_entries.Remove(evictedNode.Value, out CacheEntry? evicted))
             {
+                Interlocked.Increment(ref _evictionCount);
                 evicted.Program.Dispose();
             }
         }
