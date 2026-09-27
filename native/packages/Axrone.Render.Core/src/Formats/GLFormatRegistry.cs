@@ -20,7 +20,12 @@ public readonly record struct FormatDescriptor(
     bool HasStencil);
 
 /// <summary>
-/// Registry of GL format descriptors for texture allocation.
+/// Registry of GL format descriptors for texture allocation. This is the
+/// backend-agnostic wire descriptor for allocator shorthand names; the
+/// creation-path authority (name to <c>TextureFormat</c> enum) lives in
+/// <c>Axrone.Render.OpenGL.Texture.TextureFormats.TryParseName</c>. The two
+/// tables are locked together by the format-parity test — update both when
+/// adding a key.
 /// </summary>
 public static class GLFormatRegistry
 {

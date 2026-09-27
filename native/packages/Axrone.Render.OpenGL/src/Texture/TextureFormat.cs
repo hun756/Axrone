@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Axrone.Render.OpenGL.Texture;
 
 /// <summary>
@@ -386,6 +388,38 @@ public static class TextureFormats
 
         return table;
     }
+
+    /// <summary>
+    /// Allocator shorthand names keyed to texture formats. This is the creation-path
+    /// authority for string format keys; the backend-agnostic wire descriptor for the
+    /// same keys lives in <c>Axrone.Render.Core.GLFormatRegistry</c>. The two tables
+    /// are locked together by the format-parity test — update both when adding a key.
+    /// </summary>
+    private static readonly FrozenDictionary<string, TextureFormat> _names =
+        new Dictionary<string, TextureFormat>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["r11g11b10f"] = TextureFormat.R11fG11fB10f,
+            ["rgba8"] = TextureFormat.Rgba8,
+            ["rgba16f"] = TextureFormat.Rgba16f,
+            ["rgba32f"] = TextureFormat.Rgba32f,
+            ["rg16f"] = TextureFormat.Rg16f,
+            ["rg32f"] = TextureFormat.Rg32f,
+            ["r16f"] = TextureFormat.R16f,
+            ["r32f"] = TextureFormat.R32f,
+            ["depth24"] = TextureFormat.Depth24,
+            ["depth32f"] = TextureFormat.Depth32f,
+            ["depth24-stencil8"] = TextureFormat.Depth24Stencil8,
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Tries to resolve an allocator shorthand name (e.g. "rgba8") to a texture format.
+    /// </summary>
+    /// <param name="name">The shorthand name.</param>
+    /// <param name="format">The texture format if found.</param>
+    /// <returns>True if the name was found; otherwise, false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryParseName(string name, out TextureFormat format) =>
+        _names.TryGetValue(name, out format);
 
     /// <summary>
     /// Gets the format info for a texture format.

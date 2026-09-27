@@ -272,7 +272,7 @@ public sealed class RenderResourceAllocator : IDisposable
         if (name.Contains("present", StringComparison.OrdinalIgnoreCase))
             return NativeHandle.FromDefaultFramebuffer();
 
-        if (!GLFormatRegistry.TryGetFormat(formatKey, out var desc))
+        if (!TextureFormats.TryParseName(formatKey, out var format))
             ThrowHelper.ThrowInvalidOperation($"Unsupported allocator format key: {formatKey}");
 
         // Delete previous texture if exists
@@ -282,12 +282,10 @@ public sealed class RenderResourceAllocator : IDisposable
             _allocated.Remove(name);
         }
 
-        // All standardized internal formats fit in 16 bits, so the narrowing is
-        // lossless for every format the registry can return.
-        var tex = new GLTexture(_context, GLConst.Texture2D, (TextureFormat)desc.InternalFormat, width, height);
+        var tex = new GLTexture(_context, GLConst.Texture2D, format, width, height);
         _allocated[name] = tex;
 
-        return NativeHandle.FromTexture(new GpuTextureHandle(tex.Id, width, height, desc.InternalFormat));
+        return NativeHandle.FromTexture(new GpuTextureHandle(tex.Id, width, height, tex.FormatInfo.InternalFormat));
     }
 
     /// <inheritdoc/>
