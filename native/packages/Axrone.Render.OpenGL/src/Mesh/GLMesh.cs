@@ -179,7 +179,10 @@ public sealed class GLMesh : IGLResource, IDisposable
     }
 
     /// <inheritdoc/>
-    public void Rebuild()
+    public void Rebuild() => OnContextRestored();
+
+    /// <inheritdoc/>
+    public void OnContextRestored()
     {
         if (IsDisposed)
             return;
@@ -195,7 +198,6 @@ public sealed class GLMesh : IGLResource, IDisposable
         }
 
         // Rebuild VAO (priority = 20)
-        VertexArray.OnContextRestored();
         VertexArray.Rebuild();
 
         // Reconfigure the VAO layout
@@ -208,9 +210,6 @@ public sealed class GLMesh : IGLResource, IDisposable
             VertexArray.ConfigureLayout(VertexBuffer, Layout.Attributes, VertexCount);
         }
     }
-
-    /// <inheritdoc/>
-    public void OnContextRestored() => Rebuild();
 
     /// <inheritdoc/>
     public void Dispose()

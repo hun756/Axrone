@@ -352,12 +352,14 @@ public sealed class GLResourceRegistry : IDisposable
                 // Sort by rebuild priority (lower = rebuilt first)
                 Array.Sort(batch, 0, collected, RebuildPriorityComparer.Instance);
 
+                // Single notification entry: OnContextRestored performs the rebuild
+                // (Rebuild delegates to it). Calling both would rebuild twice and
+                // orphan the first GL object.
                 for (int i = 0; i < collected; i++)
                 {
                     IGLResource resource = batch[i];
                     batch[i] = null!;
                     resource.OnContextRestored();
-                    resource.Rebuild();
                 }
             }
             finally

@@ -32,6 +32,13 @@ public sealed class GLProgram : IGLResource, IDisposable
     /// </summary>
     public bool IsDisposed => Volatile.Read(ref _isDisposed) != 0;
 
+    /// <summary>
+    /// Gets how many times the program was (re)built. Uniform caches observe this
+    /// counter: after a context-loss rebuild the driver may recycle program names,
+    /// so name-keyed cache entries from before the rebuild are untrustworthy.
+    /// </summary>
+    public uint RebuildCount { get; private set; }
+
     /// <inheritdoc/>
     public DescriptorHandle<GLResourceNode> RegistryHandle { get; set; }
 
@@ -194,10 +201,15 @@ public sealed class GLProgram : IGLResource, IDisposable
     public void Invalidate() => Id = 0;
 
     /// <inheritdoc/>
-    public void Rebuild()
+    public void Rebuild() => OnContextRestored();
+
+    /// <inheritdoc/>
+    public void OnContextRestored()
     {
         if (IsDisposed)
             return;
+
+        RebuildCount++;
 
         // Compile vertex shader
         uint vs = _context.GL.CreateShader(GLConst.VertexShader);
@@ -274,9 +286,6 @@ public sealed class GLProgram : IGLResource, IDisposable
     public void OnContextLost() => Id = 0;
 
     /// <inheritdoc/>
-    public void OnContextRestored() => Rebuild();
-
-    /// <inheritdoc/>
     public override string ToString() => $"GLProgram: Id={Id}";
 }
 
@@ -284,6 +293,11 @@ public sealed class GLProgram : IGLResource, IDisposable
 /// High-performance uniform cache using open-addressed hash table.
 /// Eliminates redundant uniform uploads by tracking last-set values.
 /// </summary>
+/// <remarks>
+/// A value-dedup cache, not a lifecycle registry: intentionally separate from the
+/// descriptor-table registry. Name reuse across program rebuilds is guarded by the
+/// owning <see cref="ShaderInstance"/>, which clears the cache on rebuild epochs.
+/// </remarks>
 public sealed class UniformCache
 {
     private const int Capacity = 8192;
@@ -335,6 +349,7 @@ public sealed class ShaderInstance
 {
     private readonly GLContext _context;
     private readonly UniformCache _cache;
+    private uint _lastRebuildSeen;
 
     /// <summary>
     /// Gets the program.
@@ -356,6 +371,26 @@ public sealed class ShaderInstance
         _context = context;
         Program = program;
         _cache = cache;
+        _lastRebuildSeen = program.RebuildCount;
+    }
+
+    /// <summary>
+    /// Drops name-keyed cache entries after a program rebuild. A recycled program
+    /// name with an identical value hash would otherwise read as "unchanged" and
+    /// skip the upload the fresh GL object requires.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void RefreshAfterRebuild()
+    {
+        _cache.Clear();
+        _lastRebuildSeen = Program.RebuildCount;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureCacheFresh()
+    {
+        if (_lastRebuildSeen != Program.RebuildCount)
+            RefreshAfterRebuild();
     }
 
     /// <summary>
@@ -369,6 +404,7 @@ public sealed class ShaderInstance
         if (location < 0)
             return;
 
+        EnsureCacheFresh();
         uint hash = (uint)BitConverter.SingleToInt32Bits(value);
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
@@ -387,6 +423,7 @@ public sealed class ShaderInstance
         if (location < 0)
             return;
 
+        EnsureCacheFresh();
         if (_cache.CheckAndSet(Program.Id, location, (uint)value))
         {
             _context.GL.Uniform1(location, value);
@@ -404,6 +441,7 @@ public sealed class ShaderInstance
         if (location < 0)
             return;
 
+        EnsureCacheFresh();
         fixed (System.Numerics.Matrix4x4* ptr = &matrix)
         {
             float* f = (float*)ptr;

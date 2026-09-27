@@ -248,10 +248,10 @@ public sealed class GLBuffer : IGLResource, IDisposable
     public void OnContextLost() => Invalidate();
 
     /// <inheritdoc/>
-    public unsafe void OnContextRestored() => Rebuild();
+    public unsafe void Rebuild() => OnContextRestored();
 
     /// <inheritdoc/>
-    public unsafe void Rebuild()
+    public unsafe void OnContextRestored()
     {
         if (IsDisposed)
             return;

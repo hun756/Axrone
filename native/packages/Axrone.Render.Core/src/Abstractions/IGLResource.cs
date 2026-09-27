@@ -24,13 +24,17 @@ public interface IGLResource : IDisposable
 
     /// <summary>
     /// Rebuilds the GPU resource from its snapshot/configuration.
-    /// Called during context-restoration to re-create GPU handles.
+    /// Delegates to <see cref="OnContextRestored"/>: the registry invokes the
+    /// notification exactly once per restore and never calls both in sequence.
     /// </summary>
     void Rebuild();
 
     /// <summary>Called when the GL context is lost. Resets handles to zero.</summary>
     void OnContextLost();
 
-    /// <summary>Called when the GL context is restored. Re-creates GPU resources.</summary>
+    /// <summary>
+    /// Called when the GL context is restored. Re-creates GPU resources.
+    /// This is the single rebuild entry invoked by the registry.
+    /// </summary>
     void OnContextRestored();
 }
