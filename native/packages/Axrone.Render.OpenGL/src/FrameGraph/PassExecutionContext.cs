@@ -4,6 +4,10 @@ namespace Axrone.Render.OpenGL.FrameGraph;
 /// Execution context passed to render passes during frame graph execution.
 /// Provides access to transient resources allocated by the frame graph.
 /// </summary>
+/// <remarks>
+/// A per-frame name-to-object scratch map with no lifecycle: intentionally separate
+/// from the descriptor-table registry.
+/// </remarks>
 public sealed class PassExecutionContext
 {
     private readonly Dictionary<string, object> _resources = new(StringComparer.OrdinalIgnoreCase);

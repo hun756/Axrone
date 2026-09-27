@@ -4,6 +4,10 @@ namespace Axrone.Render.OpenGL.Context;
 /// High-performance GL state cache that eliminates redundant GL calls.
 /// Tracks all relevant GL state and only issues calls when state actually changes.
 /// </summary>
+/// <remarks>
+/// A shadow-state mirror, not a lifecycle registry: no handles, no generations, no
+/// reclamation. Intentionally separate from the descriptor-table registry.
+/// </remarks>
 public sealed class GLStateCache
 {
     private readonly IGLApi _gl;

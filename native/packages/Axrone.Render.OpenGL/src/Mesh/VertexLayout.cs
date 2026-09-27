@@ -5,6 +5,10 @@ namespace Axrone.Render.OpenGL.Mesh;
 /// Immutable vertex layout descriptor. Defines the attribute structure of a vertex.
 /// Used to configure <see cref="GLVertexArray"/> layouts and validate mesh data.
 /// </summary>
+/// <remarks>
+/// A wire-format value descriptor with no lifecycle: intentionally separate from the
+/// descriptor-table registry.
+/// </remarks>
 public sealed class VertexLayout : IEquatable<VertexLayout>
 {
     private readonly VertexAttribute[] _attributes;
