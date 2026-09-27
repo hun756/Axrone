@@ -11,6 +11,10 @@ namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 /// is sized to cover the entire viewport with one vertex clipped.</para>
 /// <para>Texture bindings and custom uniform setters can be configured fluently
 /// to support arbitrary post-process shaders.</para>
+/// <para>Two execution paths exist: <see cref="Execute(GLContext, PassExecutionContext)"/>
+/// (the <c>IRenderPassExecutor</c>-compatible one) and the internal
+/// <c>ExecuteMonomorphic</c>, which replays the same draw as a value command over a
+/// static-abstract invoker.</para>
 /// </remarks>
 public sealed class FullscreenQuadPassExecutor : RenderPass
 {
@@ -137,5 +141,61 @@ public sealed class FullscreenQuadPassExecutor : RenderPass
 
         // Draw fullscreen triangle (3 vertices, no VAO needed).
         context.GL.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+
+    /// <summary>
+    /// Monomorphic twin of <see cref="Execute(GLContext, PassExecutionContext)"/>:
+    /// resolves the pass's draw into a value command and replays it through
+    /// <see cref="FullscreenDispatcher"/> against a <see cref="GLContextInvoker"/>,
+    /// so the hot path is a fully inlined sequence with no vtable and no allocation.
+    /// </summary>
+    /// <remarks>
+    /// <para>The two paths are behavior-identical where both apply, with one
+    /// deliberate addition: the command records explicit opaque blend state, so a
+    /// fullscreen draw that follows a blended geometry pass leaves the state cache
+    /// consistent instead of leaking blend into the next pass.</para>
+    /// <para>Two configurations cannot be expressed in the monomorphic command
+    /// vocabulary and therefore take <see cref="Execute(GLContext, PassExecutionContext)"/>
+    /// unchanged: a custom uniform callback (an arbitrary delegate, not a recorded
+    /// uniform) and more texture binds than the command carries inline. Falling back
+    /// keeps the established path the single behavior-defining implementation — the
+    /// monomorphic path can never change what a pass draws.</para>
+    /// </remarks>
+    /// <param name="context">The GL context for issuing draw calls.</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
+    internal void ExecuteMonomorphic(GLContext context, PassExecutionContext ctx)
+    {
+        if (_uniformCallback is not null || _textureBindings.Count > FullscreenCommandLimits.MaxTextureBinds)
+        {
+            Execute(context, ctx);
+            return;
+        }
+
+        context.AssertRenderThread();
+
+        // Bind output framebuffer (or default).
+        if (_outputFramebufferName is not null && ctx.HasResource(_outputFramebufferName))
+        {
+            var fbo = ctx.GetFramebuffer(_outputFramebufferName);
+            context.State.BindFramebuffer(GLConst.Framebuffer, fbo.Id);
+            context.State.SetViewport(0, 0, fbo.Width, fbo.Height);
+        }
+
+        context.State.SetDepthTest(false);
+        context.State.SetCullFace(false);
+
+        // Resolve resource names into the value command (stack only, no allocation).
+        var command = new FullscreenTriangleCommand<GLContextInvoker>(_shader.Id);
+        for (int i = 0; i < _textureBindings.Count; i++)
+        {
+            var (unit, textureName) = _textureBindings[i];
+            var texture = ctx.GetTexture(textureName);
+            command.AddTextureBind((uint)unit, texture.Id);
+        }
+
+        var invoker = new GLContextInvoker(context);
+
+        // Draw fullscreen triangle (3 vertices, no VAO needed) — monomorphic replay.
+        FullscreenDispatcher.Dispatch(ref invoker, ref command);
     }
 }
