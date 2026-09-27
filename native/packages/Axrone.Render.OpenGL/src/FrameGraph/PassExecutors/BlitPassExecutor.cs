@@ -1,3 +1,12 @@
+using Axrone.Execution;
+using Axrone.Utility.Backoff.SpinPolicies;
+using RenderPump = Axrone.Execution.CommandPump<
+    Axrone.Render.Core.RenderCommand,
+    Axrone.Render.OpenGL.FrameGraph.RenderPumpContext,
+    Axrone.Render.OpenGL.FrameGraph.RenderCommandProcessor,
+    Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
+    Axrone.Execution.NullExecutorTelemetry>;
+
 namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 
 /// <summary>
@@ -45,6 +54,32 @@ public sealed class BlitPassExecutor : RenderPass
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "Source and destination framebuffers must be different", nameof(BlitPassExecutor));
         }
+    }
+
+    /// <summary>
+    /// Enqueues this pass's blit as a render command into a pump.
+    /// The pump-derived execution path: identical pixels, library-driven dispatch.
+    /// </summary>
+    /// <param name="pump">The pump receiving the command.</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
+    /// <returns>The enqueue receipt.</returns>
+    internal EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(pump);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        var sourceFbo = ctx.GetFramebuffer(_sourceFramebufferName);
+        var destFbo = ctx.GetFramebuffer(_destinationFramebufferName);
+        DescriptorHandle<GLResourceNode> sourceHandle = sourceFbo.RegistryHandle;
+        DescriptorHandle<GLResourceNode> destinationHandle = destFbo.RegistryHandle;
+
+        RenderCommand command = RenderCommand.CreateBlit(
+            in sourceHandle, in destinationHandle,
+            0, 0, sourceFbo.Width, sourceFbo.Height,
+            0, 0, destFbo.Width, destFbo.Height,
+            _blitMask, _filterMode);
+
+        return pump.TryEnqueue(in command);
     }
 
     /// <inheritdoc/>
