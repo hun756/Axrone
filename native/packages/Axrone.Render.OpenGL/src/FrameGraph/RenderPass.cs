@@ -60,6 +60,13 @@ public enum FramePassKind
 /// <see cref="Validate"/> to enforce pre-conditions. The constructor must call
 /// <see cref="Reads"/> and <see cref="Writes"/> to declare resource dependencies
 /// for the frame graph scheduler.</para>
+/// <para>Attachment load/store metadata (<see cref="LoadAction"/>,
+/// <see cref="StoreAction"/>) is opt-in and is declared from the subclass
+/// constructor via <see cref="DeclaresLoadAction"/> and
+/// <see cref="DeclaresStoreAction"/>. The defaults (<see cref="AttachmentLoadAction.Load"/>
+/// / <see cref="AttachmentStoreAction.Store"/>) exactly preserve the previous
+/// behavior. The scheduler does not consume the metadata yet, so declaring it has no
+/// effect on ordering or execution.</para>
 /// </remarks>
 public abstract class RenderPass
 {
@@ -76,6 +83,30 @@ public abstract class RenderPass
 
     /// <summary>Gets or sets a value indicating whether this pass is enabled.</summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets how this pass's render target attachments must be loaded.
+    /// Defaults to <see cref="AttachmentLoadAction.Load"/>. Settable only from the
+    /// subclass constructor via <see cref="DeclaresLoadAction"/>.
+    /// </summary>
+    public AttachmentLoadAction LoadAction
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get;
+        private set;
+    } = AttachmentLoadAction.Load;
+
+    /// <summary>
+    /// Gets how this pass's render target attachments must be stored.
+    /// Defaults to <see cref="AttachmentStoreAction.Store"/>. Settable only from the
+    /// subclass constructor via <see cref="DeclaresStoreAction"/>.
+    /// </summary>
+    public AttachmentStoreAction StoreAction
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get;
+        private set;
+    } = AttachmentStoreAction.Store;
 
     /// <summary>Gets the resource names this pass reads.</summary>
     public ReadOnlySpan<string> GetReadResources()
@@ -122,6 +153,22 @@ public abstract class RenderPass
         _writes.Add(resourceName);
         _writesSnapshot = null;
     }
+
+    /// <summary>
+    /// Declares how this pass's render target attachments must be loaded.
+    /// Call from the subclass constructor. Opt-in metadata: it does not change
+    /// scheduling or execution, and the default preserves existing behavior.
+    /// </summary>
+    /// <param name="action">The declared load action.</param>
+    protected void DeclaresLoadAction(AttachmentLoadAction action) => LoadAction = action;
+
+    /// <summary>
+    /// Declares how this pass's render target attachments must be stored.
+    /// Call from the subclass constructor. Opt-in metadata: it does not change
+    /// scheduling or execution, and the default preserves existing behavior.
+    /// </summary>
+    /// <param name="action">The declared store action.</param>
+    protected void DeclaresStoreAction(AttachmentStoreAction action) => StoreAction = action;
 
     /// <summary>
     /// Executes the pass using the given GL context and resource context.

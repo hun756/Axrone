@@ -69,6 +69,19 @@ public sealed class FrameGraph : IDisposable
             if (_passes[i].IsEnabled)
             {
                 _passes[i].Validate();
+
+                // Attachment-action metadata validation (opt-in, metadata only):
+                // DontCare promises the pass overwrites the attachment in full, which
+                // requires that it actually writes something. The snapshot taken here
+                // is cached and reused by the dependency build below, so this adds no
+                // allocation and no extra traversal.
+                if (_passes[i].LoadAction == AttachmentLoadAction.DontCare && _passes[i].GetWrittenResources().IsEmpty)
+                {
+                    ThrowHelper.Throw(
+                        RenderErrorCode.InvalidPassConfiguration,
+                        $"Pass '{_passes[i].Name}' declares AttachmentLoadAction.DontCare but writes no resources; the attachment would never be filled",
+                        nameof(FrameGraph));
+                }
             }
         }
 
