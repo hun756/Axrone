@@ -8,6 +8,7 @@ using RenderPump = Axrone.Execution.CommandPump<
 
 namespace Axrone.Render.OpenGL.FrameGraph;
 
+
 /// <summary>
 /// Classifies the type of a render pass for frame graph scheduling and optimization.
 /// </summary>
@@ -60,36 +61,6 @@ public enum FramePassKind
 }
 
 /// <summary>
-/// Delegate for the setup phase of a render pass.
-/// Declares resource dependencies, the render target descriptor and load/store actions,
-/// and initializes the pass payload.
-/// </summary>
-public delegate void RenderPassSetupDelegate<TPassData>(IRenderPassBuilder builder, ref TPassData data) where TPassData : struct;
-
-/// <summary>
-/// Delegate for the execution phase of a render pass.
-/// Receives the graph-owned render context (warm state cache) plus the pass execution
-/// context for resource resolution. Raw GL remains reachable through
-/// <see cref="PassExecutionContext.Context"/> for operations the hardware-agnostic
-/// <see cref="IRenderContext"/> verbs do not cover (SSBO/image bindings, matrix uploads,
-/// mesh draws).
-/// </summary>
-public delegate void RenderPassExecuteDelegate<TPassData>(in TPassData data, IRenderContext context, PassExecutionContext ctx) where TPassData : struct;
-
-/// <summary>
-/// Delegate for the validation phase of a render pass.
-/// Enforces pass-specific pre-conditions (disposed programs, value ranges, wiring).
-/// </summary>
-public delegate void RenderPassValidateDelegate<TPassData>(in TPassData data) where TPassData : struct;
-
-/// <summary>
-/// Delegate for the pump-enqueue phase of a pump-capable render pass.
-/// Resolves resources from the execution context at enqueue time and must not retain
-/// the pump or the receipt beyond the call.
-/// </summary>
-public delegate EnqueueResult RenderPassPumpDelegate<TPassData>(in TPassData data, RenderPump pump, PassExecutionContext ctx) where TPassData : struct;
-
-/// <summary>
 /// Implementation of <see cref="IRenderPassBuilder"/> that collects pass configuration.
 /// </summary>
 internal sealed class RenderPassBuilder : IRenderPassBuilder
@@ -113,23 +84,30 @@ internal sealed class RenderPassBuilder : IRenderPassBuilder
 
 /// <summary>
 /// Strongly-typed render pass. The single canonical pass implementation in the frame graph:
-/// pass payload data plus setup / execute / validate delegates, executed
+/// a pass payload that owns its own setup / validate / execute phases, executed
 /// <see cref="IRenderContext"/>-native on the graph-owned <see cref="GLRenderContext"/>
 /// so the state cache stays warm across passes and execution allocates nothing per pass.
 /// </summary>
 /// <remarks>
+/// <para>The phase protocol is static-abstract (see <see cref="IPassSetup{TSelf}"/>,
+/// <see cref="IPassValidate{TSelf}"/> and <see cref="IPassExecute{TSelf}"/>), so a pass
+/// cannot be constructed with a missing, null or mismatched phase: the constraint below
+/// turns every one of those into a compile error, and there is no per-frame branch to
+/// check. <c>CustomPass</c> remains the documented callback-based escape hatch.</para>
 /// <para>Per-frame mutation goes through <see cref="Data"/> (a mutable ref): update fields
 /// such as view-projection matrices, intensities or time seeds before the graph executes.
 /// Reference-type payloads inside the struct (for example mesh lists) stay shared.</para>
 /// <para>Pump-capable passes use <see cref="PumpRenderPass{TPassData}"/> instead; this type
 /// never touches the command pump and always takes the direct leg.</para>
 /// </remarks>
-/// <typeparam name="TPassData">The struct payload type storing pass inputs and parameters.</typeparam>
-public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
+/// <typeparam name="TPassData">
+/// The payload type storing pass inputs and parameters and implementing the three
+/// static-abstract phase interfaces.
+/// </typeparam>
+public sealed class RenderPass<TPassData> : IRenderPass
+    where TPassData : IPassSetup<TPassData>, IPassValidate<TPassData>, IPassExecute<TPassData>
 {
     private TPassData _data;
-    private readonly RenderPassExecuteDelegate<TPassData> _execute;
-    private readonly RenderPassValidateDelegate<TPassData>? _validate;
     private readonly string[] _reads;
     private readonly string[] _writes;
 
@@ -154,25 +132,24 @@ public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
     /// <summary>Gets a mutable reference to the pass payload. Update per frame before execution.</summary>
     public ref TPassData Data => ref _data;
 
-    /// <summary>Initializes a render pass with setup, execution and optional validation delegates.</summary>
-    public RenderPass(
-        string name,
-        FramePassKind kind,
-        RenderPassSetupDelegate<TPassData> setup,
-        RenderPassExecuteDelegate<TPassData> execute,
-        RenderPassValidateDelegate<TPassData>? validate = null)
+    /// <summary>Initializes a render pass from a fully built payload.</summary>
+    /// <param name="name">The pass name.</param>
+    /// <param name="kind">The pass kind classification.</param>
+    /// <param name="data">
+    /// The pass payload. It is stored as-is and then handed to
+    /// <see cref="IPassSetup{TSelf}.Declare"/> so the pass can snapshot its own
+    /// dependencies, descriptor and attachment actions.
+    /// </param>
+    public RenderPass(string name, FramePassKind kind, TPassData data)
     {
         ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(setup);
-        ArgumentNullException.ThrowIfNull(execute);
 
         Name = name;
         Kind = kind;
-        _execute = execute;
-        _validate = validate;
+        _data = data;
 
         var builder = new RenderPassBuilder();
-        setup(builder, ref _data);
+        TPassData.Declare(builder, ref _data);
 
         Descriptor = builder.Descriptor;
         LoadAction = builder.LoadAction;
@@ -197,7 +174,7 @@ public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
                 ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(RenderPass<TPassData>));
             }
 
-            _execute(in _data, glCtx, glCtx.PassContext);
+            TPassData.Execute(in _data, glCtx, glCtx.PassContext);
         }
         else
         {
@@ -206,7 +183,7 @@ public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
     }
 
     /// <inheritdoc/>
-    public void Validate() => _validate?.Invoke(in _data);
+    public void Validate() => TPassData.Validate(in _data);
 
     /// <inheritdoc/>
     public override string ToString() => $"RenderPass: \"{Name}\" ({Kind}), Enabled={IsEnabled}";
@@ -218,13 +195,19 @@ public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
 /// When the enqueue is refused (ring full) the frame graph falls back to the direct leg,
 /// so the pass still runs exactly once and its GL effects stay inside the global order.
 /// </summary>
-/// <typeparam name="TPassData">The struct payload type storing pass inputs and parameters.</typeparam>
-public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue where TPassData : struct
+/// <remarks>
+/// All four phases (setup, validate, execute, enqueue) are static abstracts on the
+/// payload, so a pump pass cannot be built with a missing phase and the enqueue leg
+/// is guaranteed to exist whenever the pass declares itself pump-capable.
+/// </remarks>
+/// <typeparam name="TPassData">
+/// The payload type storing pass inputs and parameters and implementing the four
+/// static-abstract phase interfaces.
+/// </typeparam>
+public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue
+    where TPassData : IPassSetup<TPassData>, IPassValidate<TPassData>, IPassExecute<TPassData>, IPassEnqueue<TPassData>
 {
     private TPassData _data;
-    private readonly RenderPassExecuteDelegate<TPassData> _execute;
-    private readonly RenderPassValidateDelegate<TPassData>? _validate;
-    private readonly RenderPassPumpDelegate<TPassData> _pump;
     private readonly string[] _reads;
     private readonly string[] _writes;
 
@@ -249,28 +232,24 @@ public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue where 
     /// <summary>Gets a mutable reference to the pass payload. Update per frame before execution.</summary>
     public ref TPassData Data => ref _data;
 
-    /// <summary>Initializes a pump-capable render pass.</summary>
-    public PumpRenderPass(
-        string name,
-        FramePassKind kind,
-        RenderPassSetupDelegate<TPassData> setup,
-        RenderPassExecuteDelegate<TPassData> execute,
-        RenderPassPumpDelegate<TPassData> pump,
-        RenderPassValidateDelegate<TPassData>? validate = null)
+    /// <summary>Initializes a pump-capable render pass from a fully built payload.</summary>
+    /// <param name="name">The pass name.</param>
+    /// <param name="kind">The pass kind classification.</param>
+    /// <param name="data">
+    /// The pass payload. It is stored as-is and then handed to
+    /// <see cref="IPassSetup{TSelf}.Declare"/> so the pass can snapshot its own
+    /// dependencies, descriptor and attachment actions.
+    /// </param>
+    public PumpRenderPass(string name, FramePassKind kind, TPassData data)
     {
         ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(setup);
-        ArgumentNullException.ThrowIfNull(execute);
-        ArgumentNullException.ThrowIfNull(pump);
 
         Name = name;
         Kind = kind;
-        _execute = execute;
-        _pump = pump;
-        _validate = validate;
+        _data = data;
 
         var builder = new RenderPassBuilder();
-        setup(builder, ref _data);
+        TPassData.Declare(builder, ref _data);
 
         Descriptor = builder.Descriptor;
         LoadAction = builder.LoadAction;
@@ -295,7 +274,7 @@ public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue where 
                 ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(PumpRenderPass<TPassData>));
             }
 
-            _execute(in _data, glCtx, glCtx.PassContext);
+            TPassData.Execute(in _data, glCtx, glCtx.PassContext);
         }
         else
         {
@@ -308,11 +287,11 @@ public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue where 
     {
         ArgumentNullException.ThrowIfNull(pump);
         ArgumentNullException.ThrowIfNull(ctx);
-        return _pump(in _data, pump, ctx);
+        return TPassData.EnqueueCommands(in _data, pump, ctx);
     }
 
     /// <inheritdoc/>
-    public void Validate() => _validate?.Invoke(in _data);
+    public void Validate() => TPassData.Validate(in _data);
 
     /// <inheritdoc/>
     public override string ToString() => $"RenderPass: \"{Name}\" ({Kind}), Enabled={IsEnabled}";
