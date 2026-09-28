@@ -89,11 +89,16 @@ public static class BlitPass
         var sourceFbo = ctx.GetFramebuffer(data.SourceFramebufferName);
         var destFbo = ctx.GetFramebuffer(data.DestinationFramebufferName);
 
-        sourceFbo.BlitTo(
-            destFbo,
+        // The bind+blit sequence lives once in the command, so the direct (pumpless)
+        // leg and the pump replay leg issue exactly the same GL calls.
+        var blitCommand = new BlitFramebufferCommand<GLFramebufferInvoker>(
+            sourceFbo.Id, destFbo.Id,
             0, 0, sourceFbo.Width, sourceFbo.Height,
             0, 0, destFbo.Width, destFbo.Height,
-            data.BlitMask,
-            data.FilterMode);
+            data.BlitMask, data.FilterMode);
+
+        var invoker = new GLFramebufferInvoker(ctx.Context);
+
+        BlitDispatcher.Dispatch(ref invoker, ref blitCommand);
     }
 }
