@@ -10,16 +10,16 @@ namespace Axrone.Render.OpenGL.FrameGraph;
 
 /// <summary>
 /// Implemented by passes that can express their work as render pump commands.
-/// The frame graph calls <see cref="EnqueueCommands"/> opportunistically during
-/// <see cref="FrameGraph.EnqueuePumpPasses"/>; passes that do not implement this
-/// interface keep their direct <see cref="IRenderPass.Execute(IRenderContext)"/> path unchanged.
+/// The frame graph calls <see cref="EnqueueCommands"/> opportunistically while
+/// walking the compiled order; passes that do not implement this interface keep
+/// their direct <see cref="IRenderPass.Execute(IRenderContext)"/> path unchanged.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The contract is best-effort: the graph never requires a pass to be
 /// pump-capable, and a pump pass whose enqueue is refused (ring full) is simply
 /// not counted — the pass's direct <see cref="IRenderPass.Execute(IRenderContext)"/> path remains
-/// the fallback for callers that invoke <see cref="FrameGraph.Execute"/>.
+/// the fallback for callers that execute a compiled graph.
 /// </para>
 /// <para>
 /// Implementations must resolve resources from the execution context at enqueue
