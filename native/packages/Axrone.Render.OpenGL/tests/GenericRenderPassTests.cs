@@ -1,3 +1,5 @@
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
+
 using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
@@ -21,12 +23,125 @@ public sealed class GenericRenderPassTests : IDisposable
         _context.Dispose();
     }
 
-    private struct PostProcessPassData
+    // ========================================================================
+    // Test payloads: each one owns its setup / validate / execute phases
+    // ========================================================================
+
+    /// <summary>
+    /// Payload of the descriptor probe pass. The setup phase declares the
+    /// dependency, descriptor and attachment metadata; the remaining payload
+    /// fields prove the pass stores and exposes its data unchanged.
+    /// </summary>
+    private struct DescriptorPassData
+        : IPassSetup<DescriptorPassData>, IPassValidate<DescriptorPassData>, IPassExecute<DescriptorPassData>
     {
+        public string ReadName;
+        public string WriteName;
+        public RenderPassDescriptor Descriptor;
+        public AttachmentLoadAction LoadAction;
+        public AttachmentStoreAction StoreAction;
         public uint InputTexture;
         public uint OutputFramebuffer;
         public float Intensity;
+
+        public static void Declare(IRenderPassBuilder builder, ref DescriptorPassData data)
+        {
+            builder.Reads(data.ReadName);
+            builder.Writes(data.WriteName);
+            builder.SetDescriptor(in data.Descriptor);
+            builder.SetLoadAction(data.LoadAction);
+            builder.SetStoreAction(data.StoreAction);
+        }
+
+        public static void Validate(in DescriptorPassData data)
+        {
+        }
+
+        public static void Execute(in DescriptorPassData data, IRenderContext context, PassExecutionContext ctx)
+        {
+        }
     }
+
+    /// <summary>
+    /// Payload of the DAG-order passes. The setup phase flips the payload into its
+    /// ready state, so the execute phase observing that flag proves the same payload
+    /// instance travelled from setup through to execution.
+    /// </summary>
+    private struct LoggedPassData
+        : IPassSetup<LoggedPassData>, IPassValidate<LoggedPassData>, IPassExecute<LoggedPassData>
+    {
+        public string? ReadName;
+        public string? WriteName;
+        public string LogEntry;
+        public List<string> ExecutionLog;
+        public bool Ran;
+
+        public static void Declare(IRenderPassBuilder builder, ref LoggedPassData data)
+        {
+            if (data.ReadName is not null)
+            {
+                builder.Reads(data.ReadName);
+            }
+
+            if (data.WriteName is not null)
+            {
+                builder.Writes(data.WriteName);
+            }
+
+            data.Ran = true;
+        }
+
+        public static void Validate(in LoggedPassData data)
+        {
+        }
+
+        public static void Execute(in LoggedPassData data, IRenderContext context, PassExecutionContext ctx)
+        {
+            if (data.Ran)
+            {
+                data.ExecutionLog.Add(data.LogEntry);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Payload of the context probes. It records the context it was executed with
+    /// into a caller-owned slot, so both probes can be compared against the same
+    /// graph-owned instance.
+    /// </summary>
+    private struct ContextProbeData
+        : IPassSetup<ContextProbeData>, IPassValidate<ContextProbeData>, IPassExecute<ContextProbeData>
+    {
+        public string? ReadName;
+        public string? WriteName;
+        public IRenderContext?[] Slot;
+
+        public static void Declare(IRenderPassBuilder builder, ref ContextProbeData data)
+        {
+            if (data.ReadName is not null)
+            {
+                builder.Reads(data.ReadName);
+            }
+
+            if (data.WriteName is not null)
+            {
+                builder.Writes(data.WriteName);
+            }
+        }
+
+        public static void Validate(in ContextProbeData data)
+        {
+        }
+
+        public static void Execute(in ContextProbeData data, IRenderContext context, PassExecutionContext ctx)
+        {
+            data.Slot[0] = context;
+        }
+    }
+
+    // ========================================================================
+    // Setup phase
+    // ========================================================================
 
     [Fact]
     public void GenericPass_SetupPhase_CapturesDescriptorAndDependencies()
@@ -34,22 +149,20 @@ public sealed class GenericRenderPassTests : IDisposable
         var vp = new ViewportRect(0, 0, 1920, 1080);
         var desc = RenderPassDescriptor.CreateDefault(vp, new ClearColorValue(0.1f, 0.2f, 0.3f, 1f));
 
-        var pass = new RenderPass<PostProcessPassData>(
+        var pass = new RenderPass<DescriptorPassData>(
             "BloomExtract",
             FramePassKind.PostProcess,
-            (builder, ref data) =>
+            new DescriptorPassData
             {
-                builder.Reads("HDRSceneColor");
-                builder.Writes("BloomMip0");
-                builder.SetDescriptor(desc);
-                builder.SetLoadAction(AttachmentLoadAction.Clear);
-                builder.SetStoreAction(AttachmentStoreAction.Store);
-
-                data.InputTexture = 42;
-                data.OutputFramebuffer = 100;
-                data.Intensity = 1.5f;
-            },
-            (in data, ctx, execCtx) => { });
+                ReadName = "HDRSceneColor",
+                WriteName = "BloomMip0",
+                Descriptor = desc,
+                LoadAction = AttachmentLoadAction.Clear,
+                StoreAction = AttachmentStoreAction.Store,
+                InputTexture = 42,
+                OutputFramebuffer = 100,
+                Intensity = 1.5f
+            });
 
         pass.Name.Should().Be("BloomExtract");
         pass.Kind.Should().Be(FramePassKind.PostProcess);
@@ -141,66 +254,45 @@ public sealed class GenericRenderPassTests : IDisposable
         glCtx.EndPass();
     }
 
-    private struct GeometryData
-    {
-        public bool Ran;
-    }
-
-    private struct CompositeData
-    {
-        public bool Ran;
-    }
+    // ========================================================================
+    // Execution routing
+    // ========================================================================
 
     [Fact]
     public void FrameGraph_AddPassGeneric_CompilesAndExecutesInDagOrder()
     {
         using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
 
-        bool geomExecuted = false;
-        bool compExecuted = false;
         var executionOrder = new List<string>();
 
         // Intentionally add dependent pass first: Composite reads "AlbedoTexture" written by Geometry
-        fg.AddPass<CompositeData>(
+        fg.AddPass<LoggedPassData>(
             "CompositePass",
             FramePassKind.PostProcess,
-            (builder, ref data) =>
+            new LoggedPassData
             {
-                builder.Reads("AlbedoTexture");
-                builder.Writes("FinalOutput");
-                data.Ran = true;
-            },
-            (in data, ctx, exec) =>
-            {
-                compExecuted = data.Ran;
-                executionOrder.Add("CompositePass");
+                ReadName = "AlbedoTexture",
+                WriteName = "FinalOutput",
+                LogEntry = "CompositePass",
+                ExecutionLog = executionOrder
             });
 
-        fg.AddPass<GeometryData>(
+        fg.AddPass<LoggedPassData>(
             "GeometryPass",
             FramePassKind.Opaque,
-            (builder, ref data) =>
+            new LoggedPassData
             {
-                builder.Writes("AlbedoTexture");
-                data.Ran = true;
-            },
-            (in data, ctx, exec) =>
-            {
-                geomExecuted = data.Ran;
-                executionOrder.Add("GeometryPass");
+                WriteName = "AlbedoTexture",
+                LogEntry = "GeometryPass",
+                ExecutionLog = executionOrder
             });
 
         fg.Execute();
 
-        geomExecuted.Should().BeTrue();
-        compExecuted.Should().BeTrue();
-
-        // Topological order must place GeometryPass before CompositePass
+        // Topological order must place GeometryPass before CompositePass. Both
+        // entries exist only if each pass saw the payload its setup phase wrote.
+        executionOrder.Should().HaveCount(2);
         executionOrder.Should().ContainInOrder("GeometryPass", "CompositePass");
-    }
-
-    private struct ContextProbeData
-    {
     }
 
     [Fact]
@@ -233,25 +325,31 @@ public sealed class GenericRenderPassTests : IDisposable
     {
         using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
 
-        IRenderContext? first = null;
-        IRenderContext? second = null;
+        IRenderContext?[] firstSlot = new IRenderContext?[1];
+        IRenderContext?[] secondSlot = new IRenderContext?[1];
 
         fg.AddPass<ContextProbeData>(
             "ProbeA",
             FramePassKind.Custom,
-            (builder, ref data) => builder.Writes("ProbeResource"),
-            (in data, ctx, exec) => first = ctx);
+            new ContextProbeData
+            {
+                WriteName = "ProbeResource",
+                Slot = firstSlot
+            });
 
         fg.AddPass<ContextProbeData>(
             "ProbeB",
             FramePassKind.Custom,
-            (builder, ref data) => builder.Reads("ProbeResource"),
-            (in data, ctx, exec) => second = ctx);
+            new ContextProbeData
+            {
+                ReadName = "ProbeResource",
+                Slot = secondSlot
+            });
 
         fg.Execute();
 
-        first.Should().BeSameAs(fg.RenderContext);
-        second.Should().BeSameAs(fg.RenderContext);
+        firstSlot[0].Should().BeSameAs(fg.RenderContext);
+        secondSlot[0].Should().BeSameAs(fg.RenderContext);
     }
 
     [Fact]
@@ -260,11 +358,10 @@ public sealed class GenericRenderPassTests : IDisposable
         var pass = new RenderPass<ContextProbeData>(
             "NativeOnly",
             FramePassKind.Custom,
-            (builder, ref data) => { },
-            (in data, ctx, exec) => { });
+            new ContextProbeData { Slot = new IRenderContext?[1] });
 
         // A GLRenderContext without a PassExecutionContext cannot satisfy the pass
-        // contract, so execution must fail closed instead of running the delegate.
+        // contract, so execution must fail closed instead of running the phase.
         var renderCtx = new GLRenderContext(_context, passContext: null);
 
         var action = () => ((IRenderPass)pass).Execute(renderCtx);
