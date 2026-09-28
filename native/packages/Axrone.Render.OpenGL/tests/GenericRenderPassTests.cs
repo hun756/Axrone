@@ -5,6 +5,12 @@ using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
 using Axrone.Render.OpenGL.FrameGraph.Passes;
 
+// Alias to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
+// and the typestate FrameGraph handle within that namespace: FG is the building
+// handle (AddPass/Reset/Compile), and Compile() hands out the compiled handle
+// that carries Execute(). RenderContext is readable on the building handle.
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
+
 namespace Axrone.Render.OpenGL.Tests;
 
 public sealed class GenericRenderPassTests : IDisposable
@@ -261,12 +267,12 @@ public sealed class GenericRenderPassTests : IDisposable
     [Fact]
     public void FrameGraph_AddPassGeneric_CompilesAndExecutesInDagOrder()
     {
-        using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
+        using var fg = new FG(_context);
 
         var executionOrder = new List<string>();
 
         // Intentionally add dependent pass first: Composite reads "AlbedoTexture" written by Geometry
-        fg.AddPass<LoggedPassData>(
+        fg.AddPass<LoggedPassData, DefaultGraphPolicy>(
             "CompositePass",
             FramePassKind.PostProcess,
             new LoggedPassData
@@ -277,7 +283,7 @@ public sealed class GenericRenderPassTests : IDisposable
                 ExecutionLog = executionOrder
             });
 
-        fg.AddPass<LoggedPassData>(
+        fg.AddPass<LoggedPassData, DefaultGraphPolicy>(
             "GeometryPass",
             FramePassKind.Opaque,
             new LoggedPassData
@@ -287,7 +293,7 @@ public sealed class GenericRenderPassTests : IDisposable
                 ExecutionLog = executionOrder
             });
 
-        fg.Execute();
+        fg.Compile().Execute();
 
         // Topological order must place GeometryPass before CompositePass. Both
         // entries exist only if each pass saw the payload its setup phase wrote.
@@ -298,7 +304,7 @@ public sealed class GenericRenderPassTests : IDisposable
     [Fact]
     public void FrameGraph_Execute_RoutesCustomPassThroughOwnedRenderContext()
     {
-        using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
+        using var fg = new FG(_context);
 
         GLContext? receivedContext = null;
         PassExecutionContext? receivedPassContext = null;
@@ -314,7 +320,7 @@ public sealed class GenericRenderPassTests : IDisposable
 
         fg.AddPass(pass);
 
-        fg.Execute();
+        fg.Compile().Execute();
 
         receivedContext.Should().BeSameAs(fg.RenderContext.GLContext);
         receivedPassContext.Should().BeSameAs(fg.RenderContext.PassContext);
@@ -323,12 +329,12 @@ public sealed class GenericRenderPassTests : IDisposable
     [Fact]
     public void FrameGraph_Execute_GenericPassesShareGraphOwnedRenderContext()
     {
-        using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
+        using var fg = new FG(_context);
 
         IRenderContext?[] firstSlot = new IRenderContext?[1];
         IRenderContext?[] secondSlot = new IRenderContext?[1];
 
-        fg.AddPass<ContextProbeData>(
+        fg.AddPass<ContextProbeData, DefaultGraphPolicy>(
             "ProbeA",
             FramePassKind.Custom,
             new ContextProbeData
@@ -337,7 +343,7 @@ public sealed class GenericRenderPassTests : IDisposable
                 Slot = firstSlot
             });
 
-        fg.AddPass<ContextProbeData>(
+        fg.AddPass<ContextProbeData, DefaultGraphPolicy>(
             "ProbeB",
             FramePassKind.Custom,
             new ContextProbeData
@@ -346,7 +352,7 @@ public sealed class GenericRenderPassTests : IDisposable
                 Slot = secondSlot
             });
 
-        fg.Execute();
+        fg.Compile().Execute();
 
         firstSlot[0].Should().BeSameAs(fg.RenderContext);
         secondSlot[0].Should().BeSameAs(fg.RenderContext);
