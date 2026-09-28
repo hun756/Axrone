@@ -1,3 +1,5 @@
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
+
 using Axrone.Execution;
 using RenderPump = Axrone.Execution.CommandPump<
     Axrone.Render.Core.RenderCommand,
@@ -9,9 +11,11 @@ using RenderPump = Axrone.Execution.CommandPump<
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the presentation pass (blit to the default framebuffer).
+/// Payload for the presentation pass (blit to the default framebuffer), owning the
+/// pass's setup, validate, execute and pump-enqueue phases.
 /// </summary>
 public record struct PresentPassData
+    : IPassSetup<PresentPassData>, IPassValidate<PresentPassData>, IPassExecute<PresentPassData>, IPassEnqueue<PresentPassData>
 {
     /// <summary>Source framebuffer resource name.</summary>
     public string SourceFramebufferName { get; set; }
@@ -27,43 +31,15 @@ public record struct PresentPassData
 
     /// <summary>Buffer mask for blitting.</summary>
     public uint BlitMask { get; set; }
-}
 
-/// <summary>
-/// Factory for the presentation pass.
-/// </summary>
-public static class PresentPass
-{
-    private const uint DefaultFramebufferId = 0;
-
-    /// <summary>Creates a pump-capable present pass.</summary>
-    public static PumpRenderPass<PresentPassData> Create(
-        string name,
-        string sourceFramebufferName,
-        int destinationWidth = 0,
-        int destinationHeight = 0,
-        uint filterMode = GLConst.NearestFilter,
-        uint blitMask = GLConst.ColorBufferBit)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref PresentPassData data)
     {
-        ArgumentNullException.ThrowIfNull(sourceFramebufferName);
-        return new PumpRenderPass<PresentPassData>(
-            name,
-            FramePassKind.Present,
-            (IRenderPassBuilder builder, ref PresentPassData data) =>
-            {
-                data.SourceFramebufferName = sourceFramebufferName;
-                data.DestinationWidth = destinationWidth;
-                data.DestinationHeight = destinationHeight;
-                data.FilterMode = filterMode;
-                data.BlitMask = blitMask;
-                builder.Reads(sourceFramebufferName);
-            },
-            Execute,
-            Enqueue,
-            Validate);
+        builder.Reads(data.SourceFramebufferName);
     }
 
-    private static void Validate(in PresentPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in PresentPassData data)
     {
         if (string.IsNullOrWhiteSpace(data.SourceFramebufferName))
         {
@@ -81,7 +57,8 @@ public static class PresentPass
         }
     }
 
-    private static void Execute(in PresentPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in PresentPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -107,7 +84,8 @@ public static class PresentPass
         state.SetViewport(0, 0, dstWidth, dstHeight);
     }
 
-    private static EnqueueResult Enqueue(in PresentPassData data, RenderPump pump, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static EnqueueResult EnqueueCommands(in PresentPassData data, RenderPump pump, PassExecutionContext ctx)
     {
         var sourceFbo = ctx.GetFramebuffer(data.SourceFramebufferName);
 
@@ -123,5 +101,36 @@ public static class PresentPass
             data.BlitMask, data.FilterMode);
 
         return pump.TryEnqueue(in command);
+    }
+
+    private const uint DefaultFramebufferId = 0;
+}
+
+/// <summary>
+/// Factory for the presentation pass.
+/// </summary>
+public static class PresentPass
+{
+    /// <summary>Creates a pump-capable present pass.</summary>
+    public static PumpRenderPass<PresentPassData> Create(
+        string name,
+        string sourceFramebufferName,
+        int destinationWidth = 0,
+        int destinationHeight = 0,
+        uint filterMode = GLConst.NearestFilter,
+        uint blitMask = GLConst.ColorBufferBit)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFramebufferName);
+        return new PumpRenderPass<PresentPassData>(
+            name,
+            FramePassKind.Present,
+            new PresentPassData
+            {
+                SourceFramebufferName = sourceFramebufferName,
+                DestinationWidth = destinationWidth,
+                DestinationHeight = destinationHeight,
+                FilterMode = filterMode,
+                BlitMask = blitMask
+            });
     }
 }
