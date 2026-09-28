@@ -1,9 +1,10 @@
 using Xunit;
 using FluentAssertions;
 using Axrone.Execution;
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 
@@ -35,6 +36,17 @@ public class PresentPumpTests
         return (context, mock, ctx, source);
     }
 
+    /// <summary>
+    /// Runs one pass on the direct leg: the same
+    /// <see cref="IRenderContext"/>-native seam the frame graph uses, built over
+    /// the pass's own <see cref="PassExecutionContext"/>.
+    /// </summary>
+    private static void ExecuteDirect(GLContext context, IRenderPass pass, PassExecutionContext ctx)
+    {
+        var renderCtx = new GLRenderContext(context, ctx);
+        pass.Execute(renderCtx);
+    }
+
     [Fact]
     public void PresentThroughPump_BlitsSourceOntoDefaultFramebuffer()
     {
@@ -42,7 +54,7 @@ public class PresentPumpTests
 
         // A scaled-up linear-filtered present: every packet field is non-default,
         // so a lost rectangle, mask, or filter shows up as a log diff.
-        var pass = new PresentPassExecutor(
+        var pass = PresentPass.Create(
             "present", "x",
             destinationWidth: 128,
             destinationHeight: 128,
@@ -81,7 +93,7 @@ public class PresentPumpTests
         var (context, mock, ctx, source) = CreateFrame();
         var (directContext, directMock, directCtx, directSource) = CreateFrame();
 
-        var pass = new PresentPassExecutor(
+        var pass = PresentPass.Create(
             "present", "x",
             destinationWidth: 128,
             destinationHeight: 128,
@@ -90,7 +102,7 @@ public class PresentPumpTests
         mock.ClearCallLog();
         directMock.ClearCallLog();
 
-        pass.Execute(directContext, directCtx);
+        ExecuteDirect(directContext, pass, directCtx);
 
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
@@ -117,8 +129,8 @@ public class PresentPumpTests
         var (context, mock, ctx, source) = CreateFrame();
 
         // Zero destination dimensions mean "follow the source", the same sizing
-        // rule Execute applies.
-        var pass = new PresentPassExecutor("present", "x");
+        // rule the direct leg applies.
+        var pass = PresentPass.Create("present", "x");
 
         mock.ClearCallLog();
 
@@ -140,7 +152,7 @@ public class PresentPumpTests
     {
         var (context, mock, ctx, source) = CreateFrame();
 
-        var pass = new PresentPassExecutor("present", "x");
+        var pass = PresentPass.Create("present", "x");
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
 
@@ -181,7 +193,7 @@ public class PresentPumpTests
 
     /// <summary>
     /// The GL calls a present is defined by: the read/draw framebuffer binds that
-    /// select the blit endpoints, and the blit itself. The direct path
+    /// select the blit endpoints, and the blit itself. The direct leg
     /// additionally rebinds <see cref="GLConst.Framebuffer"/> to 0 and resets the
     /// viewport after the blit — a presentation courtesy the packet does not
     /// carry — so equality is asserted over the blit-relevant lines only.
