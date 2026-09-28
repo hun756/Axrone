@@ -1,13 +1,12 @@
 using Axrone.Render.OpenGL.Context;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 namespace Axrone.Render.OpenGL.Tests;
 
-// Alias to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
+// Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
 // and class FrameGraph within that namespace.
 using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
 using FGP = global::Axrone.Render.OpenGL.FrameGraph.FramePassKind;
-using FGPass = global::Axrone.Render.OpenGL.FrameGraph.RenderPass;
-using FGCtx = global::Axrone.Render.OpenGL.FrameGraph.PassExecutionContext;
 
 /// <summary>
 /// Tests for FrameGraph pass scheduling, topological ordering,
@@ -15,6 +14,10 @@ using FGCtx = global::Axrone.Render.OpenGL.FrameGraph.PassExecutionContext;
 /// </summary>
 public sealed class FrameGraphTests : IDisposable
 {
+    private static readonly string[] s_scene = new string[] { "scene" };
+    private static readonly string[] s_resourceA = new string[] { "a" };
+    private static readonly string[] s_resourceB = new string[] { "b" };
+
     private readonly MockGLApi _mock;
     private readonly GLContext _context;
 
@@ -38,12 +41,12 @@ public sealed class FrameGraphTests : IDisposable
     public void SinglePass_Executes()
     {
         using var graph = new FG(_context);
-        var pass = new TestRenderPass("pass1", FGP.Custom);
-        graph.AddPass(pass);
+        int executionCount = 0;
+        graph.AddPass(CustomPass.Create("pass1", FGP.Custom, (gl, ctx) => executionCount++));
 
         graph.Execute();
 
-        pass.ExecutionCount.Should().Be(1);
+        executionCount.Should().Be(1);
     }
 
     [Fact]
@@ -52,17 +55,10 @@ public sealed class FrameGraphTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<int>();
 
-        var pass0 = new OrderTrackingPass("pass0", 0, executionOrder);
-        var pass1 = new OrderTrackingPass("pass1", 1, executionOrder);
-        var pass2 = new OrderTrackingPass("pass2", 2, executionOrder);
-
         // pass1 writes "scene", pass2 reads "scene" => pass1 must come before pass2
-        pass1.AddWrite("scene");
-        pass2.AddRead("scene");
-
-        graph.AddPass(pass0);
-        graph.AddPass(pass1);
-        graph.AddPass(pass2);
+        graph.AddPass(CustomPass.Create("pass0", FGP.Custom, (gl, ctx) => executionOrder.Add(0)));
+        graph.AddPass(CustomPass.Create("pass1", FGP.Custom, (gl, ctx) => executionOrder.Add(1), writes: s_scene));
+        graph.AddPass(CustomPass.Create("pass2", FGP.Custom, (gl, ctx) => executionOrder.Add(2), reads: s_scene));
 
         graph.Execute();
 
@@ -76,16 +72,19 @@ public sealed class FrameGraphTests : IDisposable
     {
         using var graph = new FG(_context);
 
-        var passA = new TestRenderPassWithDeps("passA");
-        passA.AddWrite("a");
-        passA.AddRead("b");
+        graph.AddPass(CustomPass.Create(
+            "passA",
+            FGP.Custom,
+            static (_, _) => { },
+            reads: s_resourceB,
+            writes: s_resourceA));
 
-        var passB = new TestRenderPassWithDeps("passB");
-        passB.AddWrite("b");
-        passB.AddRead("a");
-
-        graph.AddPass(passA);
-        graph.AddPass(passB);
+        graph.AddPass(CustomPass.Create(
+            "passB",
+            FGP.Custom,
+            static (_, _) => { },
+            reads: s_resourceA,
+            writes: s_resourceB));
 
         var action = () => graph.Compile();
 
@@ -97,8 +96,8 @@ public sealed class FrameGraphTests : IDisposable
     public void Reset_ClearsAllPasses()
     {
         using var graph = new FG(_context);
-        graph.AddPass(new TestRenderPass("pass1", FGP.Custom));
-        graph.AddPass(new TestRenderPass("pass2", FGP.Custom));
+        graph.AddPass(CustomPass.Create("pass1", FGP.Custom, static (_, _) => { }));
+        graph.AddPass(CustomPass.Create("pass2", FGP.Custom, static (_, _) => { }));
         graph.PassCount.Should().Be(2);
 
         graph.Reset();
@@ -110,8 +109,10 @@ public sealed class FrameGraphTests : IDisposable
     public void DisabledPass_IsSkipped()
     {
         using var graph = new FG(_context);
-        var enabledPass = new TestRenderPass("enabled", FGP.Custom);
-        var disabledPass = new TestRenderPass("disabled", FGP.Custom);
+        int enabledCount = 0;
+        int disabledCount = 0;
+        var enabledPass = CustomPass.Create("enabled", FGP.Custom, (gl, ctx) => enabledCount++);
+        var disabledPass = CustomPass.Create("disabled", FGP.Custom, (gl, ctx) => disabledCount++);
         disabledPass.IsEnabled = false;
 
         graph.AddPass(enabledPass);
@@ -119,8 +120,8 @@ public sealed class FrameGraphTests : IDisposable
 
         graph.Execute();
 
-        enabledPass.ExecutionCount.Should().Be(1);
-        disabledPass.ExecutionCount.Should().Be(0);
+        enabledCount.Should().Be(1);
+        disabledCount.Should().Be(0);
     }
 
     [Fact]
@@ -130,10 +131,10 @@ public sealed class FrameGraphTests : IDisposable
 
         graph.PassCount.Should().Be(0);
 
-        graph.AddPass(new TestRenderPass("pass1", FGP.Custom));
+        graph.AddPass(CustomPass.Create("pass1", FGP.Custom, static (_, _) => { }));
         graph.PassCount.Should().Be(1);
 
-        graph.AddPass(new TestRenderPass("pass2", FGP.Custom));
+        graph.AddPass(CustomPass.Create("pass2", FGP.Custom, static (_, _) => { }));
         graph.PassCount.Should().Be(2);
     }
 
@@ -143,70 +144,9 @@ public sealed class FrameGraphTests : IDisposable
         var graph = new FG(_context);
         graph.Dispose();
 
-        var action = () => graph.AddPass(new TestRenderPass("pass1", FGP.Custom));
+        var action = () => graph.AddPass(CustomPass.Create("pass1", FGP.Custom, static (_, _) => { }));
 
         action.Should().Throw<ObjectDisposedException>();
-    }
-
-    // ========================================================================
-    // Helper pass implementations
-    // ========================================================================
-
-    /// <summary>
-    /// Simple test pass that counts executions.
-    /// </summary>
-    private sealed class TestRenderPass : FGPass
-    {
-        public int ExecutionCount { get; private set; }
-
-        public TestRenderPass(string name, FGP kind) : base(name, kind)
-        {
-        }
-
-        public override void Execute(GLContext context, FGCtx ctx)
-        {
-            ExecutionCount++;
-        }
-    }
-
-    /// <summary>
-    /// Test pass that records its execution order.
-    /// </summary>
-    private sealed class OrderTrackingPass : FGPass
-    {
-        private readonly int _order;
-        private readonly List<int> _executionOrder;
-
-        public OrderTrackingPass(string name, int order, List<int> executionOrder) : base(name, FGP.Custom)
-        {
-            _order = order;
-            _executionOrder = executionOrder;
-        }
-
-        public void AddRead(string resource) => Reads(resource);
-        public void AddWrite(string resource) => Writes(resource);
-
-        public override void Execute(GLContext context, FGCtx ctx)
-        {
-            _executionOrder.Add(_order);
-        }
-    }
-
-    /// <summary>
-    /// Test pass with configurable read/write dependencies for cycle detection tests.
-    /// </summary>
-    private sealed class TestRenderPassWithDeps : FGPass
-    {
-        public TestRenderPassWithDeps(string name) : base(name, FGP.Custom)
-        {
-        }
-
-        public void AddRead(string resource) => Reads(resource);
-        public void AddWrite(string resource) => Writes(resource);
-
-        public override void Execute(GLContext context, FGCtx ctx)
-        {
-        }
     }
 
     public void Dispose()
