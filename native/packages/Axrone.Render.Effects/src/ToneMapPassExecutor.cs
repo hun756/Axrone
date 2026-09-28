@@ -90,7 +90,7 @@ public enum ToneMapOperator
 /// <c>2^ev</c>; and <see cref="AdaptationSpeed"/> is normalised to (0, 1] whereas the WebGL2
 /// pass drives the same blend with a raw <c>adaptationRate</c> (default 1.5).</para>
 /// </remarks>
-public sealed class ToneMapPassExecutor : RenderPass
+public sealed class ToneMapPassExecutor : IRenderPass
 {
     private const int InvalidUniformLocation = -1;
 
@@ -140,6 +140,29 @@ public sealed class ToneMapPassExecutor : RenderPass
     private float _maxExposureEv = DefaultMaxExposureEv;
     private float _deltaTime;
 
+    private readonly List<string> _reads = new(4);
+    private readonly List<string> _writes = new(4);
+    private string[]? _readsSnapshot;
+    private string[]? _writesSnapshot;
+
+    /// <summary>Gets the pass name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the pass kind for scheduling classification.</summary>
+    public FramePassKind Kind { get; }
+
+    /// <summary>Gets or sets a value indicating whether this pass is enabled.</summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Gets the hardware-agnostic descriptor describing targets and attachments.</summary>
+    public RenderPassDescriptor Descriptor { get; }
+
+    /// <summary>Gets how this pass's render target attachments must be loaded.</summary>
+    public AttachmentLoadAction LoadAction => AttachmentLoadAction.Load;
+
+    /// <summary>Gets how this pass's render target attachments must be stored.</summary>
+    public AttachmentStoreAction StoreAction => AttachmentStoreAction.Store;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ToneMapPassExecutor"/> class.
     /// </summary>
@@ -163,12 +186,14 @@ public sealed class ToneMapPassExecutor : RenderPass
         string outputTextureName = "scene_ldr",
         string exposureHistoryReadName = "",
         string exposureHistoryWriteName = "")
-        : base(name, FramePassKind.ToneMap)
     {
+        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(shader);
         ArgumentNullException.ThrowIfNull(exposureHistoryReadName);
         ArgumentNullException.ThrowIfNull(exposureHistoryWriteName);
 
+        Name = name;
+        Kind = FramePassKind.ToneMap;
         _shader = shader;
         _inputTextureName = inputTextureName;
         _outputTextureName = outputTextureName;
@@ -176,14 +201,28 @@ public sealed class ToneMapPassExecutor : RenderPass
         _exposureHistoryWriteName = exposureHistoryWriteName;
         _exposureHistoryWired = exposureHistoryReadName.Length != 0 && exposureHistoryWriteName.Length != 0;
 
-        Reads(inputTextureName);
-        Writes(outputTextureName);
+        _reads.Add(inputTextureName);
+        _writes.Add(outputTextureName);
 
         if (_exposureHistoryWired)
         {
-            Reads(exposureHistoryReadName);
-            Writes(exposureHistoryWriteName);
+            _reads.Add(exposureHistoryReadName);
+            _writes.Add(exposureHistoryWriteName);
         }
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetReadResources()
+    {
+        _readsSnapshot ??= _reads.ToArray();
+        return _readsSnapshot;
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetWrittenResources()
+    {
+        _writesSnapshot ??= _writes.ToArray();
+        return _writesSnapshot;
     }
 
     /// <summary>Gets or sets the active tone mapping operator.</summary>
@@ -294,7 +333,7 @@ public sealed class ToneMapPassExecutor : RenderPass
 
     /// <summary>
     /// Gets or sets the frame duration in seconds fed to the adaptation blend. The pass has no
-    /// clock of its own, so the caller sets this per frame before <see cref="RenderPass.Execute"/>.
+    /// clock of its own, so the caller sets this per frame before execution.
     /// Consumed as <c>u_deltaTime</c>.
     /// </summary>
     public float DeltaTime
@@ -410,7 +449,7 @@ public sealed class ToneMapPassExecutor : RenderPass
     }
 
     /// <inheritdoc/>
-    public override void Validate()
+    public void Validate()
     {
         if (_exposure <= 0f)
         {
@@ -458,8 +497,28 @@ public sealed class ToneMapPassExecutor : RenderPass
     }
 
     /// <inheritdoc/>
+    void IRenderPass.Execute(IRenderContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context is GLRenderContext glCtx && glCtx.PassContext is not null)
+        {
+            Execute(glCtx.GLContext, glCtx.PassContext);
+            return;
+        }
+
+        ThrowHelper.Throw(RenderErrorCode.InvalidOperation,
+            $"{Name} requires a GLRenderContext with a configured PassContext.",
+            nameof(ToneMapPassExecutor));
+    }
+
+    /// <summary>
+    /// Executes the tone mapping (plus optional exposure adaptation) on the given GL context.
+    /// </summary>
+    /// <param name="context">The GL context for issuing draw calls.</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override void Execute(GLContext context, PassExecutionContext ctx)
+    public void Execute(GLContext context, PassExecutionContext ctx)
     {
         context.AssertRenderThread();
 
