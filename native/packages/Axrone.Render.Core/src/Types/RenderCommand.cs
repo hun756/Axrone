@@ -5,6 +5,10 @@ namespace Axrone.Render.Core;
 /// generational registry handles (never raw GL names): a recycled slot fails
 /// closed at resolve time instead of aliasing a stranger object.
 /// </summary>
+/// <remarks>
+/// The 64 bytes are a tagged union: the leading <see cref="Type"/> byte selects
+/// the blit or the clear view of the overlapping payload.
+/// </remarks>
 [StructLayout(LayoutKind.Explicit, Size = 64)]
 public readonly struct RenderCommand : IEquatable<RenderCommand>
 {
@@ -60,6 +64,44 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
     [FieldOffset(60)]
     public readonly int DestinationY1;
 
+    // --------------------------------------------------------------------
+    // Clear payload: the explicit layout is a byte union, so these overlap
+    // the blit bytes they do not need. Both payloads stay inside the 64-byte
+    // packet; the discriminator at offset 0 says which view is live.
+    // --------------------------------------------------------------------
+
+    /// <summary>Clear buffer mask (color/depth/stencil bits).</summary>
+    [FieldOffset(4)]
+    public readonly uint ClearMask;
+
+    /// <summary>Target framebuffer registration.</summary>
+    [FieldOffset(16)]
+    public readonly DescriptorHandle<GLResourceNode> Target;
+
+    /// <summary>Clear color red.</summary>
+    [FieldOffset(32)]
+    public readonly float ColorR;
+
+    /// <summary>Clear color green.</summary>
+    [FieldOffset(36)]
+    public readonly float ColorG;
+
+    /// <summary>Clear color blue.</summary>
+    [FieldOffset(40)]
+    public readonly float ColorB;
+
+    /// <summary>Clear color alpha.</summary>
+    [FieldOffset(44)]
+    public readonly float ColorA;
+
+    /// <summary>Clear depth value.</summary>
+    [FieldOffset(48)]
+    public readonly float Depth;
+
+    /// <summary>Clear stencil value.</summary>
+    [FieldOffset(52)]
+    public readonly int Stencil;
+
     /// <summary>
     /// Creates a framebuffer blit command.
     /// </summary>
@@ -74,6 +116,21 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
             sourceX0, sourceY0, sourceX1, sourceY1,
             destinationX0, destinationY0, destinationX1, destinationY1,
             mask, filter);
+
+    /// <summary>
+    /// Creates a color/depth/stencil clear command.
+    /// </summary>
+    /// <remarks>
+    /// Only the clear fields are written; the remaining bytes stay zeroed by the
+    /// constructor's <c>initobj</c>, so two clears with equal arguments are
+    /// bit-identical and compare equal under the whole-struct equality below.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static RenderCommand CreateClear(
+        in DescriptorHandle<GLResourceNode> target,
+        float r, float g, float b, float a,
+        float depth, int stencil, uint clearMask) => new(
+            target, r, g, b, a, depth, stencil, clearMask);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private RenderCommand(
@@ -96,6 +153,23 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
         DestinationY0 = destinationY0;
         DestinationX1 = destinationX1;
         DestinationY1 = destinationY1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private RenderCommand(
+        in DescriptorHandle<GLResourceNode> target,
+        float r, float g, float b, float a,
+        float depth, int stencil, uint clearMask)
+    {
+        Type = RenderCommandType.Clear;
+        ClearMask = clearMask;
+        Target = target;
+        ColorR = r;
+        ColorG = g;
+        ColorB = b;
+        ColorA = a;
+        Depth = depth;
+        Stencil = stencil;
     }
 
     /// <inheritdoc/>
