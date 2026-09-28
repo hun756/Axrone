@@ -1,27 +1,29 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the screen-space ambient occlusion (SSAO) pass.
+/// Payload for the screen-space ambient occlusion (SSAO) pass, owning the pass's
+/// setup, validate and execute phases.
 /// </summary>
-public record struct SsaoPassData
+public sealed class SsaoPassData
+    : IPassSetup<SsaoPassData>, IPassValidate<SsaoPassData>, IPassExecute<SsaoPassData>
 {
-    /// <summary>SSAO shader program.</summary>
-    public GLProgram Program { get; set; }
+    /// <summary>SSAO shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Program { get; set; } = null!;
 
     /// <summary>Depth texture resource name.</summary>
-    public string DepthTextureName { get; set; }
+    public string DepthTextureName { get; set; } = string.Empty;
 
     /// <summary>View-space normal texture resource name.</summary>
-    public string NormalTextureName { get; set; }
+    public string NormalTextureName { get; set; } = string.Empty;
 
     /// <summary>Occlusion output target name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Depth sampler uniform name.</summary>
-    public string DepthUniform { get; set; }
+    public string DepthUniform { get; set; } = string.Empty;
 
     /// <summary>Normal sampler uniform name.</summary>
-    public string NormalUniform { get; set; }
+    public string NormalUniform { get; set; } = string.Empty;
 
     /// <summary>SSAO sampling radius in scene units. Must be in (0, 64].</summary>
     public float Radius { get; set; }
@@ -34,57 +36,17 @@ public record struct SsaoPassData
 
     /// <summary>Post-process phase. HDR-space effects run before tone mapping.</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the SSAO post-process pass.
-/// </summary>
-public static class SsaoPass
-{
-    private const float MaxRadius = 64f;
-    private const float MaxBias = 1f;
-
-    /// <summary>Creates an SSAO pass.</summary>
-    public static RenderPass<SsaoPassData> Create(
-        string name,
-        GLProgram program,
-        string depthTextureName,
-        string normalTextureName,
-        string outputName,
-        string depthUniform = "u_depth",
-        string normalUniform = "u_normal",
-        float radius = 0.5f,
-        float bias = 0.02f,
-        float intensity = 1.0f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref SsaoPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(depthTextureName);
-        ArgumentNullException.ThrowIfNull(normalTextureName);
-        ArgumentNullException.ThrowIfNull(outputName);
-        return new RenderPass<SsaoPassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref SsaoPassData data) =>
-            {
-                data.Program = program;
-                data.DepthTextureName = depthTextureName;
-                data.NormalTextureName = normalTextureName;
-                data.OutputTextureName = outputName;
-                data.DepthUniform = depthUniform;
-                data.NormalUniform = normalUniform;
-                data.Radius = radius;
-                data.Bias = bias;
-                data.Intensity = intensity;
-                data.Phase = PostProcessPhase.BeforeTonemap;
-                builder.Reads(depthTextureName);
-                builder.Reads(normalTextureName);
-                builder.Writes(outputName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.DepthTextureName);
+        builder.Reads(data.NormalTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in SsaoPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in SsaoPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -135,7 +97,8 @@ public static class SsaoPass
         }
     }
 
-    private static void Execute(in SsaoPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in SsaoPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -200,5 +163,49 @@ public static class SsaoPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+
+    private const float MaxRadius = 64f;
+    private const float MaxBias = 1f;
+}
+
+/// <summary>
+/// Factory for the SSAO post-process pass.
+/// </summary>
+public static class SsaoPass
+{
+    /// <summary>Creates an SSAO pass.</summary>
+    public static RenderPass<SsaoPassData> Create(
+        string name,
+        GLProgram program,
+        string depthTextureName,
+        string normalTextureName,
+        string outputName,
+        string depthUniform = "u_depth",
+        string normalUniform = "u_normal",
+        float radius = 0.5f,
+        float bias = 0.02f,
+        float intensity = 1.0f)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(depthTextureName);
+        ArgumentNullException.ThrowIfNull(normalTextureName);
+        ArgumentNullException.ThrowIfNull(outputName);
+        return new RenderPass<SsaoPassData>(
+            name,
+            FramePassKind.PostProcess,
+            new SsaoPassData
+            {
+                Program = program,
+                DepthTextureName = depthTextureName,
+                NormalTextureName = normalTextureName,
+                OutputTextureName = outputName,
+                DepthUniform = depthUniform,
+                NormalUniform = normalUniform,
+                Radius = radius,
+                Bias = bias,
+                Intensity = intensity,
+                Phase = PostProcessPhase.BeforeTonemap
+            });
     }
 }
