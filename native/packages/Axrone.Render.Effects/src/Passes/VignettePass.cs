@@ -1,18 +1,20 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the vignette pass.
+/// Payload for the vignette pass, owning the pass's setup, validate and execute
+/// phases.
 /// </summary>
-public record struct VignettePassData
+public sealed class VignettePassData
+    : IPassSetup<VignettePassData>, IPassValidate<VignettePassData>, IPassExecute<VignettePassData>
 {
-    /// <summary>Vignette shader program.</summary>
-    public GLProgram Program { get; set; }
+    /// <summary>Vignette shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Program { get; set; } = null!;
 
     /// <summary>Input colour texture resource name.</summary>
-    public string InputTextureName { get; set; }
+    public string InputTextureName { get; set; } = string.Empty;
 
     /// <summary>Vignetted output target name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Vignette strength. Must be in [0, 1]. Update per frame if animated.</summary>
     public float Intensity { get; set; }
@@ -22,46 +24,16 @@ public record struct VignettePassData
 
     /// <summary>Post-process phase. Display-referred effects run after tone mapping.</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the vignette post-process pass.
-/// Renders through a descriptor-driven pass lifecycle (<c>BeginPass</c>/<c>EndPass</c>)
-/// and issues only hardware-agnostic verbs.
-/// </summary>
-public static class VignettePass
-{
-    /// <summary>Creates a vignette pass.</summary>
-    public static RenderPass<VignettePassData> Create(
-        string name,
-        GLProgram program,
-        string inputName,
-        string outputName,
-        float intensity = 0.4f,
-        float smoothness = 0.4f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref VignettePassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(inputName);
-        ArgumentNullException.ThrowIfNull(outputName);
-        return new RenderPass<VignettePassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref VignettePassData data) =>
-            {
-                data.Program = program;
-                data.InputTextureName = inputName;
-                data.OutputTextureName = outputName;
-                data.Intensity = intensity;
-                data.Smoothness = smoothness;
-                data.Phase = PostProcessPhase.AfterTonemap;
-                builder.Reads(inputName);
-                builder.Writes(outputName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in VignettePassData data)
+    /// <inheritdoc/>
+    public static void Validate(in VignettePassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -94,7 +66,8 @@ public static class VignettePass
         }
     }
 
-    private static void Execute(in VignettePassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in VignettePassData data, IRenderContext context, PassExecutionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -155,5 +128,39 @@ public static class VignettePass
         glCtx.DrawFullscreenQuad();
 
         glCtx.EndPass();
+    }
+}
+
+/// <summary>
+/// Factory for the vignette post-process pass.
+/// Renders through a descriptor-driven pass lifecycle (<c>BeginPass</c>/<c>EndPass</c>)
+/// and issues only hardware-agnostic verbs.
+/// </summary>
+public static class VignettePass
+{
+    /// <summary>Creates a vignette pass.</summary>
+    public static RenderPass<VignettePassData> Create(
+        string name,
+        GLProgram program,
+        string inputName,
+        string outputName,
+        float intensity = 0.4f,
+        float smoothness = 0.4f)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(inputName);
+        ArgumentNullException.ThrowIfNull(outputName);
+        return new RenderPass<VignettePassData>(
+            name,
+            FramePassKind.PostProcess,
+            new VignettePassData
+            {
+                Program = program,
+                InputTextureName = inputName,
+                OutputTextureName = outputName,
+                Intensity = intensity,
+                Smoothness = smoothness,
+                Phase = PostProcessPhase.AfterTonemap
+            });
     }
 }
