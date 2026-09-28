@@ -31,7 +31,7 @@ namespace Axrone.Render.Effects;
 /// through <see cref="WithMipPyramid"/> stays owned by the caller and is never disposed
 /// here.</para>
 /// </remarks>
-public sealed class BloomPassExecutor : RenderPass, IDisposable
+public sealed class BloomPassExecutor : IRenderPass, IDisposable
 {
     /// <summary>Smallest mip-pyramid level count. A pyramid always has at least one halving step.</summary>
     public const int MinMipCount = 2;
@@ -75,6 +75,29 @@ public sealed class BloomPassExecutor : RenderPass, IDisposable
     private readonly GLProgram _brightPassShader;
     private readonly GLProgram _blurShader;
     private readonly GLProgram _compositeShader;
+
+    private readonly List<string> _reads = new(2);
+    private readonly List<string> _writes = new(2);
+    private string[]? _readsSnapshot;
+    private string[]? _writesSnapshot;
+
+    /// <summary>Gets the pass name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the pass kind for scheduling classification.</summary>
+    public FramePassKind Kind { get; }
+
+    /// <summary>Gets or sets a value indicating whether this pass is enabled.</summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Gets the hardware-agnostic descriptor describing targets and attachments.</summary>
+    public RenderPassDescriptor Descriptor { get; }
+
+    /// <summary>Gets how this pass's render target attachments must be loaded.</summary>
+    public AttachmentLoadAction LoadAction => AttachmentLoadAction.Load;
+
+    /// <summary>Gets how this pass's render target attachments must be stored.</summary>
+    public AttachmentStoreAction StoreAction => AttachmentStoreAction.Store;
 
     private readonly string _inputTextureName;
     private readonly string _outputTextureName;
@@ -142,12 +165,14 @@ public sealed class BloomPassExecutor : RenderPass, IDisposable
         GLProgram compositeShader,
         string inputTextureName = "scene_hdr",
         string outputTextureName = "scene_bloom")
-        : base(name, FramePassKind.Bloom)
     {
+        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(brightPassShader);
         ArgumentNullException.ThrowIfNull(blurShader);
         ArgumentNullException.ThrowIfNull(compositeShader);
 
+        Name = name;
+        Kind = FramePassKind.Bloom;
         _brightPassShader = brightPassShader;
         _blurShader = blurShader;
         _compositeShader = compositeShader;
@@ -155,8 +180,8 @@ public sealed class BloomPassExecutor : RenderPass, IDisposable
         _outputTextureName = outputTextureName;
         _outputFramebufferName = outputTextureName + "_fbo";
 
-        Reads(inputTextureName);
-        Writes(outputTextureName);
+        _reads.Add(inputTextureName);
+        _writes.Add(outputTextureName);
     }
 
     /// <summary>Gets the luminance threshold for bright-pass extraction.</summary>
@@ -397,7 +422,21 @@ public sealed class BloomPassExecutor : RenderPass, IDisposable
     }
 
     /// <inheritdoc/>
-    public override void Validate()
+    public ReadOnlySpan<string> GetReadResources()
+    {
+        _readsSnapshot ??= _reads.ToArray();
+        return _readsSnapshot;
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetWrittenResources()
+    {
+        _writesSnapshot ??= _writes.ToArray();
+        return _writesSnapshot;
+    }
+
+    /// <inheritdoc/>
+    public void Validate()
     {
         if (_threshold < 0f)
         {
@@ -474,8 +513,28 @@ public sealed class BloomPassExecutor : RenderPass, IDisposable
     }
 
     /// <inheritdoc/>
+    void IRenderPass.Execute(IRenderContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context is GLRenderContext glCtx && glCtx.PassContext is not null)
+        {
+            Execute(glCtx.GLContext, glCtx.PassContext);
+            return;
+        }
+
+        ThrowHelper.Throw(RenderErrorCode.InvalidOperation,
+            $"{Name} requires a GLRenderContext with a configured PassContext.",
+            nameof(BloomPassExecutor));
+    }
+
+    /// <summary>
+    /// Executes the pass on the graph-owned render context.
+    /// </summary>
+    /// <param name="context">The render context (must be a <see cref="GLRenderContext"/> with a configured pass context).</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override void Execute(GLContext context, PassExecutionContext ctx)
+    public void Execute(GLContext context, PassExecutionContext ctx)
     {
         context.AssertRenderThread();
 
