@@ -1,6 +1,7 @@
 using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 namespace Axrone.Render.OpenGL.Tests;
 
@@ -33,7 +34,7 @@ public sealed class GenericRenderPassTests : IDisposable
         var vp = new ViewportRect(0, 0, 1920, 1080);
         var desc = RenderPassDescriptor.CreateDefault(vp, new ClearColorValue(0.1f, 0.2f, 0.3f, 1f));
 
-        var pass = new GenericRenderPass<PostProcessPassData>(
+        var pass = new RenderPass<PostProcessPassData>(
             "BloomExtract",
             FramePassKind.PostProcess,
             (builder, ref data) =>
@@ -198,38 +199,33 @@ public sealed class GenericRenderPassTests : IDisposable
         executionOrder.Should().ContainInOrder("GeometryPass", "CompositePass");
     }
 
-    private sealed class CapturingLegacyPass : RenderPass
-    {
-        public GLContext? ReceivedContext;
-        public PassExecutionContext? ReceivedPassContext;
-
-        public CapturingLegacyPass()
-            : base("LegacyCapture", FramePassKind.Custom)
-        {
-        }
-
-        public override void Execute(GLContext context, PassExecutionContext ctx)
-        {
-            ReceivedContext = context;
-            ReceivedPassContext = ctx;
-        }
-    }
-
     private struct ContextProbeData
     {
     }
 
     [Fact]
-    public void FrameGraph_Execute_RoutesLegacyPassThroughOwnedRenderContext()
+    public void FrameGraph_Execute_RoutesCustomPassThroughOwnedRenderContext()
     {
         using var fg = new global::Axrone.Render.OpenGL.FrameGraph.FrameGraph(_context);
-        var pass = new CapturingLegacyPass();
+
+        GLContext? receivedContext = null;
+        PassExecutionContext? receivedPassContext = null;
+
+        var pass = CustomPass.Create(
+            "LegacyCapture",
+            FramePassKind.Custom,
+            (gl, ctx) =>
+            {
+                receivedContext = gl;
+                receivedPassContext = ctx;
+            });
+
         fg.AddPass(pass);
 
         fg.Execute();
 
-        pass.ReceivedContext.Should().BeSameAs(fg.RenderContext.GLContext);
-        pass.ReceivedPassContext.Should().BeSameAs(fg.RenderContext.PassContext);
+        receivedContext.Should().BeSameAs(fg.RenderContext.GLContext);
+        receivedPassContext.Should().BeSameAs(fg.RenderContext.PassContext);
     }
 
     [Fact]
@@ -259,15 +255,19 @@ public sealed class GenericRenderPassTests : IDisposable
     }
 
     [Fact]
-    public void GenericRenderPass_LegacyGlContextBridge_FailsClosed()
+    public void RenderPass_Execute_MissingPassContext_FailsClosed()
     {
-        var pass = new GenericRenderPass<ContextProbeData>(
+        var pass = new RenderPass<ContextProbeData>(
             "NativeOnly",
             FramePassKind.Custom,
             (builder, ref data) => { },
             (in data, ctx, exec) => { });
 
-        var action = () => pass.Execute(_context, new PassExecutionContext(_context));
+        // A GLRenderContext without a PassExecutionContext cannot satisfy the pass
+        // contract, so execution must fail closed instead of running the delegate.
+        var renderCtx = new GLRenderContext(_context, passContext: null);
+
+        var action = () => ((IRenderPass)pass).Execute(renderCtx);
 
         action.Should().Throw<RenderException>()
             .Where(e => e.Code == RenderErrorCode.InvalidOperation);
