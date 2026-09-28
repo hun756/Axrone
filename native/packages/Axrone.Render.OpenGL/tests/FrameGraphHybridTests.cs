@@ -1,7 +1,8 @@
 using Axrone.Execution;
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Utility.Descriptors;
@@ -28,9 +29,8 @@ namespace Axrone.Render.OpenGL.Tests;
 /// The graph owns its internal <see cref="PassExecutionContext"/> and tests cannot
 /// register resources into it, so the pump-capable test passes capture their
 /// framebuffers directly and enqueue real blit commands whose handles resolve
-/// through the context registry when pumped (same technique as
-/// <see cref="FrameGraphPumpTests"/>). Distinct framebuffer sizes give every pass
-/// a distinct <c>BlitFramebuffer</c> log line, which is what the ordering
+/// through the context registry when pumped. Distinct framebuffer sizes give every
+/// pass a distinct <c>BlitFramebuffer</c> log line, which is what the ordering
 /// assertions key on.
 /// </remarks>
 public sealed class FrameGraphHybridTests : IDisposable
@@ -58,7 +58,7 @@ public sealed class FrameGraphHybridTests : IDisposable
 
         var blitA = new PumpBlitPass("blitA", aSource, aDestination);
         blitA.AddWrite("stageA");
-        var direct = MarkerPass("direct").Reads("stageA").Writes("stageB");
+        var direct = MarkerPass("direct", reads: ["stageA"], writes: ["stageB"]);
         var blitB = new PumpBlitPass("blitB", bSource, bDestination);
         blitB.AddRead("stageB");
 
@@ -101,15 +101,14 @@ public sealed class FrameGraphHybridTests : IDisposable
         int blitsSeenByDirectPass = -1;
         var blit = new PumpBlitPass("blit", source, destination);
         blit.AddWrite("stage");
-        var direct = new CustomPassExecutor("direct", FramePassKind.Custom, (context, _) =>
+        var direct = CustomPass.Create("direct", FramePassKind.Custom, (context, _) =>
         {
             // Snapshot the log at the moment the direct pass runs: a blit that
             // pumped work from the earlier pass is already applied here.
             blitsSeenByDirectPass = _mock.CallLog
                 .Count(c => c.StartsWith("BlitFramebuffer(", StringComparison.Ordinal));
             context.GL.Viewport(1, 2, 8, 16);
-        });
-        direct.Reads("stage");
+        }, reads: ["stage"]);
 
         graph.AddPass(blit);
         graph.AddPass(direct);
@@ -132,13 +131,12 @@ public sealed class FrameGraphHybridTests : IDisposable
         using var destination = new GLFramebuffer(_context, 64, 64, "dst");
 
         int blitsSeenByDirectPass = -1;
-        var direct = new CustomPassExecutor("direct", FramePassKind.Custom, (context, _) =>
+        var direct = CustomPass.Create("direct", FramePassKind.Custom, (context, _) =>
         {
             blitsSeenByDirectPass = _mock.CallLog
                 .Count(c => c.StartsWith("BlitFramebuffer(", StringComparison.Ordinal));
             context.GL.Viewport(1, 2, 8, 16);
-        });
-        direct.Writes("stage");
+        }, writes: ["stage"]);
         var blit = new PumpBlitPass("blit", source, destination);
         blit.AddRead("stage");
 
@@ -265,7 +263,7 @@ public sealed class FrameGraphHybridTests : IDisposable
     public void Execute_FailingDirectPass_ThrowsRenderExceptionWithPassName()
     {
         using var graph = new FG(_context);
-        var boom = new CustomPassExecutor("boom", FramePassKind.Custom, (_, _) =>
+        var boom = CustomPass.Create("boom", FramePassKind.Custom, (_, _) =>
             throw new InvalidOperationException("pass body blew up"));
         graph.AddPass(boom);
 
@@ -285,9 +283,8 @@ public sealed class FrameGraphHybridTests : IDisposable
 
         var blit = new PumpBlitPass("blit", source, destination);
         blit.AddWrite("stage");
-        var boom = new CustomPassExecutor("boom", FramePassKind.Custom, (_, _) =>
-            throw new InvalidOperationException("pass body blew up"));
-        boom.Reads("stage");
+        var boom = CustomPass.Create("boom", FramePassKind.Custom, (_, _) =>
+            throw new InvalidOperationException("pass body blew up"), reads: ["stage"]);
 
         graph.AddPass(blit);
         graph.AddPass(boom);
@@ -309,8 +306,9 @@ public sealed class FrameGraphHybridTests : IDisposable
     /// A direct-only pass that emits the one GL line the ordering assertions key
     /// on. Integral arguments keep the log line culture-independent.
     /// </summary>
-    private static CustomPassExecutor MarkerPass(string name) =>
-        new(name, FramePassKind.Custom, (context, _) => context.GL.Viewport(1, 2, 8, 16));
+    private static RenderPass<CustomPassData> MarkerPass(string name, string[]? reads = null, string[]? writes = null) =>
+        CustomPass.Create(name, FramePassKind.Custom, (context, _) => context.GL.Viewport(1, 2, 8, 16),
+            reads: reads, writes: writes);
 
     private static int IndexOfBlit(List<string> log, int size) =>
         log.FindIndex(c => c.StartsWith($"BlitFramebuffer(0, 0, {size}, {size}", StringComparison.Ordinal));
@@ -320,25 +318,38 @@ public sealed class FrameGraphHybridTests : IDisposable
 
     /// <summary>
     /// Pump-capable test pass: enqueues <c>commandCount</c> real blit commands for
-    /// two captured framebuffers, mirroring <see cref="BlitPassExecutor"/> but
-    /// resolving its handles from its own fields (the graph's internal execution
-    /// context is unreachable from tests).
+    /// two captured framebuffers, mirroring the shipped blit pass but resolving
+    /// its handles from its own fields (the graph's internal execution context is
+    /// unreachable from tests). Written as a plain <see cref="IRenderPass"/>
+    /// double because the production passes are sealed generic types.
     /// </summary>
-    private sealed class PumpBlitPass : RenderPass, IPumpEnqueue
+    private sealed class PumpBlitPass : IRenderPass, IPumpEnqueue
     {
         private readonly GLFramebuffer _source;
         private readonly GLFramebuffer _destination;
         private readonly int _commandCount;
+        private readonly List<string> _reads = new(2);
+        private readonly List<string> _writes = new(2);
         private int _enqueueAttempts;
 
         public PumpBlitPass(string name, GLFramebuffer source, GLFramebuffer destination, int commandCount = 1)
-            : base(name, FramePassKind.Blit)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(commandCount, 1);
+            Name = name;
             _source = source;
             _destination = destination;
             _commandCount = commandCount;
         }
+
+        public string Name { get; }
+
+        public bool IsEnabled { get; set; } = true;
+
+        public RenderPassDescriptor Descriptor => default;
+
+        public AttachmentLoadAction LoadAction => AttachmentLoadAction.Load;
+
+        public AttachmentStoreAction StoreAction => AttachmentStoreAction.Store;
 
         /// <summary>Gets how many times the graph asked this pass to enqueue.</summary>
         public int EnqueueAttempts
@@ -349,9 +360,19 @@ public sealed class FrameGraphHybridTests : IDisposable
         /// <summary>Gets how many times the graph ran this pass on the direct path.</summary>
         public int DirectExecutionCount { get; private set; }
 
-        public void AddRead(string resource) => Reads(resource);
+        public void AddRead(string resource) => _reads.Add(resource);
 
-        public void AddWrite(string resource) => Writes(resource);
+        public void AddWrite(string resource) => _writes.Add(resource);
+
+        public ReadOnlySpan<string> GetReadResources() => _reads.ToArray();
+
+        public ReadOnlySpan<string> GetWrittenResources() => _writes.ToArray();
+
+        public void Validate()
+        {
+        }
+
+        public void Execute(IRenderContext context) => DirectExecutionCount++;
 
         public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
         {
@@ -372,19 +393,28 @@ public sealed class FrameGraphHybridTests : IDisposable
 
             return receipt;
         }
-
-        public override void Execute(GLContext context, PassExecutionContext ctx) => DirectExecutionCount++;
     }
 
     /// <summary>
     /// Pump-capable pass that always refuses, so the graph's refusal fallback has
     /// to run its direct path. Emits a distinct GL line when it does.
     /// </summary>
-    private sealed class RefusingPumpPass : RenderPass, IPumpEnqueue
+    private sealed class RefusingPumpPass : IRenderPass, IPumpEnqueue
     {
-        public RefusingPumpPass(string name) : base(name, FramePassKind.Blit)
-        {
-        }
+        private readonly List<string> _reads = new(2);
+        private readonly List<string> _writes = new(2);
+
+        public RefusingPumpPass(string name) => Name = name;
+
+        public string Name { get; }
+
+        public bool IsEnabled { get; set; } = true;
+
+        public RenderPassDescriptor Descriptor => default;
+
+        public AttachmentLoadAction LoadAction => AttachmentLoadAction.Load;
+
+        public AttachmentStoreAction StoreAction => AttachmentStoreAction.Store;
 
         /// <summary>Gets how many times the graph asked this pass to enqueue.</summary>
         public int EnqueueAttempts { get; private set; }
@@ -392,9 +422,17 @@ public sealed class FrameGraphHybridTests : IDisposable
         /// <summary>Gets how many times the graph ran this pass on the direct path.</summary>
         public int DirectExecutionCount { get; private set; }
 
-        public void AddRead(string resource) => Reads(resource);
+        public void AddRead(string resource) => _reads.Add(resource);
 
-        public void AddWrite(string resource) => Writes(resource);
+        public void AddWrite(string resource) => _writes.Add(resource);
+
+        public ReadOnlySpan<string> GetReadResources() => _reads.ToArray();
+
+        public ReadOnlySpan<string> GetWrittenResources() => _writes.ToArray();
+
+        public void Validate()
+        {
+        }
 
         public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
         {
@@ -402,10 +440,10 @@ public sealed class FrameGraphHybridTests : IDisposable
             return new EnqueueResult(-1, EnqueueStatus.QueueFull);
         }
 
-        public override void Execute(GLContext context, PassExecutionContext ctx)
+        public void Execute(IRenderContext context)
         {
             DirectExecutionCount++;
-            context.GL.Viewport(3, 4, 5, 6);
+            ((GLRenderContext)context).GLContext.GL.Viewport(3, 4, 5, 6);
         }
     }
 
