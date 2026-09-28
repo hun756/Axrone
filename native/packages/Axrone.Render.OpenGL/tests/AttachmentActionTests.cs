@@ -2,6 +2,8 @@ using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
 
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
+
 // Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
 // and class FrameGraph within that namespace.
 using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
@@ -209,11 +211,48 @@ public sealed class AttachmentActionTests : IDisposable
     // ========================================================================
 
     /// <summary>
-    /// Payload of the stub pass. The pass state is carried by the captured
-    /// callbacks, so the payload itself holds no data.
+    /// Payload of the stub pass. The pass state is carried by the payload itself:
+    /// the declared attachment metadata, dependency names and the execute callback
+    /// all live here, and the static phase bodies read them.
     /// </summary>
     private struct StubPassData
+        : IPassSetup<StubPassData>, IPassValidate<StubPassData>, IPassExecute<StubPassData>
     {
+        public AttachmentLoadAction? LoadAction;
+        public AttachmentStoreAction? StoreAction;
+        public string[] Reads;
+        public string[] Writes;
+        public Action? OnExecute;
+
+        public static void Declare(IRenderPassBuilder builder, ref StubPassData data)
+        {
+            if (data.LoadAction.HasValue)
+            {
+                builder.SetLoadAction(data.LoadAction.Value);
+            }
+
+            if (data.StoreAction.HasValue)
+            {
+                builder.SetStoreAction(data.StoreAction.Value);
+            }
+
+            for (int i = 0; i < data.Reads.Length; i++)
+            {
+                builder.Reads(data.Reads[i]);
+            }
+
+            for (int i = 0; i < data.Writes.Length; i++)
+            {
+                builder.Writes(data.Writes[i]);
+            }
+        }
+
+        public static void Validate(in StubPassData data)
+        {
+        }
+
+        public static void Execute(in StubPassData data, IRenderContext context, PassExecutionContext ctx)
+            => data.OnExecute?.Invoke();
     }
 
     /// <summary>
@@ -231,35 +270,14 @@ public sealed class AttachmentActionTests : IDisposable
         return new RenderPass<StubPassData>(
             name,
             FramePassKind.Custom,
-            (IRenderPassBuilder builder, ref StubPassData data) =>
+            new StubPassData
             {
-                if (loadAction.HasValue)
-                {
-                    builder.SetLoadAction(loadAction.Value);
-                }
-
-                if (storeAction.HasValue)
-                {
-                    builder.SetStoreAction(storeAction.Value);
-                }
-
-                if (reads is not null)
-                {
-                    for (int i = 0; i < reads.Length; i++)
-                    {
-                        builder.Reads(reads[i]);
-                    }
-                }
-
-                if (writes is not null)
-                {
-                    for (int i = 0; i < writes.Length; i++)
-                    {
-                        builder.Writes(writes[i]);
-                    }
-                }
-            },
-            (in StubPassData data, IRenderContext context, PassExecutionContext ctx) => onExecute?.Invoke());
+                LoadAction = loadAction,
+                StoreAction = storeAction,
+                Reads = reads ?? [],
+                Writes = writes ?? [],
+                OnExecute = onExecute
+            });
     }
 
     /// <summary>
