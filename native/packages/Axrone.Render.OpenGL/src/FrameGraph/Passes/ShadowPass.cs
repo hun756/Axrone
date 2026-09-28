@@ -1,12 +1,14 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the shadow map pass.
+/// Payload for the shadow map pass, owning the pass's setup, validate and execute phases.
 /// </summary>
 public record struct ShadowPassData
+    : IPassSetup<ShadowPassData>, IPassValidate<ShadowPassData>, IPassExecute<ShadowPassData>
 {
     /// <summary>Depth-only shader program.</summary>
     public GLProgram DepthProgram { get; set; }
@@ -28,46 +30,16 @@ public record struct ShadowPassData
 
     /// <summary>Meshes rendered into the shadow map.</summary>
     public List<GLMesh> Meshes { get; set; }
-}
 
-/// <summary>
-/// Factory for the shadow map pass (depth-only from the light's perspective).
-/// </summary>
-public static class ShadowPass
-{
-    /// <summary>Creates a shadow map pass.</summary>
-    public static RenderPass<ShadowPassData> Create(
-        string name,
-        GLProgram depthProgram,
-        string shadowMapTextureName,
-        string shadowFramebufferName,
-        Matrix4x4 lightViewProjection,
-        int shadowMapWidth = 2048,
-        int shadowMapHeight = 2048)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref ShadowPassData data)
     {
-        ArgumentNullException.ThrowIfNull(depthProgram);
-        ArgumentNullException.ThrowIfNull(shadowMapTextureName);
-        ArgumentNullException.ThrowIfNull(shadowFramebufferName);
-        return new RenderPass<ShadowPassData>(
-            name,
-            FramePassKind.Shadow,
-            (IRenderPassBuilder builder, ref ShadowPassData data) =>
-            {
-                data.DepthProgram = depthProgram;
-                data.ShadowMapTextureName = shadowMapTextureName;
-                data.ShadowFramebufferName = shadowFramebufferName;
-                data.LightViewProjection = lightViewProjection;
-                data.ShadowMapWidth = shadowMapWidth;
-                data.ShadowMapHeight = shadowMapHeight;
-                data.Meshes = new List<GLMesh>();
-                builder.Writes(shadowMapTextureName);
-                builder.Writes(shadowFramebufferName);
-            },
-            Execute,
-            Validate);
+        builder.Writes(data.ShadowMapTextureName);
+        builder.Writes(data.ShadowFramebufferName);
     }
 
-    private static void Validate(in ShadowPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in ShadowPassData data)
     {
         if (data.DepthProgram.IsDisposed)
         {
@@ -80,7 +52,8 @@ public static class ShadowPass
         }
     }
 
-    private static void Execute(in ShadowPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in ShadowPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -125,5 +98,39 @@ public static class ShadowPass
         }
 
         state.SetColorMask(true, true, true, true);
+    }
+}
+
+/// <summary>
+/// Factory for the shadow map pass (depth-only from the light's perspective).
+/// </summary>
+public static class ShadowPass
+{
+    /// <summary>Creates a shadow map pass.</summary>
+    public static RenderPass<ShadowPassData> Create(
+        string name,
+        GLProgram depthProgram,
+        string shadowMapTextureName,
+        string shadowFramebufferName,
+        Matrix4x4 lightViewProjection,
+        int shadowMapWidth = 2048,
+        int shadowMapHeight = 2048)
+    {
+        ArgumentNullException.ThrowIfNull(depthProgram);
+        ArgumentNullException.ThrowIfNull(shadowMapTextureName);
+        ArgumentNullException.ThrowIfNull(shadowFramebufferName);
+        return new RenderPass<ShadowPassData>(
+            name,
+            FramePassKind.Shadow,
+            new ShadowPassData
+            {
+                DepthProgram = depthProgram,
+                ShadowMapTextureName = shadowMapTextureName,
+                ShadowFramebufferName = shadowFramebufferName,
+                LightViewProjection = lightViewProjection,
+                ShadowMapWidth = shadowMapWidth,
+                ShadowMapHeight = shadowMapHeight,
+                Meshes = new List<GLMesh>()
+            });
     }
 }
