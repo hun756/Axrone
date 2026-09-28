@@ -1,21 +1,25 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the depth-of-field (DoF) pass.
+/// Payload for the depth-of-field (DoF) pass, owning the pass's setup, validate
+/// and execute phases.
 /// </summary>
-public record struct DofPassData
+public sealed class DofPassData
+    : IPassSetup<DofPassData>, IPassValidate<DofPassData>, IPassExecute<DofPassData>
 {
-    /// <summary>Depth-of-field shader program.</summary>
-    public GLProgram Program { get; set; }
+    private const float MaxBlurPixels = 64f;
+
+    /// <summary>Depth-of-field shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Program { get; set; } = null!;
 
     /// <summary>Input colour texture resource name.</summary>
-    public string InputTextureName { get; set; }
+    public string InputTextureName { get; set; } = string.Empty;
 
     /// <summary>Depth texture resource name.</summary>
-    public string DepthTextureName { get; set; }
+    public string DepthTextureName { get; set; } = string.Empty;
 
     /// <summary>Defocused output target name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Focus plane distance in scene units. Must be positive.</summary>
     public float FocusDistance { get; set; }
@@ -28,52 +32,17 @@ public record struct DofPassData
 
     /// <summary>Post-process phase. HDR-space effects run before tone mapping.</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the depth-of-field post-process pass.
-/// </summary>
-public static class DofPass
-{
-    private const float MaxBlurPixels = 64f;
-
-    /// <summary>Creates a depth-of-field pass.</summary>
-    public static RenderPass<DofPassData> Create(
-        string name,
-        GLProgram program,
-        string inputName,
-        string depthName,
-        string outputName,
-        float focusDistance = 10f,
-        float focusRange = 5f,
-        float maxBlur = 8f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref DofPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(inputName);
-        ArgumentNullException.ThrowIfNull(depthName);
-        ArgumentNullException.ThrowIfNull(outputName);
-        return new RenderPass<DofPassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref DofPassData data) =>
-            {
-                data.Program = program;
-                data.InputTextureName = inputName;
-                data.DepthTextureName = depthName;
-                data.OutputTextureName = outputName;
-                data.FocusDistance = focusDistance;
-                data.FocusRange = focusRange;
-                data.MaxBlur = maxBlur;
-                data.Phase = PostProcessPhase.BeforeTonemap;
-                builder.Reads(inputName);
-                builder.Reads(depthName);
-                builder.Writes(outputName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        builder.Reads(data.DepthTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in DofPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in DofPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -118,7 +87,8 @@ public static class DofPass
         }
     }
 
-    private static void Execute(in DofPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in DofPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -183,5 +153,42 @@ public static class DofPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the depth-of-field post-process pass.
+/// </summary>
+public static class DofPass
+{
+    /// <summary>Creates a depth-of-field pass.</summary>
+    public static RenderPass<DofPassData> Create(
+        string name,
+        GLProgram program,
+        string inputName,
+        string depthName,
+        string outputName,
+        float focusDistance = 10f,
+        float focusRange = 5f,
+        float maxBlur = 8f)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(inputName);
+        ArgumentNullException.ThrowIfNull(depthName);
+        ArgumentNullException.ThrowIfNull(outputName);
+        return new RenderPass<DofPassData>(
+            name,
+            FramePassKind.PostProcess,
+            new DofPassData
+            {
+                Program = program,
+                InputTextureName = inputName,
+                DepthTextureName = depthName,
+                OutputTextureName = outputName,
+                FocusDistance = focusDistance,
+                FocusRange = focusRange,
+                MaxBlur = maxBlur,
+                Phase = PostProcessPhase.BeforeTonemap
+            });
     }
 }
