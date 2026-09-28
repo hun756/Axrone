@@ -81,7 +81,7 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
     }
 
     /// <summary>
-    /// Mirrors <see cref="PassExecutors.ClearPassExecutor.Execute"/>: bind the target,
+    /// Mirrors <see cref="Passes.ClearPass"/> execution: bind the target,
     /// push only the clear values the mask asks for, then issue a single
     /// <c>glClear</c>. Clear values stay on the state cache, so a repeat of the
     /// same clear costs one <c>glClear</c> and nothing else.
@@ -127,7 +127,7 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
     }
 
     /// <summary>
-    /// Mirrors <see cref="PassExecutors.PresentPassExecutor.Execute"/> up to and
+    /// Mirrors <see cref="Passes.PresentPass"/> execution up to and
     /// including the blit: bind the source for reads and framebuffer 0 for
     /// draws, then issue one <c>glBlitFramebuffer</c> carrying the packet's
     /// rectangles, mask, and filter.

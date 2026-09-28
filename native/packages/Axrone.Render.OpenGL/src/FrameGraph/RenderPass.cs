@@ -1,3 +1,11 @@
+using Axrone.Execution;
+using RenderPump = Axrone.Execution.CommandPump<
+    Axrone.Render.Core.RenderCommand,
+    Axrone.Render.OpenGL.FrameGraph.RenderPumpContext,
+    Axrone.Render.OpenGL.FrameGraph.RenderCommandProcessor,
+    Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
+    Axrone.Execution.NullExecutorTelemetry>;
+
 namespace Axrone.Render.OpenGL.FrameGraph;
 
 /// <summary>
@@ -52,33 +60,78 @@ public enum FramePassKind
 }
 
 /// <summary>
-/// Base class for all render passes in the frame graph.
-/// Each pass declares its resource reads/writes and implements execution logic.
+/// Delegate for the setup phase of a render pass.
+/// Declares resource dependencies, the render target descriptor and load/store actions,
+/// and initializes the pass payload.
+/// </summary>
+public delegate void RenderPassSetupDelegate<TPassData>(IRenderPassBuilder builder, ref TPassData data) where TPassData : struct;
+
+/// <summary>
+/// Delegate for the execution phase of a render pass.
+/// Receives the graph-owned render context (warm state cache) plus the pass execution
+/// context for resource resolution. Raw GL remains reachable through
+/// <see cref="PassExecutionContext.Context"/> for operations the hardware-agnostic
+/// <see cref="IRenderContext"/> verbs do not cover (SSBO/image bindings, matrix uploads,
+/// mesh draws).
+/// </summary>
+public delegate void RenderPassExecuteDelegate<TPassData>(in TPassData data, IRenderContext context, PassExecutionContext ctx) where TPassData : struct;
+
+/// <summary>
+/// Delegate for the validation phase of a render pass.
+/// Enforces pass-specific pre-conditions (disposed programs, value ranges, wiring).
+/// </summary>
+public delegate void RenderPassValidateDelegate<TPassData>(in TPassData data) where TPassData : struct;
+
+/// <summary>
+/// Delegate for the pump-enqueue phase of a pump-capable render pass.
+/// Resolves resources from the execution context at enqueue time and must not retain
+/// the pump or the receipt beyond the call.
+/// </summary>
+public delegate EnqueueResult RenderPassPumpDelegate<TPassData>(in TPassData data, RenderPump pump, PassExecutionContext ctx) where TPassData : struct;
+
+/// <summary>
+/// Implementation of <see cref="IRenderPassBuilder"/> that collects pass configuration.
+/// </summary>
+internal sealed class RenderPassBuilder : IRenderPassBuilder
+{
+    private readonly List<string> _reads = new(4);
+    private readonly List<string> _writes = new(4);
+
+    public RenderPassDescriptor Descriptor { get; private set; }
+    public AttachmentLoadAction LoadAction { get; private set; } = AttachmentLoadAction.Load;
+    public AttachmentStoreAction StoreAction { get; private set; } = AttachmentStoreAction.Store;
+
+    public IReadOnlyList<string> ReadsList => _reads;
+    public IReadOnlyList<string> WritesList => _writes;
+
+    public void Reads(string resourceName) => _reads.Add(resourceName);
+    public void Writes(string resourceName) => _writes.Add(resourceName);
+    public void SetDescriptor(in RenderPassDescriptor descriptor) => Descriptor = descriptor;
+    public void SetLoadAction(AttachmentLoadAction action) => LoadAction = action;
+    public void SetStoreAction(AttachmentStoreAction action) => StoreAction = action;
+}
+
+/// <summary>
+/// Strongly-typed render pass. The single canonical pass implementation in the frame graph:
+/// pass payload data plus setup / execute / validate delegates, executed
+/// <see cref="IRenderContext"/>-native on the graph-owned <see cref="GLRenderContext"/>
+/// so the state cache stays warm across passes and execution allocates nothing per pass.
 /// </summary>
 /// <remarks>
-/// <para>Execution contract: the frame graph executes every pass through
-/// <see cref="IRenderPass.Execute(IRenderContext)"/> on its graph-owned
-/// <see cref="GLRenderContext"/>. GL-specific subclasses override the legacy bridge
-/// <see cref="Execute(Context.GLContext, PassExecutionContext)"/>, which the interface
-/// implementation adapts to; <see cref="IRenderContext"/>-native pass types implement
-/// the interface directly and leave the bridge unimplemented. Subclasses may override
-/// <see cref="Validate"/> to enforce pre-conditions. The constructor must call
-/// <see cref="Reads"/> and <see cref="Writes"/> to declare resource dependencies
-/// for the frame graph scheduler.</para>
-/// <para>Attachment load/store metadata (<see cref="LoadAction"/>,
-/// <see cref="StoreAction"/>) is opt-in and is declared from the subclass
-/// constructor via <see cref="DeclaresLoadAction"/> and
-/// <see cref="DeclaresStoreAction"/>. The defaults (<see cref="AttachmentLoadAction.Load"/>
-/// / <see cref="AttachmentStoreAction.Store"/>) exactly preserve the previous
-/// behavior. The scheduler does not consume the metadata yet, so declaring it has no
-/// effect on ordering or execution.</para>
+/// <para>Per-frame mutation goes through <see cref="Data"/> (a mutable ref): update fields
+/// such as view-projection matrices, intensities or time seeds before the graph executes.
+/// Reference-type payloads inside the struct (for example mesh lists) stay shared.</para>
+/// <para>Pump-capable passes use <see cref="PumpRenderPass{TPassData}"/> instead; this type
+/// never touches the command pump and always takes the direct leg.</para>
 /// </remarks>
-public abstract class RenderPass : IRenderPass
+/// <typeparam name="TPassData">The struct payload type storing pass inputs and parameters.</typeparam>
+public sealed class RenderPass<TPassData> : IRenderPass where TPassData : struct
 {
-    private readonly List<string> _reads = new();
-    private readonly List<string> _writes = new();
-    private string[]? _readsSnapshot;
-    private string[]? _writesSnapshot;
+    private TPassData _data;
+    private readonly RenderPassExecuteDelegate<TPassData> _execute;
+    private readonly RenderPassValidateDelegate<TPassData>? _validate;
+    private readonly string[] _reads;
+    private readonly string[] _writes;
 
     /// <summary>Gets the pass name.</summary>
     public string Name { get; }
@@ -90,122 +143,49 @@ public abstract class RenderPass : IRenderPass
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>Gets the hardware-agnostic descriptor describing targets and attachments.</summary>
-    public RenderPassDescriptor Descriptor { get; protected set; }
+    public RenderPassDescriptor Descriptor { get; }
 
-    /// <summary>
-    /// Gets how this pass's render target attachments must be loaded.
-    /// Defaults to <see cref="AttachmentLoadAction.Load"/>. Settable only from the
-    /// subclass constructor via <see cref="DeclaresLoadAction"/>.
-    /// </summary>
-    public AttachmentLoadAction LoadAction
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get;
-        private set;
-    } = AttachmentLoadAction.Load;
+    /// <summary>Gets how this pass's render target attachments must be loaded.</summary>
+    public AttachmentLoadAction LoadAction { get; }
 
-    /// <summary>
-    /// Gets how this pass's render target attachments must be stored.
-    /// Defaults to <see cref="AttachmentStoreAction.Store"/>. Settable only from the
-    /// subclass constructor via <see cref="DeclaresStoreAction"/>.
-    /// </summary>
-    public AttachmentStoreAction StoreAction
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get;
-        private set;
-    } = AttachmentStoreAction.Store;
+    /// <summary>Gets how this pass's render target attachments must be stored.</summary>
+    public AttachmentStoreAction StoreAction { get; }
 
-    /// <summary>Gets the resource names this pass reads.</summary>
-    public ReadOnlySpan<string> GetReadResources()
-    {
-        _readsSnapshot ??= _reads.ToArray();
-        return _readsSnapshot;
-    }
+    /// <summary>Gets a mutable reference to the pass payload. Update per frame before execution.</summary>
+    public ref TPassData Data => ref _data;
 
-    /// <summary>Gets the resource names this pass writes.</summary>
-    public ReadOnlySpan<string> GetWrittenResources()
-    {
-        _writesSnapshot ??= _writes.ToArray();
-        return _writesSnapshot;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RenderPass"/> class.
-    /// </summary>
-    /// <param name="name">The pass name. Must not be null or empty.</param>
-    /// <param name="kind">The pass kind.</param>
-    protected RenderPass(string name, FramePassKind kind)
+    /// <summary>Initializes a render pass with setup, execution and optional validation delegates.</summary>
+    public RenderPass(
+        string name,
+        FramePassKind kind,
+        RenderPassSetupDelegate<TPassData> setup,
+        RenderPassExecuteDelegate<TPassData> execute,
+        RenderPassValidateDelegate<TPassData>? validate = null)
     {
         ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(setup);
+        ArgumentNullException.ThrowIfNull(execute);
+
         Name = name;
         Kind = kind;
+        _execute = execute;
+        _validate = validate;
+
+        var builder = new RenderPassBuilder();
+        setup(builder, ref _data);
+
+        Descriptor = builder.Descriptor;
+        LoadAction = builder.LoadAction;
+        StoreAction = builder.StoreAction;
+        _reads = builder.ReadsList.ToArray();
+        _writes = builder.WritesList.ToArray();
     }
 
-    /// <summary>
-    /// Declares that this pass reads the specified resource.
-    /// </summary>
-    /// <param name="resourceName">The resource name in the pass context.</param>
-    protected void Reads(string resourceName)
-    {
-        _reads.Add(resourceName);
-        _readsSnapshot = null;
-    }
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetReadResources() => _reads;
 
-    /// <summary>
-    /// Declares that this pass writes the specified resource.
-    /// </summary>
-    /// <param name="resourceName">The resource name in the pass context.</param>
-    protected void Writes(string resourceName)
-    {
-        _writes.Add(resourceName);
-        _writesSnapshot = null;
-    }
-
-    /// <summary>
-    /// Declares how this pass's render target attachments must be loaded.
-    /// Call from the subclass constructor. Opt-in metadata: it does not change
-    /// scheduling or execution, and the default preserves existing behavior.
-    /// </summary>
-    /// <param name="action">The declared load action.</param>
-    protected void DeclaresLoadAction(AttachmentLoadAction action) => LoadAction = action;
-
-    /// <summary>
-    /// Declares how this pass's render target attachments must be stored.
-    /// Call from the subclass constructor. Opt-in metadata: it does not change
-    /// scheduling or execution, and the default preserves existing behavior.
-    /// </summary>
-    /// <param name="action">The declared store action.</param>
-    protected void DeclaresStoreAction(AttachmentStoreAction action) => StoreAction = action;
-
-    internal void DeclareRead(string resourceName) => Reads(resourceName);
-    internal void DeclareWrite(string resourceName) => Writes(resourceName);
-    internal void DeclareLoadAction(AttachmentLoadAction action) => DeclaresLoadAction(action);
-    internal void DeclareStoreAction(AttachmentStoreAction action) => DeclaresStoreAction(action);
-
-    /// <summary>
-    /// Legacy OpenGL execution bridge: issues this pass's work directly against a
-    /// <see cref="Context.GLContext"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>The frame graph no longer calls this method. It executes every pass
-    /// through <see cref="IRenderPass.Execute(IRenderContext)"/> on the graph-owned
-    /// <see cref="GLRenderContext"/>, and the interface implementation below adapts
-    /// that call back into this bridge for GL-specific subclasses.</para>
-    /// <para>Pass types that are <see cref="IRenderContext"/>-native (such as
-    /// <see cref="GenericRenderPass{TPassData}"/>) do not override this bridge; the
-    /// base implementation fails closed so a legacy call can never silently execute
-    /// a pass on a context whose state cache the pass does not share.</para>
-    /// </remarks>
-    /// <param name="context">The GL context for issuing draw calls.</param>
-    /// <param name="ctx">The pass execution context for resource resolution.</param>
-    public virtual void Execute(Context.GLContext context, PassExecutionContext ctx)
-    {
-        ThrowHelper.Throw(
-            RenderErrorCode.InvalidOperation,
-            $"{GetType().Name} has no legacy GLContext execution bridge; execute it through IRenderContext.",
-            nameof(RenderPass));
-    }
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetWrittenResources() => _writes;
 
     /// <inheritdoc/>
     void IRenderPass.Execute(IRenderContext context)
@@ -214,23 +194,125 @@ public abstract class RenderPass : IRenderPass
         {
             if (glCtx.PassContext is null)
             {
-                ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(RenderPass));
+                ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(RenderPass<TPassData>));
             }
 
-            Execute(glCtx.GLContext, glCtx.PassContext);
+            _execute(in _data, glCtx, glCtx.PassContext);
         }
         else
         {
-            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, $"Execution of {GetType().Name} requires a GLRenderContext backend.", nameof(RenderPass));
+            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, $"Execution of {GetType().Name} requires a GLRenderContext backend.", nameof(RenderPass<TPassData>));
         }
     }
 
-    /// <summary>
-    /// Validates the pass configuration. Called before execution to catch
-    /// misconfigurations early. Override to add pass-specific validation.
-    /// </summary>
-    public virtual void Validate() { }
+    /// <inheritdoc/>
+    public void Validate() => _validate?.Invoke(in _data);
 
+    /// <inheritdoc/>
+    public override string ToString() => $"RenderPass: \"{Name}\" ({Kind}), Enabled={IsEnabled}";
+}
+
+/// <summary>
+/// Pump-capable render pass. Same single execution path as <see cref="RenderPass{TPassData}"/>,
+/// plus an <see cref="IPumpEnqueue"/> leg that expresses the work as render pump commands.
+/// When the enqueue is refused (ring full) the frame graph falls back to the direct leg,
+/// so the pass still runs exactly once and its GL effects stay inside the global order.
+/// </summary>
+/// <typeparam name="TPassData">The struct payload type storing pass inputs and parameters.</typeparam>
+public sealed class PumpRenderPass<TPassData> : IRenderPass, IPumpEnqueue where TPassData : struct
+{
+    private TPassData _data;
+    private readonly RenderPassExecuteDelegate<TPassData> _execute;
+    private readonly RenderPassValidateDelegate<TPassData>? _validate;
+    private readonly RenderPassPumpDelegate<TPassData> _pump;
+    private readonly string[] _reads;
+    private readonly string[] _writes;
+
+    /// <summary>Gets the pass name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the pass kind for scheduling classification.</summary>
+    public FramePassKind Kind { get; }
+
+    /// <summary>Gets or sets a value indicating whether this pass is enabled.</summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Gets the hardware-agnostic descriptor describing targets and attachments.</summary>
+    public RenderPassDescriptor Descriptor { get; }
+
+    /// <summary>Gets how this pass's render target attachments must be loaded.</summary>
+    public AttachmentLoadAction LoadAction { get; }
+
+    /// <summary>Gets how this pass's render target attachments must be stored.</summary>
+    public AttachmentStoreAction StoreAction { get; }
+
+    /// <summary>Gets a mutable reference to the pass payload. Update per frame before execution.</summary>
+    public ref TPassData Data => ref _data;
+
+    /// <summary>Initializes a pump-capable render pass.</summary>
+    public PumpRenderPass(
+        string name,
+        FramePassKind kind,
+        RenderPassSetupDelegate<TPassData> setup,
+        RenderPassExecuteDelegate<TPassData> execute,
+        RenderPassPumpDelegate<TPassData> pump,
+        RenderPassValidateDelegate<TPassData>? validate = null)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(setup);
+        ArgumentNullException.ThrowIfNull(execute);
+        ArgumentNullException.ThrowIfNull(pump);
+
+        Name = name;
+        Kind = kind;
+        _execute = execute;
+        _pump = pump;
+        _validate = validate;
+
+        var builder = new RenderPassBuilder();
+        setup(builder, ref _data);
+
+        Descriptor = builder.Descriptor;
+        LoadAction = builder.LoadAction;
+        StoreAction = builder.StoreAction;
+        _reads = builder.ReadsList.ToArray();
+        _writes = builder.WritesList.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetReadResources() => _reads;
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<string> GetWrittenResources() => _writes;
+
+    /// <inheritdoc/>
+    void IRenderPass.Execute(IRenderContext context)
+    {
+        if (context is GLRenderContext glCtx)
+        {
+            if (glCtx.PassContext is null)
+            {
+                ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(PumpRenderPass<TPassData>));
+            }
+
+            _execute(in _data, glCtx, glCtx.PassContext);
+        }
+        else
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, $"Execution of {GetType().Name} requires a GLRenderContext backend.", nameof(PumpRenderPass<TPassData>));
+        }
+    }
+
+    /// <inheritdoc/>
+    public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(pump);
+        ArgumentNullException.ThrowIfNull(ctx);
+        return _pump(in _data, pump, ctx);
+    }
+
+    /// <inheritdoc/>
+    public void Validate() => _validate?.Invoke(in _data);
 
     /// <inheritdoc/>
     public override string ToString() => $"RenderPass: \"{Name}\" ({Kind}), Enabled={IsEnabled}";

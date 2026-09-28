@@ -16,11 +16,11 @@ public sealed class FrameGraph : IDisposable
 {
     private readonly GLContext _context;
     private readonly GLRenderContext _renderContext;
-    private readonly List<RenderPass> _passes = new(32);
+    private readonly List<IRenderPass> _passes = new(32);
     private readonly Dictionary<string, FrameGraphResource> _transientResources = new(StringComparer.OrdinalIgnoreCase);
     private readonly PassExecutionContext _execContext;
     private readonly RenderPump _pump;
-    private RenderPass[]? _sortedPasses;
+    private IRenderPass[]? _sortedPasses;
     private int _isDisposed;
 
     /// <summary>
@@ -87,7 +87,7 @@ public sealed class FrameGraph : IDisposable
     /// </summary>
     /// <param name="pass">The render pass to add.</param>
     /// <returns>This frame graph for fluent chaining.</returns>
-    public FrameGraph AddPass(RenderPass pass)
+    public FrameGraph AddPass(IRenderPass pass)
     {
         if (IsDisposed)
             ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
@@ -106,17 +106,19 @@ public sealed class FrameGraph : IDisposable
     /// <param name="kind">The pass kind classification.</param>
     /// <param name="setup">The pass dependency and descriptor setup delegate.</param>
     /// <param name="execute">The pass execution delegate.</param>
+    /// <param name="validate">Optional validation delegate.</param>
     /// <returns>This frame graph for fluent chaining.</returns>
     public FrameGraph AddPass<TPassData>(
         string name,
         FramePassKind kind,
         RenderPassSetupDelegate<TPassData> setup,
-        RenderPassExecuteDelegate<TPassData> execute) where TPassData : struct
+        RenderPassExecuteDelegate<TPassData> execute,
+        RenderPassValidateDelegate<TPassData>? validate = null) where TPassData : struct
     {
         if (IsDisposed)
             ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
 
-        var pass = new GenericRenderPass<TPassData>(name, kind, setup, execute);
+        var pass = new RenderPass<TPassData>(name, kind, setup, execute, validate);
         AddPass(pass);
         return this;
     }
@@ -176,7 +178,7 @@ public sealed class FrameGraph : IDisposable
 
         if (enabledPassCount == 0)
         {
-            _sortedPasses = Array.Empty<RenderPass>();
+            _sortedPasses = Array.Empty<IRenderPass>();
             return;
         }
 
@@ -247,7 +249,7 @@ public sealed class FrameGraph : IDisposable
 
                 // 3. Kahn's algorithm: emit zero-in-degree passes, release their readers.
                 // Direct-fill into the final array (length = enabledPassCount, known up front).
-                RenderPass[] sorted = GC.AllocateUninitializedArray<RenderPass>(enabledPassCount);
+                IRenderPass[] sorted = GC.AllocateUninitializedArray<IRenderPass>(enabledPassCount);
                 int queueHead = 0;
                 int queueTail = 0;
                 int queueCount = 0;
@@ -367,10 +369,9 @@ public sealed class FrameGraph : IDisposable
     /// passes behave exactly as before.</para>
     /// <para>Execution seam: every direct leg runs through
     /// <see cref="IRenderPass.Execute(IRenderContext)"/> on the graph-owned
-    /// <see cref="RenderContext"/>. GL-specific passes are adapted into their
-    /// legacy GLContext bridge by the base class; <see cref="IRenderContext"/>-native
-    /// passes (for example <c>GenericRenderPass&lt;TPassData&gt;</c>) consume the
-    /// shared context directly, keeping its state cache warm for the whole walk.</para>
+    /// <see cref="RenderContext"/>. All passes are <see cref="IRenderContext"/>-native:
+    /// they consume the shared context directly, keeping its state cache warm
+    /// for the whole walk. There is no legacy bridge.</para>
     /// </remarks>
     public void Execute()
     {
@@ -385,10 +386,10 @@ public sealed class FrameGraph : IDisposable
 
         // 2. Walk the sorted passes once, in order. Allocation-free: locals only,
         // no LINQ, no closures; pump legs and direct legs keep the same position.
-        RenderPass[] sorted = _sortedPasses!;
+        IRenderPass[] sorted = _sortedPasses!;
         for (int i = 0; i < sorted.Length; i++)
         {
-            RenderPass pass = sorted[i];
+            IRenderPass pass = sorted[i];
 
             if (!pass.IsEnabled)
                 continue;
@@ -411,13 +412,8 @@ public sealed class FrameGraph : IDisposable
                 }
 
                 // Still refused: take the direct leg here rather than skipping the
-                // pass, so its GL effects stay inside the global order. The
-                // RenderPass test is the only fallback leg that exists today; an
-                // IPumpEnqueue that is not a RenderPass has no direct path.
-                if (pass is RenderPass refusedPass)
-                {
-                    ExecuteDirect(refusedPass);
-                }
+                // pass, so its GL effects stay inside the global order.
+                ExecuteDirect(pass);
 
                 continue;
             }
@@ -438,11 +434,11 @@ public sealed class FrameGraph : IDisposable
     /// the refusal fallback.
     /// </summary>
     /// <param name="pass">The pass to execute.</param>
-    private void ExecuteDirect(RenderPass pass)
+    private void ExecuteDirect(IRenderPass pass)
     {
         try
         {
-            ((IRenderPass)pass).Execute(_renderContext);
+            pass.Execute(_renderContext);
         }
 #pragma warning disable CA1031 // Pass failures are wrapped with pass identity; the type is preserved
         catch (Exception ex)
@@ -480,7 +476,7 @@ public sealed class FrameGraph : IDisposable
         nuint enqueued = 0;
         for (int i = 0; i < _sortedPasses!.Length; i++)
         {
-            RenderPass pass = _sortedPasses[i];
+            IRenderPass pass = _sortedPasses[i];
 
             if (!pass.IsEnabled)
                 continue;
