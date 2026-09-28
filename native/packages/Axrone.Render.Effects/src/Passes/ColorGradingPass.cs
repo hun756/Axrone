@@ -1,19 +1,23 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the colour grading pass.
-/// Grading factors are multiplicative and centred on 1.0 (neutral).
+/// Payload for the colour grading pass, owning the pass's setup, validate and
+/// execute phases. Grading factors are multiplicative and centred on 1.0 (neutral).
 /// </summary>
-public record struct ColorGradingPassData
+public sealed class ColorGradingPassData
+    : IPassSetup<ColorGradingPassData>, IPassValidate<ColorGradingPassData>, IPassExecute<ColorGradingPassData>
 {
-    /// <summary>Colour grading shader program.</summary>
-    public GLProgram Program { get; set; }
+    private const float MinGradingFactor = 0f;
+    private const float MaxGradingFactor = 2f;
+
+    /// <summary>Colour grading shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Program { get; set; } = null!;
 
     /// <summary>Input colour texture resource name.</summary>
-    public string InputTextureName { get; set; }
+    public string InputTextureName { get; set; } = string.Empty;
 
     /// <summary>Graded output target name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Contrast factor. Must be in [0, 2]. Update per frame if animated.</summary>
     public float Contrast { get; set; }
@@ -26,49 +30,16 @@ public record struct ColorGradingPassData
 
     /// <summary>Post-process phase. Display-referred effects run after tone mapping.</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the colour grading post-process pass.
-/// </summary>
-public static class ColorGradingPass
-{
-    private const float MinGradingFactor = 0f;
-    private const float MaxGradingFactor = 2f;
-
-    /// <summary>Creates a colour grading pass.</summary>
-    public static RenderPass<ColorGradingPassData> Create(
-        string name,
-        GLProgram program,
-        string inputName,
-        string outputName,
-        float contrast = 1f,
-        float saturation = 1f,
-        float brightness = 1f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref ColorGradingPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(inputName);
-        ArgumentNullException.ThrowIfNull(outputName);
-        return new RenderPass<ColorGradingPassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref ColorGradingPassData data) =>
-            {
-                data.Program = program;
-                data.InputTextureName = inputName;
-                data.OutputTextureName = outputName;
-                data.Contrast = contrast;
-                data.Saturation = saturation;
-                data.Brightness = brightness;
-                data.Phase = PostProcessPhase.AfterTonemap;
-                builder.Reads(inputName);
-                builder.Writes(outputName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in ColorGradingPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in ColorGradingPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -107,7 +78,8 @@ public static class ColorGradingPass
         }
     }
 
-    private static void Execute(in ColorGradingPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in ColorGradingPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -158,5 +130,39 @@ public static class ColorGradingPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the colour grading post-process pass.
+/// </summary>
+public static class ColorGradingPass
+{
+    /// <summary>Creates a colour grading pass.</summary>
+    public static RenderPass<ColorGradingPassData> Create(
+        string name,
+        GLProgram program,
+        string inputName,
+        string outputName,
+        float contrast = 1f,
+        float saturation = 1f,
+        float brightness = 1f)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(inputName);
+        ArgumentNullException.ThrowIfNull(outputName);
+        return new RenderPass<ColorGradingPassData>(
+            name,
+            FramePassKind.PostProcess,
+            new ColorGradingPassData
+            {
+                Program = program,
+                InputTextureName = inputName,
+                OutputTextureName = outputName,
+                Contrast = contrast,
+                Saturation = saturation,
+                Brightness = brightness,
+                Phase = PostProcessPhase.AfterTonemap
+            });
     }
 }
