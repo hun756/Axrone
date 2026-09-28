@@ -1,6 +1,7 @@
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Render.OpenGL.Shading;
@@ -11,7 +12,7 @@ namespace Axrone.Render.OpenGL.Tests;
 /// <summary>
 /// Covers the monomorphic (static-abstract, zero-vtable) fullscreen command path:
 /// dispatch mechanics, the recording-invoker contract, blend restoration through
-/// the state cache, and the <see cref="FullscreenQuadPassExecutor"/> proof path.
+/// the state cache, and the <see cref="FullscreenQuadPass"/> proof path.
 /// </summary>
 public sealed class FullscreenCommandTests : IDisposable
 {
@@ -25,6 +26,18 @@ public sealed class FullscreenCommandTests : IDisposable
     {
         _mock = new MockGLApi();
         _context = new GLContext(_mock);
+    }
+
+    /// <summary>
+    /// Runs one pass on the direct leg: the same
+    /// <see cref="IRenderContext"/>-native seam the frame graph uses, built over
+    /// the pass's own <see cref="PassExecutionContext"/>. The pass itself decides
+    /// whether the monomorphic command path or the established one runs.
+    /// </summary>
+    private void ExecutePass(IRenderPass pass, PassExecutionContext execCtx)
+    {
+        var renderCtx = new GLRenderContext(_context, execCtx);
+        pass.Execute(renderCtx);
     }
 
     // =========================================================================
@@ -232,18 +245,18 @@ public sealed class FullscreenCommandTests : IDisposable
     }
 
     // =========================================================================
-    // Proof path — FullscreenQuadPassExecutor routed through the dispatcher
+    // Proof path — FullscreenQuadPass routed through the dispatcher
     // =========================================================================
 
     [Fact]
-    public void FullscreenQuadPassExecutor_ExecuteMonomorphic_IssuesSameDrawAsExecute()
+    public void FullscreenQuadPass_ExecuteMonomorphic_IssuesProgramBindAndDraw()
     {
         using var program = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
+        var pass = FullscreenQuadPass.Create("fullscreen", program);
         var execCtx = new PassExecutionContext(_context);
         _mock.ClearCallLog();
 
-        pass.ExecuteMonomorphic(_context, execCtx);
+        ExecutePass(pass, execCtx);
 
         _mock.CallLog.Should().Contain($"UseProgram({program.Id})");
         _mock.CallLog.Should().Contain(DrawArraysCall);
@@ -252,39 +265,52 @@ public sealed class FullscreenCommandTests : IDisposable
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_ExecuteMonomorphic_MatchesBaselineCallSequence()
-    {
-        using var program = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
-        pass.BindTexture(1, "input");
-        var execCtx = new PassExecutionContext(_context);
-        execCtx.SetResource("input", new GLTexture(_context, GLConst.Texture2D, TextureFormat.Rgba8, 8, 8));
-
-        _mock.ClearCallLog();
-        pass.Execute(_context, execCtx);
-        List<string> baseline = _mock.CallLog.ToList();
-
-        _mock.ClearCallLog();
-        pass.ExecuteMonomorphic(_context, execCtx);
-        List<string> monomorphic = _mock.CallLog.ToList();
-
-        monomorphic.Should().Contain(baseline, "the monomorphic path must issue the same GL traffic");
-    }
-
-    [Fact]
-    public void FullscreenQuadPassExecutor_ExecuteMonomorphic_BindsTexturesAndDisablesBlend()
+    public void FullscreenQuadPass_ExecuteMonomorphic_MatchesBaselineCallSequence()
     {
         using var program = new GLProgram(_context, "vs", "fs");
         var texture = new GLTexture(_context, GLConst.Texture2D, TextureFormat.Rgba8, 8, 8);
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
-        pass.BindTexture(0, "input");
+        var execCtx = new PassExecutionContext(_context);
+        execCtx.SetResource("input", texture);
+
+        List<(int Unit, string TextureName)> bindings = [(1, "input")];
+
+        // No uniform callback and one inline texture bind: the fast path.
+        var monomorphic = FullscreenQuadPass.Create("fullscreen", program, textureBindings: bindings);
+        // A uniform callback is outside the command vocabulary: the established path.
+        var established = FullscreenQuadPass.Create("fullscreen", program, textureBindings: bindings,
+            uniformCallback: (_, _) => { });
+
+        // Invalidate the state cache before each leg so both replay the same
+        // driver traffic instead of deduping the second one against the first.
+        _context.State.Invalidate();
+        _mock.ClearCallLog();
+        ExecutePass(monomorphic, execCtx);
+        List<string> monomorphicLines = _mock.CallLog.ToList();
+
+        _context.State.Invalidate();
+        _mock.ClearCallLog();
+        ExecutePass(established, execCtx);
+        List<string> baseline = _mock.CallLog.ToList();
+
+        monomorphicLines.Should().NotBeEmpty("a vacuous pass would compare equal against anything");
+        baseline.Should().NotBeEmpty("a vacuous pass would compare equal against anything");
+        monomorphicLines.Should().Contain(baseline, "the monomorphic path must issue the same GL traffic");
+    }
+
+    [Fact]
+    public void FullscreenQuadPass_ExecuteMonomorphic_BindsTexturesAndDisablesBlend()
+    {
+        using var program = new GLProgram(_context, "vs", "fs");
+        var texture = new GLTexture(_context, GLConst.Texture2D, TextureFormat.Rgba8, 8, 8);
+        List<(int Unit, string TextureName)> bindings = [(0, "input")];
+        var pass = FullscreenQuadPass.Create("fullscreen", program, textureBindings: bindings);
         var execCtx = new PassExecutionContext(_context);
         execCtx.SetResource("input", texture);
 
         _context.State.SetBlend(true);
         _mock.ClearCallLog();
 
-        pass.ExecuteMonomorphic(_context, execCtx);
+        ExecutePass(pass, execCtx);
 
         _mock.CallLog.Should().Contain($"BindTexture({GLConst.Texture2D}, {texture.Id})");
         _mock.CallLog.Should().Contain(DisableBlendCall);
@@ -292,51 +318,53 @@ public sealed class FullscreenCommandTests : IDisposable
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_ExecuteMonomorphic_WithUniformCallback_TakesEstablishedPath()
+    public void FullscreenQuadPass_Execute_WithUniformCallback_TakesEstablishedPath()
     {
         using var program = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
         bool callbackInvoked = false;
-        pass.WithUniforms((_, _) => callbackInvoked = true);
+        var pass = FullscreenQuadPass.Create("fullscreen", program,
+            uniformCallback: (_, _) => callbackInvoked = true);
         var execCtx = new PassExecutionContext(_context);
         _mock.ClearCallLog();
 
-        pass.ExecuteMonomorphic(_context, execCtx);
+        ExecutePass(pass, execCtx);
 
         callbackInvoked.Should().BeTrue("a custom uniform callback is outside the command vocabulary");
         _mock.CallLog.Should().Contain(DrawArraysCall);
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_ExecuteMonomorphic_BeyondInlineCapacity_TakesEstablishedPath()
+    public void FullscreenQuadPass_ExecuteMonomorphic_BeyondInlineCapacity_TakesEstablishedPath()
     {
         using var program = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
         var execCtx = new PassExecutionContext(_context);
+        List<(int Unit, string TextureName)> bindings = [];
         for (int i = 0; i <= FullscreenCommandLimits.MaxTextureBinds; i++)
         {
             string name = $"tex{i}";
-            pass.BindTexture(i, name);
+            bindings.Add((i, name));
             execCtx.SetResource(name, new GLTexture(_context, GLConst.Texture2D, TextureFormat.Rgba8, 8, 8));
         }
 
+        var pass = FullscreenQuadPass.Create("fullscreen", program, textureBindings: bindings);
+
         _mock.ClearCallLog();
 
-        pass.ExecuteMonomorphic(_context, execCtx);
+        ExecutePass(pass, execCtx);
 
         _mock.CallLog.Should().Contain(DrawArraysCall);
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_Execute_IsUnchangedByTheMonomorphicPath()
+    public void FullscreenQuadPass_Execute_WithUniformCallback_LeavesBlendStateUntouched()
     {
         using var program = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", program);
+        var pass = FullscreenQuadPass.Create("fullscreen", program, uniformCallback: (_, _) => { });
         var execCtx = new PassExecutionContext(_context);
         _context.State.SetBlend(true);
         _mock.ClearCallLog();
 
-        pass.Execute(_context, execCtx);
+        ExecutePass(pass, execCtx);
 
         // The established path must not gain blend bookkeeping from this slice.
         _mock.CallLog.Should().NotContain(DisableBlendCall);
