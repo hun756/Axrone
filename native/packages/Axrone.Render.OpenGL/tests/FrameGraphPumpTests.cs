@@ -7,9 +7,12 @@ using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Utility.Descriptors;
 
-// Alias to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
-// and class FrameGraph within that namespace.
-using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
+// Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
+// and the typestate FrameGraph handles within that namespace: FG is the building
+// handle (AddPass/Reset/Compile), FGC the compiled handle returned by Compile()
+// that carries Execute and the pump legs.
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
+using FGC = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.CompiledPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 
 using RenderPump = Axrone.Execution.CommandPump<
     Axrone.Render.Core.RenderCommand,
@@ -26,7 +29,8 @@ namespace Axrone.Render.OpenGL.Tests;
 /// Tests for the FrameGraph command-pump wiring: pump-capable passes
 /// (<see cref="IPumpEnqueue"/>) enqueue library commands into the graph-owned
 /// pump while classic passes keep their direct <see cref="IRenderPass.Execute(IRenderContext)"/>
-/// path (hybrid graph).
+/// path (hybrid graph). The pump legs live on the compiled handle, so every
+/// test compiles the building graph first and drives it through that handle.
 /// </summary>
 /// <remarks>
 /// The graph owns its internal <see cref="PassExecutionContext"/> and tests
@@ -53,9 +57,10 @@ public sealed class FrameGraphPumpTests : IDisposable
         var destination = new GLFramebuffer(_context, 64, 64, "dst");
         graph.AddPass(CreatePumpTestPass("blit", source, destination));
 
-        graph.EnqueuePumpPasses().Should().Be(1u);
+        FGC compiled = graph.Compile();
+        compiled.EnqueuePumpPasses().Should().Be(1u);
 
-        graph.PumpQueuedCommands().Should().Be(1u);
+        compiled.PumpQueuedCommands().Should().Be(1u);
 
         _mock.CallLog.Should().Contain(c => c.Contains("BlitFramebuffer(0, 0, 64, 64, 0, 0, 64, 64", StringComparison.Ordinal));
 
@@ -70,9 +75,10 @@ public sealed class FrameGraphPumpTests : IDisposable
         int executionCount = 0;
         graph.AddPass(CustomPass.Create("classic", FramePassKind.Custom, (gl, ctx) => executionCount++));
 
-        graph.EnqueuePumpPasses().Should().Be(0u);
+        FGC compiled = graph.Compile();
+        compiled.EnqueuePumpPasses().Should().Be(0u);
 
-        graph.Execute();
+        compiled.Execute();
 
         executionCount.Should().Be(1);
     }
@@ -87,7 +93,7 @@ public sealed class FrameGraphPumpTests : IDisposable
         pass.IsEnabled = false;
         graph.AddPass(pass);
 
-        graph.EnqueuePumpPasses().Should().Be(0u);
+        graph.Compile().EnqueuePumpPasses().Should().Be(0u);
 
         source.Dispose();
         destination.Dispose();
@@ -101,14 +107,14 @@ public sealed class FrameGraphPumpTests : IDisposable
         var destination = new GLFramebuffer(_context, 64, 64, "dst");
         graph.AddPass(CreatePumpTestPass("blit", source, destination));
 
-        graph.EnqueuePumpPasses().Should().Be(1u);
+        graph.Compile().EnqueuePumpPasses().Should().Be(1u);
 
         graph.Reset();
         graph.PassCount.Should().Be(0);
 
         // Documented semantics: Reset leaves the pump alive and undrained;
         // queued-but-unpumped commands survive and still pump.
-        graph.PumpQueuedCommands().Should().Be(1u);
+        graph.Compile().PumpQueuedCommands().Should().Be(1u);
 
         source.Dispose();
         destination.Dispose();
@@ -130,7 +136,7 @@ public sealed class FrameGraphPumpTests : IDisposable
             static (_, _) => throw new InvalidOperationException("walk fault")));
         graph.AddPass(CreatePumpTestPass("blit", source, destination));
 
-        var action = () => graph.Execute();
+        var action = () => graph.Compile().Execute();
 
         // (a) The original failure surfaces: pass identity wrapped, original type,
         //     message and stack preserved through the walk's fault isolation.
@@ -145,7 +151,7 @@ public sealed class FrameGraphPumpTests : IDisposable
         //     later enqueue with EnqueueStatus.Closed instead of accepting work
         //     whose GL state is unknown.
         graph.Pump.State.Should().Be(PumpState.Faulted);
-        graph.EnqueuePumpPasses().Should().Be(0u);
+        graph.Compile().EnqueuePumpPasses().Should().Be(0u);
 
         source.Dispose();
         destination.Dispose();
@@ -155,9 +161,10 @@ public sealed class FrameGraphPumpTests : IDisposable
     public void PumpQueuedCommands_OnDisposedGraph_ThrowsObjectDisposed()
     {
         var graph = new FG(_context);
+        FGC compiled = graph.Compile();
         graph.Dispose();
 
-        var action = () => graph.PumpQueuedCommands();
+        var action = () => compiled.PumpQueuedCommands();
 
         action.Should().Throw<ObjectDisposedException>();
     }
@@ -165,7 +172,10 @@ public sealed class FrameGraphPumpTests : IDisposable
     [Fact]
     public void Constructor_NonPowerOfTwoPumpCapacity_Throws()
     {
-        var action = () => new FG(_context, 100);
+        // The pump capacity is not a public constructor parameter, so the
+        // validation it used to be reached through is reached here through the
+        // internal storage seam the test assembly is a friend of.
+        var action = () => new FG(new FrameGraphStorage(_context, 100));
 
         action.Should().Throw<ArgumentOutOfRangeException>();
     }
