@@ -10,4 +10,7 @@ public enum RenderCommandType : byte
 
     /// <summary>Color/depth/stencil clear of one framebuffer.</summary>
     Clear = 1,
+
+    /// <summary>Blit of a framebuffer onto the default framebuffer (present).</summary>
+    Present = 2,
 }
