@@ -9,6 +9,13 @@ namespace Axrone.Render.OpenGL.FrameGraph;
 /// </summary>
 public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand, RenderPumpContext>, IEquatable<RenderCommandProcessor>
 {
+    /// <summary>
+    /// The only framebuffer a present can name as its destination. Framebuffer 0
+    /// is owned by GL, never by the resource registry, so the processor binds it
+    /// by constant instead of resolving a handle that cannot exist.
+    /// </summary>
+    private const uint DefaultFramebufferId = 0;
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Process(ref RenderCommand command, ref RenderPumpContext context)
@@ -20,6 +27,9 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
                 break;
             case RenderCommandType.Clear:
                 ExecuteClear(in command, ref context);
+                break;
+            case RenderCommandType.Present:
+                ExecutePresent(in command, ref context);
                 break;
             default:
                 ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, $"Unknown render command type: {command.Type}", nameof(RenderCommandProcessor));
@@ -114,5 +124,43 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
         {
             gl.Clear(mask);
         }
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="PassExecutors.PresentPassExecutor.Execute"/> up to and
+    /// including the blit: bind the source for reads and framebuffer 0 for
+    /// draws, then issue one <c>glBlitFramebuffer</c> carrying the packet's
+    /// rectangles, mask, and filter.
+    /// </summary>
+    /// <remarks>
+    /// Only the source is resolved. The destination is the default framebuffer,
+    /// which the registry does not manage, so there is no destination handle to
+    /// resolve: framebuffer 0 is bound by construction, and a stale source is
+    /// the only handle failure a present command can produce.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void ExecutePresent(in RenderCommand command, ref RenderPumpContext context)
+    {
+        DescriptorHandle<GLResourceNode> sourceHandle = command.Source;
+        Context.GLResourceRegistry registry = context.Context.Registry;
+
+        if (!registry.TryResolve(in sourceHandle, out var source) || source is not Resources.GLFramebuffer sourceFbo)
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "Present source handle is stale or not a framebuffer", nameof(RenderCommandProcessor));
+            return; // Unreachable, satisfies compiler
+        }
+
+        var state = context.Context.State;
+        var gl = context.Context.GL;
+
+        // Read and draw are bound separately so the destination side of the blit
+        // can be framebuffer 0 while the source side is the resolved FBO.
+        state.BindFramebuffer(GLConst.ReadFramebuffer, sourceFbo.Id);
+        state.BindFramebuffer(GLConst.DrawFramebuffer, DefaultFramebufferId);
+
+        gl.BlitFramebuffer(
+            command.SourceX0, command.SourceY0, command.SourceX1, command.SourceY1,
+            command.DestinationX0, command.DestinationY0, command.DestinationX1, command.DestinationY1,
+            command.Mask, command.Filter);
     }
 }
