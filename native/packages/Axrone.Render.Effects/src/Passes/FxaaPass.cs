@@ -1,18 +1,20 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the FXAA (Fast Approximate Anti-Aliasing) pass.
+/// Payload for the FXAA (Fast Approximate Anti-Aliasing) pass, owning the pass's
+/// setup, validate and execute phases.
 /// </summary>
-public record struct FxaaPassData
+public sealed class FxaaPassData
+    : IPassSetup<FxaaPassData>, IPassValidate<FxaaPassData>, IPassExecute<FxaaPassData>
 {
-    /// <summary>FXAA shader program.</summary>
-    public GLProgram Shader { get; set; }
+    /// <summary>FXAA shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Shader { get; set; } = null!;
 
     /// <summary>Input LDR texture resource name.</summary>
-    public string InputTextureName { get; set; }
+    public string InputTextureName { get; set; } = string.Empty;
 
     /// <summary>Output anti-aliased texture resource name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Sub-pixel aliasing removal quality in [0, 1]. Update per frame if animated.</summary>
     public float SubpixelQuality { get; set; }
@@ -22,45 +24,16 @@ public record struct FxaaPassData
 
     /// <summary>Absolute minimum luminance for FXAA application. Must be non-negative.</summary>
     public float EdgeThresholdMin { get; set; }
-}
 
-/// <summary>
-/// Factory for the FXAA post-process pass.
-/// The shader is expected to expose <c>u_texture</c>, <c>u_texelSize</c>,
-/// <c>u_subpixelQuality</c>, <c>u_edgeThreshold</c> and <c>u_edgeThresholdMin</c>.
-/// </summary>
-public static class FxaaPass
-{
-    /// <summary>Creates an FXAA pass.</summary>
-    public static RenderPass<FxaaPassData> Create(
-        string name,
-        GLProgram shader,
-        string inputTextureName = "scene_ldr",
-        string outputTextureName = "scene_aa",
-        float subpixelQuality = 0.75f,
-        float edgeThreshold = 0.125f,
-        float edgeThresholdMin = 0.0312f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref FxaaPassData data)
     {
-        ArgumentNullException.ThrowIfNull(shader);
-        return new RenderPass<FxaaPassData>(
-            name,
-            FramePassKind.Fxaa,
-            (IRenderPassBuilder builder, ref FxaaPassData data) =>
-            {
-                data.Shader = shader;
-                data.InputTextureName = inputTextureName;
-                data.OutputTextureName = outputTextureName;
-                data.SubpixelQuality = subpixelQuality;
-                data.EdgeThreshold = edgeThreshold;
-                data.EdgeThresholdMin = edgeThresholdMin;
-                builder.Reads(inputTextureName);
-                builder.Writes(outputTextureName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in FxaaPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in FxaaPassData data)
     {
         if (data.SubpixelQuality < 0f || data.SubpixelQuality > 1f)
         {
@@ -81,7 +54,8 @@ public static class FxaaPass
         }
     }
 
-    private static void Execute(in FxaaPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in FxaaPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -109,5 +83,38 @@ public static class FxaaPass
         gl.Uniform1(data.Shader.GetUniformLocation("u_edgeThresholdMin"), data.EdgeThresholdMin);
 
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the FXAA post-process pass.
+/// The shader is expected to expose <c>u_texture</c>, <c>u_texelSize</c>,
+/// <c>u_subpixelQuality</c>, <c>u_edgeThreshold</c> and <c>u_edgeThresholdMin</c>.
+/// </summary>
+public static class FxaaPass
+{
+    /// <summary>Creates an FXAA pass.</summary>
+    public static RenderPass<FxaaPassData> Create(
+        string name,
+        GLProgram shader,
+        string inputTextureName = "scene_ldr",
+        string outputTextureName = "scene_aa",
+        float subpixelQuality = 0.75f,
+        float edgeThreshold = 0.125f,
+        float edgeThresholdMin = 0.0312f)
+    {
+        ArgumentNullException.ThrowIfNull(shader);
+        return new RenderPass<FxaaPassData>(
+            name,
+            FramePassKind.Fxaa,
+            new FxaaPassData
+            {
+                Shader = shader,
+                InputTextureName = inputTextureName,
+                OutputTextureName = outputTextureName,
+                SubpixelQuality = subpixelQuality,
+                EdgeThreshold = edgeThreshold,
+                EdgeThresholdMin = edgeThresholdMin
+            });
     }
 }
