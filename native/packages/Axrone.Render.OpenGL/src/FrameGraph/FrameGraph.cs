@@ -286,8 +286,47 @@ public sealed class FrameGraph : IDisposable
     }
 
     /// <summary>
-    /// Executes all passes in topological order.
+    /// Executes all passes in topological order, pump-driven where the pass
+    /// supports it and direct otherwise.
     /// </summary>
+    /// <remarks>
+    /// <para>The walk is hybrid and strictly order-preserving. For every sorted,
+    /// enabled pass:</para>
+    /// <list type="bullet">
+    /// <item><description>a pump-capable pass (<see cref="IPumpEnqueue"/>) enqueues
+    /// its commands into <see cref="Pump"/> and moves on; the commands reach the GL
+    /// API at the next drain point;</description></item>
+    /// <item><description>a refused enqueue (ring full) drains the pump once and
+    /// retries that enqueue exactly once;</description></item>
+    /// <item><description>a pass still refused after the retry falls back to its
+    /// direct <see cref="RenderPass.Execute"/> in place, so it still runs exactly
+    /// once and its GL effects stay inside the global order;</description></item>
+    /// <item><description>a classic pass drains the pump first — pumped work
+    /// enqueued by earlier passes must be applied before a direct pass reads its
+    /// inputs — and then executes directly.</description></item>
+    /// </list>
+    /// <para>One final drain closes the walk, so no command enqueued here outlives
+    /// the call. Order is preserved because the ring is FIFO and enqueues follow
+    /// the compiled order, so pumped work can never overtake an earlier pass, and
+    /// the drain-before-direct rule keeps direct work behind everything enqueued
+    /// before it.</para>
+    /// <para>Known limitation: an exception raised by
+    /// <see cref="RenderCommandProcessor"/> surfaces from the drain that runs the
+    /// command, not from the pass that enqueued it, so it carries no pass name and
+    /// is not wrapped in <see cref="RenderException"/> (only the direct leg is
+    /// wrapped, per pass). The refusal fallback above is the mitigation for the
+    /// common cause of a full ring; a processor fault stays attributable only to
+    /// the failing command type.</para>
+    /// <para>Retry granularity is per pass, not per command: a pass that enqueues
+    /// several commands and is refused part-way through re-runs its whole enqueue
+    /// after the drain, so the commands already accepted are executed twice. The
+    /// shipped single-command pump passes are unaffected; a multi-command
+    /// <see cref="IPumpEnqueue"/> must therefore size the pump for its per-frame
+    /// command count.</para>
+    /// <para>No other behavior changes: disabled passes are skipped, and pumping an
+    /// empty ring is a no-op, so empty graphs and graphs without pump-capable
+    /// passes behave exactly as before.</para>
+    /// </remarks>
     public void Execute()
     {
         if (IsDisposed)
@@ -299,24 +338,71 @@ public sealed class FrameGraph : IDisposable
             Compile();
         }
 
-        // 2. Execute each pass in order
-        for (int i = 0; i < _sortedPasses!.Length; i++)
+        // 2. Walk the sorted passes once, in order. Allocation-free: locals only,
+        // no LINQ, no closures; pump legs and direct legs keep the same position.
+        RenderPass[] sorted = _sortedPasses!;
+        for (int i = 0; i < sorted.Length; i++)
         {
-            RenderPass pass = _sortedPasses[i];
+            RenderPass pass = sorted[i];
 
             if (!pass.IsEnabled)
                 continue;
 
-            try
+            if (pass is IPumpEnqueue pumpPass)
             {
-                pass.Execute(_context, _execContext);
+                if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+                {
+                    // Pump leg: the commands execute at the next drain point, in
+                    // enqueue order, which is graph order.
+                    continue;
+                }
+
+                // Refused (ring full): drain once. The pending pumped work lands in
+                // graph order and the freed slots give this pass a second chance.
+                PumpQueuedCommands();
+                if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+                {
+                    continue;
+                }
+
+                // Still refused: take the direct leg here rather than skipping the
+                // pass, so its GL effects stay inside the global order. The
+                // RenderPass test is the only fallback leg that exists today; an
+                // IPumpEnqueue that is not a RenderPass has no direct path.
+                if (pass is RenderPass refusedPass)
+                {
+                    ExecuteDirect(refusedPass);
+                }
+
+                continue;
             }
+
+            // Classic pass: drain-before-direct, so pumped work enqueued by
+            // earlier passes is already applied when this pass reads its inputs.
+            PumpQueuedCommands();
+            ExecuteDirect(pass);
+        }
+
+        // 3. Final drain: nothing enqueued by this walk survives the call.
+        PumpQueuedCommands();
+    }
+
+    /// <summary>
+    /// Executes one pass on the direct path, wrapping any failure with the pass
+    /// identity. Shared by the classic leg and the refusal fallback.
+    /// </summary>
+    /// <param name="pass">The pass to execute.</param>
+    private void ExecuteDirect(RenderPass pass)
+    {
+        try
+        {
+            pass.Execute(_context, _execContext);
+        }
 #pragma warning disable CA1031 // Pass failures are wrapped with pass identity; the type is preserved
-            catch (Exception ex)
+        catch (Exception ex)
 #pragma warning restore CA1031
-            {
-                throw new RenderException($"Pass '{pass.Name}' failed: {ex.Message}", RenderErrorCode.PassExecutionFailed, ex);
-            }
+        {
+            throw new RenderException($"Pass '{pass.Name}' failed: {ex.Message}", RenderErrorCode.PassExecutionFailed, ex);
         }
     }
 
