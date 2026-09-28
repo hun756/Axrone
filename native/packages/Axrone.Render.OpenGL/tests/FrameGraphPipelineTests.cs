@@ -4,8 +4,11 @@ using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
 using Axrone.Render.OpenGL.FrameGraph.Passes;
 
-// Aliases to avoid ambiguity between namespace and class name.
-using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
+// Aliases to avoid ambiguity between namespace and the typestate FrameGraph
+// handles: FG is the building handle (AddPass/Reset/Compile), FGC the compiled
+// handle returned by Compile() that carries Execute().
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
+using FGC = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.CompiledPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 using FGP = global::Axrone.Render.OpenGL.FrameGraph.FramePassKind;
 
 /// <summary>
@@ -58,7 +61,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(transparentPass);
 
         // Act
-        graph.Execute();
+        graph.Compile().Execute();
 
         // Assert: all 3 passes executed
         executionOrder.Should().HaveCount(3);
@@ -95,7 +98,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(uiPass);
 
         // Act
-        graph.Execute();
+        graph.Compile().Execute();
 
         // Assert: all 6 passes executed
         executionOrder.Should().HaveCount(6);
@@ -126,7 +129,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(writerPass);
 
         // Act
-        graph.Execute();
+        graph.Compile().Execute();
 
         // Assert: writer executed before reader despite being added second
         executionOrder.Should().HaveCount(2);
@@ -170,7 +173,8 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(CreateTrackingPass("Pass1", FGP.Custom, firstPassExecution));
 
         // Act: execute first graph
-        graph.Execute();
+        FGC compiled = graph.Compile();
+        compiled.Execute();
         firstPassExecution.Should().HaveCount(1);
 
         // Reset the graph
@@ -185,7 +189,8 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(pass3);
 
         // Execute second graph
-        graph.Execute();
+        compiled = graph.Compile();
+        compiled.Execute();
 
         // Assert: second graph executed correctly
         secondPassExecution.Should().HaveCount(2);
@@ -212,7 +217,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(passC);
 
         // Act
-        graph.Execute();
+        graph.Compile().Execute();
 
         // Assert: all executed, no particular order required
         executionOrder.Should().HaveCount(3);
@@ -239,7 +244,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.AddPass(pass3);
 
         // Act
-        graph.Execute();
+        graph.Compile().Execute();
 
         // Assert: disabled pass skipped
         executionOrder.Should().HaveCount(2);
