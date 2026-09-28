@@ -1,5 +1,6 @@
 namespace Axrone.Execution;
 
+using System.Runtime.ExceptionServices;
 using Axrone.Utility.Alignment;
 
 /// <summary>
@@ -32,8 +33,12 @@ internal struct PumpSlot<TCommand> where TCommand : unmanaged
 /// its own thread (for graphics, the render thread that owns the GL context),
 /// so context affinity, teardown ordering, and test determinism stay trivial.
 /// Producer faults never exist (enqueue is infallible bookkeeping);
-/// processor exceptions propagate synchronously to the <see cref="Pump"/>
-/// caller, which owns the recovery policy.
+/// processor exceptions are contained rather than left to chance: the drain
+/// catches, moves the lifecycle to <see cref="PumpState.Faulted"/>, reports
+/// <see cref="IExecutorTelemetry.FaultEncountered"/>, and rethrows the captured
+/// <see cref="ExceptionDispatchInfo"/> with its original stack. The
+/// <see cref="Pump"/> caller still owns the recovery policy, but the ring is left
+/// in a defined, observable state instead of an undefined one.
 /// </para>
 /// <para>
 /// Backing memory is 64-byte aligned native memory released by
@@ -119,6 +124,10 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
 
     /// <summary>
     /// Attempts to enqueue one command. Lock-free; safe from any producer thread.
+    /// Every state other than <see cref="PumpState.Running"/> — draining,
+    /// stopped, <b>faulted</b>, or disposed — refuses through
+    /// <see cref="EnqueueStatus.Closed"/>, so a faulted pump never accepts more
+    /// work and no producer has to branch on the fault itself.
     /// </summary>
     /// <param name="item">The command to queue.</param>
     /// <returns>The claim receipt (sequence) or the refusal reason.</returns>
@@ -182,7 +191,9 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
 
     /// <summary>
     /// Enqueues one command, spinning with <typeparamref name="TBackoff"/>
-    /// while the ring is full. Cancellation and pump closure abort the wait.
+    /// while the ring is full. Cancellation and pump closure abort the wait, and
+    /// every retry round that loses the race for a slot reports
+    /// <see cref="IExecutorTelemetry.ContentionDetected"/> before backing off.
     /// </summary>
     /// <param name="item">The command to queue.</param>
     /// <param name="cancellationToken">Aborts the wait.</param>
@@ -198,6 +209,7 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
             if (result.Status != EnqueueStatus.QueueFull)
                 return result;
 
+            TTelemetry.ContentionDetected();
             TBackoff.Advance(ref spin);
         }
     }
@@ -205,13 +217,20 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
     /// <summary>
     /// Processes up to <paramref name="maxItems"/> queued commands through
     /// <typeparamref name="TProcessor"/>. SINGLE-CONSUMER ONLY: exactly one
-    /// thread may pump. Processor exceptions propagate to the caller; the
-    /// faulting command stays claimed (tail does not advance past it), so a
-    /// retry observes the same head of queue.
+    /// thread may pump. A processor exception is contained: the pump moves to
+    /// <see cref="PumpState.Faulted"/>, reports
+    /// <see cref="IExecutorTelemetry.FaultEncountered"/>, and rethrows the
+    /// original exception with its stack intact. The faulting command stays
+    /// claimed (tail does not advance past it), so a retry observes the same head
+    /// of queue.
     /// </summary>
     /// <param name="context">Consumer-owned context, threaded by ref.</param>
     /// <param name="maxItems">Maximum commands to process.</param>
     /// <returns>Commands processed.</returns>
+    /// <exception cref="Exception">
+    /// Whatever the processor threw, rethrown through the captured
+    /// <see cref="ExceptionDispatchInfo"/> so the processor frames survive.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public unsafe nuint Pump(ref TContext context, nuint maxItems)
     {
@@ -226,7 +245,18 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
             if (Volatile.Read(ref slot->Sequence) - (tail + 1) != 0)
                 break;
 
-            TProcessor.Process(ref slot->Item, ref context);
+            try
+            {
+                TProcessor.Process(ref slot->Item, ref context);
+            }
+            catch (Exception ex)
+            {
+                ExceptionDispatchInfo fault = ExceptionDispatchInfo.Capture(ex);
+                Fault(ex);
+                fault.Throw();
+                throw; // Fault + captured rethrow above never return; this ends the drain for the compiler too.
+            }
+
             slot->Item = default;
             Volatile.Write(ref slot->Sequence, tail + (long)_mask + 1);
             TTelemetry.ItemDequeued();
@@ -248,13 +278,40 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
 
     /// <summary>
     /// Refuses further enqueues; already queued work still pumps.
-    /// Idempotent.
+    /// Idempotent, and inert once the pump is faulted: a fault is terminal until
+    /// <see cref="Dispose"/>.
     /// </summary>
     public void Complete()
     {
         int current = Volatile.Read(ref _state);
         if (current == (int)PumpState.Running)
             Interlocked.CompareExchange(ref _state, (int)PumpState.Draining, current);
+    }
+
+    /// <summary>
+    /// Reports a terminal processor fault: moves the lifecycle to
+    /// <see cref="PumpState.Faulted"/> and signals
+    /// <see cref="IExecutorTelemetry.FaultEncountered"/>. Producers are refused
+    /// from this point on through <see cref="EnqueueStatus.Closed"/>.
+    /// </summary>
+    /// <param name="exception">The faulting processor's exception.</param>
+    /// <remarks>
+    /// This method never throws — propagating the fault is the caller's job, so
+    /// that the drain can rethrow the original exception through a captured
+    /// <see cref="ExceptionDispatchInfo"/> with its stack intact. A pump whose
+    /// native memory is already released keeps reporting
+    /// <see cref="PumpState.Disposed"/>; the telemetry signal still fires, since
+    /// the fault happened either way.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="exception"/> is null.</exception>
+    public void Fault(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        if (Volatile.Read(ref _state) != (int)PumpState.Disposed)
+            Volatile.Write(ref _state, (int)PumpState.Faulted);
+
+        TTelemetry.FaultEncountered(exception);
     }
 
     /// <summary>
@@ -266,6 +323,10 @@ public sealed class CommandPump<TCommand, TContext, TProcessor, TBackoff, TTelem
     /// <param name="context">Consumer-owned context, threaded by ref.</param>
     /// <param name="cancellationToken">Aborts the wait.</param>
     /// <returns>Commands processed during the drain.</returns>
+    /// <exception cref="Exception">
+    /// A processor fault propagates out of the drain, leaving the pump
+    /// <see cref="PumpState.Faulted"/> with the remaining queue intact.
+    /// </exception>
     public nuint Drain(ref TContext context, CancellationToken cancellationToken = default)
     {
         Complete();
