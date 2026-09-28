@@ -1,5 +1,7 @@
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 namespace Axrone.Render.OpenGL.Benchmarks;
 
@@ -55,7 +57,7 @@ public class FrameGraphBenchmarks
 
         for (int i = 0; i < 10; i++)
         {
-            _graph.AddPass(new NoOpPass($"Pass_{i}", FramePassKind.Opaque));
+            _graph.AddPass(NoOpPass($"Pass_{i}", FramePassKind.Opaque));
         }
 
         _graph.Compile();
@@ -72,7 +74,7 @@ public class FrameGraphBenchmarks
 
         for (int i = 0; i < 10; i++)
         {
-            _graph.AddPass(new NoOpPass($"Pass_{i}", FramePassKind.Opaque));
+            _graph.AddPass(NoOpPass($"Pass_{i}", FramePassKind.Opaque));
         }
 
         _graph.Execute();
@@ -89,7 +91,7 @@ public class FrameGraphBenchmarks
 
         for (int i = 0; i < 50; i++)
         {
-            _graph.AddPass(new NoOpPass($"Pass_{i}", FramePassKind.Opaque));
+            _graph.AddPass(NoOpPass($"Pass_{i}", FramePassKind.Opaque));
         }
 
         _graph.Execute();
@@ -98,15 +100,6 @@ public class FrameGraphBenchmarks
     /// <summary>
     /// Minimal no-op render pass for benchmarking frame graph overhead.
     /// </summary>
-    private sealed class NoOpPass : RenderPass
-    {
-        public NoOpPass(string name, FramePassKind kind) : base(name, kind)
-        {
-        }
-
-        public override void Execute(Context.GLContext context, PassExecutionContext ctx)
-        {
-            // Intentionally empty — benchmarks frame graph overhead, not pass work
-        }
-    }
+    private static RenderPass<CustomPassData> NoOpPass(string name, FramePassKind kind) =>
+        CustomPass.Create(name, kind, static (_, _) => { });
 }
