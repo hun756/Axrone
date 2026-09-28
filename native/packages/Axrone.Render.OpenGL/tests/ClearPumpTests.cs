@@ -1,9 +1,10 @@
 using Xunit;
 using FluentAssertions;
 using Axrone.Execution;
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 
@@ -19,7 +20,7 @@ namespace Axrone.Render.OpenGL.Tests;
 /// <summary>
 /// Tests for the pump-derived clear path: the packet replayed through
 /// <see cref="RenderCommandProcessor"/> must produce the same GL call sequence as
-/// <see cref="ClearPassExecutor.Execute"/>, and a clear with no registry-backed
+/// the direct leg of the clear pass, and a clear with no registry-backed
 /// target must refuse to enqueue instead of fabricating a handle.
 /// </summary>
 public class ClearPumpTests
@@ -34,6 +35,17 @@ public class ClearPumpTests
         return (context, mock, ctx, target);
     }
 
+    /// <summary>
+    /// Runs one pass on the direct leg: the same
+    /// <see cref="IRenderContext"/>-native seam the frame graph uses, built over
+    /// the pass's own <see cref="PassExecutionContext"/>.
+    /// </summary>
+    private static void ExecuteDirect(GLContext context, IRenderPass pass, PassExecutionContext ctx)
+    {
+        var renderCtx = new GLRenderContext(context, ctx);
+        pass.Execute(renderCtx);
+    }
+
     [Fact]
     public void ClearThroughPump_IssuesSameCallsAsDirect()
     {
@@ -42,17 +54,17 @@ public class ClearPumpTests
 
         // Distinctive, non-default values on every enabled buffer: any value lost
         // or reordered between the packet and the processor shows up as a log diff.
-        var pass = new ClearPassExecutor(
+        var pass = ClearPass.Create(
             "clear", "x",
             new Vector4(0.1f, 0.2f, 0.3f, 1.0f),
-            clearDepth: 0.5,
+            clearDepth: 0.5f,
             clearStencil: 3,
             clearStencilEnabled: true);
 
         mock.ClearCallLog();
         directMock.ClearCallLog();
 
-        pass.Execute(directContext, directCtx);
+        ExecuteDirect(directContext, pass, directCtx);
 
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
@@ -76,7 +88,7 @@ public class ClearPumpTests
 
         // Integral clear values keep the log assertions independent of the
         // ambient culture's decimal separator.
-        var pass = new ClearPassExecutor("clear", "x", new Vector4(1f, 1f, 1f, 1f));
+        var pass = ClearPass.Create("clear", "x", new Vector4(1f, 1f, 1f, 1f));
         mock.ClearCallLog();
 
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
@@ -100,7 +112,7 @@ public class ClearPumpTests
     {
         var (context, mock, ctx, target) = CreateFrame();
 
-        var pass = new ClearPassExecutor("clear"); // default framebuffer
+        var pass = ClearPass.Create("clear"); // default framebuffer
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
 
         EnqueueResult receipt = pass.EnqueueCommands(pump, ctx);
@@ -122,7 +134,7 @@ public class ClearPumpTests
     {
         var (context, mock, ctx, target) = CreateFrame();
 
-        var pass = new ClearPassExecutor("clear", "not-registered");
+        var pass = ClearPass.Create("clear", "not-registered");
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
 
         EnqueueResult receipt = pass.EnqueueCommands(pump, ctx);
@@ -143,7 +155,7 @@ public class ClearPumpTests
     {
         var (context, mock, ctx, target) = CreateFrame();
 
-        var pass = new ClearPassExecutor("clear", "x", new Vector4(1f, 1f, 1f, 1f));
+        var pass = ClearPass.Create("clear", "x", new Vector4(1f, 1f, 1f, 1f));
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
 
