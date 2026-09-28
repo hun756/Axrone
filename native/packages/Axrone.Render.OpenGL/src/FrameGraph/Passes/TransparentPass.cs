@@ -1,5 +1,6 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
@@ -11,9 +12,11 @@ namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 public readonly record struct TransparentMeshEntry(GLMesh Mesh, Vector3 WorldPosition);
 
 /// <summary>
-/// Payload for the transparent geometry pass.
+/// Payload for the transparent geometry pass, owning the pass's setup, validate and
+/// execute phases.
 /// </summary>
 public record struct TransparentPassData
+    : IPassSetup<TransparentPassData>, IPassValidate<TransparentPassData>, IPassExecute<TransparentPassData>
 {
     /// <summary>Shader program.</summary>
     public GLProgram Program { get; set; }
@@ -23,38 +26,18 @@ public record struct TransparentPassData
 
     /// <summary>Mesh entries rendered in this pass.</summary>
     public List<TransparentMeshEntry> Entries { get; set; }
-}
 
-/// <summary>
-/// Factory for the transparent geometry pass (alpha-blended, back-to-front sorted).
-/// </summary>
-public static class TransparentPass
-{
-    /// <summary>Creates a transparent geometry pass.</summary>
-    public static RenderPass<TransparentPassData> Create(
-        string name,
-        GLProgram program,
-        string? targetFramebufferName = null)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref TransparentPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        return new RenderPass<TransparentPassData>(
-            name,
-            FramePassKind.Transparent,
-            (IRenderPassBuilder builder, ref TransparentPassData data) =>
-            {
-                data.Program = program;
-                data.TargetFramebufferName = targetFramebufferName;
-                data.Entries = new List<TransparentMeshEntry>();
-                if (targetFramebufferName is not null)
-                {
-                    builder.Reads(targetFramebufferName);
-                }
-            },
-            Execute,
-            Validate);
+        if (data.TargetFramebufferName is not null)
+        {
+            builder.Reads(data.TargetFramebufferName);
+        }
     }
 
-    private static void Validate(in TransparentPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in TransparentPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -62,7 +45,8 @@ public static class TransparentPass
         }
     }
 
-    private static void Execute(in TransparentPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in TransparentPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -106,5 +90,29 @@ public static class TransparentPass
         {
             entries[i].Mesh.Draw();
         }
+    }
+}
+
+/// <summary>
+/// Factory for the transparent geometry pass (alpha-blended, back-to-front sorted).
+/// </summary>
+public static class TransparentPass
+{
+    /// <summary>Creates a transparent geometry pass.</summary>
+    public static RenderPass<TransparentPassData> Create(
+        string name,
+        GLProgram program,
+        string? targetFramebufferName = null)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        return new RenderPass<TransparentPassData>(
+            name,
+            FramePassKind.Transparent,
+            new TransparentPassData
+            {
+                Program = program,
+                TargetFramebufferName = targetFramebufferName,
+                Entries = new List<TransparentMeshEntry>()
+            });
     }
 }
