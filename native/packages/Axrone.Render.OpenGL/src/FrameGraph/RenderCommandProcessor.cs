@@ -18,6 +18,9 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
             case RenderCommandType.Blit:
                 ExecuteBlit(in command, ref context);
                 break;
+            case RenderCommandType.Clear:
+                ExecuteClear(in command, ref context);
+                break;
             default:
                 ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, $"Unknown render command type: {command.Type}", nameof(RenderCommandProcessor));
                 break;
@@ -65,5 +68,51 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
             command.SourceX0, command.SourceY0, command.SourceX1, command.SourceY1,
             command.DestinationX0, command.DestinationY0, command.DestinationX1, command.DestinationY1,
             command.Mask, command.Filter);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="PassExecutors.ClearPassExecutor.Execute"/>: bind the target,
+    /// push only the clear values the mask asks for, then issue a single
+    /// <c>glClear</c>. Clear values stay on the state cache, so a repeat of the
+    /// same clear costs one <c>glClear</c> and nothing else.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void ExecuteClear(in RenderCommand command, ref RenderPumpContext context)
+    {
+        DescriptorHandle<GLResourceNode> targetHandle = command.Target;
+        Context.GLResourceRegistry registry = context.Context.Registry;
+
+        if (!registry.TryResolve(in targetHandle, out var target) || target is not Resources.GLFramebuffer targetFbo)
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "Clear target handle is stale or not a framebuffer", nameof(RenderCommandProcessor));
+            return; // Unreachable, satisfies compiler
+        }
+
+        var state = context.Context.State;
+        var gl = context.Context.GL;
+
+        state.BindFramebuffer(GLConst.Framebuffer, targetFbo.Id);
+
+        uint mask = command.ClearMask;
+
+        if ((mask & GLConst.ColorBufferBit) != 0)
+        {
+            state.SetClearColor(command.ColorR, command.ColorG, command.ColorB, command.ColorA);
+        }
+
+        if ((mask & GLConst.DepthBufferBit) != 0)
+        {
+            state.SetClearDepth(command.Depth);
+        }
+
+        if ((mask & GLConst.StencilBufferBit) != 0)
+        {
+            state.SetClearStencil(command.Stencil);
+        }
+
+        if (mask != 0)
+        {
+            gl.Clear(mask);
+        }
     }
 }
