@@ -7,4 +7,7 @@ public enum RenderCommandType : byte
 {
     /// <summary>Framebuffer-to-framebuffer blit.</summary>
     Blit = 0,
+
+    /// <summary>Color/depth/stencil clear of one framebuffer.</summary>
+    Clear = 1,
 }
