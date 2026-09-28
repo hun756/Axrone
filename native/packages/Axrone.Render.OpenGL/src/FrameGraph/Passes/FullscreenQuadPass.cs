@@ -1,13 +1,16 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the fullscreen triangle pass.
+/// Payload for the fullscreen triangle pass, owning the pass's setup, validate and
+/// execute phases.
 /// Texture bindings are creation-time (they declare graph dependencies).
 /// </summary>
 public record struct FullscreenQuadPassData
+    : IPassSetup<FullscreenQuadPassData>, IPassValidate<FullscreenQuadPassData>, IPassExecute<FullscreenQuadPassData>
 {
     /// <summary>Fullscreen shader program.</summary>
     public GLProgram Shader { get; set; }
@@ -20,49 +23,23 @@ public record struct FullscreenQuadPassData
 
     /// <summary>Optional custom uniform callback invoked after binding.</summary>
     public Action<GLContext, GLProgram>? UniformCallback { get; set; }
-}
 
-/// <summary>
-/// Factory for the screen-filling triangle pass (overdrawn triangle, no VAO).
-/// </summary>
-public static class FullscreenQuadPass
-{
-    /// <summary>Creates a fullscreen triangle pass.</summary>
-    public static RenderPass<FullscreenQuadPassData> Create(
-        string name,
-        GLProgram shader,
-        string? outputFramebufferName = null,
-        IReadOnlyList<(int Unit, string TextureName)>? textureBindings = null,
-        Action<GLContext, GLProgram>? uniformCallback = null)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref FullscreenQuadPassData data)
     {
-        ArgumentNullException.ThrowIfNull(shader);
-        List<(int Unit, string TextureName)> snapshot = textureBindings is null
-            ? new List<(int Unit, string TextureName)>()
-            : new List<(int Unit, string TextureName)>(textureBindings);
-        return new RenderPass<FullscreenQuadPassData>(
-            name,
-            FramePassKind.FullscreenQuad,
-            (IRenderPassBuilder builder, ref FullscreenQuadPassData data) =>
-            {
-                data.Shader = shader;
-                data.OutputFramebufferName = outputFramebufferName;
-                data.TextureBindings = snapshot;
-                data.UniformCallback = uniformCallback;
-                if (outputFramebufferName is not null)
-                {
-                    builder.Writes(outputFramebufferName);
-                }
+        if (data.OutputFramebufferName is not null)
+        {
+            builder.Writes(data.OutputFramebufferName);
+        }
 
-                for (int i = 0; i < snapshot.Count; i++)
-                {
-                    builder.Reads(snapshot[i].TextureName);
-                }
-            },
-            Execute,
-            Validate);
+        for (int i = 0; i < data.TextureBindings.Count; i++)
+        {
+            builder.Reads(data.TextureBindings[i].TextureName);
+        }
     }
 
-    private static void Validate(in FullscreenQuadPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in FullscreenQuadPassData data)
     {
         for (int i = 0; i < data.TextureBindings.Count; i++)
         {
@@ -81,7 +58,8 @@ public static class FullscreenQuadPass
         }
     }
 
-    private static void Execute(in FullscreenQuadPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in FullscreenQuadPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -136,5 +114,35 @@ public static class FullscreenQuadPass
 
         var invoker = new GLContextInvoker(glContext);
         FullscreenDispatcher.Dispatch(ref invoker, ref command);
+    }
+}
+
+/// <summary>
+/// Factory for the screen-filling triangle pass (overdrawn triangle, no VAO).
+/// </summary>
+public static class FullscreenQuadPass
+{
+    /// <summary>Creates a fullscreen triangle pass.</summary>
+    public static RenderPass<FullscreenQuadPassData> Create(
+        string name,
+        GLProgram shader,
+        string? outputFramebufferName = null,
+        IReadOnlyList<(int Unit, string TextureName)>? textureBindings = null,
+        Action<GLContext, GLProgram>? uniformCallback = null)
+    {
+        ArgumentNullException.ThrowIfNull(shader);
+        List<(int Unit, string TextureName)> snapshot = textureBindings is null
+            ? new List<(int Unit, string TextureName)>()
+            : new List<(int Unit, string TextureName)>(textureBindings);
+        return new RenderPass<FullscreenQuadPassData>(
+            name,
+            FramePassKind.FullscreenQuad,
+            new FullscreenQuadPassData
+            {
+                Shader = shader,
+                OutputFramebufferName = outputFramebufferName,
+                TextureBindings = snapshot,
+                UniformCallback = uniformCallback
+            });
     }
 }
