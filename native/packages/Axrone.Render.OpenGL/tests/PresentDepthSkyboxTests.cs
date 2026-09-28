@@ -4,7 +4,7 @@ using Xunit;
 using FluentAssertions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Mesh;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
@@ -24,14 +24,14 @@ public class PresentDepthSkyboxTests
     [Fact]
     public void Present_RoutesToDefaultFramebuffer()
     {
-        var pass = new PresentPassExecutor("present", "scene");
+        var pass = PresentPass.Create("present", "scene");
         pass.Kind.Should().Be(FramePassKind.Present);
         pass.GetReadResources().ToArray().Should().Equal("scene");
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
 
-        var bad = new PresentPassExecutor("present", "scene", -1, 0);
+        var bad = PresentPass.Create("present", "scene", destinationWidth: -1, destinationHeight: 0);
         Action invalid = () => bad.Validate();
         invalid.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.InvalidPassConfiguration);
@@ -42,12 +42,12 @@ public class PresentDepthSkyboxTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new DepthPrepassPassExecutor(
+        var pass = DepthPrepassPass.Create(
             "depth", program, "u_viewProj",
             new List<GLMesh>(), "depthTex");
 
         pass.Kind.Should().Be(FramePassKind.DepthPrepass);
-        pass.MeshCount.Should().Be(0);
+        pass.Data.Meshes.Count.Should().Be(0);
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
@@ -65,13 +65,13 @@ public class PresentDepthSkyboxTests
         var program = CreateProgram(context);
         var flat = new GLTexture(context, GLConst.Texture2D, TextureFormat.Rgba8, 4, 4);
 
-        var bad = new SkyboxPassExecutor("sky", program, flat, "u_viewProj");
+        var bad = SkyboxPass.Create("sky", program, flat, "u_viewProj");
         Action invalid = () => bad.Validate();
         invalid.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.InvalidPassConfiguration);
 
         var cube = new GLTexture(context, GLConst.TextureCubeMap, TextureFormat.Rgba8, 4, 4);
-        var good = new SkyboxPassExecutor("sky", program, cube, "u_viewProj");
+        var good = SkyboxPass.Create("sky", program, cube, "u_viewProj");
         good.Kind.Should().Be(FramePassKind.Skybox);
 
         Action validate = () => good.Validate();
