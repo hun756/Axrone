@@ -5,8 +5,10 @@ using Axrone.Render.OpenGL.FrameGraph;
 #pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 // Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
-// and class FrameGraph within that namespace.
-using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
+// and the typestate FrameGraph handle within that namespace: FG is the building
+// handle (AddPass/Reset/Compile), and Compile() hands out the compiled handle
+// that carries Execute().
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 using FGP = global::Axrone.Render.OpenGL.FrameGraph.FramePassKind;
 
 namespace Axrone.Render.OpenGL.Tests;
@@ -124,7 +126,7 @@ public sealed class AttachmentActionTests : IDisposable
             loadAction: AttachmentLoadAction.DontCare,
             onExecute: () => executionCount++));
 
-        Action action = () => graph.Execute();
+        Action action = () => graph.Compile().Execute();
 
         action.Should().Throw<RenderException>()
             .Where(e => e.Code == RenderErrorCode.InvalidPassConfiguration)
@@ -178,7 +180,7 @@ public sealed class AttachmentActionTests : IDisposable
         Action compile = () => graph.Compile();
         compile.Should().NotThrow();
 
-        Action execute = () => graph.Execute();
+        Action execute = () => graph.Compile().Execute();
         execute.Should().NotThrow();
 
         executionCount.Should().Be(1);
@@ -305,6 +307,6 @@ public sealed class AttachmentActionTests : IDisposable
         graph.AddPass(passA);
         graph.AddPass(passB);
         graph.AddPass(passC);
-        graph.Execute();
+        graph.Compile().Execute();
     }
 }
