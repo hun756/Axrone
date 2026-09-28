@@ -8,13 +8,16 @@ using RenderPump = Axrone.Execution.CommandPump<
 
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the clear pass.
+/// Payload for the clear pass, owning the pass's setup, validate, execute and
+/// pump-enqueue phases.
 /// </summary>
 public record struct ClearPassData
+    : IPassSetup<ClearPassData>, IPassValidate<ClearPassData>, IPassExecute<ClearPassData>, IPassEnqueue<ClearPassData>
 {
     /// <summary>Target framebuffer resource name, or null for the default framebuffer.</summary>
     public string? TargetFramebufferName { get; set; }
@@ -36,49 +39,18 @@ public record struct ClearPassData
 
     /// <summary>Whether to clear the stencil buffer.</summary>
     public bool ClearStencilEnabled { get; set; }
-}
 
-/// <summary>
-/// Factory for the framebuffer clear pass (color / depth / stencil).
-/// </summary>
-public static class ClearPass
-{
-    /// <summary>Creates a pump-capable clear pass.</summary>
-    public static PumpRenderPass<ClearPassData> Create(
-        string name,
-        string? targetFramebufferName = null,
-        Vector4 clearColor = default,
-        float clearDepth = 1.0f,
-        int clearStencil = 0,
-        bool clearColorEnabled = true,
-        bool clearDepthEnabled = true,
-        bool clearStencilEnabled = false)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref ClearPassData data)
     {
-        string? target = targetFramebufferName;
-        return new PumpRenderPass<ClearPassData>(
-            name,
-            FramePassKind.Clear,
-            (IRenderPassBuilder builder, ref ClearPassData data) =>
-            {
-                data.TargetFramebufferName = target;
-                data.ClearColor = clearColor;
-                data.ClearDepth = clearDepth;
-                data.ClearStencil = clearStencil;
-                data.ClearColorEnabled = clearColorEnabled;
-                data.ClearDepthEnabled = clearDepthEnabled;
-                data.ClearStencilEnabled = clearStencilEnabled;
-
-                if (target is not null)
-                {
-                    builder.Reads(target);
-                }
-            },
-            Execute,
-            Enqueue,
-            Validate);
+        if (data.TargetFramebufferName is not null)
+        {
+            builder.Reads(data.TargetFramebufferName);
+        }
     }
 
-    private static void Validate(in ClearPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in ClearPassData data)
     {
         if (!data.ClearColorEnabled && !data.ClearDepthEnabled && !data.ClearStencilEnabled)
         {
@@ -86,7 +58,8 @@ public static class ClearPass
         }
     }
 
-    private static EnqueueResult Enqueue(in ClearPassData data, RenderPump pump, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static EnqueueResult EnqueueCommands(in ClearPassData data, RenderPump pump, PassExecutionContext ctx)
     {
         if (data.TargetFramebufferName is null || !ctx.HasResource(data.TargetFramebufferName))
         {
@@ -108,7 +81,8 @@ public static class ClearPass
         return pump.TryEnqueue(in command);
     }
 
-    private static void Execute(in ClearPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in ClearPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -148,5 +122,37 @@ public static class ClearPass
         {
             gl.Clear(mask);
         }
+    }
+}
+
+/// <summary>
+/// Factory for the framebuffer clear pass (color / depth / stencil).
+/// </summary>
+public static class ClearPass
+{
+    /// <summary>Creates a pump-capable clear pass.</summary>
+    public static PumpRenderPass<ClearPassData> Create(
+        string name,
+        string? targetFramebufferName = null,
+        Vector4 clearColor = default,
+        float clearDepth = 1.0f,
+        int clearStencil = 0,
+        bool clearColorEnabled = true,
+        bool clearDepthEnabled = true,
+        bool clearStencilEnabled = false)
+    {
+        return new PumpRenderPass<ClearPassData>(
+            name,
+            FramePassKind.Clear,
+            new ClearPassData
+            {
+                TargetFramebufferName = targetFramebufferName,
+                ClearColor = clearColor,
+                ClearDepth = clearDepth,
+                ClearStencil = clearStencil,
+                ClearColorEnabled = clearColorEnabled,
+                ClearDepthEnabled = clearDepthEnabled,
+                ClearStencilEnabled = clearStencilEnabled
+            });
     }
 }
