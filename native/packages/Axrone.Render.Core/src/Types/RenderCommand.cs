@@ -7,7 +7,7 @@ namespace Axrone.Render.Core;
 /// </summary>
 /// <remarks>
 /// The 64 bytes are a tagged union: the leading <see cref="Type"/> byte selects
-/// the blit or the clear view of the overlapping payload.
+/// the blit, clear, or present view of the overlapping payload.
 /// </remarks>
 [StructLayout(LayoutKind.Explicit, Size = 64)]
 public readonly struct RenderCommand : IEquatable<RenderCommand>
@@ -24,11 +24,14 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
     [FieldOffset(8)]
     public readonly uint Filter;
 
-    /// <summary>Source framebuffer registration.</summary>
+    /// <summary>Source framebuffer registration; also the present view's only handle.</summary>
     [FieldOffset(16)]
     public readonly DescriptorHandle<GLResourceNode> Source;
 
-    /// <summary>Destination framebuffer registration.</summary>
+    /// <summary>
+    /// Destination framebuffer registration. Outside the present view: present has
+    /// no destination handle and leaves these bytes zeroed.
+    /// </summary>
     [FieldOffset(24)]
     public readonly DescriptorHandle<GLResourceNode> Destination;
 
@@ -102,6 +105,58 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
     [FieldOffset(52)]
     public readonly int Stencil;
 
+    // --------------------------------------------------------------------
+    // Present payload: the third view of the same bytes. A present is a blit
+    // whose destination is the default framebuffer, so the rectangles, mask,
+    // and filter are read at exactly the offsets the blit view uses — same
+    // semantics, same bytes, no new fields. The one difference is the handle
+    // count: present carries `Source` at offset 16 and nothing else.
+    //
+    // The absent destination handle is structural, not a shortcut. The default
+    // framebuffer is owned by GL and the windowing system and is never
+    // registered in the resource registry, so no generational
+    // DescriptorHandle<GLResourceNode> exists for it — and a fabricated or
+    // zeroed handle would resolve to whatever resource later occupies that
+    // slot, which is exactly the aliasing the handle scheme exists to
+    // prevent. Carrying no destination handle therefore pins the destination
+    // to framebuffer 0 by construction instead of by trust. `Destination` at
+    // offset 24 is not part of this view and stays zeroed by the constructor's
+    // initobj, so two presents with equal arguments are bit-identical under
+    // the whole-struct equality below.
+    // --------------------------------------------------------------------
+
+    /// <summary>
+    /// Creates a present command: a blit of <paramref name="source"/> onto the
+    /// default framebuffer.
+    /// </summary>
+    /// <remarks>
+    /// There is no destination parameter because there is no destination handle
+    /// to pass — the default framebuffer is not registry-managed. The
+    /// destination rectangle describes the region of the default framebuffer to
+    /// write, and the processor binds framebuffer 0 for it unconditionally.
+    /// </remarks>
+    /// <param name="source">The source framebuffer registration.</param>
+    /// <param name="sourceX0">Source rectangle x0.</param>
+    /// <param name="sourceY0">Source rectangle y0.</param>
+    /// <param name="sourceX1">Source rectangle x1.</param>
+    /// <param name="sourceY1">Source rectangle y1.</param>
+    /// <param name="destinationX0">Destination rectangle x0 on the default framebuffer.</param>
+    /// <param name="destinationY0">Destination rectangle y0 on the default framebuffer.</param>
+    /// <param name="destinationX1">Destination rectangle x1 on the default framebuffer.</param>
+    /// <param name="destinationY1">Destination rectangle y1 on the default framebuffer.</param>
+    /// <param name="mask">The blit buffer mask (color/depth/stencil bits).</param>
+    /// <param name="filter">The blit filter mode.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static RenderCommand CreatePresent(
+        in DescriptorHandle<GLResourceNode> source,
+        int sourceX0, int sourceY0, int sourceX1, int sourceY1,
+        int destinationX0, int destinationY0, int destinationX1, int destinationY1,
+        uint mask, uint filter) => new(
+            source,
+            sourceX0, sourceY0, sourceX1, sourceY1,
+            destinationX0, destinationY0, destinationX1, destinationY1,
+            mask, filter);
+
     /// <summary>
     /// Creates a framebuffer blit command.
     /// </summary>
@@ -170,6 +225,29 @@ public readonly struct RenderCommand : IEquatable<RenderCommand>
         ColorA = a;
         Depth = depth;
         Stencil = stencil;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private RenderCommand(
+        in DescriptorHandle<GLResourceNode> source,
+        int sourceX0, int sourceY0, int sourceX1, int sourceY1,
+        int destinationX0, int destinationY0, int destinationX1, int destinationY1,
+        uint mask, uint filter)
+    {
+        Type = RenderCommandType.Present;
+        Mask = mask;
+        Filter = filter;
+        Source = source;
+        SourceX0 = sourceX0;
+        SourceY0 = sourceY0;
+        SourceX1 = sourceX1;
+        SourceY1 = sourceY1;
+        DestinationX0 = destinationX0;
+        DestinationY0 = destinationY0;
+        DestinationX1 = destinationX1;
+        DestinationY1 = destinationY1;
+        // Destination is deliberately not written: present has no destination
+        // handle, and the initobj default keeps the bytes deterministic.
     }
 
     /// <inheritdoc/>
