@@ -3,7 +3,7 @@ using FluentAssertions;
 using Axrone.Execution;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Utility.Backoff.SpinPolicies;
 
@@ -35,7 +35,7 @@ public class RenderPumpTests
         ctx.SetResource("src", source);
         ctx.SetResource("dst", destination);
 
-        var pass = new BlitPassExecutor("blit", "src", "dst");
+        var pass = BlitPass.Create("blit", "src", "dst");
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
 
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
@@ -58,7 +58,7 @@ public class RenderPumpTests
         ctx.SetResource("src", source);
         ctx.SetResource("dst", destination);
 
-        var pass = new BlitPassExecutor("blit", "src", "dst");
+        var pass = BlitPass.Create("blit", "src", "dst");
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
 
