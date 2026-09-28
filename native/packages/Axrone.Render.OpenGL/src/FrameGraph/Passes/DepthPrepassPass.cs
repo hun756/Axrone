@@ -1,12 +1,14 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the depth-only pre-pass.
+/// Payload for the depth-only pre-pass, owning the pass's setup, validate and execute phases.
 /// </summary>
 public record struct DepthPrepassPassData
+    : IPassSetup<DepthPrepassPassData>, IPassValidate<DepthPrepassPassData>, IPassExecute<DepthPrepassPassData>
 {
     /// <summary>Depth-only shader program.</summary>
     public GLProgram DepthProgram { get; set; }
@@ -22,61 +24,15 @@ public record struct DepthPrepassPassData
 
     /// <summary>Meshes rendered into the depth target.</summary>
     public List<GLMesh> Meshes { get; set; }
-}
 
-/// <summary>
-/// Factory for the depth-only pre-pass (early-Z priming).
-/// </summary>
-public static class DepthPrepassPass
-{
-    /// <summary>Creates a depth pre-pass.</summary>
-    public static RenderPass<DepthPrepassPassData> Create(
-        string name,
-        GLProgram depthProgram,
-        string viewProjectionUniform,
-        IReadOnlyList<GLMesh> meshes,
-        string depthTargetName)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref DepthPrepassPassData data)
     {
-        ArgumentNullException.ThrowIfNull(depthProgram);
-        ArgumentNullException.ThrowIfNull(viewProjectionUniform);
-        ArgumentNullException.ThrowIfNull(meshes);
-        ArgumentNullException.ThrowIfNull(depthTargetName);
-
-        if (string.IsNullOrWhiteSpace(viewProjectionUniform))
-        {
-            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "View-projection uniform name must not be empty", nameof(DepthPrepassPass));
-        }
-
-        if (string.IsNullOrWhiteSpace(depthTargetName))
-        {
-            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "Depth target name must not be empty", nameof(DepthPrepassPass));
-        }
-
-        List<GLMesh> snapshot = new(meshes.Count);
-        for (int i = 0; i < meshes.Count; i++)
-        {
-            GLMesh mesh = meshes[i];
-            ArgumentNullException.ThrowIfNull(mesh);
-            snapshot.Add(mesh);
-        }
-
-        return new RenderPass<DepthPrepassPassData>(
-            name,
-            FramePassKind.DepthPrepass,
-            (IRenderPassBuilder builder, ref DepthPrepassPassData data) =>
-            {
-                data.DepthProgram = depthProgram;
-                data.ViewProjectionUniform = viewProjectionUniform;
-                data.ViewProjection = Matrix4x4.Identity;
-                data.DepthTargetName = depthTargetName;
-                data.Meshes = snapshot;
-                builder.Writes(depthTargetName);
-            },
-            Execute,
-            Validate);
+        builder.Writes(data.DepthTargetName);
     }
 
-    private static void Validate(in DepthPrepassPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in DepthPrepassPassData data)
     {
         if (data.DepthProgram.IsDisposed)
         {
@@ -94,7 +50,8 @@ public static class DepthPrepassPass
         }
     }
 
-    private static void Execute(in DepthPrepassPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in DepthPrepassPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -149,5 +106,55 @@ public static class DepthPrepassPass
         }
 
         state.SetColorMask(true, true, true, true);
+    }
+}
+
+/// <summary>
+/// Factory for the depth-only pre-pass (early-Z priming).
+/// </summary>
+public static class DepthPrepassPass
+{
+    /// <summary>Creates a depth pre-pass.</summary>
+    public static RenderPass<DepthPrepassPassData> Create(
+        string name,
+        GLProgram depthProgram,
+        string viewProjectionUniform,
+        IReadOnlyList<GLMesh> meshes,
+        string depthTargetName)
+    {
+        ArgumentNullException.ThrowIfNull(depthProgram);
+        ArgumentNullException.ThrowIfNull(viewProjectionUniform);
+        ArgumentNullException.ThrowIfNull(meshes);
+        ArgumentNullException.ThrowIfNull(depthTargetName);
+
+        if (string.IsNullOrWhiteSpace(viewProjectionUniform))
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "View-projection uniform name must not be empty", nameof(DepthPrepassPass));
+        }
+
+        if (string.IsNullOrWhiteSpace(depthTargetName))
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "Depth target name must not be empty", nameof(DepthPrepassPass));
+        }
+
+        List<GLMesh> snapshot = new(meshes.Count);
+        for (int i = 0; i < meshes.Count; i++)
+        {
+            GLMesh mesh = meshes[i];
+            ArgumentNullException.ThrowIfNull(mesh);
+            snapshot.Add(mesh);
+        }
+
+        return new RenderPass<DepthPrepassPassData>(
+            name,
+            FramePassKind.DepthPrepass,
+            new DepthPrepassPassData
+            {
+                DepthProgram = depthProgram,
+                ViewProjectionUniform = viewProjectionUniform,
+                ViewProjection = Matrix4x4.Identity,
+                DepthTargetName = depthTargetName,
+                Meshes = snapshot
+            });
     }
 }
