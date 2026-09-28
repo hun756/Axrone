@@ -4,30 +4,16 @@ using Xunit;
 using FluentAssertions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 public class FrameGraphOrderTests
 {
-    private sealed class RecordingPass : RenderPass
-    {
-        private readonly List<string> _log;
-
-        public RecordingPass(string name, List<string> log, string[] reads, string[] writes)
-            : base(name, FramePassKind.Custom)
-        {
-            _log = log;
-            foreach (string read in reads)
-            {
-                Reads(read);
-            }
-
-            foreach (string write in writes)
-            {
-                Writes(write);
-            }
-        }
-
-        public override void Execute(GLContext context, PassExecutionContext ctx) => _log.Add(Name);
-    }
+    /// <summary>
+    /// Creates a pass that appends its name to <paramref name="log"/> on execution
+    /// and declares the given resource dependencies at construction.
+    /// </summary>
+    private static RenderPass<CustomPassData> CreateRecordingPass(string name, List<string> log, string[] reads, string[] writes)
+        => CustomPass.Create(name, FramePassKind.Custom, (gl, ctx) => log.Add(name), reads: reads, writes: writes);
 
     private static GLContext CreateContext()
     {
@@ -51,9 +37,9 @@ public class FrameGraphOrderTests
 
         // Inserted backwards: reader first, writer last. The reader also consumes
         // the middle pass output, forcing a total order.
-        graph.AddPass(new RecordingPass("read", log, s_colorShadedRead, s_empty));
-        graph.AddPass(new RecordingPass("middle", log, s_colorRead, s_shadedWrite));
-        graph.AddPass(new RecordingPass("write", log, s_empty, s_colorRead));
+        graph.AddPass(CreateRecordingPass("read", log, s_colorShadedRead, s_empty));
+        graph.AddPass(CreateRecordingPass("middle", log, s_colorRead, s_shadedWrite));
+        graph.AddPass(CreateRecordingPass("write", log, s_empty, s_colorRead));
 
         graph.Compile();
         graph.Execute();
@@ -68,8 +54,8 @@ public class FrameGraphOrderTests
         var graph = new FrameGraph(context);
         var log = new List<string>();
 
-        graph.AddPass(new RecordingPass("a", log, s_yRead, s_xWrite));
-        graph.AddPass(new RecordingPass("b", log, s_xWrite, s_yRead));
+        graph.AddPass(CreateRecordingPass("a", log, s_yRead, s_xWrite));
+        graph.AddPass(CreateRecordingPass("b", log, s_xWrite, s_yRead));
 
         Action compile = () => graph.Compile();
         compile.Should().Throw<RenderException>()
