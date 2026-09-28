@@ -1,12 +1,16 @@
 namespace Axrone.Execution.Tests;
 
+using System.Runtime.CompilerServices;
 using Xunit;
 using FluentAssertions;
 using Axrone.Execution;
+using Axrone.Utility.Backoff;
 using Axrone.Utility.Backoff.SpinPolicies;
 
 public class CommandPumpTests
 {
+    private static CancellationTokenSource? s_contentionCts;
+
     private sealed class SumContext
     {
         public long Total;
@@ -23,17 +27,45 @@ public class CommandPumpTests
         public static long Enqueued;
         public static long Dequeued;
         public static long Saturated;
+        public static long Contentions;
+        public static long Faults;
+        public static Exception? LastFault;
 
         public static void Reset()
         {
             Enqueued = 0;
             Dequeued = 0;
             Saturated = 0;
+            Contentions = 0;
+            Faults = 0;
+            LastFault = null;
         }
 
         public static void ItemEnqueued() => Interlocked.Increment(ref Enqueued);
         public static void ItemDequeued() => Interlocked.Increment(ref Dequeued);
         public static void QueueSaturated() => Interlocked.Increment(ref Saturated);
+        public static void ContentionDetected() => Interlocked.Increment(ref Contentions);
+
+        public static void FaultEncountered(Exception exception)
+        {
+            Volatile.Write(ref LastFault, exception);
+            Interlocked.Increment(ref Faults);
+        }
+    }
+
+    /// <summary>Backoff that cancels the blocking enqueue on its first step, so the
+    /// contention round is observed exactly once without a timing dependency.</summary>
+    private readonly struct CancelOnFirstBackoff : ISpinBackoff
+    {
+        public static void Initialize(out int state) => state = 0;
+
+        public static void Advance(ref int state)
+        {
+            state++;
+            s_contentionCts?.Cancel();
+        }
+
+        public static void Reset(ref int state) => state = 0;
     }
 
     private ref struct ViewContext
@@ -221,6 +253,66 @@ public class CommandPumpTests
     }
 
     [Fact]
+    public void ProcessorFault_FaultsPump_RethrowsWithStack_AndRefusesWork()
+    {
+        CountingTelemetry.Reset();
+        using var pump = new CommandPump<int, SumContext, FaultProcessor, AggressiveSpinBackoff, CountingTelemetry>(
+            new ExecutorOptions { Capacity = 4 });
+        var context = new SumContext();
+        pump.TryEnqueue(1);
+
+        Action pumpIt = () => pump.PumpAll(ref context);
+        InvalidOperationException caught = pumpIt.Should().Throw<InvalidOperationException>().Which;
+
+        caught.Message.Should().Be("fault");
+        caught.StackTrace.Should().Contain(nameof(FaultProcessor.ThrowFault));
+        pump.State.Should().Be(PumpState.Faulted);
+        pump.TryEnqueue(2).Status.Should().Be(EnqueueStatus.Closed);
+        pump.Enqueue(2).Status.Should().Be(EnqueueStatus.Closed);
+        CountingTelemetry.Faults.Should().Be(1);
+        CountingTelemetry.LastFault.Should().BeSameAs(caught);
+    }
+
+    [Fact]
+    public void BlockingEnqueue_AgainstFullRing_ReportsContention()
+    {
+        CountingTelemetry.Reset();
+        using var pump = new CommandPump<int, SumContext, SumProcessor, CancelOnFirstBackoff, CountingTelemetry>(
+            new ExecutorOptions { Capacity = 2 });
+        pump.TryEnqueue(1).IsEnqueued.Should().BeTrue();
+        pump.TryEnqueue(2).IsEnqueued.Should().BeTrue();
+
+        using var cts = new CancellationTokenSource();
+        s_contentionCts = cts;
+
+        Action enqueue = () => pump.Enqueue(3, cts.Token);
+        enqueue.Should().Throw<OperationCanceledException>();
+
+        CountingTelemetry.Saturated.Should().Be(1);
+        CountingTelemetry.Contentions.Should().Be(1);
+        s_contentionCts = null;
+    }
+
+    [Fact]
+    public void FaultCall_TransitionsStateAndReportsTelemetry_WithoutThrowing()
+    {
+        CountingTelemetry.Reset();
+        using var pump = new CommandPump<int, SumContext, SumProcessor, AggressiveSpinBackoff, CountingTelemetry>(
+            new ExecutorOptions { Capacity = 4 });
+        var fault = new InvalidOperationException("host fault");
+
+        pump.Fault(fault);
+
+        pump.State.Should().Be(PumpState.Faulted);
+        pump.TryEnqueue(1).Status.Should().Be(EnqueueStatus.Closed);
+        CountingTelemetry.Faults.Should().Be(1);
+        CountingTelemetry.LastFault.Should().BeSameAs(fault);
+
+        var nullFault = () => pump.Fault(null!);
+        nullFault.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
     public void HotPath_AllocatesNothing()
     {
         using var pump = CreateSumPump(64);
@@ -241,6 +333,10 @@ public class CommandPumpTests
     private readonly struct FaultProcessor : ICommandProcessor<int, SumContext>
     {
         public static void Process(ref int command, ref SumContext context) =>
-            throw new InvalidOperationException("fault");
+            ThrowFault();
+
+        // Deep throw site: a stack-preserving rethrow keeps this frame, a reset one loses it.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void ThrowFault() => throw new InvalidOperationException("fault");
     }
 }
