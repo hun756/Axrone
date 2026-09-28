@@ -1,18 +1,24 @@
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Shading;
 
 namespace Axrone.Render.OpenGL.Tests;
 
 /// <summary>
-/// Tests for the mechanism pass executors in the frame graph system.
-/// Covers constructor initialization (Name, Kind), fluent configuration,
-/// and Validate() pre-condition checks. Effect pass executor tests live in
-/// Axrone.Render.Effects.Tests.
+/// Tests for the mechanism render passes in the frame graph system, built through the
+/// per-pass factories in <c>Axrone.Render.OpenGL.FrameGraph.Passes</c>.
+/// Covers factory initialization (Name, Kind), creation-time configuration and
+/// per-frame payload mutation through <c>pass.Data</c>, and Validate() pre-condition
+/// checks. Effect pass tests live in Axrone.Render.Effects.Tests.
 /// </summary>
 public sealed class PassExecutorTests : IDisposable
 {
+    private static readonly string[] ComputeBindingResourceNames = ["buffer1", "image1", "ubo1"];
+    private static readonly string[] FullscreenTextureNames = ["tex0", "tex1", "tex2"];
+    private static readonly string[] CustomReadResources = ["input_texture"];
+    private static readonly string[] CustomWriteResources = ["output_texture"];
+
     private readonly MockGLApi _mock;
     private readonly GLContext _context;
 
@@ -23,22 +29,35 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // ClearPassExecutor Tests
+    // ClearPass Tests
     // =========================================================================
 
     [Fact]
-    public void ClearPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void ClearPass_Create_SetsCorrectNameAndKind()
     {
-        var pass = new ClearPassExecutor("clear", clearColor: new Vector4(0, 0, 0, 1));
+        var pass = ClearPass.Create("clear", clearColor: new Vector4(0, 0, 0, 1));
 
         pass.Name.Should().Be("clear");
         pass.Kind.Should().Be(FramePassKind.Clear);
     }
 
     [Fact]
-    public void ClearPassExecutor_Validate_ThrowsWhenNoBuffersToClear()
+    public void ClearPass_ClearColor_IsCapturedInPayload()
     {
-        var pass = new ClearPassExecutor(
+        var pass = ClearPass.Create("clear", clearColor: new Vector4(0.25f, 0.5f, 0.75f, 1f));
+
+        pass.Data.ClearColor.Should().Be(new Vector4(0.25f, 0.5f, 0.75f, 1f));
+        pass.Data.ClearDepth.Should().Be(1f);
+        pass.Data.ClearStencil.Should().Be(0);
+        pass.Data.ClearColorEnabled.Should().BeTrue();
+        pass.Data.ClearDepthEnabled.Should().BeTrue();
+        pass.Data.ClearStencilEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ClearPass_Validate_ThrowsWhenNoBuffersToClear()
+    {
+        var pass = ClearPass.Create(
             "clear",
             clearColorEnabled: false,
             clearDepthEnabled: false,
@@ -51,9 +70,9 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void ClearPassExecutor_Validate_DoesNotThrowWhenClearColorEnabled()
+    public void ClearPass_Validate_DoesNotThrowWhenClearColorEnabled()
     {
-        var pass = new ClearPassExecutor("clear", clearColorEnabled: true);
+        var pass = ClearPass.Create("clear", clearColorEnabled: true);
 
         var action = () => pass.Validate();
 
@@ -61,34 +80,57 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void ClearPassExecutor_IsEnabled_DefaultsToTrue()
+    public void ClearPass_IsEnabled_DefaultsToTrue()
     {
-        var pass = new ClearPassExecutor("clear");
+        var pass = ClearPass.Create("clear");
 
         pass.IsEnabled.Should().BeTrue();
     }
 
+    [Fact]
+    public void ClearPass_TargetFramebufferName_DeclaresReadDependency()
+    {
+        var pass = ClearPass.Create("clear", "hdr_fbo");
+
+        pass.Data.TargetFramebufferName.Should().Be("hdr_fbo");
+        pass.GetReadResources().ToArray().Should().Contain("hdr_fbo");
+    }
+
     // =========================================================================
-    // OpaquePassExecutor Tests
+    // OpaquePass Tests
     // =========================================================================
 
     [Fact]
-    public void OpaquePassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void OpaquePass_Create_SetsCorrectNameAndKind()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new OpaquePassExecutor("opaque", program);
+        var pass = OpaquePass.Create("opaque", program);
 
         pass.Name.Should().Be("opaque");
         pass.Kind.Should().Be(FramePassKind.Opaque);
+        pass.Data.Program.Should().BeSameAs(program);
+        pass.Data.Meshes.Should().BeEmpty();
 
         program.Dispose();
     }
 
     [Fact]
-    public void OpaquePassExecutor_Validate_ThrowsWhenProgramDisposed()
+    public void OpaquePass_TargetFramebufferName_DeclaresWriteDependency()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new OpaquePassExecutor("opaque", program);
+        var pass = OpaquePass.Create("opaque", program, "scene_fbo");
+
+        pass.Data.TargetFramebufferName.Should().Be("scene_fbo");
+        pass.GetWrittenResources().ToArray().Should().Contain("scene_fbo");
+
+        program.Dispose();
+    }
+
+    [Fact]
+    public void OpaquePass_Validate_ThrowsWhenProgramDisposed()
+    {
+        var program = new GLProgram(_context, "vs", "fs");
+        var pass = OpaquePass.Create("opaque", program);
         program.Dispose();
 
         var action = () => pass.Validate();
@@ -98,10 +140,10 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void OpaquePassExecutor_Validate_DoesNotThrowWithValidProgram()
+    public void OpaquePass_Validate_DoesNotThrowWithValidProgram()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new OpaquePassExecutor("opaque", program);
+        var pass = OpaquePass.Create("opaque", program);
 
         var action = () => pass.Validate();
 
@@ -111,26 +153,28 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // TransparentPassExecutor Tests
+    // TransparentPass Tests
     // =========================================================================
 
     [Fact]
-    public void TransparentPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void TransparentPass_Create_SetsCorrectNameAndKind()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new TransparentPassExecutor("transparent", program);
+        var pass = TransparentPass.Create("transparent", program);
 
         pass.Name.Should().Be("transparent");
         pass.Kind.Should().Be(FramePassKind.Transparent);
+        pass.Data.Program.Should().BeSameAs(program);
+        pass.Data.Entries.Should().BeEmpty();
 
         program.Dispose();
     }
 
     [Fact]
-    public void TransparentPassExecutor_Validate_ThrowsWhenProgramDisposed()
+    public void TransparentPass_Validate_ThrowsWhenProgramDisposed()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new TransparentPassExecutor("transparent", program);
+        var pass = TransparentPass.Create("transparent", program);
         program.Dispose();
 
         var action = () => pass.Validate();
@@ -140,10 +184,10 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void TransparentPassExecutor_Validate_DoesNotThrowWithValidProgram()
+    public void TransparentPass_Validate_DoesNotThrowWithValidProgram()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new TransparentPassExecutor("transparent", program);
+        var pass = TransparentPass.Create("transparent", program);
 
         var action = () => pass.Validate();
 
@@ -153,56 +197,71 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // ComputePassExecutor Tests
+    // ComputePass Tests
     // =========================================================================
 
     [Fact]
-    public void ComputePassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void ComputePass_Create_SetsCorrectNameAndKind()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create("compute", shader);
 
         pass.Name.Should().Be("compute");
         pass.Kind.Should().Be(FramePassKind.Compute);
+        pass.Data.ComputeShader.Should().BeSameAs(shader);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_WithDispatchSize_SetsGroupCounts()
+    public void ComputePass_DispatchSize_SetsGroupCounts()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create("compute", shader);
 
-        var result = pass.WithDispatchSize(8, 4, 2);
+        pass.Data.GroupCountX = 8u;
+        pass.Data.GroupCountY = 4u;
+        pass.Data.GroupCountZ = 2u;
 
-        pass.GroupCountX.Should().Be(8u);
-        pass.GroupCountY.Should().Be(4u);
-        pass.GroupCountZ.Should().Be(2u);
-        result.Should().BeSameAs(pass);
+        pass.Data.GroupCountX.Should().Be(8u);
+        pass.Data.GroupCountY.Should().Be(4u);
+        pass.Data.GroupCountZ.Should().Be(2u);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_DefaultDispatchSize_IsOneOneOne()
+    public void ComputePass_CreationTimeGroupCounts_AreCapturedInPayload()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create("compute", shader, groupCountX: 8, groupCountY: 4, groupCountZ: 2);
 
-        pass.GroupCountX.Should().Be(1u);
-        pass.GroupCountY.Should().Be(1u);
-        pass.GroupCountZ.Should().Be(1u);
+        pass.Data.GroupCountX.Should().Be(8u);
+        pass.Data.GroupCountY.Should().Be(4u);
+        pass.Data.GroupCountZ.Should().Be(2u);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_Validate_ThrowsWhenGroupCountXLessThanOne()
+    public void ComputePass_DefaultDispatchSize_IsOneOneOne()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
-        pass.WithDispatchSize(0, 1, 1);
+        var pass = ComputePass.Create("compute", shader);
+
+        pass.Data.GroupCountX.Should().Be(1u);
+        pass.Data.GroupCountY.Should().Be(1u);
+        pass.Data.GroupCountZ.Should().Be(1u);
+
+        shader.Dispose();
+    }
+
+    [Fact]
+    public void ComputePass_Validate_ThrowsWhenGroupCountXLessThanOne()
+    {
+        var shader = new GLProgram(_context, "vs", "fs");
+        var pass = ComputePass.Create("compute", shader);
+        pass.Data.GroupCountX = 0u;
 
         var action = () => pass.Validate();
 
@@ -213,71 +272,78 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void ComputePassExecutor_BindStorageBuffer_AddsBinding()
+    public void ComputePass_StorageBufferBinding_AddsBindingAndReadDependency()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create(
+            "compute",
+            shader,
+            bindings: new[] { new ComputeResourceBinding(0, "myBuffer", ComputeBindingType.ShaderStorageBuffer) });
 
-        var result = pass.BindStorageBuffer(0, "myBuffer");
-
-        pass.Bindings.Should().HaveCount(1);
-        pass.Bindings[0].BindingPoint.Should().Be(0u);
-        pass.Bindings[0].ResourceName.Should().Be("myBuffer");
-        pass.Bindings[0].Type.Should().Be(ComputeBindingType.ShaderStorageBuffer);
-        result.Should().BeSameAs(pass);
+        pass.Data.Bindings.Should().HaveCount(1);
+        pass.Data.Bindings[0].BindingPoint.Should().Be(0u);
+        pass.Data.Bindings[0].ResourceName.Should().Be("myBuffer");
+        pass.Data.Bindings[0].Type.Should().Be(ComputeBindingType.ShaderStorageBuffer);
+        pass.GetReadResources().ToArray().Should().Contain("myBuffer");
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_BindImage_AddsBinding()
+    public void ComputePass_ImageBinding_AddsBinding()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create(
+            "compute",
+            shader,
+            bindings: new[] { new ComputeResourceBinding(1, "outputImage", ComputeBindingType.Image) });
 
-        pass.BindImage(1, "outputImage");
-
-        pass.Bindings.Should().HaveCount(1);
-        pass.Bindings[0].Type.Should().Be(ComputeBindingType.Image);
+        pass.Data.Bindings.Should().HaveCount(1);
+        pass.Data.Bindings[0].Type.Should().Be(ComputeBindingType.Image);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_BindUniformBuffer_AddsBinding()
+    public void ComputePass_UniformBufferBinding_AddsBinding()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create(
+            "compute",
+            shader,
+            bindings: new[] { new ComputeResourceBinding(2, "params", ComputeBindingType.UniformBuffer) });
 
-        pass.BindUniformBuffer(2, "params");
-
-        pass.Bindings.Should().HaveCount(1);
-        pass.Bindings[0].Type.Should().Be(ComputeBindingType.UniformBuffer);
+        pass.Data.Bindings.Should().HaveCount(1);
+        pass.Data.Bindings[0].Type.Should().Be(ComputeBindingType.UniformBuffer);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_MultipleBindings_AllTracked()
+    public void ComputePass_MultipleBindings_AllTracked()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
+        var pass = ComputePass.Create(
+            "compute",
+            shader,
+            bindings: new[]
+            {
+                new ComputeResourceBinding(0, "buffer1", ComputeBindingType.ShaderStorageBuffer),
+                new ComputeResourceBinding(1, "image1", ComputeBindingType.Image),
+                new ComputeResourceBinding(2, "ubo1", ComputeBindingType.UniformBuffer),
+            });
 
-        pass.BindStorageBuffer(0, "buffer1")
-            .BindImage(1, "image1")
-            .BindUniformBuffer(2, "ubo1");
-
-        pass.Bindings.Should().HaveCount(3);
+        pass.Data.Bindings.Should().HaveCount(3);
+        pass.GetReadResources().ToArray().Should().BeEquivalentTo(ComputeBindingResourceNames);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void ComputePassExecutor_Validate_DoesNotThrowWithValidConfig()
+    public void ComputePass_Validate_DoesNotThrowWithValidConfig()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new ComputePassExecutor("compute", shader);
-        pass.WithDispatchSize(4, 4, 1);
+        var pass = ComputePass.Create("compute", shader, groupCountX: 4, groupCountY: 4);
 
         var action = () => pass.Validate();
 
@@ -287,56 +353,64 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // FullscreenQuadPassExecutor Tests
+    // FullscreenQuadPass Tests
     // =========================================================================
 
     [Fact]
-    public void FullscreenQuadPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void FullscreenQuadPass_Create_SetsCorrectNameAndKind()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
+        var pass = FullscreenQuadPass.Create("fullscreen", shader);
 
         pass.Name.Should().Be("fullscreen");
         pass.Kind.Should().Be(FramePassKind.FullscreenQuad);
+        pass.Data.Shader.Should().BeSameAs(shader);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_BindTexture_AddsTextureBinding()
+    public void FullscreenQuadPass_TextureBindings_AddsTextureBinding()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
+        var pass = FullscreenQuadPass.Create(
+            "fullscreen",
+            shader,
+            textureBindings: new[] { (0, "inputTex") });
 
-        var result = pass.BindTexture(0, "inputTex");
-
-        pass.TextureBindings.Should().HaveCount(1);
-        pass.TextureBindings[0].Unit.Should().Be(0);
-        pass.TextureBindings[0].TextureName.Should().Be("inputTex");
-        result.Should().BeSameAs(pass);
+        pass.Data.TextureBindings.Should().HaveCount(1);
+        pass.Data.TextureBindings[0].Unit.Should().Be(0);
+        pass.Data.TextureBindings[0].TextureName.Should().Be("inputTex");
+        pass.GetReadResources().ToArray().Should().Contain("inputTex");
 
         shader.Dispose();
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_MultipleTextureBindings_AllTracked()
+    public void FullscreenQuadPass_MultipleTextureBindings_AllTracked()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
+        var pass = FullscreenQuadPass.Create(
+            "fullscreen",
+            shader,
+            textureBindings: new[] { (0, "tex0"), (1, "tex1"), (2, "tex2") });
 
-        pass.BindTexture(0, "tex0").BindTexture(1, "tex1").BindTexture(2, "tex2");
-
-        pass.TextureBindings.Should().HaveCount(3);
+        pass.Data.TextureBindings.Should().HaveCount(3);
+        pass.GetReadResources().ToArray().Should().BeEquivalentTo(FullscreenTextureNames);
 
         shader.Dispose();
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_Validate_ThrowsWhenTextureUnitOutOfRange()
+    public void FullscreenQuadPass_Validate_ThrowsWhenTextureUnitOutOfRange()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
-        pass.BindTexture(32, "inputTex"); // 32 is out of [0, 31]
+
+        // 32 is out of [0, 31]
+        var pass = FullscreenQuadPass.Create(
+            "fullscreen",
+            shader,
+            textureBindings: new[] { (32, "inputTex") });
 
         var action = () => pass.Validate();
 
@@ -347,11 +421,13 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_Validate_ThrowsWhenTextureUnitNegative()
+    public void FullscreenQuadPass_Validate_ThrowsWhenTextureUnitNegative()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
-        pass.BindTexture(-1, "inputTex");
+        var pass = FullscreenQuadPass.Create(
+            "fullscreen",
+            shader,
+            textureBindings: new[] { (-1, "inputTex") });
 
         var action = () => pass.Validate();
 
@@ -362,36 +438,48 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_WithOutput_SetsOutputFramebuffer()
+    public void FullscreenQuadPass_OutputFramebufferName_SetsOutputFramebuffer()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
+        var pass = FullscreenQuadPass.Create("fullscreen", shader, "output_fbo");
 
-        var result = pass.WithOutput("output_fbo");
-
-        pass.OutputFramebufferName.Should().Be("output_fbo");
-        result.Should().BeSameAs(pass);
+        pass.Data.OutputFramebufferName.Should().Be("output_fbo");
+        pass.GetWrittenResources().ToArray().Should().Contain("output_fbo");
 
         shader.Dispose();
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_OutputFramebufferName_DefaultsToNull()
+    public void FullscreenQuadPass_OutputFramebufferName_DefaultsToNull()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
+        var pass = FullscreenQuadPass.Create("fullscreen", shader);
 
-        pass.OutputFramebufferName.Should().BeNull();
+        pass.Data.OutputFramebufferName.Should().BeNull();
 
         shader.Dispose();
     }
 
     [Fact]
-    public void FullscreenQuadPassExecutor_Validate_DoesNotThrowWithValidConfig()
+    public void FullscreenQuadPass_UniformCallback_IsCapturedInPayload()
     {
         var shader = new GLProgram(_context, "vs", "fs");
-        var pass = new FullscreenQuadPassExecutor("fullscreen", shader);
-        pass.BindTexture(0, "inputTex");
+        Action<GLContext, GLProgram> uniformCallback = (ctx, prog) => { };
+        var pass = FullscreenQuadPass.Create("fullscreen", shader, uniformCallback: uniformCallback);
+
+        pass.Data.UniformCallback.Should().BeSameAs(uniformCallback);
+
+        shader.Dispose();
+    }
+
+    [Fact]
+    public void FullscreenQuadPass_Validate_DoesNotThrowWithValidConfig()
+    {
+        var shader = new GLProgram(_context, "vs", "fs");
+        var pass = FullscreenQuadPass.Create(
+            "fullscreen",
+            shader,
+            textureBindings: new[] { (0, "inputTex") });
 
         var action = () => pass.Validate();
 
@@ -401,22 +489,22 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // BlitPassExecutor Tests
+    // BlitPass Tests
     // =========================================================================
 
     [Fact]
-    public void BlitPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void BlitPass_Create_SetsCorrectNameAndKind()
     {
-        var pass = new BlitPassExecutor("blit", "source_fbo", "dest_fbo");
+        var pass = BlitPass.Create("blit", "source_fbo", "dest_fbo");
 
         pass.Name.Should().Be("blit");
         pass.Kind.Should().Be(FramePassKind.Blit);
     }
 
     [Fact]
-    public void BlitPassExecutor_Validate_ThrowsWhenSourceAndDestinationAreSame()
+    public void BlitPass_Validate_ThrowsWhenSourceAndDestinationAreSame()
     {
-        var pass = new BlitPassExecutor("blit", "same_fbo", "same_fbo");
+        var pass = BlitPass.Create("blit", "same_fbo", "same_fbo");
 
         var action = () => pass.Validate();
 
@@ -425,9 +513,9 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void BlitPassExecutor_Validate_DoesNotThrowWhenDifferent()
+    public void BlitPass_Validate_DoesNotThrowWhenDifferent()
     {
-        var pass = new BlitPassExecutor("blit", "source_fbo", "dest_fbo");
+        var pass = BlitPass.Create("blit", "source_fbo", "dest_fbo");
 
         var action = () => pass.Validate();
 
@@ -435,49 +523,49 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void BlitPassExecutor_DeclaresCorrectResourceDependencies()
+    public void BlitPass_DeclaresCorrectResourceDependencies()
     {
-        var pass = new BlitPassExecutor("blit", "source_fbo", "dest_fbo");
+        var pass = BlitPass.Create("blit", "source_fbo", "dest_fbo");
 
         pass.GetReadResources().ToArray().Should().Contain("source_fbo");
         pass.GetWrittenResources().ToArray().Should().Contain("dest_fbo");
     }
 
     // =========================================================================
-    // CustomPassExecutor Tests
+    // CustomPass Tests
     // =========================================================================
 
     [Fact]
-    public void CustomPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void CustomPass_Create_SetsCorrectNameAndKind()
     {
-        var pass = new CustomPassExecutor("custom", FramePassKind.Custom, (ctx, execCtx) => { });
+        var pass = CustomPass.Create("custom", FramePassKind.Custom, (ctx, execCtx) => { });
 
         pass.Name.Should().Be("custom");
         pass.Kind.Should().Be(FramePassKind.Custom);
     }
 
     [Fact]
-    public void CustomPassExecutor_Constructor_AcceptsAnyPassKind()
+    public void CustomPass_Create_AcceptsAnyPassKind()
     {
-        var pass = new CustomPassExecutor("custom_post", FramePassKind.PostProcess, (ctx, execCtx) => { });
+        var pass = CustomPass.Create("custom_post", FramePassKind.PostProcess, (ctx, execCtx) => { });
 
         pass.Kind.Should().Be(FramePassKind.PostProcess);
     }
 
     [Fact]
-    public void CustomPassExecutor_ExecuteCallback_IsAccessible()
+    public void CustomPass_ExecuteCallback_IsAccessible()
     {
         Action<GLContext, PassExecutionContext> callback = (ctx, execCtx) => { };
-        var pass = new CustomPassExecutor("custom", FramePassKind.Custom, callback);
+        var pass = CustomPass.Create("custom", FramePassKind.Custom, callback);
 
-        pass.ExecuteCallback.Should().BeSameAs(callback);
+        pass.Data.ExecuteCallback.Should().BeSameAs(callback);
     }
 
     [Fact]
-    public void CustomPassExecutor_Validate_InvokesValidateCallback()
+    public void CustomPass_Validate_InvokesValidateCallback()
     {
         bool validateInvoked = false;
-        var pass = new CustomPassExecutor(
+        var pass = CustomPass.Create(
             "custom",
             FramePassKind.Custom,
             (ctx, execCtx) => { },
@@ -489,22 +577,22 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void CustomPassExecutor_ValidateCallback_IsAccessible()
+    public void CustomPass_ValidateCallback_IsAccessible()
     {
         Action validateCallback = () => { };
-        var pass = new CustomPassExecutor(
+        var pass = CustomPass.Create(
             "custom",
             FramePassKind.Custom,
             (ctx, execCtx) => { },
             validateCallback);
 
-        pass.ValidateCallback.Should().BeSameAs(validateCallback);
+        pass.Data.ValidateCallback.Should().BeSameAs(validateCallback);
     }
 
     [Fact]
-    public void CustomPassExecutor_ValidateCallbackIsNull_DoesNotThrow()
+    public void CustomPass_ValidateCallbackIsNull_DoesNotThrow()
     {
-        var pass = new CustomPassExecutor("custom", FramePassKind.Custom, (ctx, execCtx) => { });
+        var pass = CustomPass.Create("custom", FramePassKind.Custom, (ctx, execCtx) => { });
 
         var action = () => pass.Validate();
 
@@ -512,32 +600,38 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void CustomPassExecutor_Reads_DeclaresReadResource()
+    public void CustomPass_Reads_DeclaresReadResource()
     {
-        var pass = new CustomPassExecutor("custom", FramePassKind.Custom, (ctx, execCtx) => { });
-        pass.Reads("input_texture");
+        var pass = CustomPass.Create(
+            "custom",
+            FramePassKind.Custom,
+            (ctx, execCtx) => { },
+            reads: CustomReadResources);
 
         pass.GetReadResources().ToArray().Should().Contain("input_texture");
     }
 
     [Fact]
-    public void CustomPassExecutor_Writes_DeclaresWrittenResource()
+    public void CustomPass_Writes_DeclaresWrittenResource()
     {
-        var pass = new CustomPassExecutor("custom", FramePassKind.Custom, (ctx, execCtx) => { });
-        pass.Writes("output_texture");
+        var pass = CustomPass.Create(
+            "custom",
+            FramePassKind.Custom,
+            (ctx, execCtx) => { },
+            writes: CustomWriteResources);
 
         pass.GetWrittenResources().ToArray().Should().Contain("output_texture");
     }
 
     // =========================================================================
-    // ShadowPassExecutor Tests
+    // ShadowPass Tests
     // =========================================================================
 
     [Fact]
-    public void ShadowPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void ShadowPass_Create_SetsCorrectNameAndKind()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new ShadowPassExecutor(
+        var pass = ShadowPass.Create(
             "shadow",
             program,
             "shadow_map",
@@ -546,15 +640,38 @@ public sealed class PassExecutorTests : IDisposable
 
         pass.Name.Should().Be("shadow");
         pass.Kind.Should().Be(FramePassKind.Shadow);
+        pass.Data.DepthProgram.Should().BeSameAs(program);
+        pass.Data.LightViewProjection.Should().Be(Matrix4x4.Identity);
+        pass.Data.ShadowMapWidth.Should().Be(2048);
+        pass.Data.ShadowMapHeight.Should().Be(2048);
 
         program.Dispose();
     }
 
     [Fact]
-    public void ShadowPassExecutor_Validate_ThrowsWhenProgramDisposed()
+    public void ShadowPass_LightViewProjection_IsMutableForPerFrameUpdates()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new ShadowPassExecutor(
+        var pass = ShadowPass.Create(
+            "shadow",
+            program,
+            "shadow_map",
+            "shadow_fbo",
+            Matrix4x4.Identity);
+
+        Matrix4x4 updated = Matrix4x4.CreateTranslation(1f, 2f, 3f);
+        pass.Data.LightViewProjection = updated;
+
+        pass.Data.LightViewProjection.Should().Be(updated);
+
+        program.Dispose();
+    }
+
+    [Fact]
+    public void ShadowPass_Validate_ThrowsWhenProgramDisposed()
+    {
+        var program = new GLProgram(_context, "vs", "fs");
+        var pass = ShadowPass.Create(
             "shadow",
             program,
             "shadow_map",
@@ -569,10 +686,10 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void ShadowPassExecutor_Validate_DoesNotThrowWithValidProgram()
+    public void ShadowPass_Validate_DoesNotThrowWithValidProgram()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new ShadowPassExecutor(
+        var pass = ShadowPass.Create(
             "shadow",
             program,
             "shadow_map",
@@ -587,10 +704,10 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void ShadowPassExecutor_DeclaresCorrectResourceDependencies()
+    public void ShadowPass_DeclaresCorrectResourceDependencies()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new ShadowPassExecutor(
+        var pass = ShadowPass.Create(
             "shadow",
             program,
             "shadow_map",
@@ -604,26 +721,29 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     // =========================================================================
-    // PostProcessPassExecutor Tests
+    // PostProcessPass Tests
     // =========================================================================
 
     [Fact]
-    public void PostProcessPassExecutor_Constructor_SetsCorrectNameAndKind()
+    public void PostProcessPass_Create_SetsCorrectNameAndKind()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex");
 
         pass.Name.Should().Be("postprocess");
         pass.Kind.Should().Be(FramePassKind.PostProcess);
+        pass.Data.Program.Should().BeSameAs(program);
+        pass.Data.InputTextureName.Should().Be("input_tex");
+        pass.Data.Phase.Should().Be(PostProcessPhase.AfterTonemap);
 
         program.Dispose();
     }
 
     [Fact]
-    public void PostProcessPassExecutor_Validate_ThrowsWhenProgramDisposed()
+    public void PostProcessPass_Validate_ThrowsWhenProgramDisposed()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex");
         program.Dispose();
 
         var action = () => pass.Validate();
@@ -633,10 +753,10 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void PostProcessPassExecutor_Validate_DoesNotThrowWithValidProgram()
+    public void PostProcessPass_Validate_DoesNotThrowWithValidProgram()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex");
 
         var action = () => pass.Validate();
 
@@ -646,23 +766,23 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void PostProcessPassExecutor_SetUniform_ReturnsSameInstance()
+    public void PostProcessPass_UniformSetter_IsStoredInPayload()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex");
 
-        var result = pass.SetUniform("u_param", (ctx, prog) => { });
+        pass.Data.UniformSetters["u_param"] = (ctx, prog) => { };
 
-        result.Should().BeSameAs(pass);
+        pass.Data.UniformSetters.Should().ContainKey("u_param");
 
         program.Dispose();
     }
 
     [Fact]
-    public void PostProcessPassExecutor_DeclaresCorrectReadResource()
+    public void PostProcessPass_DeclaresCorrectReadResource()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex");
 
         pass.GetReadResources().ToArray().Should().Contain("input_tex");
 
@@ -670,11 +790,12 @@ public sealed class PassExecutorTests : IDisposable
     }
 
     [Fact]
-    public void PostProcessPassExecutor_WithOutputFramebuffer_DeclaresWriteResource()
+    public void PostProcessPass_OutputFramebuffer_DeclaresWriteResource()
     {
         var program = new GLProgram(_context, "vs", "fs");
-        var pass = new PostProcessPassExecutor("postprocess", program, "input_tex", "output_fbo");
+        var pass = PostProcessPass.Create("postprocess", program, "input_tex", "output_fbo");
 
+        pass.Data.OutputFramebufferName.Should().Be("output_fbo");
         pass.GetWrittenResources().ToArray().Should().Contain("output_fbo");
 
         program.Dispose();
