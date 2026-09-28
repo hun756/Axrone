@@ -12,8 +12,24 @@ public enum EnqueueStatus : byte
     /// <summary>Ring is full; nothing was claimed. Back off and retry.</summary>
     QueueFull = 1,
 
-    /// <summary>Pump is draining, stopped, or disposed; the command was refused.</summary>
+    /// <summary>
+    /// Pump is draining, stopped, faulted, or disposed; the command was refused.
+    /// This is the single refusal status for every non-running lifecycle: a
+    /// producer retries on <see cref="QueueFull"/> and gives up on
+    /// <see cref="Closed"/> without ever reading <see cref="PumpState"/>, so the
+    /// faulted state is observable through <c>CommandPump.State</c> alone.
+    /// </summary>
     Closed = 2,
+
+    /// <summary>
+    /// The pump is faulted. Reserved for callers that reclassify a refusal using
+    /// <c>CommandPump.State</c> (queue wrappers that surface
+    /// <see cref="PumpState.Faulted"/> as an enqueue outcome);
+    /// <c>CommandPump.TryEnqueue</c> itself never returns it, because a faulted
+    /// pump refuses exactly like any other non-running state, through
+    /// <see cref="Closed"/>.
+    /// </summary>
+    Faulted = 3,
 }
 
 /// <summary>
@@ -33,8 +49,9 @@ public readonly record struct EnqueueResult(long SequenceNumber, EnqueueStatus S
 
 /// <summary>
 /// Lifecycle of a command pump. Producers may enqueue only while
-/// <see cref="PumpState.Running"/>; the consumer drains through
-/// <see cref="PumpState.Draining"/> into <see cref="PumpState.Stopped"/>.
+/// <see cref="Running"/>; the consumer drains through <see cref="Draining"/>
+/// into <see cref="Stopped"/>, and every other state refuses enqueues with
+/// <see cref="EnqueueStatus.Closed"/>.
 /// </summary>
 public enum PumpState : int
 {
@@ -49,6 +66,22 @@ public enum PumpState : int
 
     /// <summary>Native memory released.</summary>
     Disposed = 3,
+
+    /// <summary>
+    /// A processor threw. The pump refuses further enqueues, reports the fault
+    /// through <see cref="IExecutorTelemetry.FaultEncountered"/>, and leaves the
+    /// faulting command at the head of the ring so a retry sees the same head of
+    /// queue. The fault itself is rethrown to the pumping caller.
+    /// </summary>
+    /// <remarks>
+    /// Appended after <see cref="Disposed"/> on purpose: hosts persist these
+    /// values into logs and telemetry sinks, so existing values must never move.
+    /// A faulted pump that is then disposed reports <see cref="Disposed"/>,
+    /// because the ring's native memory is gone and disposal is the state callers
+    /// must honor. Pump state therefore reads as a terminal failure that
+    /// <see cref="Disposed"/> supersedes.
+    /// </remarks>
+    Faulted = 4,
 }
 
 /// <summary>
@@ -84,6 +117,21 @@ public interface IExecutorTelemetry
 
     /// <summary>Called when an enqueue attempt finds the ring full.</summary>
     static abstract void QueueSaturated();
+
+    /// <summary>
+    /// Called once per blocking-enqueue retry round that lost the race for a
+    /// slot, immediately before the backoff step. A sustained count means the
+    /// ring is full while the consumer is not draining fast enough.
+    /// </summary>
+    static abstract void ContentionDetected();
+
+    /// <summary>
+    /// Called when a processor faulted the pump and the lifecycle moved to
+    /// <see cref="PumpState.Faulted"/>. The pump still rethrows the fault to the
+    /// pumping caller; this is the observing channel, not a recovery channel.
+    /// </summary>
+    /// <param name="exception">The faulting processor's exception.</param>
+    static abstract void FaultEncountered(Exception exception);
 }
 
 /// <summary>
@@ -103,6 +151,14 @@ public readonly struct NullExecutorTelemetry : IExecutorTelemetry, IEquatable<Nu
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void QueueSaturated() { }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ContentionDetected() { }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void FaultEncountered(Exception exception) { }
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
