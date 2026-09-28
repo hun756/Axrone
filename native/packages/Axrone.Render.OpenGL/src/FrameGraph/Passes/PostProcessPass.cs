@@ -1,13 +1,16 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the generic post-process pass (fullscreen triangle over one input).
+/// Payload for the generic post-process pass (fullscreen triangle over one input),
+/// owning the pass's setup, validate and execute phases.
 /// Uniform setters do not declare graph dependencies and may be added after creation.
 /// </summary>
 public record struct PostProcessPassData
+    : IPassSetup<PostProcessPassData>, IPassValidate<PostProcessPassData>, IPassExecute<PostProcessPassData>
 {
     /// <summary>Post-process shader program.</summary>
     public GLProgram Program { get; set; }
@@ -23,44 +26,19 @@ public record struct PostProcessPassData
 
     /// <summary>Post-process phase (display-referred effects run after tone mapping).</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the generic post-process pass.
-/// </summary>
-public static class PostProcessPass
-{
-    /// <summary>Creates a generic post-process pass.</summary>
-    public static RenderPass<PostProcessPassData> Create(
-        string name,
-        GLProgram program,
-        string inputTextureName,
-        string? outputFramebufferName = null,
-        PostProcessPhase phase = PostProcessPhase.AfterTonemap)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref PostProcessPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(inputTextureName);
-        return new RenderPass<PostProcessPassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref PostProcessPassData data) =>
-            {
-                data.Program = program;
-                data.InputTextureName = inputTextureName;
-                data.OutputFramebufferName = outputFramebufferName;
-                data.Phase = phase;
-                data.UniformSetters = new Dictionary<string, Action<GLContext, GLProgram>>(StringComparer.OrdinalIgnoreCase);
-                builder.Reads(inputTextureName);
-                if (outputFramebufferName is not null)
-                {
-                    builder.Writes(outputFramebufferName);
-                }
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        if (data.OutputFramebufferName is not null)
+        {
+            builder.Writes(data.OutputFramebufferName);
+        }
     }
 
-    private static void Validate(in PostProcessPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in PostProcessPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -68,7 +46,8 @@ public static class PostProcessPass
         }
     }
 
-    private static void Execute(in PostProcessPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in PostProcessPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -108,5 +87,34 @@ public static class PostProcessPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the generic post-process pass.
+/// </summary>
+public static class PostProcessPass
+{
+    /// <summary>Creates a generic post-process pass.</summary>
+    public static RenderPass<PostProcessPassData> Create(
+        string name,
+        GLProgram program,
+        string inputTextureName,
+        string? outputFramebufferName = null,
+        PostProcessPhase phase = PostProcessPhase.AfterTonemap)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(inputTextureName);
+        return new RenderPass<PostProcessPassData>(
+            name,
+            FramePassKind.PostProcess,
+            new PostProcessPassData
+            {
+                Program = program,
+                InputTextureName = inputTextureName,
+                OutputFramebufferName = outputFramebufferName,
+                Phase = phase,
+                UniformSetters = new Dictionary<string, Action<GLContext, GLProgram>>(StringComparer.OrdinalIgnoreCase)
+            });
     }
 }
