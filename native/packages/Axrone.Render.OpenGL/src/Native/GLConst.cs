@@ -48,7 +48,10 @@ public static class GLConst
     public const uint Repeat = 0x2901;
     public const uint MirroredRepeat = 0x8370;
 
-    // Pixel formats
+    // Pixel formats and clear buffer tokens
+    public const uint Color = 0x1800;
+    public const uint Depth = 0x1801;
+    public const uint Stencil = 0x1802;
     public const uint Red = 0x1903;
     public const uint Rg = 0x8227;
     public const uint Rgb = 0x1907;
@@ -135,6 +138,9 @@ public static class GLConst
 
     // Stencil
     public const uint StencilTest = 0x0B90;
+
+    // Scissor
+    public const uint ScissorTest = 0x0C11;
 
     // Transform feedback
     public const uint TransformFeedback = 0x8E22;
