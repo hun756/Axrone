@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Axrone.Execution;
 using RenderPump = Axrone.Execution.CommandPump<
     Axrone.Render.Core.RenderCommand,
@@ -378,6 +379,24 @@ public sealed class FrameGraph : IDisposable
     /// <see cref="RenderContext"/>. All passes are <see cref="IRenderContext"/>-native:
     /// they consume the shared context directly, keeping its state cache warm
     /// for the whole walk. There is no legacy bridge.</para>
+    /// <para><b>Fault policy (fail-closed, per pass).</b> The pump-enqueue attempt,
+    /// the refusal drain-and-retry, the direct fallback and the drains issued
+    /// inside the walk are one fault-isolated unit: the first exception aborts the
+    /// whole walk. The graph-owned <see cref="Pump"/> is marked
+    /// <see cref="PumpState.Faulted"/> through <see cref="RenderPump.Fault(Exception)"/>
+    /// (which also fires the pump's fault telemetry and never throws), so every
+    /// later enqueue is refused with <see cref="EnqueueStatus.Closed"/> and no
+    /// producer has to branch on the fault. The walk is deliberately NOT drained
+    /// on the way out: GL state is unknown once a pass has failed, so commands
+    /// queued but not yet pumped are preserved in the ring (the documented
+    /// <see cref="Reset"/> semantics) instead of being executed out of order. The
+    /// original exception is rethrown through a captured
+    /// <see cref="ExceptionDispatchInfo"/>, so its type, message and stack survive
+    /// the isolation boundary; the wrapping <see cref="RenderException"/> of the
+    /// direct leg stays the outermost exception and keeps the pass identity. A
+    /// <see cref="RenderCommandProcessor"/> fault is already contained and marked
+    /// by the pump itself on the drain path; this catch additionally covers it when
+    /// it propagates through the refusal-path drain.</para>
     /// </remarks>
     public void Execute()
     {
@@ -392,6 +411,8 @@ public sealed class FrameGraph : IDisposable
 
         // 2. Walk the sorted passes once, in order. Allocation-free: locals only,
         // no LINQ, no closures; pump legs and direct legs keep the same position.
+        // Each iteration is one fault-isolated unit (see the remarks): a failure
+        // faults the pump and aborts the walk instead of leaking GL work.
         IRenderPass[] sorted = _sortedPasses!;
         for (int i = 0; i < sorted.Length; i++)
         {
@@ -400,34 +421,48 @@ public sealed class FrameGraph : IDisposable
             if (!pass.IsEnabled)
                 continue;
 
-            if (pass is IPumpEnqueue pumpPass)
+            try
             {
-                if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+                if (pass is IPumpEnqueue pumpPass)
                 {
-                    // Pump leg: the commands execute at the next drain point, in
-                    // enqueue order, which is graph order.
+                    if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+                    {
+                        // Pump leg: the commands execute at the next drain point, in
+                        // enqueue order, which is graph order.
+                        continue;
+                    }
+
+                    // Refused (ring full): drain once. The pending pumped work lands in
+                    // graph order and the freed slots give this pass a second chance.
+                    PumpQueuedCommands();
+                    if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+                    {
+                        continue;
+                    }
+
+                    // Still refused: take the direct leg here rather than skipping the
+                    // pass, so its GL effects stay inside the global order.
+                    ExecuteDirect(pass);
+
                     continue;
                 }
 
-                // Refused (ring full): drain once. The pending pumped work lands in
-                // graph order and the freed slots give this pass a second chance.
+                // Classic pass: drain-before-direct, so pumped work enqueued by
+                // earlier passes is already applied when this pass reads its inputs.
                 PumpQueuedCommands();
-                if (pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
-                {
-                    continue;
-                }
-
-                // Still refused: take the direct leg here rather than skipping the
-                // pass, so its GL effects stay inside the global order.
                 ExecuteDirect(pass);
-
-                continue;
             }
-
-            // Classic pass: drain-before-direct, so pumped work enqueued by
-            // earlier passes is already applied when this pass reads its inputs.
-            PumpQueuedCommands();
-            ExecuteDirect(pass);
+#pragma warning disable CA1031 // Fail-closed by policy: the pump is marked Faulted and the original exception, not a wrapped one, reaches the caller.
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                // Fail closed: the pump stops accepting work for the rest of the
+                // graph's life, the ring is left intact (never drained here, GL state
+                // is unknown), and the original stack reaches the caller untouched.
+                Pump.Fault(ex);
+                ExceptionDispatchInfo.Capture(ex).Throw();
+                throw; // Fault + captured rethrow above never return; this ends the loop for the compiler too.
+            }
         }
 
         // 3. Final drain: nothing enqueued by this walk survives the call.
