@@ -1,0 +1,14 @@
+global using System;
+global using System.Numerics;
+global using Xunit;
+global using FluentAssertions;
+global using Axrone.Render.Core;
+global using Axrone.Render.Core.Abstractions;
+global using Axrone.Render.OpenGL.Context;
+global using Axrone.Render.OpenGL.FrameGraph;
+global using Axrone.Render.OpenGL.Native;
+global using Axrone.Render.OpenGL.Resources;
+global using Axrone.Render.OpenGL.Shading;
+global using Axrone.Render.OpenGL.Texture;
+global using Axrone.Render.OpenGL.Mock;
+global using Axrone.Render.Effects;

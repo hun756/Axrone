@@ -29,6 +29,7 @@
 
   <ItemGroup Label="PublicApi">
     <InternalsVisibleTo Include="Axrone.Render.OpenGL.Tests" />
+    <InternalsVisibleTo Include="Axrone.Render.Effects.Tests" />
   </ItemGroup>
 
   <ItemGroup Label="Dependencies">

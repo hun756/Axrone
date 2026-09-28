@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Render.Effects</RootNamespace>
+    <AssemblyName>Axrone.Render.Effects</AssemblyName>
+    <Description>Post-process and screen-space effect passes for the Axrone renderer (consumers of the generic render-pass mechanism).</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1062: Execute overrides dereference context/ctx exactly as the OpenGL mechanism executors do;
+         the guard paths (AssertRenderThread, PassExecutionContext lookups) live in the referenced
+         OpenGL assembly, which the analyzer's intra-compilation null-state tracking cannot see. -->
+    <NoWarn>$(NoWarn);CA1062</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Render.Effects.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Label="Dependencies">
+    <ProjectReference Include="../Axrone.Render.Core/Axrone.Render.Core.csproj" />
+    <ProjectReference Include="../Axrone.Render.OpenGL/Axrone.Render.OpenGL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>
