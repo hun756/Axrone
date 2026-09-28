@@ -101,24 +101,30 @@ public sealed class FrameGraph : IDisposable
     /// <summary>
     /// Adds a strongly-typed generic render pass to the graph.
     /// </summary>
-    /// <typeparam name="TPassData">The pass payload data type.</typeparam>
+    /// <remarks>
+    /// The pass phases are static abstracts on <typeparamref name="TPassData"/>, so
+    /// this is a construction-and-add: the payload already knows how to declare its
+    /// dependencies, validate itself and execute. The pass therefore cannot be
+    /// registered with a missing or mismatched phase.
+    /// </remarks>
+    /// <typeparam name="TPassData">
+    /// The pass payload data type, implementing the setup, validate and execute
+    /// static-abstract phase interfaces.
+    /// </typeparam>
     /// <param name="name">The pass name.</param>
     /// <param name="kind">The pass kind classification.</param>
-    /// <param name="setup">The pass dependency and descriptor setup delegate.</param>
-    /// <param name="execute">The pass execution delegate.</param>
-    /// <param name="validate">Optional validation delegate.</param>
+    /// <param name="data">The pass payload, stored by the pass and declared through its own setup phase.</param>
     /// <returns>This frame graph for fluent chaining.</returns>
     public FrameGraph AddPass<TPassData>(
         string name,
         FramePassKind kind,
-        RenderPassSetupDelegate<TPassData> setup,
-        RenderPassExecuteDelegate<TPassData> execute,
-        RenderPassValidateDelegate<TPassData>? validate = null) where TPassData : struct
+        TPassData data)
+        where TPassData : IPassSetup<TPassData>, IPassValidate<TPassData>, IPassExecute<TPassData>
     {
         if (IsDisposed)
             ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
 
-        var pass = new RenderPass<TPassData>(name, kind, setup, execute, validate);
+        var pass = new RenderPass<TPassData>(name, kind, data);
         AddPass(pass);
         return this;
     }
