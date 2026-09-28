@@ -1,3 +1,11 @@
+using Axrone.Execution;
+using RenderPump = Axrone.Execution.CommandPump<
+    Axrone.Render.Core.RenderCommand,
+    Axrone.Render.OpenGL.FrameGraph.RenderPumpContext,
+    Axrone.Render.OpenGL.FrameGraph.RenderCommandProcessor,
+    Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
+    Axrone.Execution.NullExecutorTelemetry>;
+
 namespace Axrone.Render.OpenGL.FrameGraph;
 
 /// <summary>
@@ -10,6 +18,7 @@ public sealed class FrameGraph : IDisposable
     private readonly List<RenderPass> _passes = new(32);
     private readonly Dictionary<string, FrameGraphResource> _transientResources = new(StringComparer.OrdinalIgnoreCase);
     private readonly PassExecutionContext _execContext;
+    private readonly RenderPump _pump;
     private RenderPass[]? _sortedPasses;
     private int _isDisposed;
 
@@ -28,14 +37,33 @@ public sealed class FrameGraph : IDisposable
     }
 
     /// <summary>
+    /// Gets the command pump owned by this graph. Pump-capable passes
+    /// (<see cref="IPumpEnqueue"/>) enqueue library commands into this pump during
+    /// <see cref="EnqueuePumpPasses"/>; the consumer drains it via
+    /// <see cref="PumpQueuedCommands"/>. The pump is created with the graph and
+    /// disposed with it; <see cref="Reset"/> leaves it alive.
+    /// </summary>
+    public RenderPump Pump
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _pump;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FrameGraph"/> class.
     /// </summary>
     /// <param name="context">The GL context.</param>
-    public FrameGraph(GLContext context)
+    /// <param name="pumpCapacity">
+    /// Ring slot capacity for the owned command pump. Must be a power of two
+    /// greater than or equal to 2; the validation performed by
+    /// <see cref="ExecutorOptions"/> propagates its argument exception unchanged.
+    /// </param>
+    public FrameGraph(GLContext context, int pumpCapacity = 256)
     {
         ArgumentNullException.ThrowIfNull(context);
         _context = context;
         _execContext = new PassExecutionContext(context);
+        _pump = new RenderPump(new ExecutorOptions { Capacity = pumpCapacity });
     }
 
     /// <summary>
@@ -293,8 +321,76 @@ public sealed class FrameGraph : IDisposable
     }
 
     /// <summary>
+    /// Enqueues the work of every sorted, enabled pass that implements
+    /// <see cref="IPumpEnqueue"/> into the owned <see cref="Pump"/>, in
+    /// topological order. Non-pump passes are skipped silently; their path is
+    /// the direct <see cref="Execute"/> traversal.
+    /// </summary>
+    /// <returns>The number of commands accepted by the pump.</returns>
+    /// <remarks>
+    /// Compiles first when needed (same lazy policy as <see cref="Execute"/>).
+    /// A pump pass whose enqueue is refused (ring full) is not counted and does
+    /// not stop later passes; enqueue failures thrown by a pass propagate to
+    /// the caller unchanged.
+    /// </remarks>
+    public nuint EnqueuePumpPasses()
+    {
+        if (IsDisposed)
+            ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
+
+        // 1. Compile if not already sorted (mirrors Execute)
+        if (_sortedPasses == null)
+        {
+            Compile();
+        }
+
+        // 2. Enqueue each pump-capable pass in order; count accepted commands only.
+        nuint enqueued = 0;
+        for (int i = 0; i < _sortedPasses!.Length; i++)
+        {
+            RenderPass pass = _sortedPasses[i];
+
+            if (!pass.IsEnabled)
+                continue;
+
+            if (pass is IPumpEnqueue pumpPass && pumpPass.EnqueueCommands(Pump, _execContext).IsEnqueued)
+            {
+                enqueued++;
+            }
+        }
+
+        return enqueued;
+    }
+
+    /// <summary>
+    /// Pumps every command currently queued in the owned <see cref="Pump"/>
+    /// through the render command processor.
+    /// </summary>
+    /// <returns>The number of commands processed.</returns>
+    /// <remarks>
+    /// Single-consumer: exactly one thread may pump. Processor exceptions
+    /// propagate to the caller; the faulting command stays claimed so a retry
+    /// observes the same head of queue.
+    /// </remarks>
+    public nuint PumpQueuedCommands()
+    {
+        if (IsDisposed)
+            ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
+
+        var pumpContext = new RenderPumpContext(_context);
+        return Pump.PumpAll(ref pumpContext);
+    }
+
+    /// <summary>
     /// Resets the frame graph for the next frame.
     /// </summary>
+    /// <remarks>
+    /// The owned <see cref="Pump"/> is left alive and is NOT drained: commands
+    /// queued by <see cref="EnqueuePumpPasses"/> but not yet pumped survive
+    /// <see cref="Reset"/> and are still returned by
+    /// <see cref="PumpQueuedCommands"/>. Only <see cref="Dispose"/> releases
+    /// the pump's native ring memory.
+    /// </remarks>
     public void Reset()
     {
         if (IsDisposed)
@@ -315,6 +411,7 @@ public sealed class FrameGraph : IDisposable
             _transientResources.Clear();
             _sortedPasses = null;
             _execContext.Clear();
+            _pump.Dispose();
         }
     }
 }

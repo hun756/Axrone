@@ -12,7 +12,7 @@ namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 /// <summary>
 /// Blits (copies) content from one framebuffer to another with optional filtering.
 /// </summary>
-public sealed class BlitPassExecutor : RenderPass
+public sealed class BlitPassExecutor : RenderPass, IPumpEnqueue
 {
     private readonly string _sourceFramebufferName;
     private readonly string _destinationFramebufferName;
@@ -63,7 +63,7 @@ public sealed class BlitPassExecutor : RenderPass
     /// <param name="pump">The pump receiving the command.</param>
     /// <param name="ctx">The pass execution context for resource resolution.</param>
     /// <returns>The enqueue receipt.</returns>
-    internal EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
+    public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(pump);
         ArgumentNullException.ThrowIfNull(ctx);
