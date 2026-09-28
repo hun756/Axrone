@@ -1,10 +1,19 @@
+using Axrone.Execution;
+using Axrone.Utility.Backoff.SpinPolicies;
+using RenderPump = Axrone.Execution.CommandPump<
+    Axrone.Render.Core.RenderCommand,
+    Axrone.Render.OpenGL.FrameGraph.RenderPumpContext,
+    Axrone.Render.OpenGL.FrameGraph.RenderCommandProcessor,
+    Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
+    Axrone.Execution.NullExecutorTelemetry>;
+
 namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 
 /// <summary>
 /// Presents a frame-graph framebuffer to the default framebuffer (id 0).
 /// Blits the full source rect onto the default framebuffer, then resets the viewport.
 /// </summary>
-public sealed class PresentPassExecutor : RenderPass
+public sealed class PresentPassExecutor : RenderPass, IPumpEnqueue
 {
     private const uint DefaultFramebufferId = 0;
 
@@ -87,5 +96,44 @@ public sealed class PresentPassExecutor : RenderPass
 
         state.BindFramebuffer(GLConst.Framebuffer, DefaultFramebufferId);
         state.SetViewport(0, 0, dstWidth, dstHeight);
+    }
+
+    /// <summary>
+    /// Enqueues this pass's present as a render command into a pump.
+    /// The pump-derived execution path: identical pixels, library-driven dispatch.
+    /// </summary>
+    /// <remarks>
+    /// The source is resolved exactly as <see cref="Execute"/> resolves it — the
+    /// pass has no present-name special case on the source side, because the
+    /// source is always a named, registry-managed framebuffer. The destination
+    /// needs no resolution at all: it is always framebuffer 0, which the packet
+    /// expresses by carrying no destination handle.
+    /// </remarks>
+    /// <param name="pump">The pump receiving the command.</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
+    /// <returns>The enqueue receipt.</returns>
+    /// <inheritdoc cref="IPumpEnqueue.EnqueueCommands"/>
+    public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(pump);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        var sourceFbo = ctx.GetFramebuffer(_sourceFramebufferName);
+
+        // Same destination sizing as Execute: an unset pair follows the source.
+        int dstWidth = _destinationWidth != 0 ? _destinationWidth : sourceFbo.Width;
+        int dstHeight = _destinationHeight != 0 ? _destinationHeight : sourceFbo.Height;
+
+        // Copy the handle out before passing it by reference: CS8156 forbids
+        // `in fbo.RegistryHandle`, and the packet travels by handle, not by GL name.
+        DescriptorHandle<GLResourceNode> sourceHandle = sourceFbo.RegistryHandle;
+
+        RenderCommand command = RenderCommand.CreatePresent(
+            in sourceHandle,
+            0, 0, sourceFbo.Width, sourceFbo.Height,
+            0, 0, dstWidth, dstHeight,
+            _blitMask, _filterMode);
+
+        return pump.TryEnqueue(in command);
     }
 }
