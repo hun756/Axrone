@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Vignette post-process pass. Darkens the edges of the input colour image,
@@ -18,9 +18,9 @@ namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 ///   <item><description><c>u_smoothness</c> (float) — see <see cref="Smoothness"/>.</description></item>
 /// </list>
 /// <para><see cref="Intensity"/> and <see cref="Smoothness"/> are mutable and are expected
-/// to be updated per frame before <see cref="RenderPass.Execute"/> runs.</para>
+/// to be updated per frame before the pass executes.</para>
 /// </remarks>
-public sealed class VignettePassExecutor : RenderPass
+public sealed class VignettePassExecutor : RenderPass, IRenderPass
 {
     private const int InvalidUniformLocation = -1;
 
@@ -146,59 +146,84 @@ public sealed class VignettePassExecutor : RenderPass
     }
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override void Execute(GLContext context, PassExecutionContext ctx)
+    /// <remarks>
+    /// This pass is <see cref="IRenderContext"/>-native: it renders through a
+    /// descriptor-driven pass lifecycle (<c>BeginPass</c>/<c>EndPass</c>) and issues
+    /// only hardware-agnostic verbs, so the legacy GLContext bridge is left
+    /// unimplemented and fails closed.
+    /// </remarks>
+    void IRenderPass.Execute(IRenderContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(ctx);
 
-        context.AssertRenderThread();
+        if (context is GLRenderContext glCtx && glCtx.PassContext is not null)
+        {
+            ExecuteCore(glCtx, glCtx.PassContext);
+            return;
+        }
 
-        var gl = context.GL;
-        var state = context.State;
+        ThrowHelper.Throw(RenderErrorCode.InvalidOperation,
+            $"{Name} resolves resources through the pass context and requires a GLRenderContext with a configured PassContext.",
+            nameof(VignettePassExecutor));
+    }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void ExecuteCore(GLRenderContext context, PassExecutionContext ctx)
+    {
         // Resolve the colour input and the render target.
         var inputTexture = ctx.GetTexture(_inputTextureName);
         var outputTexture = ctx.GetTexture(_outputTextureName);
 
-        // Bind the output framebuffer when the caller registered "<output>_fbo".
-        if (ctx.HasResource(_outputTextureName + "_fbo"))
-        {
-            state.BindFramebuffer(GLConst.Framebuffer, ctx.GetFramebuffer(_outputTextureName + "_fbo").Id);
-        }
+        // Target the registered "<output>_fbo" when present, else the backbuffer.
+        uint targetFramebuffer = ctx.HasResource(_outputTextureName + "_fbo")
+            ? ctx.GetFramebuffer(_outputTextureName + "_fbo").Id
+            : 0u;
 
-        state.SetViewport(0, 0, outputTexture.Width, outputTexture.Height);
-        state.SetDepthTest(false);
-        state.SetBlend(false);
-        state.SetCullFace(false);
-        state.SetColorMask(true, true, true, true);
+        Span<AttachmentDescriptor> attachments = stackalloc AttachmentDescriptor[1]
+        {
+            AttachmentDescriptor.Color(0, AttachmentLoadAction.Load, AttachmentStoreAction.Store)
+        };
+
+        var descriptor = new RenderPassDescriptor(
+            targetFramebuffer,
+            new ViewportRect(0, 0, outputTexture.Width, outputTexture.Height),
+            attachments);
+
+        context.BeginPass(in descriptor);
+
+        context.SetDepthState(testEnabled: false, writeEnabled: false);
+        context.SetBlendState(enabled: false);
+        context.SetCullState(enabled: false);
+        context.SetColorMask(red: true, green: true, blue: true, alpha: true);
 
         // Bind the caller-supplied vignette program.
-        state.UseProgram(_program.Id);
+        context.BindProgram(_program.Id);
 
         // Bind the colour input at unit 0.
-        state.BindTexture2D((uint)InputTextureUnit, inputTexture.Id);
+        context.BindTexture(InputTextureUnit, inputTexture.Id);
 
         int location = _program.GetUniformLocation(InputUniform);
         if (location != InvalidUniformLocation)
         {
-            gl.Uniform1(location, InputTextureUnit);
+            context.SetUniform(location, InputTextureUnit);
         }
 
         location = _program.GetUniformLocation(IntensityUniform);
         if (location != InvalidUniformLocation)
         {
-            gl.Uniform1(location, Intensity);
+            context.SetUniform(location, Intensity);
         }
 
         location = _program.GetUniformLocation(SmoothnessUniform);
         if (location != InvalidUniformLocation)
         {
-            gl.Uniform1(location, Smoothness);
+            context.SetUniform(location, Smoothness);
         }
 
         // Draw the screen-filling triangle (3 vertices, no VAO needed).
-        state.BindVertexArray(0);
-        gl.DrawArrays(GLConst.Triangles, 0, 3);
+        context.BindVertexArray(0);
+        context.DrawFullscreenQuad();
+
+        context.EndPass();
     }
 }

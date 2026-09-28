@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// FXAA (Fast Approximate Anti-Aliasing) post-process pass. Applies edge-detection

@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Depth-of-field post-process pass. Derives a circle-of-confusion from the scene depth buffer

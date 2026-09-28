@@ -1,9 +1,9 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Film grain post-process pass. Adds animated noise to the input colour image, breaking up
-/// flat gradients and banding with a caller-supplied program that generates its own
-/// screen-filling triangle.
+/// Chromatic aberration post-process pass. Samples the input colour texture with
+/// a small radial per-channel offset to mimic lens dispersion, using a
+/// caller-supplied program that generates its own screen-filling triangle.
 /// </summary>
 /// <remarks>
 /// <para>The GLSL program is supplied by the caller and is never compiled here. Bindings:</para>
@@ -14,34 +14,39 @@ namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 /// (reflected location <c>-1</c>), so a minimal program is valid:</para>
 /// <list type="bullet">
 ///   <item><description><c>u_inputTexture</c> (sampler2D) — receives the unit index 0.</description></item>
-///   <item><description><c>u_intensity</c> (float) — see <see cref="Intensity"/>.</description></item>
-///   <item><description><c>u_time</c> (float) — see <see cref="Time"/>, the animation seed.</description></item>
+///   <item><description><c>u_maxOffset</c> (float) — see <see cref="MaxOffset"/>.</description></item>
 /// </list>
-/// <para><see cref="Intensity"/> and <see cref="Time"/> are mutable and are expected to be
-/// updated per frame before <see cref="RenderPass.Execute"/> runs.</para>
+/// <para><see cref="MaxOffset"/> is expressed in texels at the input resolution; the
+/// caller's shader is responsible for converting it to UV space (for example via its
+/// own <c>u_texelSize</c> uniform or a hardcoded resolution). It is mutable and is
+/// expected to be updated per frame before <see cref="RenderPass.Execute"/> runs.</para>
 /// </remarks>
-public sealed class FilmGrainPassExecutor : RenderPass
+public sealed class ChromaticAberrationPassExecutor : RenderPass
 {
     private const int InvalidUniformLocation = -1;
 
     private const int InputTextureUnit = 0;
 
     private const string InputUniform = "u_inputTexture";
-    private const string IntensityUniform = "u_intensity";
-    private const string TimeUniform = "u_time";
+    private const string MaxOffsetUniform = "u_maxOffset";
+
+    // Sane bound for the radial per-channel offset, in texels: 64 texels at 1080p is
+    // roughly 3% of the screen width — already an extreme, heavily distorted grade.
+    private const float MinMaxOffsetTexels = 0f;
+    private const float MaxMaxOffsetTexels = 64f;
 
     private readonly GLProgram _program;
     private readonly string _inputTextureName;
     private readonly string _outputTextureName;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FilmGrainPassExecutor"/> class.
+    /// Initializes a new instance of the <see cref="ChromaticAberrationPassExecutor"/> class.
     /// </summary>
     /// <param name="name">The pass name.</param>
-    /// <param name="program">The caller-supplied film grain program. Never compiled here.</param>
+    /// <param name="program">The caller-supplied chromatic aberration program. Never compiled here.</param>
     /// <param name="inputName">Name of the input colour texture in the pass context.</param>
-    /// <param name="outputName">Name of the grained output target in the pass context.</param>
-    public FilmGrainPassExecutor(
+    /// <param name="outputName">Name of the aberrated output target in the pass context.</param>
+    public ChromaticAberrationPassExecutor(
         string name,
         GLProgram program,
         string inputName,
@@ -61,15 +66,10 @@ public sealed class FilmGrainPassExecutor : RenderPass
     }
 
     /// <summary>
-    /// Gets or sets the grain strength. Must be in [0, 1]. Update per frame if animated.
+    /// Gets or sets the maximum radial per-channel offset, in texels at the input
+    /// resolution. Must be in [0, 64]. Update per frame if animated.
     /// </summary>
-    public float Intensity { get; set; } = 0.04f;
-
-    /// <summary>
-    /// Gets or sets the grain animation seed in seconds. Must be non-negative.
-    /// Update per frame to animate the noise pattern.
-    /// </summary>
-    public float Time { get; set; }
+    public float MaxOffset { get; set; } = 4f;
 
     /// <summary>Gets the input colour texture resource name.</summary>
     public string InputTextureName
@@ -78,7 +78,7 @@ public sealed class FilmGrainPassExecutor : RenderPass
         get => _inputTextureName;
     }
 
-    /// <summary>Gets the grained output target name.</summary>
+    /// <summary>Gets the aberrated output target name.</summary>
     public string OutputTextureName
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -86,24 +86,13 @@ public sealed class FilmGrainPassExecutor : RenderPass
     }
 
     /// <summary>
-    /// Sets the grain strength.
+    /// Sets the maximum radial per-channel offset, in texels.
     /// </summary>
-    /// <param name="intensity">The intensity. Must be in [0, 1].</param>
+    /// <param name="maxOffset">The offset in texels. Must be in [0, 64].</param>
     /// <returns>This instance for fluent chaining.</returns>
-    public FilmGrainPassExecutor WithIntensity(float intensity)
+    public ChromaticAberrationPassExecutor WithMaxOffset(float maxOffset)
     {
-        Intensity = intensity;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the grain animation seed.
-    /// </summary>
-    /// <param name="time">The seed in seconds. Must be non-negative.</param>
-    /// <returns>This instance for fluent chaining.</returns>
-    public FilmGrainPassExecutor WithTime(float time)
-    {
-        Time = time;
+        MaxOffset = maxOffset;
         return this;
     }
 
@@ -118,31 +107,25 @@ public sealed class FilmGrainPassExecutor : RenderPass
         if (_program.IsDisposed)
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration,
-                "Film grain shader program has been disposed", nameof(FilmGrainPassExecutor));
+                "Chromatic aberration shader program has been disposed", nameof(ChromaticAberrationPassExecutor));
         }
 
         if (string.IsNullOrWhiteSpace(_inputTextureName))
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration,
-                "Input texture name must not be empty", nameof(FilmGrainPassExecutor));
+                "Input texture name must not be empty", nameof(ChromaticAberrationPassExecutor));
         }
 
         if (string.IsNullOrWhiteSpace(_outputTextureName))
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration,
-                "Film grain output name must not be empty", nameof(FilmGrainPassExecutor));
+                "Chromatic aberration output name must not be empty", nameof(ChromaticAberrationPassExecutor));
         }
 
-        if (Intensity < 0f || Intensity > 1f)
+        if (MaxOffset < MinMaxOffsetTexels || MaxOffset > MaxMaxOffsetTexels)
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration,
-                $"Film grain intensity must be in [0, 1], got {Intensity}", nameof(FilmGrainPassExecutor));
-        }
-
-        if (Time < 0f)
-        {
-            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration,
-                $"Film grain time must be non-negative, got {Time}", nameof(FilmGrainPassExecutor));
+                $"Chromatic aberration max offset must be in [0, 64] texels, got {MaxOffset}", nameof(ChromaticAberrationPassExecutor));
         }
     }
 
@@ -174,7 +157,7 @@ public sealed class FilmGrainPassExecutor : RenderPass
         state.SetCullFace(false);
         state.SetColorMask(true, true, true, true);
 
-        // Bind the caller-supplied film grain program.
+        // Bind the caller-supplied chromatic aberration program.
         state.UseProgram(_program.Id);
 
         // Bind the colour input at unit 0.
@@ -186,16 +169,10 @@ public sealed class FilmGrainPassExecutor : RenderPass
             gl.Uniform1(location, InputTextureUnit);
         }
 
-        location = _program.GetUniformLocation(IntensityUniform);
+        location = _program.GetUniformLocation(MaxOffsetUniform);
         if (location != InvalidUniformLocation)
         {
-            gl.Uniform1(location, Intensity);
-        }
-
-        location = _program.GetUniformLocation(TimeUniform);
-        if (location != InvalidUniformLocation)
-        {
-            gl.Uniform1(location, Time);
+            gl.Uniform1(location, MaxOffset);
         }
 
         // Draw the screen-filling triangle (3 vertices, no VAO needed).

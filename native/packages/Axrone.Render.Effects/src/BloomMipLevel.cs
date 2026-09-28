@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// One level of a bloom mip pyramid: the framebuffer the level renders into and the

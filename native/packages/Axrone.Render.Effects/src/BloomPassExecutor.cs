@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Bloom effect pass with two interchangeable implementations over the same public

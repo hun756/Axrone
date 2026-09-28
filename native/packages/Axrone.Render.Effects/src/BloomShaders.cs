@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.Shading;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Built-in GLSL 330 core shader sources for the Karis soft-knee mip-pyramid bloom:

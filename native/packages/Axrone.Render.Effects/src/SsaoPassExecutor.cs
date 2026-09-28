@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Screen-space ambient occlusion (SSAO) post-process pass. Samples the depth and view-space

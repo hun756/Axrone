@@ -1,4 +1,4 @@
-namespace Axrone.Render.OpenGL.Shading;
+namespace Axrone.Render.Effects;
 
 /// <summary>
 /// Pure CPU derivation of the Karis soft-knee bloom prefilter curve and of the
