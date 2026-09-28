@@ -1,63 +1,39 @@
 namespace Axrone.Render.Effects;
 
 /// <summary>
-/// Payload for the chromatic aberration pass.
+/// Payload for the chromatic aberration pass, owning the pass's setup, validate
+/// and execute phases.
 /// </summary>
-public record struct ChromaticAberrationPassData
+public sealed class ChromaticAberrationPassData
+    : IPassSetup<ChromaticAberrationPassData>, IPassValidate<ChromaticAberrationPassData>, IPassExecute<ChromaticAberrationPassData>
 {
-    /// <summary>Chromatic aberration shader program.</summary>
-    public GLProgram Program { get; set; }
+    private const float MinMaxOffsetTexels = 0f;
+    private const float MaxMaxOffsetTexels = 64f;
+
+    /// <summary>Chromatic aberration shader program. Assigned by the factory before the pass is constructed.</summary>
+    public GLProgram Program { get; set; } = null!;
 
     /// <summary>Input colour texture resource name.</summary>
-    public string InputTextureName { get; set; }
+    public string InputTextureName { get; set; } = string.Empty;
 
     /// <summary>Aberrated output target name.</summary>
-    public string OutputTextureName { get; set; }
+    public string OutputTextureName { get; set; } = string.Empty;
 
     /// <summary>Maximum radial per-channel offset in texels. Must be in [0, 64].</summary>
     public float MaxOffset { get; set; }
 
     /// <summary>Post-process phase. Display-referred effects run after tone mapping.</summary>
     public PostProcessPhase Phase { get; set; }
-}
 
-/// <summary>
-/// Factory for the chromatic aberration post-process pass.
-/// </summary>
-public static class ChromaticAberrationPass
-{
-    private const float MinMaxOffsetTexels = 0f;
-    private const float MaxMaxOffsetTexels = 64f;
-
-    /// <summary>Creates a chromatic aberration pass.</summary>
-    public static RenderPass<ChromaticAberrationPassData> Create(
-        string name,
-        GLProgram program,
-        string inputName,
-        string outputName,
-        float maxOffset = 4f)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref ChromaticAberrationPassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        ArgumentNullException.ThrowIfNull(inputName);
-        ArgumentNullException.ThrowIfNull(outputName);
-        return new RenderPass<ChromaticAberrationPassData>(
-            name,
-            FramePassKind.PostProcess,
-            (IRenderPassBuilder builder, ref ChromaticAberrationPassData data) =>
-            {
-                data.Program = program;
-                data.InputTextureName = inputName;
-                data.OutputTextureName = outputName;
-                data.MaxOffset = maxOffset;
-                data.Phase = PostProcessPhase.AfterTonemap;
-                builder.Reads(inputName);
-                builder.Writes(outputName);
-            },
-            Execute,
-            Validate);
+        builder.Reads(data.InputTextureName);
+        builder.Writes(data.OutputTextureName);
     }
 
-    private static void Validate(in ChromaticAberrationPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in ChromaticAberrationPassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -84,7 +60,8 @@ public static class ChromaticAberrationPass
         }
     }
 
-    private static void Execute(in ChromaticAberrationPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in ChromaticAberrationPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -123,5 +100,35 @@ public static class ChromaticAberrationPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the chromatic aberration post-process pass.
+/// </summary>
+public static class ChromaticAberrationPass
+{
+    /// <summary>Creates a chromatic aberration pass.</summary>
+    public static RenderPass<ChromaticAberrationPassData> Create(
+        string name,
+        GLProgram program,
+        string inputName,
+        string outputName,
+        float maxOffset = 4f)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(inputName);
+        ArgumentNullException.ThrowIfNull(outputName);
+        return new RenderPass<ChromaticAberrationPassData>(
+            name,
+            FramePassKind.PostProcess,
+            new ChromaticAberrationPassData
+            {
+                Program = program,
+                InputTextureName = inputName,
+                OutputTextureName = outputName,
+                MaxOffset = maxOffset,
+                Phase = PostProcessPhase.AfterTonemap
+            });
     }
 }
