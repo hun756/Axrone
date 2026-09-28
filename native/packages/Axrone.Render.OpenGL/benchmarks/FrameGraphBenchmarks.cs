@@ -2,6 +2,9 @@ using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
 using Axrone.Render.OpenGL.FrameGraph.Passes;
+using Graph = Axrone.Render.OpenGL.FrameGraph.FrameGraph<
+    Axrone.Render.OpenGL.FrameGraph.BuildingPhase,
+    Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 
 namespace Axrone.Render.OpenGL.Benchmarks;
 
@@ -15,7 +18,11 @@ public class FrameGraphBenchmarks
 {
     private MockGLApi _mock = null!;
     private GLContext _context = null!;
-    private FrameGraph.FrameGraph _graph = null!;
+
+    // Typestate handle in the building phase. The benchmark owns the graph, so it
+    // disposes the building handle; a compiled handle obtained from it is a view over
+    // the same storage and does not own the lifetime.
+    private Graph _graph;
 
     [GlobalSetup]
     public void Setup()
@@ -28,8 +35,8 @@ public class FrameGraphBenchmarks
     [IterationCleanup]
     public void Cleanup()
     {
-        _graph?.Dispose();
-        _graph = null!;
+        _graph.Dispose();
+        _graph = default;
     }
 
     [GlobalCleanup]
@@ -42,7 +49,7 @@ public class FrameGraphBenchmarks
     [Benchmark]
     public void Compile_EmptyGraph()
     {
-        _graph = new FrameGraph.FrameGraph(_context);
+        _graph = new Graph(_context);
         _graph.Compile();
     }
 
@@ -53,7 +60,7 @@ public class FrameGraphBenchmarks
     [Benchmark]
     public void Compile_10Passes()
     {
-        _graph = new FrameGraph.FrameGraph(_context);
+        _graph = new Graph(_context);
 
         for (int i = 0; i < 10; i++)
         {
@@ -70,14 +77,14 @@ public class FrameGraphBenchmarks
     [Benchmark]
     public void Execute_10Passes()
     {
-        _graph = new FrameGraph.FrameGraph(_context);
+        _graph = new Graph(_context);
 
         for (int i = 0; i < 10; i++)
         {
             _graph.AddPass(NoOpPass($"Pass_{i}", FramePassKind.Opaque));
         }
 
-        _graph.Execute();
+        _graph.Compile().Execute();
     }
 
     /// <summary>
@@ -87,14 +94,14 @@ public class FrameGraphBenchmarks
     [Benchmark]
     public void Execute_50Passes()
     {
-        _graph = new FrameGraph.FrameGraph(_context);
+        _graph = new Graph(_context);
 
         for (int i = 0; i < 50; i++)
         {
             _graph.AddPass(NoOpPass($"Pass_{i}", FramePassKind.Opaque));
         }
 
-        _graph.Execute();
+        _graph.Compile().Execute();
     }
 
     /// <summary>
