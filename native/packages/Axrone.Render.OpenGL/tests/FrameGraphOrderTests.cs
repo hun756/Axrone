@@ -6,6 +6,11 @@ using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
 using Axrone.Render.OpenGL.FrameGraph.Passes;
 
+// Alias to avoid ambiguity between namespace and the typestate FrameGraph
+// handle: FG is the building handle, and Compile() hands out the compiled
+// handle that carries Execute().
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
+
 public class FrameGraphOrderTests
 {
     /// <summary>
@@ -32,7 +37,7 @@ public class FrameGraphOrderTests
     public void Compile_OrdersWritersBeforeReaders()
     {
         using var context = CreateContext();
-        var graph = new FrameGraph(context);
+        var graph = new FG(context);
         var log = new List<string>();
 
         // Inserted backwards: reader first, writer last. The reader also consumes
@@ -41,8 +46,7 @@ public class FrameGraphOrderTests
         graph.AddPass(CreateRecordingPass("middle", log, s_colorRead, s_shadedWrite));
         graph.AddPass(CreateRecordingPass("write", log, s_empty, s_colorRead));
 
-        graph.Compile();
-        graph.Execute();
+        graph.Compile().Execute();
 
         log.Should().Equal("write", "middle", "read");
     }
@@ -51,7 +55,7 @@ public class FrameGraphOrderTests
     public void Compile_ThrowsOnCycles()
     {
         using var context = CreateContext();
-        var graph = new FrameGraph(context);
+        var graph = new FG(context);
         var log = new List<string>();
 
         graph.AddPass(CreateRecordingPass("a", log, s_yRead, s_xWrite));
