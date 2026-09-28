@@ -1,12 +1,12 @@
 namespace Axrone.Render.OpenGL.Tests;
 
 using Axrone.Render.OpenGL.Context;
+using Axrone.Render.OpenGL.FrameGraph;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 // Aliases to avoid ambiguity between namespace and class name.
 using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
 using FGP = global::Axrone.Render.OpenGL.FrameGraph.FramePassKind;
-using FGPass = global::Axrone.Render.OpenGL.FrameGraph.RenderPass;
-using FGCtx = global::Axrone.Render.OpenGL.FrameGraph.PassExecutionContext;
 
 /// <summary>
 /// Integration tests for FrameGraph end-to-end workflows including simple and complex
@@ -14,6 +14,24 @@ using FGCtx = global::Axrone.Render.OpenGL.FrameGraph.PassExecutionContext;
 /// </summary>
 public sealed class FrameGraphPipelineTests : IDisposable
 {
+    private static readonly string[] s_depth = new string[] { "depth" };
+    private static readonly string[] s_sceneColor = new string[] { "sceneColor" };
+    private static readonly string[] s_sceneColorDepth = new string[] { "sceneColor", "sceneDepth" };
+    private static readonly string[] s_sceneColorBloom = new string[] { "sceneColor", "bloomResult" };
+    private static readonly string[] s_bloomResult = new string[] { "bloomResult" };
+    private static readonly string[] s_tonemapped = new string[] { "tonemapped" };
+    private static readonly string[] s_finalImage = new string[] { "finalImage" };
+    private static readonly string[] s_shadowMap = new string[] { "shadowMap" };
+    private static readonly string[] s_sharedTexture = new string[] { "sharedTexture" };
+    private static readonly string[] s_data = new string[] { "data" };
+    private static readonly string[] s_processed = new string[] { "processed" };
+    private static readonly string[] s_resourceA = new string[] { "resourceA" };
+    private static readonly string[] s_resourceB = new string[] { "resourceB" };
+    private static readonly string[] s_resourceC = new string[] { "resourceC" };
+    private static readonly string[] s_x = new string[] { "x" };
+    private static readonly string[] s_y = new string[] { "y" };
+    private static readonly string[] s_z = new string[] { "z" };
+
     private readonly MockGLApi _mock;
     private readonly GLContext _context;
 
@@ -30,13 +48,10 @@ public sealed class FrameGraphPipelineTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<string>();
 
-        var clearPass = new TrackingPass("Clear", FGP.Clear, executionOrder);
-        var opaquePass = new TrackingPass("Opaque", FGP.Opaque, executionOrder);
-        var transparentPass = new TrackingPass("Transparent", FGP.Transparent, executionOrder);
-
         // Opaque writes "depth", Transparent reads "depth" => ordering constraint
-        opaquePass.AddWrite("depth");
-        transparentPass.AddRead("depth");
+        var clearPass = CreateTrackingPass("Clear", FGP.Clear, executionOrder);
+        var opaquePass = CreateTrackingPass("Opaque", FGP.Opaque, executionOrder, writes: s_depth);
+        var transparentPass = CreateTrackingPass("Transparent", FGP.Transparent, executionOrder, reads: s_depth);
 
         graph.AddPass(clearPass);
         graph.AddPass(opaquePass);
@@ -58,13 +73,6 @@ public sealed class FrameGraphPipelineTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<string>();
 
-        var scenePass = new TrackingPass("Scene", FGP.Opaque, executionOrder);
-        var bloomPass = new TrackingPass("Bloom", FGP.Bloom, executionOrder);
-        var toneMapPass = new TrackingPass("ToneMap", FGP.ToneMap, executionOrder);
-        var fxaaPass = new TrackingPass("FXAA", FGP.Fxaa, executionOrder);
-        var shadowPass = new TrackingPass("Shadow", FGP.Shadow, executionOrder);
-        var uiPass = new TrackingPass("UI", FGP.Transparent, executionOrder);
-
         // Dependency chain:
         // Scene writes "sceneColor", "sceneDepth"
         // Bloom reads "sceneColor", writes "bloomResult"
@@ -72,22 +80,12 @@ public sealed class FrameGraphPipelineTests : IDisposable
         // FXAA reads "tonemapped", writes "finalImage"
         // Shadow writes "shadowMap" (independent)
         // UI reads "finalImage"
-        scenePass.AddWrite("sceneColor");
-        scenePass.AddWrite("sceneDepth");
-
-        bloomPass.AddRead("sceneColor");
-        bloomPass.AddWrite("bloomResult");
-
-        toneMapPass.AddRead("sceneColor");
-        toneMapPass.AddRead("bloomResult");
-        toneMapPass.AddWrite("tonemapped");
-
-        fxaaPass.AddRead("tonemapped");
-        fxaaPass.AddWrite("finalImage");
-
-        shadowPass.AddWrite("shadowMap");
-
-        uiPass.AddRead("finalImage");
+        var scenePass = CreateTrackingPass("Scene", FGP.Opaque, executionOrder, writes: s_sceneColorDepth);
+        var bloomPass = CreateTrackingPass("Bloom", FGP.Bloom, executionOrder, reads: s_sceneColor, writes: s_bloomResult);
+        var toneMapPass = CreateTrackingPass("ToneMap", FGP.ToneMap, executionOrder, reads: s_sceneColorBloom, writes: s_tonemapped);
+        var fxaaPass = CreateTrackingPass("FXAA", FGP.Fxaa, executionOrder, reads: s_tonemapped, writes: s_finalImage);
+        var shadowPass = CreateTrackingPass("Shadow", FGP.Shadow, executionOrder, writes: s_shadowMap);
+        var uiPass = CreateTrackingPass("UI", FGP.Transparent, executionOrder, reads: s_finalImage);
 
         graph.AddPass(scenePass);
         graph.AddPass(bloomPass);
@@ -120,11 +118,8 @@ public sealed class FrameGraphPipelineTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<string>();
 
-        var writerPass = new TrackingPass("Writer", FGP.Custom, executionOrder);
-        var readerPass = new TrackingPass("Reader", FGP.Custom, executionOrder);
-
-        writerPass.AddWrite("sharedTexture");
-        readerPass.AddRead("sharedTexture");
+        var writerPass = CreateTrackingPass("Writer", FGP.Custom, executionOrder, writes: s_sharedTexture);
+        var readerPass = CreateTrackingPass("Reader", FGP.Custom, executionOrder, reads: s_sharedTexture);
 
         // Add them in reverse order to verify the graph sorts them correctly
         graph.AddPass(readerPass);
@@ -145,22 +140,13 @@ public sealed class FrameGraphPipelineTests : IDisposable
         // Arrange: create circular dependency A -> B -> C -> A
         using var graph = new FG(_context);
 
-        var passA = new DepPass("A");
-        var passB = new DepPass("B");
-        var passC = new DepPass("C");
-
         // A writes "x", reads "z"
         // B writes "y", reads "x"
         // C writes "z", reads "y"
         // This creates: A -> B -> C -> A (cycle)
-        passA.AddWrite("x");
-        passA.AddRead("z");
-
-        passB.AddWrite("y");
-        passB.AddRead("x");
-
-        passC.AddWrite("z");
-        passC.AddRead("y");
+        var passA = CreateTrackingPass("A", FGP.Custom, reads: s_z, writes: s_x);
+        var passB = CreateTrackingPass("B", FGP.Custom, reads: s_x, writes: s_y);
+        var passC = CreateTrackingPass("C", FGP.Custom, reads: s_y, writes: s_z);
 
         graph.AddPass(passA);
         graph.AddPass(passB);
@@ -181,8 +167,7 @@ public sealed class FrameGraphPipelineTests : IDisposable
         var firstPassExecution = new List<string>();
         var secondPassExecution = new List<string>();
 
-        var pass1 = new TrackingPass("Pass1", FGP.Custom, firstPassExecution);
-        graph.AddPass(pass1);
+        graph.AddPass(CreateTrackingPass("Pass1", FGP.Custom, firstPassExecution));
 
         // Act: execute first graph
         graph.Execute();
@@ -193,10 +178,8 @@ public sealed class FrameGraphPipelineTests : IDisposable
         graph.PassCount.Should().Be(0);
 
         // Create new passes for second execution
-        var pass2 = new TrackingPass("Pass2", FGP.Custom, secondPassExecution);
-        var pass3 = new TrackingPass("Pass3", FGP.Custom, secondPassExecution);
-        pass2.AddWrite("data");
-        pass3.AddRead("data");
+        var pass2 = CreateTrackingPass("Pass2", FGP.Custom, secondPassExecution, writes: s_data);
+        var pass3 = CreateTrackingPass("Pass3", FGP.Custom, secondPassExecution, reads: s_data);
 
         graph.AddPass(pass2);
         graph.AddPass(pass3);
@@ -219,14 +202,10 @@ public sealed class FrameGraphPipelineTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<string>();
 
-        var passA = new TrackingPass("A", FGP.Custom, executionOrder);
-        var passB = new TrackingPass("B", FGP.Custom, executionOrder);
-        var passC = new TrackingPass("C", FGP.Custom, executionOrder);
-
         // Each writes a unique resource, no reads
-        passA.AddWrite("resourceA");
-        passB.AddWrite("resourceB");
-        passC.AddWrite("resourceC");
+        var passA = CreateTrackingPass("A", FGP.Custom, executionOrder, writes: s_resourceA);
+        var passB = CreateTrackingPass("B", FGP.Custom, executionOrder, writes: s_resourceB);
+        var passC = CreateTrackingPass("C", FGP.Custom, executionOrder, writes: s_resourceC);
 
         graph.AddPass(passA);
         graph.AddPass(passB);
@@ -249,14 +228,9 @@ public sealed class FrameGraphPipelineTests : IDisposable
         using var graph = new FG(_context);
         var executionOrder = new List<string>();
 
-        var pass1 = new TrackingPass("Pass1", FGP.Custom, executionOrder);
-        var pass2 = new TrackingPass("Pass2", FGP.Custom, executionOrder);
-        var pass3 = new TrackingPass("Pass3", FGP.Custom, executionOrder);
-
-        pass1.AddWrite("data");
-        pass2.AddRead("data");
-        pass2.AddWrite("processed");
-        pass3.AddRead("processed");
+        var pass1 = CreateTrackingPass("Pass1", FGP.Custom, executionOrder, writes: s_data);
+        var pass2 = CreateTrackingPass("Pass2", FGP.Custom, executionOrder, reads: s_data, writes: s_processed);
+        var pass3 = CreateTrackingPass("Pass3", FGP.Custom, executionOrder, reads: s_processed);
 
         pass2.IsEnabled = false;
 
@@ -284,41 +258,21 @@ public sealed class FrameGraphPipelineTests : IDisposable
     // ========================================================================
 
     /// <summary>
-    /// Test pass that records its execution in a shared list.
+    /// Creates a test pass that records its execution in a shared list and
+    /// declares the given resource dependencies at construction.
     /// </summary>
-    private sealed class TrackingPass : FGPass
+    /// <param name="name">The pass name, also used as the log entry.</param>
+    /// <param name="kind">The pass kind classification.</param>
+    /// <param name="executionLog">The shared execution log, or null to record nothing.</param>
+    /// <param name="reads">The declared input resource names.</param>
+    /// <param name="writes">The declared output resource names.</param>
+    private static RenderPass<CustomPassData> CreateTrackingPass(
+        string name,
+        FGP kind,
+        List<string>? executionLog = null,
+        string[]? reads = null,
+        string[]? writes = null)
     {
-        private readonly List<string> _executionLog;
-
-        public TrackingPass(string name, FGP kind, List<string> executionLog)
-            : base(name, kind)
-        {
-            _executionLog = executionLog;
-        }
-
-        public void AddRead(string resource) => Reads(resource);
-        public void AddWrite(string resource) => Writes(resource);
-
-        public override void Execute(GLContext context, FGCtx ctx)
-        {
-            _executionLog.Add(Name);
-        }
-    }
-
-    /// <summary>
-    /// Test pass with configurable dependencies for cycle detection tests.
-    /// </summary>
-    private sealed class DepPass : FGPass
-    {
-        public DepPass(string name) : base(name, FGP.Custom)
-        {
-        }
-
-        public void AddRead(string resource) => Reads(resource);
-        public void AddWrite(string resource) => Writes(resource);
-
-        public override void Execute(GLContext context, FGCtx ctx)
-        {
-        }
+        return CustomPass.Create(name, kind, (gl, ctx) => executionLog?.Add(name), reads: reads, writes: writes);
     }
 }
