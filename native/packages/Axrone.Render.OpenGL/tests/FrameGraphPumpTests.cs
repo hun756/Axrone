@@ -20,6 +20,8 @@ using RenderPump = Axrone.Execution.CommandPump<
 
 namespace Axrone.Render.OpenGL.Tests;
 
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
+
 /// <summary>
 /// Tests for the FrameGraph command-pump wiring: pump-capable passes
 /// (<see cref="IPumpEnqueue"/>) enqueue library commands into the graph-owned
@@ -137,11 +139,40 @@ public sealed class FrameGraphPumpTests : IDisposable
 
     /// <summary>
     /// Payload of the pump-capable test pass: the two captured framebuffers.
+    /// The static phase bodies read the payload fields, so the enqueue leg resolves
+    /// the same handles the setup phase would have.
     /// </summary>
     private struct PumpTestPassData
+        : IPassSetup<PumpTestPassData>, IPassValidate<PumpTestPassData>, IPassExecute<PumpTestPassData>, IPassEnqueue<PumpTestPassData>
     {
         public GLFramebuffer Source;
         public GLFramebuffer Destination;
+
+        public static void Declare(IRenderPassBuilder builder, ref PumpTestPassData data)
+        {
+        }
+
+        public static void Validate(in PumpTestPassData data)
+        {
+        }
+
+        public static void Execute(in PumpTestPassData data, IRenderContext context, PassExecutionContext ctx)
+        {
+            // Pump-capable pass: the direct leg has nothing to do.
+        }
+
+        public static EnqueueResult EnqueueCommands(in PumpTestPassData data, RenderPump pump, PassExecutionContext ctx)
+        {
+            DescriptorHandle<GLResourceNode> sourceHandle = data.Source.RegistryHandle;
+            DescriptorHandle<GLResourceNode> destinationHandle = data.Destination.RegistryHandle;
+
+            RenderCommand command = RenderCommand.CreateBlit(
+                in sourceHandle, in destinationHandle,
+                0, 0, data.Source.Width, data.Source.Height,
+                0, 0, data.Destination.Width, data.Destination.Height,
+                GLConst.ColorBufferBit, GLConst.NearestFilter);
+            return pump.TryEnqueue(in command);
+        }
     }
 
     /// <summary>
@@ -158,26 +189,10 @@ public sealed class FrameGraphPumpTests : IDisposable
         return new PumpRenderPass<PumpTestPassData>(
             name,
             FramePassKind.Blit,
-            (IRenderPassBuilder builder, ref PumpTestPassData data) =>
+            new PumpTestPassData
             {
-                data.Source = source;
-                data.Destination = destination;
-            },
-            (in PumpTestPassData data, IRenderContext context, PassExecutionContext ctx) =>
-            {
-                // Pump-capable pass: the direct leg has nothing to do.
-            },
-            (in PumpTestPassData data, RenderPump pump, PassExecutionContext ctx) =>
-            {
-                DescriptorHandle<GLResourceNode> sourceHandle = data.Source.RegistryHandle;
-                DescriptorHandle<GLResourceNode> destinationHandle = data.Destination.RegistryHandle;
-
-                RenderCommand command = RenderCommand.CreateBlit(
-                    in sourceHandle, in destinationHandle,
-                    0, 0, data.Source.Width, data.Source.Height,
-                    0, 0, data.Destination.Width, data.Destination.Height,
-                    GLConst.ColorBufferBit, GLConst.NearestFilter);
-                return pump.TryEnqueue(in command);
+                Source = source,
+                Destination = destination
             });
     }
 
