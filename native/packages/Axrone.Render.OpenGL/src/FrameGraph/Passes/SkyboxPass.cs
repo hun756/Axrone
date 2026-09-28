@@ -1,10 +1,13 @@
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
+
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the cubemap skybox pass.
+/// Payload for the cubemap skybox pass, owning the pass's setup, validate and execute phases.
 /// The cubemap is a direct GPU handle (not a graph resource).
 /// </summary>
 public record struct SkyboxPassData
+    : IPassSetup<SkyboxPassData>, IPassValidate<SkyboxPassData>, IPassExecute<SkyboxPassData>
 {
     /// <summary>Skybox shader program.</summary>
     public GLProgram SkyboxProgram { get; set; }
@@ -23,58 +26,18 @@ public record struct SkyboxPassData
 
     /// <summary>Output framebuffer name, or null to keep the current binding.</summary>
     public string? OutputFramebufferName { get; set; }
-}
 
-/// <summary>
-/// Factory for the cubemap skybox background pass (far-plane fullscreen triangle).
-/// </summary>
-public static class SkyboxPass
-{
-    /// <summary>Creates a skybox pass.</summary>
-    public static RenderPass<SkyboxPassData> Create(
-        string name,
-        GLProgram skyboxProgram,
-        GLTexture cubemap,
-        string viewProjectionUniform,
-        string cubemapUniform = "u_skybox",
-        string? outputFramebufferName = null)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref SkyboxPassData data)
     {
-        ArgumentNullException.ThrowIfNull(skyboxProgram);
-        ArgumentNullException.ThrowIfNull(cubemap);
-        ArgumentNullException.ThrowIfNull(viewProjectionUniform);
-        ArgumentNullException.ThrowIfNull(cubemapUniform);
-
-        if (string.IsNullOrWhiteSpace(viewProjectionUniform))
+        if (data.OutputFramebufferName is not null)
         {
-            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "View-projection uniform name must not be empty", nameof(SkyboxPass));
+            builder.Writes(data.OutputFramebufferName);
         }
-
-        if (string.IsNullOrWhiteSpace(cubemapUniform))
-        {
-            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "Cubemap uniform name must not be empty", nameof(SkyboxPass));
-        }
-
-        return new RenderPass<SkyboxPassData>(
-            name,
-            FramePassKind.Skybox,
-            (IRenderPassBuilder builder, ref SkyboxPassData data) =>
-            {
-                data.SkyboxProgram = skyboxProgram;
-                data.Cubemap = cubemap;
-                data.ViewProjectionUniform = viewProjectionUniform;
-                data.CubemapUniform = cubemapUniform;
-                data.ViewProjection = Matrix4x4.Identity;
-                data.OutputFramebufferName = outputFramebufferName;
-                if (outputFramebufferName is not null)
-                {
-                    builder.Writes(outputFramebufferName);
-                }
-            },
-            Execute,
-            Validate);
     }
 
-    private static void Validate(in SkyboxPassData data)
+    /// <inheritdoc/>
+    public static void Validate(in SkyboxPassData data)
     {
         if (data.SkyboxProgram.IsDisposed)
         {
@@ -102,7 +65,8 @@ public static class SkyboxPass
         }
     }
 
-    private static void Execute(in SkyboxPassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in SkyboxPassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -147,5 +111,49 @@ public static class SkyboxPass
 
         state.BindVertexArray(0);
         gl.DrawArrays(GLConst.Triangles, 0, 3);
+    }
+}
+
+/// <summary>
+/// Factory for the cubemap skybox background pass (far-plane fullscreen triangle).
+/// </summary>
+public static class SkyboxPass
+{
+    /// <summary>Creates a skybox pass.</summary>
+    public static RenderPass<SkyboxPassData> Create(
+        string name,
+        GLProgram skyboxProgram,
+        GLTexture cubemap,
+        string viewProjectionUniform,
+        string cubemapUniform = "u_skybox",
+        string? outputFramebufferName = null)
+    {
+        ArgumentNullException.ThrowIfNull(skyboxProgram);
+        ArgumentNullException.ThrowIfNull(cubemap);
+        ArgumentNullException.ThrowIfNull(viewProjectionUniform);
+        ArgumentNullException.ThrowIfNull(cubemapUniform);
+
+        if (string.IsNullOrWhiteSpace(viewProjectionUniform))
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "View-projection uniform name must not be empty", nameof(SkyboxPass));
+        }
+
+        if (string.IsNullOrWhiteSpace(cubemapUniform))
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "Cubemap uniform name must not be empty", nameof(SkyboxPass));
+        }
+
+        return new RenderPass<SkyboxPassData>(
+            name,
+            FramePassKind.Skybox,
+            new SkyboxPassData
+            {
+                SkyboxProgram = skyboxProgram,
+                Cubemap = cubemap,
+                ViewProjectionUniform = viewProjectionUniform,
+                CubemapUniform = cubemapUniform,
+                ViewProjection = Matrix4x4.Identity,
+                OutputFramebufferName = outputFramebufferName
+            });
     }
 }
