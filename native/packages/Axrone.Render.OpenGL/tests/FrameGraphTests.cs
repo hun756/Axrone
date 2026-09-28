@@ -1,11 +1,14 @@
 using Axrone.Render.OpenGL.Context;
+using Axrone.Render.OpenGL.FrameGraph;
 using Axrone.Render.OpenGL.FrameGraph.Passes;
 
 namespace Axrone.Render.OpenGL.Tests;
 
 // Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
-// and class FrameGraph within that namespace.
-using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
+// and the typestate FrameGraph handle within that namespace: FG is the building
+// handle (AddPass/Reset/Compile), and Compile() hands out the compiled handle
+// that carries Execute().
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 using FGP = global::Axrone.Render.OpenGL.FrameGraph.FramePassKind;
 
 /// <summary>
@@ -32,7 +35,7 @@ public sealed class FrameGraphTests : IDisposable
     {
         using var graph = new FG(_context);
 
-        var action = () => graph.Execute();
+        var action = () => graph.Compile().Execute();
 
         action.Should().NotThrow();
     }
@@ -44,7 +47,7 @@ public sealed class FrameGraphTests : IDisposable
         int executionCount = 0;
         graph.AddPass(CustomPass.Create("pass1", FGP.Custom, (gl, ctx) => executionCount++));
 
-        graph.Execute();
+        graph.Compile().Execute();
 
         executionCount.Should().Be(1);
     }
@@ -60,7 +63,7 @@ public sealed class FrameGraphTests : IDisposable
         graph.AddPass(CustomPass.Create("pass1", FGP.Custom, (gl, ctx) => executionOrder.Add(1), writes: s_scene));
         graph.AddPass(CustomPass.Create("pass2", FGP.Custom, (gl, ctx) => executionOrder.Add(2), reads: s_scene));
 
-        graph.Execute();
+        graph.Compile().Execute();
 
         executionOrder.Should().HaveCount(3);
         // pass1 must come before pass2
@@ -118,7 +121,7 @@ public sealed class FrameGraphTests : IDisposable
         graph.AddPass(enabledPass);
         graph.AddPass(disabledPass);
 
-        graph.Execute();
+        graph.Compile().Execute();
 
         enabledCount.Should().Be(1);
         disabledCount.Should().Be(0);
