@@ -1,14 +1,16 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
 /// <summary>
-/// Payload for the opaque geometry pass.
+/// Payload for the opaque geometry pass, owning the pass's setup, validate and execute phases.
 /// Meshes are direct GPU handles (not graph resources): mutating <see cref="Meshes"/>
 /// after creation is safe and never affects the dependency DAG.
 /// </summary>
 public record struct OpaquePassData
+    : IPassSetup<OpaquePassData>, IPassValidate<OpaquePassData>, IPassExecute<OpaquePassData>
 {
     /// <summary>Shader program.</summary>
     public GLProgram Program { get; set; }
@@ -18,38 +20,18 @@ public record struct OpaquePassData
 
     /// <summary>Meshes rendered in this pass.</summary>
     public List<GLMesh> Meshes { get; set; }
-}
 
-/// <summary>
-/// Factory for the opaque geometry pass (depth-tested, front-to-back early-Z).
-/// </summary>
-public static class OpaquePass
-{
-    /// <summary>Creates an opaque geometry pass.</summary>
-    public static RenderPass<OpaquePassData> Create(
-        string name,
-        GLProgram program,
-        string? targetFramebufferName = null)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref OpaquePassData data)
     {
-        ArgumentNullException.ThrowIfNull(program);
-        return new RenderPass<OpaquePassData>(
-            name,
-            FramePassKind.Opaque,
-            (IRenderPassBuilder builder, ref OpaquePassData data) =>
-            {
-                data.Program = program;
-                data.TargetFramebufferName = targetFramebufferName;
-                data.Meshes = new List<GLMesh>();
-                if (targetFramebufferName is not null)
-                {
-                    builder.Writes(targetFramebufferName);
-                }
-            },
-            Execute,
-            Validate);
+        if (data.TargetFramebufferName is not null)
+        {
+            builder.Writes(data.TargetFramebufferName);
+        }
     }
 
-    private static void Validate(in OpaquePassData data)
+    /// <inheritdoc/>
+    public static void Validate(in OpaquePassData data)
     {
         if (data.Program.IsDisposed)
         {
@@ -57,7 +39,8 @@ public static class OpaquePass
         }
     }
 
-    private static void Execute(in OpaquePassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in OpaquePassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -93,5 +76,29 @@ public static class OpaquePass
             ref var mesh = ref meshSpan[i];
             mesh.Draw();
         }
+    }
+}
+
+/// <summary>
+/// Factory for the opaque geometry pass (depth-tested, front-to-back early-Z).
+/// </summary>
+public static class OpaquePass
+{
+    /// <summary>Creates an opaque geometry pass.</summary>
+    public static RenderPass<OpaquePassData> Create(
+        string name,
+        GLProgram program,
+        string? targetFramebufferName = null)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        return new RenderPass<OpaquePassData>(
+            name,
+            FramePassKind.Opaque,
+            new OpaquePassData
+            {
+                Program = program,
+                TargetFramebufferName = targetFramebufferName,
+                Meshes = new List<GLMesh>()
+            });
     }
 }
