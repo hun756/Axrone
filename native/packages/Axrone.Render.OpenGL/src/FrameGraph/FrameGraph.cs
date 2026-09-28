@@ -15,6 +15,7 @@ namespace Axrone.Render.OpenGL.FrameGraph;
 public sealed class FrameGraph : IDisposable
 {
     private readonly GLContext _context;
+    private readonly GLRenderContext _renderContext;
     private readonly List<RenderPass> _passes = new(32);
     private readonly Dictionary<string, FrameGraphResource> _transientResources = new(StringComparer.OrdinalIgnoreCase);
     private readonly PassExecutionContext _execContext;
@@ -63,7 +64,22 @@ public sealed class FrameGraph : IDisposable
         ArgumentNullException.ThrowIfNull(context);
         _context = context;
         _execContext = new PassExecutionContext(context);
+        _renderContext = new GLRenderContext(context, _execContext);
         _pump = new RenderPump(new ExecutorOptions { Capacity = pumpCapacity });
+    }
+
+    /// <summary>
+    /// Gets the graph-owned render context used to execute every pass.
+    /// </summary>
+    /// <remarks>
+    /// A single instance lives for the lifetime of the graph, so its GL state cache
+    /// (bound framebuffer, viewport, scissor) stays warm across passes and across
+    /// frames, and pass execution never allocates a context per call.
+    /// </remarks>
+    public GLRenderContext RenderContext
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _renderContext;
     }
 
     /// <summary>
@@ -79,6 +95,29 @@ public sealed class FrameGraph : IDisposable
         ArgumentNullException.ThrowIfNull(pass);
         _passes.Add(pass);
         _sortedPasses = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a strongly-typed generic render pass to the graph.
+    /// </summary>
+    /// <typeparam name="TPassData">The pass payload data type.</typeparam>
+    /// <param name="name">The pass name.</param>
+    /// <param name="kind">The pass kind classification.</param>
+    /// <param name="setup">The pass dependency and descriptor setup delegate.</param>
+    /// <param name="execute">The pass execution delegate.</param>
+    /// <returns>This frame graph for fluent chaining.</returns>
+    public FrameGraph AddPass<TPassData>(
+        string name,
+        FramePassKind kind,
+        RenderPassSetupDelegate<TPassData> setup,
+        RenderPassExecuteDelegate<TPassData> execute) where TPassData : struct
+    {
+        if (IsDisposed)
+            ThrowHelper.ThrowObjectDisposed(nameof(FrameGraph));
+
+        var pass = new GenericRenderPass<TPassData>(name, kind, setup, execute);
+        AddPass(pass);
         return this;
     }
 
@@ -299,8 +338,8 @@ public sealed class FrameGraph : IDisposable
     /// <item><description>a refused enqueue (ring full) drains the pump once and
     /// retries that enqueue exactly once;</description></item>
     /// <item><description>a pass still refused after the retry falls back to its
-    /// direct <see cref="RenderPass.Execute"/> in place, so it still runs exactly
-    /// once and its GL effects stay inside the global order;</description></item>
+    /// direct execution in place, so it still runs exactly once and its GL effects
+    /// stay inside the global order;</description></item>
     /// <item><description>a classic pass drains the pump first — pumped work
     /// enqueued by earlier passes must be applied before a direct pass reads its
     /// inputs — and then executes directly.</description></item>
@@ -326,6 +365,12 @@ public sealed class FrameGraph : IDisposable
     /// <para>No other behavior changes: disabled passes are skipped, and pumping an
     /// empty ring is a no-op, so empty graphs and graphs without pump-capable
     /// passes behave exactly as before.</para>
+    /// <para>Execution seam: every direct leg runs through
+    /// <see cref="IRenderPass.Execute(IRenderContext)"/> on the graph-owned
+    /// <see cref="RenderContext"/>. GL-specific passes are adapted into their
+    /// legacy GLContext bridge by the base class; <see cref="IRenderContext"/>-native
+    /// passes (for example <c>GenericRenderPass&lt;TPassData&gt;</c>) consume the
+    /// shared context directly, keeping its state cache warm for the whole walk.</para>
     /// </remarks>
     public void Execute()
     {
@@ -388,15 +433,16 @@ public sealed class FrameGraph : IDisposable
     }
 
     /// <summary>
-    /// Executes one pass on the direct path, wrapping any failure with the pass
-    /// identity. Shared by the classic leg and the refusal fallback.
+    /// Executes one pass on the direct path through the graph-owned render context,
+    /// wrapping any failure with the pass identity. Shared by the classic leg and
+    /// the refusal fallback.
     /// </summary>
     /// <param name="pass">The pass to execute.</param>
     private void ExecuteDirect(RenderPass pass)
     {
         try
         {
-            pass.Execute(_context, _execContext);
+            ((IRenderPass)pass).Execute(_renderContext);
         }
 #pragma warning disable CA1031 // Pass failures are wrapped with pass identity; the type is preserved
         catch (Exception ex)

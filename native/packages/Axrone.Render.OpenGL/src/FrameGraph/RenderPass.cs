@@ -56,7 +56,12 @@ public enum FramePassKind
 /// Each pass declares its resource reads/writes and implements execution logic.
 /// </summary>
 /// <remarks>
-/// <para>Subclasses must implement <see cref="Execute"/> and may override
+/// <para>Execution contract: the frame graph executes every pass through
+/// <see cref="IRenderPass.Execute(IRenderContext)"/> on its graph-owned
+/// <see cref="GLRenderContext"/>. GL-specific subclasses override the legacy bridge
+/// <see cref="Execute(Context.GLContext, PassExecutionContext)"/>, which the interface
+/// implementation adapts to; <see cref="IRenderContext"/>-native pass types implement
+/// the interface directly and leave the bridge unimplemented. Subclasses may override
 /// <see cref="Validate"/> to enforce pre-conditions. The constructor must call
 /// <see cref="Reads"/> and <see cref="Writes"/> to declare resource dependencies
 /// for the frame graph scheduler.</para>
@@ -68,7 +73,7 @@ public enum FramePassKind
 /// behavior. The scheduler does not consume the metadata yet, so declaring it has no
 /// effect on ordering or execution.</para>
 /// </remarks>
-public abstract class RenderPass
+public abstract class RenderPass : IRenderPass
 {
     private readonly List<string> _reads = new();
     private readonly List<string> _writes = new();
@@ -83,6 +88,9 @@ public abstract class RenderPass
 
     /// <summary>Gets or sets a value indicating whether this pass is enabled.</summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Gets the hardware-agnostic descriptor describing targets and attachments.</summary>
+    public RenderPassDescriptor Descriptor { get; protected set; }
 
     /// <summary>
     /// Gets how this pass's render target attachments must be loaded.
@@ -170,18 +178,59 @@ public abstract class RenderPass
     /// <param name="action">The declared store action.</param>
     protected void DeclaresStoreAction(AttachmentStoreAction action) => StoreAction = action;
 
+    internal void DeclareRead(string resourceName) => Reads(resourceName);
+    internal void DeclareWrite(string resourceName) => Writes(resourceName);
+    internal void DeclareLoadAction(AttachmentLoadAction action) => DeclaresLoadAction(action);
+    internal void DeclareStoreAction(AttachmentStoreAction action) => DeclaresStoreAction(action);
+
     /// <summary>
-    /// Executes the pass using the given GL context and resource context.
+    /// Legacy OpenGL execution bridge: issues this pass's work directly against a
+    /// <see cref="Context.GLContext"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>The frame graph no longer calls this method. It executes every pass
+    /// through <see cref="IRenderPass.Execute(IRenderContext)"/> on the graph-owned
+    /// <see cref="GLRenderContext"/>, and the interface implementation below adapts
+    /// that call back into this bridge for GL-specific subclasses.</para>
+    /// <para>Pass types that are <see cref="IRenderContext"/>-native (such as
+    /// <see cref="GenericRenderPass{TPassData}"/>) do not override this bridge; the
+    /// base implementation fails closed so a legacy call can never silently execute
+    /// a pass on a context whose state cache the pass does not share.</para>
+    /// </remarks>
     /// <param name="context">The GL context for issuing draw calls.</param>
     /// <param name="ctx">The pass execution context for resource resolution.</param>
-    public abstract void Execute(Context.GLContext context, PassExecutionContext ctx);
+    public virtual void Execute(Context.GLContext context, PassExecutionContext ctx)
+    {
+        ThrowHelper.Throw(
+            RenderErrorCode.InvalidOperation,
+            $"{GetType().Name} has no legacy GLContext execution bridge; execute it through IRenderContext.",
+            nameof(RenderPass));
+    }
+
+    /// <inheritdoc/>
+    void IRenderPass.Execute(IRenderContext context)
+    {
+        if (context is GLRenderContext glCtx)
+        {
+            if (glCtx.PassContext is null)
+            {
+                ThrowHelper.Throw(RenderErrorCode.InvalidOperation, "PassContext is not configured on the GLRenderContext.", nameof(RenderPass));
+            }
+
+            Execute(glCtx.GLContext, glCtx.PassContext);
+        }
+        else
+        {
+            ThrowHelper.Throw(RenderErrorCode.InvalidOperation, $"Execution of {GetType().Name} requires a GLRenderContext backend.", nameof(RenderPass));
+        }
+    }
 
     /// <summary>
     /// Validates the pass configuration. Called before execution to catch
     /// misconfigurations early. Override to add pass-specific validation.
     /// </summary>
     public virtual void Validate() { }
+
 
     /// <inheritdoc/>
     public override string ToString() => $"RenderPass: \"{Name}\" ({Kind}), Enabled={IsEnabled}";
