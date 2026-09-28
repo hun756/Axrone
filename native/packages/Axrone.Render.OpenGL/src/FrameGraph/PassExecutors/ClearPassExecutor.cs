@@ -1,9 +1,18 @@
+using Axrone.Execution;
+using Axrone.Utility.Backoff.SpinPolicies;
+using RenderPump = Axrone.Execution.CommandPump<
+    Axrone.Render.Core.RenderCommand,
+    Axrone.Render.OpenGL.FrameGraph.RenderPumpContext,
+    Axrone.Render.OpenGL.FrameGraph.RenderCommandProcessor,
+    Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
+    Axrone.Execution.NullExecutorTelemetry>;
+
 namespace Axrone.Render.OpenGL.FrameGraph.PassExecutors;
 
 /// <summary>
 /// Clears color, depth, and/or stencil buffers of a target framebuffer.
 /// </summary>
-public sealed class ClearPassExecutor : RenderPass
+public sealed class ClearPassExecutor : RenderPass, IPumpEnqueue
 {
     private readonly string? _targetFramebufferName;
     private readonly Vector4 _clearColor;
@@ -56,6 +65,50 @@ public sealed class ClearPassExecutor : RenderPass
         {
             ThrowHelper.Throw(RenderErrorCode.InvalidPassConfiguration, "ClearPassExecutor must clear at least one buffer", nameof(ClearPassExecutor));
         }
+    }
+
+    /// <summary>
+    /// Enqueues this pass's clear as a render command into a pump.
+    /// The pump-derived execution path: identical pixels, library-driven dispatch.
+    /// </summary>
+    /// <remarks>
+    /// Default-framebuffer clears stay on the direct path and report
+    /// <see cref="EnqueueStatus.Closed"/>: FBO 0 is never registered in the resource
+    /// registry, so no generational handle exists to carry it in the command, and a
+    /// fabricated one would fail closed at resolve time. The caller sees a closed
+    /// receipt and runs <see cref="Execute"/> instead.
+    /// </remarks>
+    /// <param name="pump">The pump receiving the command.</param>
+    /// <param name="ctx">The pass execution context for resource resolution.</param>
+    /// <returns>The enqueue receipt; closed when the target is the default framebuffer.</returns>
+    /// <inheritdoc cref="IPumpEnqueue.EnqueueCommands"/>
+    public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(pump);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        if (_targetFramebufferName == null || !ctx.HasResource(_targetFramebufferName))
+        {
+            return new EnqueueResult(-1, EnqueueStatus.Closed);
+        }
+
+        // Same mask build as Execute; the packet carries the buffer bits, so the
+        // processor pushes only the clear values the mask asks for.
+        uint mask = 0;
+        if (_clearColorEnabled) mask |= GLConst.ColorBufferBit;
+        if (_clearDepthEnabled) mask |= GLConst.DepthBufferBit;
+        if (_clearStencilEnabled) mask |= GLConst.StencilBufferBit;
+
+        // Copy the handle out before passing it by reference: CS8156 forbids
+        // `in fbo.RegistryHandle`, and the packet travels by handle, not by GL name.
+        DescriptorHandle<GLResourceNode> targetHandle = ctx.GetFramebuffer(_targetFramebufferName).RegistryHandle;
+
+        RenderCommand command = RenderCommand.CreateClear(
+            in targetHandle,
+            _clearColor.X, _clearColor.Y, _clearColor.Z, _clearColor.W,
+            (float)_clearDepth, _clearStencil, mask);
+
+        return pump.TryEnqueue(in command);
     }
 
     /// <inheritdoc/>
