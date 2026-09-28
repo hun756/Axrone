@@ -7,9 +7,12 @@ using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Utility.Descriptors;
 
-// Alias to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
-// and class FrameGraph within that namespace.
-using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph;
+// Aliases to avoid ambiguity between namespace Axrone.Render.OpenGL.FrameGraph
+// and the typestate FrameGraph handles within that namespace: FG is the building
+// handle (AddPass/Reset/Compile), FGC the compiled handle returned by Compile()
+// that carries Execute and the pump legs.
+using FG = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.BuildingPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
+using FGC = global::Axrone.Render.OpenGL.FrameGraph.FrameGraph<global::Axrone.Render.OpenGL.FrameGraph.CompiledPhase, global::Axrone.Render.OpenGL.FrameGraph.DefaultGraphPolicy>;
 
 using RenderPump = Axrone.Execution.CommandPump<
     Axrone.Render.Core.RenderCommand,
@@ -21,7 +24,7 @@ using RenderPump = Axrone.Execution.CommandPump<
 namespace Axrone.Render.OpenGL.Tests;
 
 /// <summary>
-/// Tests for the pump-driven <see cref="FG.Execute"/> walk: pump-capable passes
+/// Tests for the pump-driven compiled-handle <c>Execute</c> walk: pump-capable passes
 /// enqueue into the graph-owned pump, classic passes run direct, and the GLOBAL
 /// topological order is preserved across the interleaving.
 /// </summary>
@@ -69,7 +72,8 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(blitA);
 
         _mock.ClearCallLog();
-        graph.Execute();
+        FGC compiled = graph.Compile();
+        compiled.Execute();
 
         List<string> log = _mock.CallLog.ToList();
         int a = IndexOfBlit(log, 64);
@@ -88,7 +92,7 @@ public sealed class FrameGraphHybridTests : IDisposable
         blitA.DirectExecutionCount.Should().Be(0, "an accepted enqueue never takes the direct leg");
         blitB.DirectExecutionCount.Should().Be(0, "an accepted enqueue never takes the direct leg");
 
-        graph.PumpQueuedCommands().Should().Be(0u, "the final drain leaves nothing queued");
+        compiled.PumpQueuedCommands().Should().Be(0u, "the final drain leaves nothing queued");
     }
 
     [Fact]
@@ -114,7 +118,7 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(direct);
 
         _mock.ClearCallLog();
-        graph.Execute();
+        graph.Compile().Execute();
 
         blitsSeenByDirectPass.Should().Be(1, "drain-before-direct must apply the pumped blit first");
         _mock.CallLog.Should().Contain(DirectMarker);
@@ -144,7 +148,7 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(blit);
 
         _mock.ClearCallLog();
-        graph.Execute();
+        graph.Compile().Execute();
 
         blitsSeenByDirectPass.Should().Be(0);
         List<string> log = _mock.CallLog.ToList();
@@ -159,7 +163,10 @@ public sealed class FrameGraphHybridTests : IDisposable
         // Capacity 2 is the smallest legal ring (ExecutorOptions requires a power
         // of two >= 2), so pass A fills it completely and pass B's enqueue is
         // refused: the drain-retry leg is the only way B can still run pumped.
-        using var graph = new FG(_context, 2);
+        // The pump capacity is an engine detail, not a public constructor knob,
+        // so the ring is sized through the internal storage seam the test
+        // assembly is a friend of.
+        using var graph = new FG(new FrameGraphStorage(_context, 2));
         using var aSource = new GLFramebuffer(_context, 64, 64, "a-src");
         using var aDestination = new GLFramebuffer(_context, 64, 64, "a-dst");
         using var bSource = new GLFramebuffer(_context, 32, 32, "b-src");
@@ -174,7 +181,8 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(blitB);
 
         _mock.ClearCallLog();
-        graph.Execute();
+        FGC compiled = graph.Compile();
+        compiled.Execute();
 
         blitB.EnqueueAttempts.Should().Be(2, "the refused enqueue is retried once after the drain");
         blitA.DirectExecutionCount.Should().Be(0);
@@ -190,7 +198,7 @@ public sealed class FrameGraphHybridTests : IDisposable
             IndexOfBlit(log, 32),
             "the drain that frees the ring also lands pass A's work ahead of pass B");
 
-        graph.PumpQueuedCommands().Should().Be(0u);
+        compiled.PumpQueuedCommands().Should().Be(0u);
     }
 
     [Fact]
@@ -209,7 +217,8 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(refusing);
 
         _mock.ClearCallLog();
-        graph.Execute();
+        FGC compiled = graph.Compile();
+        compiled.Execute();
 
         refusing.EnqueueAttempts.Should().Be(2, "one attempt plus one drain-retry");
         refusing.DirectExecutionCount.Should().Be(1, "a still-refused pass runs exactly once, direct");
@@ -220,7 +229,7 @@ public sealed class FrameGraphHybridTests : IDisposable
             IndexOfBlit(log, 64),
             "the drain inside the refusal path lands the earlier pumped work first");
 
-        graph.PumpQueuedCommands().Should().Be(0u);
+        compiled.PumpQueuedCommands().Should().Be(0u);
     }
 
     [Fact]
@@ -231,12 +240,13 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(direct);
 
         _mock.ClearCallLog();
-        var action = () => graph.Execute();
+        FGC compiled = graph.Compile();
+        var action = () => compiled.Execute();
 
         action.Should().NotThrow();
         _mock.CallLog.Should().Contain(DirectMarker);
         _mock.CallLog.Should().NotContain(c => c.StartsWith("BlitFramebuffer(", StringComparison.Ordinal));
-        graph.PumpQueuedCommands().Should().Be(0u, "pumping an empty ring is a no-op");
+        compiled.PumpQueuedCommands().Should().Be(0u, "pumping an empty ring is a no-op");
     }
 
     [Fact]
@@ -251,7 +261,7 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(MarkerPass("direct"));
 
         _mock.ClearCallLog();
-        graph.Execute();
+        graph.Compile().Execute();
 
         blit.EnqueueAttempts.Should().Be(0);
         blit.DirectExecutionCount.Should().Be(0);
@@ -267,11 +277,14 @@ public sealed class FrameGraphHybridTests : IDisposable
             throw new InvalidOperationException("pass body blew up"));
         graph.AddPass(boom);
 
-        var action = () => graph.Execute();
+        var action = () => graph.Compile().Execute();
 
         action.Should().Throw<RenderException>()
             .Where(e => e.Code == RenderErrorCode.PassExecutionFailed)
-            .WithMessage($"*Pass '{nameof(boom)}' failed: pass body blew up*");
+            // The default policy identifies the failing pass by its PassId rather
+            // than its authored name: the failure hook is identity-by-id, and the
+            // graph assigned the only pass in this graph the first slot.
+            .WithMessage("*Pass PassId(0) failed: pass body blew up*");
     }
 
     [Fact]
@@ -289,7 +302,7 @@ public sealed class FrameGraphHybridTests : IDisposable
         graph.AddPass(blit);
         graph.AddPass(boom);
 
-        var action = () => graph.Execute();
+        var action = () => graph.Compile().Execute();
 
         action.Should().Throw<RenderException>()
             .Where(e => e.Code == RenderErrorCode.PassExecutionFailed);
