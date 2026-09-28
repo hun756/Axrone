@@ -1,7 +1,8 @@
 ﻿using Axrone.Execution;
+using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
+using Axrone.Render.OpenGL.FrameGraph.Passes;
 using Axrone.Render.OpenGL.Native;
 using Axrone.Render.OpenGL.Resources;
 using Axrone.Utility.Descriptors;
@@ -22,7 +23,7 @@ namespace Axrone.Render.OpenGL.Tests;
 /// <summary>
 /// Tests for the FrameGraph command-pump wiring: pump-capable passes
 /// (<see cref="IPumpEnqueue"/>) enqueue library commands into the graph-owned
-/// pump while classic passes keep their direct <see cref="RenderPass.Execute"/>
+/// pump while classic passes keep their direct <see cref="IRenderPass.Execute(IRenderContext)"/>
 /// path (hybrid graph).
 /// </summary>
 /// <remarks>
@@ -48,8 +49,7 @@ public sealed class FrameGraphPumpTests : IDisposable
         using var graph = new FG(_context);
         var source = new GLFramebuffer(_context, 64, 64, "src");
         var destination = new GLFramebuffer(_context, 64, 64, "dst");
-        var pass = new PumpTestPass("blit", source, destination);
-        graph.AddPass(pass);
+        graph.AddPass(CreatePumpTestPass("blit", source, destination));
 
         graph.EnqueuePumpPasses().Should().Be(1u);
 
@@ -65,14 +65,14 @@ public sealed class FrameGraphPumpTests : IDisposable
     public void EnqueuePumpPasses_WithOnlyNonPumpPasses_ReturnsZero_AndExecuteStillWorks()
     {
         using var graph = new FG(_context);
-        var pass = new NonPumpTestPass("classic");
-        graph.AddPass(pass);
+        int executionCount = 0;
+        graph.AddPass(CustomPass.Create("classic", FramePassKind.Custom, (gl, ctx) => executionCount++));
 
         graph.EnqueuePumpPasses().Should().Be(0u);
 
         graph.Execute();
 
-        pass.ExecutionCount.Should().Be(1);
+        executionCount.Should().Be(1);
     }
 
     [Fact]
@@ -81,7 +81,8 @@ public sealed class FrameGraphPumpTests : IDisposable
         using var graph = new FG(_context);
         var source = new GLFramebuffer(_context, 64, 64, "src");
         var destination = new GLFramebuffer(_context, 64, 64, "dst");
-        var pass = new PumpTestPass("blit", source, destination) { IsEnabled = false };
+        var pass = CreatePumpTestPass("blit", source, destination);
+        pass.IsEnabled = false;
         graph.AddPass(pass);
 
         graph.EnqueuePumpPasses().Should().Be(0u);
@@ -96,7 +97,7 @@ public sealed class FrameGraphPumpTests : IDisposable
         using var graph = new FG(_context);
         var source = new GLFramebuffer(_context, 64, 64, "src");
         var destination = new GLFramebuffer(_context, 64, 64, "dst");
-        graph.AddPass(new PumpTestPass("blit", source, destination));
+        graph.AddPass(CreatePumpTestPass("blit", source, destination));
 
         graph.EnqueuePumpPasses().Should().Be(1u);
 
@@ -135,57 +136,49 @@ public sealed class FrameGraphPumpTests : IDisposable
     // ========================================================================
 
     /// <summary>
-    /// Pump-capable test pass: enqueues a real blit command for two captured
-    /// framebuffers, mirroring <see cref="BlitPassExecutor"/> but resolving
-    /// resources from its own fields (the graph's internal execution context
-    /// is unreachable from tests).
+    /// Payload of the pump-capable test pass: the two captured framebuffers.
     /// </summary>
-    private sealed class PumpTestPass : RenderPass, IPumpEnqueue
+    private struct PumpTestPassData
     {
-        private readonly GLFramebuffer _source;
-        private readonly GLFramebuffer _destination;
-
-        public PumpTestPass(string name, GLFramebuffer source, GLFramebuffer destination)
-            : base(name, FramePassKind.Blit)
-        {
-            _source = source;
-            _destination = destination;
-        }
-
-        public EnqueueResult EnqueueCommands(RenderPump pump, PassExecutionContext ctx)
-        {
-            DescriptorHandle<GLResourceNode> sourceHandle = _source.RegistryHandle;
-            DescriptorHandle<GLResourceNode> destinationHandle = _destination.RegistryHandle;
-
-            RenderCommand command = RenderCommand.CreateBlit(
-                in sourceHandle, in destinationHandle,
-                0, 0, _source.Width, _source.Height,
-                0, 0, _destination.Width, _destination.Height,
-                GLConst.ColorBufferBit, GLConst.NearestFilter);
-            return pump.TryEnqueue(in command);
-        }
-
-        public override void Execute(GLContext context, PassExecutionContext ctx)
-        {
-        }
+        public GLFramebuffer Source;
+        public GLFramebuffer Destination;
     }
 
     /// <summary>
-    /// Classic non-pump pass: direct-execution only, counts executions.
+    /// Creates a pump-capable test pass: enqueues a real blit command for two
+    /// captured framebuffers, mirroring <see cref="BlitPass"/> but resolving
+    /// resources from its payload (the graph's internal execution context
+    /// is unreachable from tests).
     /// </summary>
-    private sealed class NonPumpTestPass : RenderPass
+    private static PumpRenderPass<PumpTestPassData> CreatePumpTestPass(
+        string name,
+        GLFramebuffer source,
+        GLFramebuffer destination)
     {
-        public int ExecutionCount { get; private set; }
+        return new PumpRenderPass<PumpTestPassData>(
+            name,
+            FramePassKind.Blit,
+            (IRenderPassBuilder builder, ref PumpTestPassData data) =>
+            {
+                data.Source = source;
+                data.Destination = destination;
+            },
+            (in PumpTestPassData data, IRenderContext context, PassExecutionContext ctx) =>
+            {
+                // Pump-capable pass: the direct leg has nothing to do.
+            },
+            (in PumpTestPassData data, RenderPump pump, PassExecutionContext ctx) =>
+            {
+                DescriptorHandle<GLResourceNode> sourceHandle = data.Source.RegistryHandle;
+                DescriptorHandle<GLResourceNode> destinationHandle = data.Destination.RegistryHandle;
 
-        public NonPumpTestPass(string name)
-            : base(name, FramePassKind.Custom)
-        {
-        }
-
-        public override void Execute(GLContext context, PassExecutionContext ctx)
-        {
-            ExecutionCount++;
-        }
+                RenderCommand command = RenderCommand.CreateBlit(
+                    in sourceHandle, in destinationHandle,
+                    0, 0, data.Source.Width, data.Source.Height,
+                    0, 0, data.Destination.Width, data.Destination.Height,
+                    GLConst.ColorBufferBit, GLConst.NearestFilter);
+                return pump.TryEnqueue(in command);
+            });
     }
 
     public void Dispose()
