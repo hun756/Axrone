@@ -1,5 +1,6 @@
 #pragma warning disable CA1002 // Payloads expose concrete collections for allocation-free access.
 #pragma warning disable CA2227 // The setup protocol assigns payload collections once at creation.
+#pragma warning disable CA1062 // Phase parameters are supplied by the frame graph, which null-checks before dispatch.
 
 namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 
@@ -30,11 +31,13 @@ public readonly record struct ComputeResourceBinding(
     ComputeBindingType Type);
 
 /// <summary>
-/// Payload for the GPU compute dispatch pass.
+/// Payload for the GPU compute dispatch pass, owning the pass's setup, validate and
+/// execute phases.
 /// Bindings are creation-time: they declare graph dependencies, so they cannot be
 /// added after creation without invalidating the compiled DAG.
 /// </summary>
 public record struct ComputePassData
+    : IPassSetup<ComputePassData>, IPassValidate<ComputePassData>, IPassExecute<ComputePassData>
 {
     /// <summary>Compute shader program.</summary>
     public GLProgram ComputeShader { get; set; }
@@ -50,46 +53,18 @@ public record struct ComputePassData
 
     /// <summary>Resource bindings resolved from the pass context at execution time.</summary>
     public List<ComputeResourceBinding> Bindings { get; set; }
-}
 
-/// <summary>
-/// Factory for the GPU compute shader dispatch pass.
-/// </summary>
-public static class ComputePass
-{
-    /// <summary>Creates a compute dispatch pass.</summary>
-    public static RenderPass<ComputePassData> Create(
-        string name,
-        GLProgram computeShader,
-        uint groupCountX = 1,
-        uint groupCountY = 1,
-        uint groupCountZ = 1,
-        IReadOnlyList<ComputeResourceBinding>? bindings = null)
+    /// <inheritdoc/>
+    public static void Declare(IRenderPassBuilder builder, ref ComputePassData data)
     {
-        ArgumentNullException.ThrowIfNull(computeShader);
-        List<ComputeResourceBinding> snapshot = bindings is null
-            ? new List<ComputeResourceBinding>()
-            : new List<ComputeResourceBinding>(bindings);
-        return new RenderPass<ComputePassData>(
-            name,
-            FramePassKind.Compute,
-            (IRenderPassBuilder builder, ref ComputePassData data) =>
-            {
-                data.ComputeShader = computeShader;
-                data.GroupCountX = groupCountX;
-                data.GroupCountY = groupCountY;
-                data.GroupCountZ = groupCountZ;
-                data.Bindings = snapshot;
-                for (int i = 0; i < snapshot.Count; i++)
-                {
-                    builder.Reads(snapshot[i].ResourceName);
-                }
-            },
-            Execute,
-            Validate);
+        for (int i = 0; i < data.Bindings.Count; i++)
+        {
+            builder.Reads(data.Bindings[i].ResourceName);
+        }
     }
 
-    private static void Validate(in ComputePassData data)
+    /// <inheritdoc/>
+    public static void Validate(in ComputePassData data)
     {
         if (data.GroupCountX < 1 || data.GroupCountY < 1 || data.GroupCountZ < 1)
         {
@@ -109,7 +84,8 @@ public static class ComputePass
         }
     }
 
-    private static void Execute(in ComputePassData data, IRenderContext context, PassExecutionContext ctx)
+    /// <inheritdoc/>
+    public static void Execute(in ComputePassData data, IRenderContext context, PassExecutionContext ctx)
     {
         var glContext = ctx.Context;
         glContext.AssertRenderThread();
@@ -147,5 +123,37 @@ public static class ComputePass
 
         gl.DispatchCompute(data.GroupCountX, data.GroupCountY, data.GroupCountZ);
         gl.MemoryBarrier(GLConst.AllShaderStorageBits);
+    }
+}
+
+/// <summary>
+/// Factory for the GPU compute shader dispatch pass.
+/// </summary>
+public static class ComputePass
+{
+    /// <summary>Creates a compute dispatch pass.</summary>
+    public static RenderPass<ComputePassData> Create(
+        string name,
+        GLProgram computeShader,
+        uint groupCountX = 1,
+        uint groupCountY = 1,
+        uint groupCountZ = 1,
+        IReadOnlyList<ComputeResourceBinding>? bindings = null)
+    {
+        ArgumentNullException.ThrowIfNull(computeShader);
+        List<ComputeResourceBinding> snapshot = bindings is null
+            ? new List<ComputeResourceBinding>()
+            : new List<ComputeResourceBinding>(bindings);
+        return new RenderPass<ComputePassData>(
+            name,
+            FramePassKind.Compute,
+            new ComputePassData
+            {
+                ComputeShader = computeShader,
+                GroupCountX = groupCountX,
+                GroupCountY = groupCountY,
+                GroupCountZ = groupCountZ,
+                Bindings = snapshot
+            });
     }
 }
