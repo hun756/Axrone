@@ -1,6 +1,4 @@
-using Axrone.Render.OpenGL.Shading;
-
-namespace Axrone.Render.OpenGL.Tests;
+namespace Axrone.Render.Effects.Tests;
 
 /// <summary>
 /// Tests for <see cref="BloomMath"/>: the CPU side of the Karis soft-knee bloom

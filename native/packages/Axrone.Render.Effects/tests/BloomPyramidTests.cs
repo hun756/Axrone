@@ -1,11 +1,4 @@
-using Axrone.Render.OpenGL.Context;
-using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
-using Axrone.Render.OpenGL.Native;
-using Axrone.Render.OpenGL.Resources;
-using Axrone.Render.OpenGL.Shading;
-
-namespace Axrone.Render.OpenGL.Tests;
+namespace Axrone.Render.Effects.Tests;
 
 /// <summary>
 /// Tests for the mip-pyramid half of <see cref="BloomPassExecutor"/>: stage order,

@@ -1,11 +1,4 @@
-namespace Axrone.Render.OpenGL.Tests;
-
-using Xunit;
-using FluentAssertions;
-using Axrone.Render.OpenGL.Context;
-using Axrone.Render.OpenGL.FrameGraph;
-using Axrone.Render.OpenGL.FrameGraph.PassExecutors;
-using Axrone.Render.OpenGL.Shading;
+namespace Axrone.Render.Effects.Tests;
 
 public class PostEffectExecutorTests
 {
@@ -90,6 +83,42 @@ public class PostEffectExecutorTests
             .Where(ex => ex.Code == RenderErrorCode.InvalidPassConfiguration);
 
         program.Dispose();
+    }
+
+    [Fact]
+    public void Vignette_ExecutesThroughGenericRenderContext()
+    {
+        using var context = CreateContext(out var mock);
+        var program = CreateProgram(context);
+        var pass = new VignettePassExecutor("vignette", program, "scene", "out");
+
+        var execCtx = new PassExecutionContext(context);
+        using var input = new GLTexture(context, GLConst.Texture2D, TextureFormat.Rgba16f, 64, 32, label: "scene");
+        using var output = new GLTexture(context, GLConst.Texture2D, TextureFormat.Rgba16f, 64, 32, label: "out");
+        execCtx.SetResource("scene", input);
+        execCtx.SetResource("out", output);
+
+        var renderContext = new GLRenderContext(context, execCtx);
+        mock.ClearCallLog();
+
+        ((IRenderPass)pass).Execute(renderContext);
+
+        mock.CallLog.Should().Contain(c => c.Contains("UseProgram", StringComparison.Ordinal));
+        mock.CallLog.Should().Contain(c => c.Contains("DrawArrays", StringComparison.Ordinal));
+        renderContext.IsPassActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Vignette_LegacyGlContextBridge_FailsClosed()
+    {
+        using var context = CreateContext(out _);
+        var program = CreateProgram(context);
+        var pass = new VignettePassExecutor("vignette", program, "scene", "out");
+
+        var action = () => pass.Execute(context, new PassExecutionContext(context));
+
+        action.Should().Throw<RenderException>()
+            .Where(ex => ex.Code == RenderErrorCode.InvalidOperation);
     }
 
     [Fact]
