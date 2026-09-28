@@ -115,6 +115,43 @@ public sealed class FrameGraphPumpTests : IDisposable
     }
 
     [Fact]
+    public void Execute_ThrowingPass_FaultsGraphPump_AndRefusesLaterEnqueues()
+    {
+        using var graph = new FG(_context);
+        var source = new GLFramebuffer(_context, 64, 64, "src");
+        var destination = new GLFramebuffer(_context, 64, 64, "dst");
+
+        // The throwing pass declares no dependencies and is added first, so the walk
+        // reaches it first. The blit pass is only the observable: with a healthy pump
+        // the same graph enqueues it (see EnqueuePumpPasses_WithPumpPass_...).
+        graph.AddPass(CustomPass.Create(
+            "throwing",
+            FramePassKind.Custom,
+            static (_, _) => throw new InvalidOperationException("walk fault")));
+        graph.AddPass(CreatePumpTestPass("blit", source, destination));
+
+        var action = () => graph.Execute();
+
+        // (a) The original failure surfaces: pass identity wrapped, original type,
+        //     message and stack preserved through the walk's fault isolation.
+        RenderException thrown = action.Should().Throw<RenderException>().Which;
+        thrown.Code.Should().Be(RenderErrorCode.PassExecutionFailed);
+        thrown.Message.Should().Contain("walk fault");
+        thrown.InnerException.Should().BeOfType<InvalidOperationException>()
+            .Which.Message.Should().Be("walk fault");
+        thrown.StackTrace.Should().Contain(nameof(Execute_ThrowingPass_FaultsGraphPump_AndRefusesLaterEnqueues));
+
+        // (b) Fail-closed: the graph-owned pump is Faulted, so it refuses every
+        //     later enqueue with EnqueueStatus.Closed instead of accepting work
+        //     whose GL state is unknown.
+        graph.Pump.State.Should().Be(PumpState.Faulted);
+        graph.EnqueuePumpPasses().Should().Be(0u);
+
+        source.Dispose();
+        destination.Dispose();
+    }
+
+    [Fact]
     public void PumpQueuedCommands_OnDisposedGraph_ThrowsObjectDisposed()
     {
         var graph = new FG(_context);
