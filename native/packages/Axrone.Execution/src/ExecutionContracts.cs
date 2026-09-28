@@ -179,6 +179,99 @@ public readonly struct NullExecutorTelemetry : IExecutorTelemetry, IEquatable<Nu
 }
 
 /// <summary>
+/// Threaded command executor: the same ring dialect, enqueue receipts and
+/// lifecycle words as <see cref="CommandPump{TCommand, TContext, TProcessor, TBackoff, TTelemetry}"/>,
+/// with the drain owned by a dedicated background thread instead of by the
+/// caller's thread. Producers see the identical vocabulary — <see cref="EnqueueResult"/>
+/// receipts, <see cref="EnqueueStatus.QueueFull"/> on a full ring,
+/// <see cref="EnqueueStatus.Closed"/> on any non-running lifecycle — so queue
+/// wrappers classify refusals without branching on the owning type.
+/// </summary>
+/// <remarks>
+/// An executor is the shape to reach for when the work is CPU-bound and
+/// schedulable off the caller's thread. It deliberately does NOT replace
+/// <see cref="CommandPump{TCommand, TContext, TProcessor, TBackoff, TTelemetry}"/>
+/// for anything that has to run on a specific thread: GL commands, swapchain
+/// presentation and every other context-affine operation stay on the pump,
+/// because the render thread that owns the context is the only thread allowed
+/// to submit them.
+/// </remarks>
+/// <typeparam name="TCommand">Command type. Unmanaged so the ring backs onto native memory.</typeparam>
+public interface ICommandExecutor<TCommand> : IDisposable, IAsyncDisposable
+    where TCommand : unmanaged
+{
+    /// <summary>
+    /// Attempts to enqueue one command. Lock-free; safe from any producer
+    /// thread. Refuses with <see cref="EnqueueStatus.Closed"/> while the
+    /// executor is draining, stopped, <b>faulted</b>, or disposed, and with
+    /// <see cref="EnqueueStatus.QueueFull"/> when the ring is saturated.
+    /// </summary>
+    /// <param name="item">The command to queue.</param>
+    /// <returns>The claim receipt (sequence) or the refusal reason.</returns>
+    EnqueueResult TryEnqueue(in TCommand item);
+
+    /// <summary>
+    /// Enqueues one command, spinning with the configured <c>TBackoff</c>
+    /// while the ring is full. Cancellation and executor closure abort the
+    /// wait; every retry round that loses the race for a slot reports
+    /// <see cref="IExecutorTelemetry.ContentionDetected"/> before backing off.
+    /// </summary>
+    /// <param name="item">The command to queue.</param>
+    /// <param name="cancellationToken">Aborts the wait.</param>
+    /// <returns>The claim receipt, or a closed refusal.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    EnqueueResult Enqueue(in TCommand item, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Enqueues a span of commands, stopping at the first refusal.
+    /// </summary>
+    /// <param name="items">Commands to queue.</param>
+    /// <returns>Commands accepted before the first refusal.</returns>
+    nuint TryEnqueueBatch(params ReadOnlySpan<TCommand> items);
+
+    /// <summary>
+    /// Refuses further enqueues; already queued work still drains. Pass a
+    /// <paramref name="fault"/> to retire the executor with a terminal
+    /// <see cref="PumpState.Faulted"/> instead of a graceful drain.
+    /// Idempotent, and inert once the lifecycle has left
+    /// <see cref="PumpState.Running"/>.
+    /// </summary>
+    /// <param name="fault">The fault to retire the executor with, or null to drain.</param>
+    void Complete(Exception? fault = null);
+
+    /// <summary>
+    /// Completes, then awaits the worker's terminal transition: the executor
+    /// reports <see cref="PumpState.Stopped"/> after the ring is empty, or the
+    /// captured processor fault propagates with its original stack intact.
+    /// </summary>
+    /// <param name="cancellationToken">Aborts the wait.</param>
+    /// <returns>A task that completes when the worker has stopped draining.</returns>
+    /// <exception cref="Exception">
+    /// Whatever the processor threw, or the fault handed to
+    /// <see cref="Complete"/>, rethrown through the captured
+    /// <see cref="System.Runtime.ExceptionServices.ExceptionDispatchInfo"/>.
+    /// </exception>
+    /// <remarks>
+    /// Never call this from the worker thread: the worker is the thing being
+    /// waited on. Use <see cref="IDisposable.Dispose"/> or
+    /// <see cref="IAsyncDisposable.DisposeAsync"/> from the worker thread.
+    /// </remarks>
+    ValueTask DrainAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Lifecycle state.</summary>
+    PumpState State { get; }
+
+    /// <summary>Ring slot capacity.</summary>
+    nuint Capacity { get; }
+
+    /// <summary>
+    /// Approximate queued depth (head minus consumer tail). Racy by design:
+    /// producers observe a stale tail. Exact only when producers are quiescent.
+    /// </summary>
+    nuint Count { get; }
+}
+
+/// <summary>
 /// Pump sizing. Capacity must be a power of two greater than or equal to 2.
 /// </summary>
 public sealed class ExecutorOptions
@@ -199,4 +292,18 @@ public sealed class ExecutorOptions
             _capacity = value;
         }
     }
+
+    /// <summary>
+    /// Logical processor the worker thread asks to be pinned to, or <c>-1</c>
+    /// for no request. Pinning is advisory: unsupported platforms, containers
+    /// with a restricted CPU set and rejected masks all leave the worker on the
+    /// runtime's own scheduling instead of failing the executor.
+    /// </summary>
+    public int ProcessorAffinity { get; init; } = -1;
+
+    /// <summary>Managed thread priority of the worker thread.</summary>
+    public ThreadPriority Priority { get; init; } = ThreadPriority.Highest;
+
+    /// <summary>Debug name of the worker thread. Must not be null.</summary>
+    public string ThreadName { get; init; } = "Axrone-ExecutorWorker";
 }
