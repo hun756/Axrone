@@ -16,7 +16,7 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new SsaoPassExecutor("ssao", program, "depth", "normal", "ao");
+        var pass = SsaoPass.Create("ssao", program, "depth", "normal", "ao");
 
         pass.Kind.Should().Be(FramePassKind.PostProcess);
         pass.GetReadResources().ToArray().Should().BeEquivalentTo("depth", "normal");
@@ -36,7 +36,7 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new DofPassExecutor("dof", program, "scene", "depth", "dof");
+        var pass = DofPass.Create("dof", program, "scene", "depth", "dof");
 
         pass.Kind.Should().Be(FramePassKind.PostProcess);
 
@@ -51,15 +51,14 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new FilmGrainPassExecutor("grain", program, "scene", "grained")
-            .WithIntensity(0.5f);
+        var pass = FilmGrainPass.Create("grain", program, "scene", "grained", intensity: 0.5f);
 
         pass.Kind.Should().Be(FramePassKind.PostProcess);
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
 
-        pass.WithIntensity(2.0f);
+        pass.Data.Intensity = 2.0f;
         Action invalid = () => pass.Validate();
         invalid.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.InvalidPassConfiguration);
@@ -72,12 +71,12 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new VignettePassExecutor("vignette", program, "scene", "out");
+        var pass = VignettePass.Create("vignette", program, "scene", "out");
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
 
-        pass.WithIntensity(1.5f);
+        pass.Data.Intensity = 1.5f;
         Action invalid = () => pass.Validate();
         invalid.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.InvalidPassConfiguration);
@@ -90,7 +89,7 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out var mock);
         var program = CreateProgram(context);
-        var pass = new VignettePassExecutor("vignette", program, "scene", "out");
+        var pass = VignettePass.Create("vignette", program, "scene", "out");
 
         var execCtx = new PassExecutionContext(context);
         using var input = new GLTexture(context, GLConst.Texture2D, TextureFormat.Rgba16f, 64, 32, label: "scene");
@@ -109,13 +108,17 @@ public class PostEffectExecutorTests
     }
 
     [Fact]
-    public void Vignette_LegacyGlContextBridge_FailsClosed()
+    public void Vignette_WithoutPassContext_FailsClosed()
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new VignettePassExecutor("vignette", program, "scene", "out");
+        var pass = VignettePass.Create("vignette", program, "scene", "out");
 
-        var action = () => pass.Execute(context, new PassExecutionContext(context));
+        // A GLRenderContext without a configured PassContext cannot resolve the pass
+        // resources, so the pass must refuse to run instead of silently no-op.
+        var renderContext = new GLRenderContext(context);
+
+        var action = () => ((IRenderPass)pass).Execute(renderContext);
 
         action.Should().Throw<RenderException>()
             .Where(ex => ex.Code == RenderErrorCode.InvalidOperation);
@@ -126,7 +129,7 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new ChromaticAberrationPassExecutor("ca", program, "scene", "out");
+        var pass = ChromaticAberrationPass.Create("ca", program, "scene", "out");
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
@@ -140,12 +143,19 @@ public class PostEffectExecutorTests
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
 
-        new SsaoPassExecutor("a", program, "d", "n", "o").Phase.Should().Be(PostProcessPhase.BeforeTonemap);
-        new DofPassExecutor("b", program, "i", "d", "o").Phase.Should().Be(PostProcessPhase.BeforeTonemap);
-        new FilmGrainPassExecutor("c", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
-        new VignettePassExecutor("d", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
-        new ChromaticAberrationPassExecutor("e", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
-        new ColorGradingPassExecutor("f", program, "i", "o").Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        var ssao = SsaoPass.Create("a", program, "d", "n", "o");
+        var dof = DofPass.Create("b", program, "i", "d", "o");
+        var grain = FilmGrainPass.Create("c", program, "i", "o");
+        var vignette = VignettePass.Create("d", program, "i", "o");
+        var aberration = ChromaticAberrationPass.Create("e", program, "i", "o");
+        var grading = ColorGradingPass.Create("f", program, "i", "o");
+
+        ssao.Data.Phase.Should().Be(PostProcessPhase.BeforeTonemap);
+        dof.Data.Phase.Should().Be(PostProcessPhase.BeforeTonemap);
+        grain.Data.Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        vignette.Data.Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        aberration.Data.Phase.Should().Be(PostProcessPhase.AfterTonemap);
+        grading.Data.Phase.Should().Be(PostProcessPhase.AfterTonemap);
 
         program.Dispose();
     }
@@ -155,11 +165,11 @@ public class PostEffectExecutorTests
     {
         using var context = CreateContext(out _);
         var program = CreateProgram(context);
-        var pass = new ColorGradingPassExecutor("grade", program, "scene", "out");
+        var pass = ColorGradingPass.Create("grade", program, "scene", "out");
 
-        pass.Contrast.Should().BeApproximately(1.0f, 1e-6f);
-        pass.Saturation.Should().BeApproximately(1.0f, 1e-6f);
-        pass.Brightness.Should().BeApproximately(1.0f, 1e-6f);
+        pass.Data.Contrast.Should().BeApproximately(1.0f, 1e-6f);
+        pass.Data.Saturation.Should().BeApproximately(1.0f, 1e-6f);
+        pass.Data.Brightness.Should().BeApproximately(1.0f, 1e-6f);
 
         Action validate = () => pass.Validate();
         validate.Should().NotThrow();
