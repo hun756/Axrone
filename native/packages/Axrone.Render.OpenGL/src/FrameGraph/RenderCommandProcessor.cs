@@ -73,11 +73,17 @@ public readonly struct RenderCommandProcessor : ICommandProcessor<RenderCommand,
             return; // Unreachable, satisfies compiler
         }
 
-        sourceFbo.BlitTo(
-            destinationFbo,
+        // Same command the direct pass execution replays, so the pump leg cannot
+        // drift from it: bind read, bind draw, one glBlitFramebuffer.
+        var blitCommand = new BlitFramebufferCommand<GLFramebufferInvoker>(
+            sourceFbo.Id, destinationFbo.Id,
             command.SourceX0, command.SourceY0, command.SourceX1, command.SourceY1,
             command.DestinationX0, command.DestinationY0, command.DestinationX1, command.DestinationY1,
             command.Mask, command.Filter);
+
+        var invoker = new GLFramebufferInvoker(context.Context);
+
+        BlitDispatcher.Dispatch(ref invoker, ref blitCommand);
     }
 
     /// <summary>
