@@ -431,6 +431,32 @@ public sealed class ShaderInstance
     }
 
     /// <summary>
+    /// Sets a vec2 uniform. Both components share one cache entry, so a re-upload is
+    /// skipped only when the pair is bit-identical to the last upload.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="x">The first component.</param>
+    /// <param name="y">The second component.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetVec2(int location, float x, float y)
+    {
+        if (location < 0)
+            return;
+
+        EnsureCacheFresh();
+
+        // FNV-1a over the bit patterns of both components.
+        uint hash = 2166136261u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(x)) * 16777619u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(y)) * 16777619u;
+
+        if (_cache.CheckAndSet(Program.Id, location, hash))
+        {
+            _context.GL.Uniform2(location, x, y);
+        }
+    }
+
+    /// <summary>
     /// Sets a mat4 uniform.
     /// </summary>
     /// <param name="location">The uniform location.</param>
