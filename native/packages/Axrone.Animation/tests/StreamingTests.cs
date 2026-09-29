@@ -39,13 +39,13 @@ public class StreamingTests
         decoded.Tracks.Count.Should().Be(1);
 
         Action corrupt = () => ChunkCodec.Decode("not json"u8);
-        corrupt.Should().Throw<SamplingException>()
+        corrupt.Should().Throw<StreamingException>()
             .Where(e => e.Code == AnimationErrorCode.StreamingChunkCorrupt);
 
         var badVersion = new ChunkPayloadDto { Version = 99, ClipId = "walk" };
         byte[] badJson = JsonSerializer.SerializeToUtf8Bytes(badVersion, ChunkJsonSerializerContext.Default.ChunkPayloadDto);
         Action version = () => ChunkCodec.Decode(badJson);
-        version.Should().Throw<SamplingException>()
+        version.Should().Throw<StreamingException>()
             .Where(e => e.Code == AnimationErrorCode.StreamingChunkIncompatible);
     }
 
@@ -94,10 +94,74 @@ public class StreamingTests
         scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, outRequests: again);
         again.Should().BeEmpty();
 
-        scheduler.MarkLoaded(outRequests[0].ChunkId);
+        scheduler.MarkLoaded(outRequests[0].Key);
         var third = new Collection<ChunkRequest>();
         scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, outRequests: third);
         third.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scheduler_FailedChunksWaitForReset()
+    {
+        var scheduler = new StreamingScheduler();
+        var first = new Collection<ChunkRequest>();
+        (ClipId Clip, float Time, float Weight)[] activities = [(new ClipId("walk"), 1.0f, 1.0f)];
+
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, first);
+        first.Should().HaveCount(1);
+
+        scheduler.MarkFailed(first[0].Key);
+        var second = new Collection<ChunkRequest>();
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, second);
+        second.Should().BeEmpty();
+
+        scheduler.Reset(first[0].Key);
+        var third = new Collection<ChunkRequest>();
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 0.0f, third);
+        third.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void ChunkKey_FormatsWithoutAllocating()
+    {
+        var key = new ChunkKey(new ClipId("walk"), 3);
+
+        Span<char> chars = stackalloc char[32];
+        key.TryFormat(chars, out int written).Should().BeTrue();
+        new string(chars[..written]).Should().Be("walk:v:3");
+        key.ToString().Should().Be("walk:v:3");
+
+        Span<byte> utf8 = stackalloc byte[32];
+        key.TryFormat(utf8, out int bytesWritten).Should().BeTrue();
+        System.Text.Encoding.UTF8.GetString(utf8[..bytesWritten]).Should().Be("walk:v:3");
+
+        Span<char> tiny = stackalloc char[2];
+        key.TryFormat(tiny, out _).Should().BeFalse();
+
+        var clip = new ClipId("run");
+        Span<char> clipChars = stackalloc char[8];
+        clip.TryFormat(clipChars, out int clipWritten).Should().BeTrue();
+        new string(clipChars[..clipWritten]).Should().Be("run");
+    }
+
+    [Fact]
+    public void ScheduleSpan_WritesSortedWithoutAllocating()
+    {
+        var scheduler = new StreamingScheduler();
+        (ClipId Clip, float Time, float Weight)[] activities = [(new ClipId("walk"), 1.0f, 1.0f)];
+        var destination = new ChunkRequest[4];
+
+        int written = scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, destination);
+        written.Should().Be(2);
+        destination[0].IsPreload.Should().BeFalse();
+        destination[1].IsPreload.Should().BeTrue();
+
+        var repeat = new ChunkRequest[4];
+        scheduler.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, repeat).Should().Be(0);
+
+        var tiny = new ChunkRequest[1];
+        var fresh = new StreamingScheduler();
+        fresh.Schedule(activities, chunkDuration: 2.0f, preloadWindow: 1.5f, tiny).Should().Be(1);
     }
 
     [Fact]

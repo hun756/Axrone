@@ -19,8 +19,95 @@ public class RigTests
         rig.RootIndices.ToArray().Should().Equal(0);
         rig.GetChildren(0).ToArray().Should().Equal(1);
         rig.GetChildren(2).ToArray().Should().BeEmpty();
-        rig.FindBoneIndex("tip").Should().Be(2);
-        rig.FindBoneIndex("ghost").Should().Be(-1);
+        rig.FindBoneIndex("tip").Should().Be(new BoneHandle(2));
+        rig.FindBoneIndex("tip").Index.Should().Be(2);
+        rig.FindBoneIndex("ghost").Should().Be(BoneHandle.Invalid);
+        BoneHandle root = rig.FindBoneIndex("root");
+        rig.GetChildren(root).ToArray().Should().Equal(1);
+
+        rig.FindBoneIndex("tip".AsSpan()).Should().Be(new BoneHandle(2));
+        rig.FindBoneIndex("ghost".AsSpan()).Should().Be(BoneHandle.Invalid);
+        rig.FindBoneIndex(ReadOnlySpan<char>.Empty).Should().Be(BoneHandle.Invalid);
+    }
+
+    [Fact]
+    public void RestPalette_MatchesLiveKinematics()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        Span<float> palette = stackalloc float[3 * 16];
+        rig.CreateRestMatrixPalette(palette);
+
+        // Chain: root at origin, mid/tip offset +1Y each with identity rotation/scale.
+        // ComposeTransformMatrix layout carries translation in elements 3/7/11.
+        palette[3].Should().BeApproximately(0.0f, 1e-6f);
+        palette[7].Should().BeApproximately(0.0f, 1e-6f);
+        palette[11].Should().BeApproximately(0.0f, 1e-6f);
+        palette[16 + 7].Should().BeApproximately(1.0f, 1e-6f);
+        palette[32 + 7].Should().BeApproximately(2.0f, 1e-6f);
+
+        // RestWorldMatrices view exposes the same bytes without copying.
+        rig.RestWorldMatrices.Length.Should().Be(3 * 16);
+        rig.RestWorldMatrices[32 + 7].Should().BeApproximately(2.0f, 1e-6f);
+    }
+
+    [Fact]
+    public void EvaluatePose_ComposesLivePoseToPalette()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        var locals = new LocalTransform[3];
+        locals[0] = LocalTransform.Identity;
+        locals[1] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
+        locals[2] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
+
+        var palette = new Matrix4x4[3];
+        rig.EvaluatePose(locals, palette);
+
+        // Column-major lane: translation rides M14/M24/M34.
+        palette[0].M24.Should().BeApproximately(0.0f, 1e-6f);
+        palette[1].M24.Should().BeApproximately(1.0f, 1e-6f);
+        palette[2].M24.Should().BeApproximately(2.0f, 1e-6f);
+
+        Action shortLocals = () => rig.EvaluatePose(Array.Empty<LocalTransform>(), palette);
+        shortLocals.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.SamplingOutOfBounds);
+    }
+
+    [Fact]
+    public void LocalTransform_SanitizesInConstructor()
+    {
+        var degenerate = new LocalTransform(Vector3.Zero, new Quaternion(0, 0, 0, 0), Vector3.Zero);
+        degenerate.Rotation.Should().Be(Quaternion.Identity);
+        degenerate.Scale.Should().Be(Vector3.One);
+    }
+
+    private struct TranslationBoundsVisitor : IRigPaletteVisitor<BoundsAccumulator>
+    {
+        public void Visit(ref BoundsAccumulator context, ReadOnlySpan<Matrix4x4> worldMatrices)
+        {
+            for (int i = 0; i < worldMatrices.Length; i++)
+            {
+                Vector3 t = new(worldMatrices[i].M14, worldMatrices[i].M24, worldMatrices[i].M34);
+                context.Min = Vector3.Min(context.Min, t);
+                context.Max = Vector3.Max(context.Max, t);
+            }
+        }
+    }
+
+    private struct BoundsAccumulator
+    {
+        public Vector3 Min;
+        public Vector3 Max;
+    }
+
+    [Fact]
+    public void AcceptPalette_RunsZeroAllocVisitor()
+    {
+        var rig = new Rig(new RigId("chain"), Chain());
+        var bounds = new BoundsAccumulator { Min = new Vector3(float.MaxValue), Max = new Vector3(float.MinValue) };
+        rig.AcceptPalette<TranslationBoundsVisitor, BoundsAccumulator>(ref bounds);
+
+        bounds.Min.Should().Be(new Vector3(0.0f, 0.0f, 0.0f));
+        bounds.Max.Should().Be(new Vector3(0.0f, 2.0f, 0.0f));
     }
 
     [Fact]

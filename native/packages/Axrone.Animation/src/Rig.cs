@@ -35,9 +35,11 @@ public sealed class Rig
     private readonly int[] _rootIndices;
     private readonly int[][] _children;
     private readonly Dictionary<string, int> _nameToIndex;
+    private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _spanLookup;
 
     internal readonly float[] RestPoseBuffer;
     internal readonly float[]? InverseBindMatrices;
+    private readonly float[] _restWorldMatrices;
 
     /// <summary>Rig identity.</summary>
     public RigId Id { get; }
@@ -63,36 +65,48 @@ public sealed class Rig
     /// <summary>Packed inverse bind matrices, or empty when absent.</summary>
     public ReadOnlySpan<float> InverseBind => InverseBindMatrices;
 
+    /// <summary>Precomputed rest-pose world matrices (16 floats per bone).</summary>
+    public ReadOnlySpan<float> RestWorldMatrices => _restWorldMatrices;
+
     /// <summary>Children of a bone.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<int> GetChildren(int boneIndex) => _children[boneIndex];
+    public ReadOnlySpan<int> GetChildren(BoneHandle bone)
+    {
+        if ((uint)bone.Index >= (uint)BoneCount)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Bone index {bone.Index} out of range.");
+        }
+
+        return _children[bone.Index];
+    }
 
     /// <summary>Validates and freezes a skeleton.</summary>
-    public Rig(RigId id, ReadOnlySpan<BoneInfo> bones)
+    public Rig(RigId id, params ReadOnlySpan<BoneInfo> bones)
     {
         Id = id;
         BoneCount = bones.Length;
         if (BoneCount <= 0)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigEmptyBones, "Rig requires at least one bone.");
+            AnimationThrowHelper.ThrowRigEmptyBones();
         }
 
         _boneNames = new string[BoneCount];
         _parents = new int[BoneCount];
         RestPoseBuffer = new float[BoneCount * 10];
         _nameToIndex = new Dictionary<string, int>(BoneCount, StringComparer.Ordinal);
+        _spanLookup = _nameToIndex.GetAlternateLookup<ReadOnlySpan<char>>();
 
         for (int i = 0; i < BoneCount; i++)
         {
             BoneInfo bone = bones[i];
             if (string.IsNullOrEmpty(bone.Name))
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigDuplicateBoneName, $"Bone {i} has empty name.");
+                AnimationThrowHelper.ThrowRigEmptyBoneName(i);
             }
 
             if (!_nameToIndex.TryAdd(bone.Name, i))
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigDuplicateBoneName, $"Duplicate bone name '{bone.Name}'.");
+                AnimationThrowHelper.ThrowRigDuplicateBoneName(bone.Name);
             }
 
             _boneNames[i] = bone.Name;
@@ -100,7 +114,7 @@ public sealed class Rig
 
             if (bone.ParentIndex >= BoneCount || bone.ParentIndex == i || bone.ParentIndex < -1)
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigInvalidParent, $"Bone {i} ('{bone.Name}') invalid parent {bone.ParentIndex}.");
+                AnimationThrowHelper.ThrowRigInvalidParent(i, bone.Name, bone.ParentIndex);
             }
 
             WriteRestPose(i, bone);
@@ -135,25 +149,119 @@ public sealed class Rig
         _rootIndices = roots.ToArray();
         _evaluationOrder = BuildEvaluationOrder(_parents, _children, _rootIndices, _boneNames);
         InverseBindMatrices = BuildInverseBindMatrices(bones);
+        _restWorldMatrices = BuildRestWorldMatrices();
     }
 
-    /// <summary>Bone index by ordinal name, -1 when absent.</summary>
+    /// <summary>Bone handle by ordinal name, invalid when absent.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int FindBoneIndex(string name) =>
-        _nameToIndex.TryGetValue(name, out int index) ? index : -1;
+    public BoneHandle FindBoneIndex(string name) =>
+        _nameToIndex.TryGetValue(name, out int index) ? new BoneHandle(index) : BoneHandle.Invalid;
 
-    /// <summary>Composes the rest-pose world matrix palette (16 floats per bone).</summary>
-    [SkipLocalsInit]
+    /// <summary>Bone handle by span, invalid when absent — no string allocation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public BoneHandle FindBoneIndex(ReadOnlySpan<char> name) =>
+        name.IsEmpty
+            ? BoneHandle.Invalid
+            : _spanLookup.TryGetValue(name, out int index) ? new BoneHandle(index) : BoneHandle.Invalid;
+
+    /// <summary>
+    /// Copies the precomputed rest-pose world matrix palette (16 floats per bone).
+    /// Composition runs once at construction; per-call cost is a single memcpy.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CreateRestMatrixPalette(Span<float> outPalette)
     {
         if (outPalette.Length < BoneCount * 16)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.SamplingOutOfBounds, "Output matrix palette too small.");
+            AnimationThrowHelper.ThrowPaletteTooSmall(outPalette.Length, BoneCount * 16);
         }
 
-        Span<Vector3> worldT = stackalloc Vector3[BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[BoneCount];
+        _restWorldMatrices.AsSpan(0, BoneCount * 16).CopyTo(outPalette);
+    }
+
+    /// <summary>
+    /// Runs a zero-allocation palette visitor over the rest world matrices.
+    /// Constrained static dispatch: no boxing, no interface call, context may
+    /// be a ref struct (stack-only accumulators welcome).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void AcceptPalette<TVisitor, TContext>(ref TContext context)
+        where TVisitor : struct, IRigPaletteVisitor<TContext>
+        where TContext : allows ref struct
+    {
+        TVisitor visitor = default;
+        ReadOnlySpan<Matrix4x4> matrices = MemoryMarshal.Cast<float, Matrix4x4>(_restWorldMatrices.AsSpan(0, BoneCount * 16));
+        visitor.Visit(ref context, matrices);
+    }
+
+    /// <summary>
+    /// Evaluates a live local-pose buffer into a world matrix palette: hierarchy
+    /// compose in evaluation order, direct element composition per bone (no matrix
+    /// temporaries). The render-ready counterpart to frame-based sampling.
+    /// </summary>
+    [SkipLocalsInit]
+    public void EvaluatePose(ReadOnlySpan<LocalTransform> localTransforms, Span<Matrix4x4> outWorldPalette)
+    {
+        if (localTransforms.Length < BoneCount)
+        {
+            AnimationThrowHelper.ThrowPaletteTooSmall(localTransforms.Length, BoneCount);
+        }
+
+        if (outWorldPalette.Length < BoneCount)
+        {
+            AnimationThrowHelper.ThrowPaletteTooSmall(outWorldPalette.Length, BoneCount);
+        }
+
+        int scratchBones = BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
+
+        Span<float> matrixLane = stackalloc float[16];
+        for (int i = 0; i < _evaluationOrder.Length; i++)
+        {
+            int b = _evaluationOrder[i];
+            int p = _parents[b];
+            ref readonly LocalTransform local = ref localTransforms[b];
+
+            if (p == -1)
+            {
+                worldT[b] = local.Translation;
+                worldR[b] = local.Rotation;
+                worldS[b] = local.Scale;
+            }
+            else
+            {
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], local.Translation, local.Rotation, local.Scale, out worldT[b], out worldR[b], out worldS[b]);
+            }
+
+            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], matrixLane);
+            outWorldPalette[b] = new Matrix4x4(
+                matrixLane[0], matrixLane[1], matrixLane[2], matrixLane[3],
+                matrixLane[4], matrixLane[5], matrixLane[6], matrixLane[7],
+                matrixLane[8], matrixLane[9], matrixLane[10], matrixLane[11],
+                matrixLane[12], matrixLane[13], matrixLane[14], matrixLane[15]);
+        }
+    }
+
+    /// <summary>
+    /// Composes rest-pose world matrices once (construction): same formulas as the
+    /// per-frame forward kinematics, so results match live evaluation bit-for-bit.
+    /// </summary>
+    [SkipLocalsInit]
+    private float[] BuildRestWorldMatrices()
+    {
+        var palette = new float[BoneCount * 16];
+        int scratchBones = BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
 
         ReadOnlySpan<float> buf = RestPoseBuffer;
         int rBase = BoneCount * 3;
@@ -179,13 +287,13 @@ public sealed class Rig
             }
             else
             {
-                worldS[b] = worldS[p] * locS;
-                worldR[b] = Quaternion.Normalize(worldR[p] * locR);
-                worldT[b] = worldT[p] + Vector3.Transform(locT * worldS[p], worldR[p]);
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], locT, locR, locS, out worldT[b], out worldR[b], out worldS[b]);
             }
 
-            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], outPalette.Slice(b * 16, 16));
+            FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], palette.AsSpan(b * 16, 16));
         }
+
+        return palette;
     }
 
     private static float[]? BuildInverseBindMatrices(ReadOnlySpan<BoneInfo> bones)
@@ -252,7 +360,7 @@ public sealed class Rig
                     int child = children[current][childCursor[current]++];
                     if (state[child] == 1)
                     {
-                        AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigCycleDetected, $"Cycle detected at bone '{boneNames[child]}'.");
+                        AnimationThrowHelper.ThrowRigCycleDetected(boneNames[child]);
                     }
 
                     if (state[child] == 0)
@@ -274,7 +382,7 @@ public sealed class Rig
         {
             if (state[i] == 0)
             {
-                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationRigInvalidParent, $"Unconnected bone tree detected: '{boneNames[i]}'.");
+                AnimationThrowHelper.ThrowRigUnconnectedBone(boneNames[i]);
             }
         }
 

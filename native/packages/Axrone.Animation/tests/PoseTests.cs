@@ -34,7 +34,8 @@ public class PoseTests
         store.Read(new CurveId("weight")).Should().Be(0.5f);
 
         Action missing = () => store.Read(new CurveId("ghost"));
-        missing.Should().Throw<SamplingException>();
+        missing.Should().Throw<ResolutionException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ResolutionCurveNotFound);
 
         var other = new CurveStore(Layout());
         other.CopyFrom(store);

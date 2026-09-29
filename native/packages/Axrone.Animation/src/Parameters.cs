@@ -38,8 +38,19 @@ public enum ConditionOperator
     LessThanOrEqual = 5,
 }
 
-/// <summary>Single transition condition against a named parameter.</summary>
-public readonly record struct ParameterCondition(string ParameterName, ConditionOperator Operator, float Threshold);
+/// <summary>
+/// Single transition condition against a named parameter. The name is the
+/// authoring identity; <see cref="StateMachineInstance.Bind"/> resolves it to
+/// a handle once, and evaluation prefers the handle (no hashing per check).
+/// </summary>
+public record struct ParameterCondition(string ParameterName, ConditionOperator Operator, float Threshold)
+{
+    /// <summary>Bind-time resolved slot.</summary>
+    internal ParameterHandle ResolvedHandle { get; set; }
+
+    /// <summary>Whether the handle was resolved.</summary>
+    internal bool IsResolved { get; set; }
+}
 
 /// <summary>
 /// Typed parameter bank over parallel arrays. Ints ride their own lane (no float
@@ -80,6 +91,9 @@ public sealed class ParameterStore
         }
     }
 
+    /// <summary>Parameter count.</summary>
+    public int Count => _types.Length;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ResolveIndex(string name)
     {
@@ -90,6 +104,75 @@ public sealed class ParameterStore
 
         return index;
     }
+
+    /// <summary>
+    /// Resolves a name to a runtime handle once (bind time). The handle then
+    /// addresses the slot directly — no hashing on the frame path.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ParameterHandle ResolveHandle(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (!_nameToIndex.TryGetValue(name, out int index))
+        {
+            AnimationThrowHelper.ThrowStateMachine(AnimationErrorCode.StateMachineParameterNotFound, $"Parameter '{name}' not found.");
+        }
+
+        return new ParameterHandle(index);
+    }
+
+    /// <summary>Tries to resolve a name to a runtime handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryResolveHandle(string name, out ParameterHandle handle)
+    {
+        if (name is not null && _nameToIndex.TryGetValue(name, out int index))
+        {
+            handle = new ParameterHandle(index);
+            return true;
+        }
+
+        handle = ParameterHandle.Invalid;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int RequireHandle(in ParameterHandle handle)
+    {
+        if ((uint)handle.Index >= (uint)_types.Length)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Parameter handle {handle.Index} out of range.");
+        }
+
+        return handle.Index;
+    }
+
+    /// <summary>Reads a float by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public float GetFloat(in ParameterHandle handle) => _floats[RequireHandle(in handle)];
+
+    /// <summary>Sets a float by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetFloat(in ParameterHandle handle, float value)
+    {
+        int index = RequireHandle(in handle);
+        _floats[index] = float.IsFinite(value) ? value : 0.0f;
+    }
+
+    /// <summary>Reads an int by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetInt(in ParameterHandle handle) => _ints[RequireHandle(in handle)];
+
+    /// <summary>Sets an int by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetInt(in ParameterHandle handle, int value) => _ints[RequireHandle(in handle)] = value;
+
+    /// <summary>Reads a bool by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool GetBool(in ParameterHandle handle) => _bools[RequireHandle(in handle)] != 0;
+
+    /// <summary>Sets a bool by handle (no lookup).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetBool(in ParameterHandle handle, bool value) => _bools[RequireHandle(in handle)] = value ? (byte)1 : (byte)0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RequireType(int index, ParameterType type, string name)
@@ -180,7 +263,10 @@ public sealed class ParameterStore
     /// <summary>Evaluates a transition condition against current values.</summary>
     public bool EvaluateCondition(in ParameterCondition condition)
     {
-        int index = ResolveIndex(condition.ParameterName);
+        ParameterHandle handle = condition.ResolvedHandle;
+        int index = condition.IsResolved
+            ? RequireHandle(in handle)
+            : ResolveIndex(condition.ParameterName);
         ParameterType type = _types[index];
 
         switch (type)
@@ -214,7 +300,8 @@ public sealed class ParameterStore
 
             case ParameterType.Bool:
                 bool bValue = _bools[index] != 0;
-                bool expected = condition.Threshold > 0.5f;
+                bool expected = condition.Threshold > AnimationConstants.BoolConditionThreshold;
+                // Ordering operators are unsatisfiable for flags (never an error).
                 return condition.Operator switch
                 {
                     ConditionOperator.Equal => bValue == expected,
@@ -226,6 +313,7 @@ public sealed class ParameterStore
                 return _triggers[index] != 0;
 
             default:
+                AnimationThrowHelper.ThrowStateMachine(AnimationErrorCode.StateMachineTypeMismatch, $"Unknown parameter type '{type}'.");
                 return false;
         }
     }

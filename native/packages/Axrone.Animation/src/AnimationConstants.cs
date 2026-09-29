@@ -21,9 +21,6 @@ public static class AnimationConstants
     /// <summary>Blend1D child count at or below which linear scan beats binary search.</summary>
     public const int Blend1DLinearScanLimit = 8;
 
-    /// <summary>IK solver convergence epsilon (squared-distance domain).</summary>
-    public const float IkConvergenceEpsilon = 1e-8f;
-
     /// <summary>IK precision lower bound.</summary>
     public const float IkPrecisionFloor = 1e-5f;
 
@@ -50,4 +47,35 @@ public static class AnimationConstants
 
     /// <summary>Keyframe reduction tolerance for curves.</summary>
     public const float KeyframeCurveTol = 1e-4f;
+
+    /// <summary>Minimum positive state duration; guards division by zero speed.</summary>
+    public const float MinStateDuration = 1e-6f;
+
+    /// <summary>Transition progress past which a newer edge may steal the blend.</summary>
+    public const float TransitionInterruptThreshold = 0.5f;
+
+    /// <summary>Threshold mapping a float condition value onto a bool.</summary>
+    public const float BoolConditionThreshold = 0.5f;
+
+    /// <summary>Degenerate-quaternion length-squared floor for normalization.</summary>
+    public const float QuaternionDegenerateLengthSq = 1e-15f;
+
+    /// <summary>Foot-contact edge ramp gain inside the contact window.</summary>
+    public const float FootEdgeRampGain = 4.0f;
+
+    /// <summary>Preload chunk request weight relative to the active request.</summary>
+    public const float PreloadWeightFactor = 0.5f;
+
+    /// <summary>
+    /// Bone count at or below which world-transform scratch lives on the stack
+    /// (~10KB for the T/R/S triple). Larger rigs rent from the pool instead of
+    /// risking a stack overflow.
+    /// </summary>
+    public const int MaxStackScratchBones = 256;
+
+    /// <summary>
+    /// Blend child count at or below which evaluation scratch lives on the stack.
+    /// Larger fan-outs rent from the pool.
+    /// </summary>
+    public const int MaxStackScratchFrames = 64;
 }

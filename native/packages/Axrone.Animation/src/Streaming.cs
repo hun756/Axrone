@@ -65,89 +65,217 @@ public sealed class ChunkPayloadDto
 #pragma warning restore CA1002, CA2227
 
 /// <summary>Source-generated JSON context (AOT-safe, no reflection).</summary>
+[JsonSourceGenerationOptions(
+    WriteIndented = false,
+    DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+    GenerationMode = JsonSourceGenerationMode.Default,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified)]
 [JsonSerializable(typeof(ChunkPayloadDto))]
 [JsonSerializable(typeof(ChunkTrackDto))]
+[JsonSerializable(typeof(List<ChunkTrackDto>))]
+[JsonSerializable(typeof(List<float>))]
 public sealed partial class ChunkJsonSerializerContext : JsonSerializerContext
 {
 }
 
-/// <summary>One chunk fetch request.</summary>
-public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload);
-
-/// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
-public sealed class StreamingScheduler
+/// <summary>
+/// One chunk fetch request, self-ordering: active before preload, then weight
+/// descending, then start time. The scheduler relies on this for sorted output.
+/// </summary>
+public readonly record struct ChunkRequest(string ChunkId, ClipId ClipId, float StartTime, float Weight, bool IsPreload, ChunkKey Key)
+    : IComparable<ChunkRequest>
 {
-    private readonly HashSet<string> _loadedChunks = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _requestedChunks = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _failedChunks = new(StringComparer.Ordinal);
-    private readonly Lock _gate = new();
-
-    /// <summary>Marks a chunk loaded.</summary>
-    public void MarkLoaded(string chunkId)
-    {
-        ArgumentNullException.ThrowIfNull(chunkId);
-        lock (_gate)
-        {
-            _requestedChunks.Remove(chunkId);
-            _loadedChunks.Add(chunkId);
-        }
-    }
-
-    /// <summary>Marks a chunk failed (eligible for retry after reset).</summary>
-    public void MarkFailed(string chunkId)
-    {
-        ArgumentNullException.ThrowIfNull(chunkId);
-        lock (_gate)
-        {
-            _requestedChunks.Remove(chunkId);
-            _failedChunks.Add(chunkId);
-        }
-    }
-
-    /// <summary>Forgets all chunk states.</summary>
-    public void Reset(string chunkId)
-    {
-        ArgumentNullException.ThrowIfNull(chunkId);
-        lock (_gate)
-        {
-            _loadedChunks.Remove(chunkId);
-            _requestedChunks.Remove(chunkId);
-            _failedChunks.Remove(chunkId);
-        }
-    }
-
-    private static void InsertSorted(Collection<ChunkRequest> requests, ChunkRequest request)
-    {
-        int index = 0;
-        while (index < requests.Count && CompareRequests(requests[index], request) <= 0)
-        {
-            index++;
-        }
-
-        requests.Insert(index, request);
-    }
-
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CompareRequests(ChunkRequest a, ChunkRequest b)
+    public int CompareTo(ChunkRequest other)
     {
-        if (a.IsPreload != b.IsPreload)
+        if (IsPreload != other.IsPreload)
         {
-            return a.IsPreload ? 1 : -1;
+            return IsPreload ? 1 : -1;
         }
 
-        int byWeight = b.Weight.CompareTo(a.Weight);
+        int byWeight = other.Weight.CompareTo(Weight);
         if (byWeight != 0)
         {
             return byWeight;
         }
 
-        return a.StartTime.CompareTo(b.StartTime);
+        return StartTime.CompareTo(other.StartTime);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) <= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(ChunkRequest left, ChunkRequest right) => left.CompareTo(right) >= 0;
+}
+
+/// <summary>
+/// Allocation-free chunk identity: (clip, version). The scheduler tracks these
+/// by value and only materializes the string id for genuinely new requests —
+/// steady-state scheduling allocates nothing. Formats as <c>clip:v:index</c>
+/// into char or UTF-8 spans without transcoding.
+/// </summary>
+public readonly record struct ChunkKey(ClipId Clip, int Version) : ISpanFormattable, IUtf8SpanFormattable
+{
+    /// <summary>Separator between clip and version.</summary>
+    private static ReadOnlySpan<char> Separator => ":v:";
+
+    /// <inheritdoc/>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        ReadOnlySpan<char> separator = Separator;
+        if (!Clip.TryFormat(destination, out int clipWritten, format, provider))
+        {
+            return false;
+        }
+
+        if (destination.Length < clipWritten + separator.Length)
+        {
+            return false;
+        }
+
+        separator.CopyTo(destination[clipWritten..]);
+        int offset = clipWritten + separator.Length;
+        if (!Version.TryFormat(destination[offset..], out int versionWritten, format, provider))
+        {
+            return false;
+        }
+
+        charsWritten = offset + versionWritten;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[64];
+        return TryFormat(buffer, out int written, format, formatProvider)
+            ? new string(buffer[..written])
+            : $"{Clip.Value}:v:{Version}";
+    }
+
+    /// <inheritdoc/>
+    public override string ToString() => ToString(null, null);
+
+    /// <inheritdoc/>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        if (!Clip.TryFormat(utf8Destination, out int clipWritten, format, provider))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> separator = ":v:"u8;
+        if (utf8Destination.Length < clipWritten + separator.Length)
+        {
+            return false;
+        }
+
+        separator.CopyTo(utf8Destination[clipWritten..]);
+        int offset = clipWritten + separator.Length;
+        if (!System.Buffers.Text.Utf8Formatter.TryFormat(Version, utf8Destination[offset..], out int versionWritten))
+        {
+            return false;
+        }
+
+        bytesWritten = offset + versionWritten;
+        return true;
+    }
+}
+
+/// <summary>Fetch lifecycle of one chunk.</summary>
+public enum ChunkStatus
+{
+    /// <summary>Never requested (or reset).</summary>
+    Unrequested = 0,
+
+    /// <summary>Requested, awaiting load.</summary>
+    Requested = 1,
+
+    /// <summary>Loaded; never rescheduled.</summary>
+    Loaded = 2,
+
+    /// <summary>Failed; rescheduled only after reset.</summary>
+    Failed = 3,
+}
+
+/// <summary>Chunk fetch scheduler: active chunks first, preload window behind.</summary>
+public sealed class StreamingScheduler
+{
+    private readonly Dictionary<ChunkKey, ChunkStatus> _states = new();
+    private readonly Lock _gate = new();
+
+    /// <summary>Marks a chunk loaded.</summary>
+    public void MarkLoaded(ChunkKey key)
+    {
+        lock (_gate)
+        {
+            _states[key] = ChunkStatus.Loaded;
+        }
+    }
+
+    /// <summary>Marks a chunk failed (eligible for retry after reset).</summary>
+    public void MarkFailed(ChunkKey key)
+    {
+        lock (_gate)
+        {
+            _states[key] = ChunkStatus.Failed;
+        }
+    }
+
+    /// <summary>Forgets all chunk states.</summary>
+    public void Reset(ChunkKey key)
+    {
+        lock (_gate)
+        {
+            _states.Remove(key);
+        }
+    }
+
+    /// <summary>Whether a key is eligible for (re)scheduling.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsSchedulable(ChunkKey key) =>
+        !_states.TryGetValue(key, out ChunkStatus status) || status == ChunkStatus.Unrequested;
+
+    /// <summary>Binary-search insertion point (shifts still cost O(n); search is O(log n)).</summary>
+    private static void InsertSorted(Collection<ChunkRequest> requests, in ChunkRequest request)
+    {
+        int low = 0;
+        int high = requests.Count - 1;
+        while (low <= high)
+        {
+            int mid = low + ((high - low) >> 1);
+            if (requests[mid].CompareTo(request) <= 0)
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        requests.Insert(low, request);
     }
 
     /// <summary>
     /// Appends active and preload chunk requests to a caller-owned collection,
-    /// kept sorted (active first, then weight, then start). No per-call allocation
-    /// beyond the interpolated chunk ids.
+    /// kept sorted (active first, then weight, then start). Steady-state calls
+    /// allocate nothing: membership probes use the by-value key, and the string
+    /// id materializes only for genuinely new requests.
     /// </summary>
     public void Schedule(
         ReadOnlySpan<(ClipId Clip, float Time, float Weight)> activities,
@@ -158,7 +286,7 @@ public sealed class StreamingScheduler
         ArgumentNullException.ThrowIfNull(outRequests);
         if (chunkDuration <= 0.0f)
         {
-            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.StreamingChunkIncompatible, "Chunk duration must be positive.");
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Chunk duration must be positive.");
         }
 
         lock (_gate)
@@ -167,26 +295,86 @@ public sealed class StreamingScheduler
             {
                 (ClipId clip, float time, float weight) = activities[i];
                 int currentIndex = (int)(time / chunkDuration);
-                string activeId = $"{clip.Value}:v:{currentIndex}";
+                var activeKey = new ChunkKey(clip, currentIndex);
 
-                if (!_loadedChunks.Contains(activeId) && !_requestedChunks.Contains(activeId) && !_failedChunks.Contains(activeId))
+                if (IsSchedulable(activeKey))
                 {
-                    InsertSorted(outRequests, new ChunkRequest(activeId, clip, currentIndex * chunkDuration, weight, false));
-                    _requestedChunks.Add(activeId);
+                    InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{currentIndex}", clip, currentIndex * chunkDuration, weight, false, activeKey));
+                    _states[activeKey] = ChunkStatus.Requested;
                 }
 
                 int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
                 if (preloadIndex != currentIndex)
                 {
-                    string preloadId = $"{clip.Value}:v:{preloadIndex}";
-                    if (!_loadedChunks.Contains(preloadId) && !_requestedChunks.Contains(preloadId) && !_failedChunks.Contains(preloadId))
+                    var preloadKey = new ChunkKey(clip, preloadIndex);
+                    if (IsSchedulable(preloadKey))
                     {
-                        InsertSorted(outRequests, new ChunkRequest(preloadId, clip, preloadIndex * chunkDuration, weight * 0.5f, true));
-                        _requestedChunks.Add(preloadId);
+                        InsertSorted(outRequests, new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * AnimationConstants.PreloadWeightFactor, true, preloadKey));
+                        _states[preloadKey] = ChunkStatus.Requested;
                     }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Zero-allocation batch scheduling into a caller-owned span. Appends unsorted,
+    /// sorts the written prefix once, and returns the count — no heap, no wrappers.
+    /// Truncates (never overflows) when the destination is too small.
+    /// </summary>
+    public int Schedule(
+        ReadOnlySpan<(ClipId Clip, float Time, float Weight)> activities,
+        float chunkDuration,
+        float preloadWindow,
+        Span<ChunkRequest> destination)
+    {
+        if (chunkDuration <= 0.0f)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, "Chunk duration must be positive.");
+        }
+
+        int written = 0;
+        lock (_gate)
+        {
+            for (int i = 0; i < activities.Length; i++)
+            {
+                (ClipId clip, float time, float weight) = activities[i];
+                int currentIndex = (int)(time / chunkDuration);
+                var activeKey = new ChunkKey(clip, currentIndex);
+
+                if (IsSchedulable(activeKey))
+                {
+                    if (written < destination.Length)
+                    {
+                        destination[written++] = new ChunkRequest($"{clip.Value}:v:{currentIndex}", clip, currentIndex * chunkDuration, weight, false, activeKey);
+                    }
+
+                    _states[activeKey] = ChunkStatus.Requested;
+                }
+
+                int preloadIndex = (int)((time + preloadWindow) / chunkDuration);
+                if (preloadIndex != currentIndex)
+                {
+                    var preloadKey = new ChunkKey(clip, preloadIndex);
+                    if (IsSchedulable(preloadKey))
+                    {
+                        if (written < destination.Length)
+                        {
+                            destination[written++] = new ChunkRequest($"{clip.Value}:v:{preloadIndex}", clip, preloadIndex * chunkDuration, weight * AnimationConstants.PreloadWeightFactor, true, preloadKey);
+                        }
+
+                        _states[preloadKey] = ChunkStatus.Requested;
+                    }
+                }
+            }
+        }
+
+        if (written > 1)
+        {
+            destination[..written].Sort();
+        }
+
+        return written;
     }
 }
 
@@ -203,23 +391,23 @@ public static class ChunkCodec
         }
         catch (JsonException ex)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, $"Chunk JSON corrupt: {ex.Message}");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, $"Chunk JSON corrupt: {ex.Message}");
             throw new UnreachableException();
         }
 
         if (payload == null)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, "Chunk JSON decoded to null.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk JSON decoded to null.");
         }
 
         if (payload.Version != 1)
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, $"Unsupported chunk version {payload.Version}.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, $"Unsupported chunk version {payload.Version}.");
         }
 
         if (string.IsNullOrWhiteSpace(payload.ClipId))
         {
-            AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkCorrupt, "Chunk clip id missing.");
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk clip id missing.");
         }
 
         foreach (ChunkTrackDto track in payload.Tracks)
@@ -235,50 +423,75 @@ public static class ChunkCodec
 
             if (components < 0)
             {
-                AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, $"Unknown channel target {track.Target}.");
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, $"Unknown channel target {track.Target}.");
             }
 
             int stride = track.Interpolation == (byte)InterpolationMode.CubicSpline ? components * 3 : components;
             if (track.KeyTimes.Count * stride != track.KeyValues.Count)
             {
-                AnimationThrowHelper.ThrowSampling(AnimationErrorCode.StreamingChunkIncompatible, "Chunk track stride mismatch.");
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, "Chunk track stride mismatch.");
             }
         }
 
         return payload;
     }
 
-    /// <summary>Merges a payload into live channels.</summary>
+    /// <summary>
+    /// Merges a payload into live channels. Exact-size outputs (two passes, no
+    /// list over-allocation); key arrays are copied so DTO buffers stay caller-owned.
+    /// </summary>
     public static AnimationChannel[] Merge(AnimationChannel[] baseChannels, ChunkPayloadDto payload, MergeMode mode)
     {
         ArgumentNullException.ThrowIfNull(baseChannels);
         ArgumentNullException.ThrowIfNull(payload);
 
-        var incoming = new List<AnimationChannel>(payload.Tracks.Count);
-        foreach (ChunkTrackDto track in payload.Tracks)
-        {
-            incoming.Add(new AnimationChannel(
-                track.BoneIndex,
-                (ChannelTarget)track.Target,
-                (InterpolationMode)track.Interpolation,
-                [.. track.KeyTimes],
-                [.. track.KeyValues]));
-        }
-
+        List<ChunkTrackDto> tracks = payload.Tracks;
         if (mode == MergeMode.ReplaceAll)
         {
-            return incoming.ToArray();
+            var replaced = GC.AllocateUninitializedArray<AnimationChannel>(tracks.Count);
+            for (int i = 0; i < tracks.Count; i++)
+            {
+                replaced[i] = ToChannel(tracks[i]);
+            }
+
+            return replaced;
         }
 
-        var merged = new List<AnimationChannel>(baseChannels);
-        foreach (AnimationChannel channel in incoming)
+        int addedCount = 0;
+        for (int i = 0; i < tracks.Count; i++)
         {
-            bool replaced = false;
-            for (int i = 0; i < merged.Count; i++)
+            ChunkTrackDto track = tracks[i];
+            bool found = false;
+            for (int j = 0; j < baseChannels.Length; j++)
             {
-                if (merged[i].BoneIndex == channel.BoneIndex && merged[i].Target == channel.Target)
+                if (baseChannels[j].BoneIndex == track.BoneIndex && (byte)baseChannels[j].Target == track.Target)
                 {
-                    merged[i] = channel;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                addedCount++;
+            }
+        }
+
+        var merged = new AnimationChannel[baseChannels.Length + addedCount];
+        Array.Copy(baseChannels, merged, baseChannels.Length);
+
+        int appendIndex = baseChannels.Length;
+        for (int i = 0; i < tracks.Count; i++)
+        {
+            ChunkTrackDto track = tracks[i];
+            AnimationChannel channel = ToChannel(track);
+
+            bool replaced = false;
+            for (int j = 0; j < baseChannels.Length; j++)
+            {
+                if (merged[j].BoneIndex == channel.BoneIndex && merged[j].Target == channel.Target)
+                {
+                    merged[j] = channel;
                     replaced = true;
                     break;
                 }
@@ -286,12 +499,21 @@ public static class ChunkCodec
 
             if (!replaced)
             {
-                merged.Add(channel);
+                merged[appendIndex++] = channel;
             }
         }
 
-        return merged.ToArray();
+        return merged;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AnimationChannel ToChannel(ChunkTrackDto track) =>
+        new(
+            track.BoneIndex,
+            (ChannelTarget)track.Target,
+            (InterpolationMode)track.Interpolation,
+            [.. track.KeyTimes],
+            [.. track.KeyValues]);
 }
 
 /// <summary>Linear keyframe reduction: drops interior keys a straight line predicts.</summary>
@@ -313,13 +535,15 @@ public static class KeyframeOptimizer
 
         foreach (AnimationChannel channel in source.Channels)
         {
+            // Channels are target-validated at construction; the default arms are
+            // provably unreachable and fail loud instead of silently miscoding.
             float tolerance = channel.Target switch
             {
                 ChannelTarget.Translation => positionTolerance,
                 ChannelTarget.Rotation => rotationTolerance,
                 ChannelTarget.Scale => scaleTolerance,
                 ChannelTarget.Curve => AnimationConstants.KeyframeCurveTol,
-                _ => positionTolerance,
+                _ => throw new UnreachableException(),
             };
 
             AnimationChannel reduced = Reduce(channel, tolerance);
@@ -328,7 +552,8 @@ public static class KeyframeOptimizer
                 case ChannelTarget.Translation: translations.Add(reduced); break;
                 case ChannelTarget.Rotation: rotations.Add(reduced); break;
                 case ChannelTarget.Scale: scales.Add(reduced); break;
-                default: curves.Add(reduced); break;
+                case ChannelTarget.Curve: curves.Add(reduced); break;
+                default: AnimationThrowHelper.ThrowUnreachable(); break;
             }
         }
 
@@ -362,61 +587,95 @@ public static class KeyframeOptimizer
         }
 
         int stride = channel.Stride;
-        var newTimes = new List<float>(times.Length) { times[0] };
-        var newValues = new List<float>(values.Length);
-        for (int c = 0; c < stride; c++)
+        float[] rentedTimes = ArrayPool<float>.Shared.Rent(times.Length);
+        float[] rentedValues = ArrayPool<float>.Shared.Rent(values.Length);
+
+        try
         {
-            newValues.Add(values[c]);
-        }
+            rentedTimes[0] = times[0];
+            values.Slice(0, stride).CopyTo(rentedValues);
+            int outKeyCount = 1;
+            int anchor = 0;
 
-        int anchor = 0;
-        for (int i = 1; i < times.Length - 1; i++)
-        {
-            float t0 = times[anchor];
-            float t1 = times[i];
-            float t2 = times[i + 1];
+            // Raw refs skip per-access bounds checks; all indices derive from the
+            // validated stride packing (ctor-verified), so they cannot overrun.
+            ref float timesRef = ref MemoryMarshal.GetReference(times);
+            ref float valuesRef = ref MemoryMarshal.GetReference(values);
 
-            if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
+            for (int i = 1; i < times.Length - 1; i++)
             {
-                PushKey(times, values, stride, i, newTimes, newValues);
-                anchor = i;
-                continue;
-            }
+                float t0 = Unsafe.Add(ref timesRef, anchor);
+                float t1 = Unsafe.Add(ref timesRef, i);
+                float t2 = Unsafe.Add(ref timesRef, i + 1);
 
-            float factor = (t1 - t0) / (t2 - t0);
-            bool deviate = false;
-            for (int s = 0; s < stride; s++)
-            {
-                float v0 = values[(anchor * stride) + s];
-                float actual = values[(i * stride) + s];
-                float v2 = values[((i + 1) * stride) + s];
-                float predicted = v0 + (factor * (v2 - v0));
-                if (MathF.Abs(actual - predicted) > tolerance)
+                if (MathF.Abs(t2 - t0) <= AnimationConstants.SoaEpsilon)
                 {
-                    deviate = true;
-                    break;
+                    PushKey(times, values, stride, i, rentedTimes, rentedValues, outKeyCount++);
+                    anchor = i;
+                    continue;
+                }
+
+                float factor = (t1 - t0) / (t2 - t0);
+                bool deviate = false;
+                if (Vector128.IsHardwareAccelerated && stride == 4)
+                {
+                    Vector128<float> v0 = Vector128.LoadUnsafe(ref valuesRef, (nuint)(anchor * stride));
+                    Vector128<float> actual = Vector128.LoadUnsafe(ref valuesRef, (nuint)(i * stride));
+                    Vector128<float> v2 = Vector128.LoadUnsafe(ref valuesRef, (nuint)((i + 1) * stride));
+                    Vector128<float> predicted = v0 + (Vector128.Create(factor) * (v2 - v0));
+                    deviate = Vector128.GreaterThanAny(Vector128.Abs(actual - predicted), Vector128.Create(tolerance));
+                }
+                else
+                {
+                    int anchorOffset = anchor * stride;
+                    int iOffset = i * stride;
+                    int nextOffset = (i + 1) * stride;
+                    for (int s = 0; s < stride; s++)
+                    {
+                        float v0 = Unsafe.Add(ref valuesRef, anchorOffset + s);
+                        float actual = Unsafe.Add(ref valuesRef, iOffset + s);
+                        float v2 = Unsafe.Add(ref valuesRef, nextOffset + s);
+                        float predicted = v0 + (factor * (v2 - v0));
+                        if (MathF.Abs(actual - predicted) > tolerance)
+                        {
+                            deviate = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (deviate)
+                {
+                    PushKey(times, values, stride, i, rentedTimes, rentedValues, outKeyCount++);
+                    anchor = i;
                 }
             }
 
-            if (deviate)
-            {
-                PushKey(times, values, stride, i, newTimes, newValues);
-                anchor = i;
-            }
-        }
+            PushKey(times, values, stride, times.Length - 1, rentedTimes, rentedValues, outKeyCount++);
 
-        PushKey(times, values, stride, times.Length - 1, newTimes, newValues);
-        return new AnimationChannel(channel.BoneIndex, channel.Target, channel.Interpolation, newTimes.ToArray(), newValues.ToArray(), channel.TargetCurveId);
+            if (outKeyCount == times.Length)
+            {
+                return channel;
+            }
+
+            var finalTimes = GC.AllocateUninitializedArray<float>(outKeyCount);
+            var finalValues = GC.AllocateUninitializedArray<float>(outKeyCount * stride);
+            rentedTimes.AsSpan(0, outKeyCount).CopyTo(finalTimes);
+            rentedValues.AsSpan(0, outKeyCount * stride).CopyTo(finalValues);
+
+            return new AnimationChannel(channel.BoneIndex, channel.Target, channel.Interpolation, finalTimes, finalValues, channel.TargetCurveId);
+        }
+        finally
+        {
+            ArrayPool<float>.Shared.Return(rentedTimes);
+            ArrayPool<float>.Shared.Return(rentedValues);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void PushKey(ReadOnlySpan<float> times, ReadOnlySpan<float> values, int stride, int index, List<float> outTimes, List<float> outValues)
+    private static void PushKey(ReadOnlySpan<float> times, ReadOnlySpan<float> values, int stride, int keyIndex, Span<float> outTimes, Span<float> outValues, int writePos)
     {
-        outTimes.Add(times[index]);
-        int baseOffset = index * stride;
-        for (int s = 0; s < stride; s++)
-        {
-            outValues.Add(values[baseOffset + s]);
-        }
+        outTimes[writePos] = times[keyIndex];
+        values.Slice(keyIndex * stride, stride).CopyTo(outValues.Slice(writePos * stride, stride));
     }
 }

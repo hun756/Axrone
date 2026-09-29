@@ -20,14 +20,23 @@ public static class IkSolvers
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(frame);
-        if (chainBoneIndices.Length < 2 || scratchPositions.Length < chainBoneIndices.Length)
+        if (chainBoneIndices.Length < 2)
         {
-            return;
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "FABRIK chain requires at least two bones.");
         }
 
-        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+        if (scratchPositions.Length < chainBoneIndices.Length)
+        {
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "FABRIK scratch is smaller than the chain.");
+        }
+
+        int scratchBones = rig.BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
         BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
 
         int count = chainBoneIndices.Length;
@@ -155,54 +164,121 @@ public static class IkSolvers
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(frame);
-        if (chainBoneIndices.Length < 2 || weight <= 0.0f)
+        if (chainBoneIndices.Length < 2)
+        {
+            AnimationThrowHelper.ThrowIk(AnimationErrorCode.ValidationInvalidArgument, "CCD chain requires at least two bones.");
+        }
+
+        if (weight <= 0.0f)
         {
             return;
         }
 
         float w = FastMath.Clamp01(weight);
-        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+        int scratchBones = rig.BoneCount;
+        using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
+            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            : ScratchWorldBuffers.RentPooled(scratchBones);
+        Span<Vector3> worldT = buffers.Translations;
+        Span<Quaternion> worldR = buffers.Rotations;
+        Span<Vector3> worldS = buffers.Scales;
 
         Span<Quaternion> localR = frame.GetRotations();
+        ReadOnlySpan<Vector3> locT = frame.ReadTranslations();
+        ReadOnlySpan<Vector3> locS = frame.ReadScales();
         int tipBone = chainBoneIndices[chainBoneIndices.Length - 1];
         float precisionSq = MathF.Max(precision, AnimationConstants.IkPrecisionFloor);
         precisionSq *= precisionSq;
 
-        int iterations = 0;
-        for (int iter = 0; iter < maxIterations; iter++)
+        BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
+
+        int[] stack = ArrayPool<int>.Shared.Rent(rig.BoneCount);
+        try
         {
-            iterations++;
-            BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
-            if (Vector3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
+            int iterations = 0;
+            for (int iter = 0; iter < maxIterations; iter++)
             {
-                break;
-            }
-
-            for (int i = chainBoneIndices.Length - 2; i >= 0; i--)
-            {
-                int bone = chainBoneIndices[i];
-                BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
-
-                Vector3 toTip = worldT[tipBone] - worldT[bone];
-                Vector3 toTarget = targetPos - worldT[bone];
-                if (toTip.LengthSquared() < AnimationConstants.SoaEpsilon
-                    || toTarget.LengthSquared() < AnimationConstants.SoaEpsilon)
+                iterations++;
+                if (Vector3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
                 {
-                    continue;
+                    break;
                 }
 
-                Quaternion deltaWorld = FastMath.QuaternionFromTo(toTip, toTarget);
-                int parent = rig.Parents[bone];
-                Quaternion parentWorld = parent != -1 ? worldR[parent] : Quaternion.Identity;
+                for (int i = chainBoneIndices.Length - 2; i >= 0; i--)
+                {
+                    int bone = chainBoneIndices[i];
 
-                Quaternion localDelta = FastMath.Multiply(FastMath.Multiply(parentWorld, deltaWorld), FastMath.Invert(parentWorld));
-                Quaternion targetLocal = FastMath.Normalize(FastMath.Multiply(localDelta, localR[bone]));
-                localR[bone] = FastMath.Slerp(localR[bone], targetLocal, w);
+                    Vector3 toTip = worldT[tipBone] - worldT[bone];
+                    Vector3 toTarget = targetPos - worldT[bone];
+                    if (toTip.LengthSquared() < AnimationConstants.SoaEpsilon
+                        || toTarget.LengthSquared() < AnimationConstants.SoaEpsilon)
+                    {
+                        continue;
+                    }
+
+                    Quaternion deltaWorld = FastMath.QuaternionFromTo(toTip, toTarget);
+                    int parent = rig.Parents[bone];
+                    Quaternion parentWorld = parent != -1 ? worldR[parent] : Quaternion.Identity;
+
+                    Quaternion localDelta = FastMath.Multiply(FastMath.Multiply(parentWorld, deltaWorld), FastMath.Invert(parentWorld));
+                    Quaternion targetLocal = FastMath.Normalize(FastMath.Multiply(localDelta, localR[bone]));
+                    localR[bone] = FastMath.Slerp(localR[bone], targetLocal, w);
+
+                    // Only the rotated joint's subtree changed: refresh it instead of
+                    // recomputing the whole hierarchy. Same formulas as ForwardKinematics,
+                    // so results are bit-identical at O(subtree) instead of O(bones).
+                    RefreshSubtree(rig, bone, locT, localR, locS, worldT, worldR, worldS, stack.AsSpan(0, rig.BoneCount));
+                }
+            }
+
+            AnimationTelemetry.RecordIkIterations(iterations);
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(stack);
+        }
+    }
+
+    /// <summary>
+    /// Recomposes world transforms for a bone and its descendants top-down.
+    /// The bone's parent must already be fresh (true here: only the subtree
+    /// root rotated, everything above it is untouched).
+    /// </summary>
+    private static void RefreshSubtree(
+        Rig rig,
+        int subtreeRoot,
+        ReadOnlySpan<Vector3> locT,
+        ReadOnlySpan<Quaternion> locR,
+        ReadOnlySpan<Vector3> locS,
+        Span<Vector3> worldT,
+        Span<Quaternion> worldR,
+        Span<Vector3> worldS,
+        Span<int> stack)
+    {
+        ReadOnlySpan<int> parents = rig.Parents;
+        int depth = 0;
+        stack[depth++] = subtreeRoot;
+
+        while (depth > 0)
+        {
+            int b = stack[--depth];
+            int p = parents[b];
+            if (p == -1)
+            {
+                worldT[b] = locT[b];
+                worldR[b] = locR[b];
+                worldS[b] = locS[b];
+            }
+            else
+            {
+                FastMath.ConcatenateLocal(worldT[p], worldR[p], worldS[p], locT[b], locR[b], locS[b], out worldT[b], out worldR[b], out worldS[b]);
+            }
+
+            ReadOnlySpan<int> children = rig.GetChildren(b);
+            for (int i = 0; i < children.Length; i++)
+            {
+                stack[depth++] = children[i];
             }
         }
-
-        AnimationTelemetry.RecordIkIterations(iterations);
     }
 }

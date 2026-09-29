@@ -29,6 +29,129 @@ public class RetargetTests
     }
 
     [Fact]
+    public void Bindings_ContainMappedBonesOnly()
+    {
+        var full = new RetargetProfile(SourceRig(), ScaledTargetRig());
+        full.Bindings.Length.Should().Be(2);
+
+        var partial = new RetargetProfile(SourceRig(), ScaledTargetRig(), [("arm", "arm")]);
+        partial.Bindings.Length.Should().Be(1);
+        partial.Bindings[0].SourceIndex.Should().Be(1);
+        partial.Bindings[0].TargetIndex.Should().Be(1);
+        partial.Bindings[0].LengthRatio.Should().BeApproximately(2.0f, 1e-6f);
+    }
+
+    [Fact]
+    public void AllModePairs_ExecuteWithoutThrowing()
+    {
+        Rig source = SourceRig();
+        Rig target = ScaledTargetRig();
+        var translationModes = new RetargetTranslationMode[]
+        {
+            RetargetTranslationMode.None,
+            RetargetTranslationMode.Absolute,
+            RetargetTranslationMode.Scaled,
+        };
+        var rotationModes = new RetargetRotationMode[]
+        {
+            RetargetRotationMode.Copy,
+            RetargetRotationMode.Offset,
+        };
+
+        foreach (RetargetTranslationMode translation in translationModes)
+        {
+            foreach (RetargetRotationMode rotation in rotationModes)
+            {
+                var profile = new RetargetProfile(source, target)
+                {
+                    TranslationMode = translation,
+                    RotationMode = rotation,
+                };
+                var sourceFrame = new AnimationFrame(2, NoCurves());
+                var targetFrame = new AnimationFrame(2, NoCurves());
+                Action retarget = () => profile.RetargetFrame(sourceFrame, targetFrame);
+                retarget.Should().NotThrow();
+            }
+        }
+    }
+
+    [Fact]
+    public void RetargetView_WorksOverStackLanes()
+    {
+        var profile = new RetargetProfile(SourceRig(), ScaledTargetRig());
+
+        Span<Vector3> srcT = stackalloc Vector3[2];
+        Span<Quaternion> srcR = stackalloc Quaternion[2];
+        Span<Vector3> srcS = stackalloc Vector3[2];
+        srcR[0] = Quaternion.Identity;
+        srcR[1] = Quaternion.Identity;
+        srcS[0] = Vector3.One;
+        srcS[1] = Vector3.One;
+        srcT[1] = new Vector3(3.0f, 0.0f, 0.0f);
+
+        Span<Vector3> dstT = stackalloc Vector3[2];
+        Span<Quaternion> dstR = stackalloc Quaternion[2];
+        Span<Vector3> dstS = stackalloc Vector3[2];
+
+        var source = new AnimationFrameView(srcT, srcR, srcS);
+        var target = new AnimationFrameView(dstT, dstR, dstS);
+        profile.RetargetView(in source, in target);
+
+        dstT[1].X.Should().BeApproximately(6.0f, 1e-5f);
+    }
+
+    [Fact]
+    public void NonUnitRestRotation_BuildsWithoutNaN()
+    {
+        var source = new Rig(new RigId("src"), [
+            new BoneInfo { Name = "root", ParentIndex = -1 },
+            new BoneInfo { Name = "arm", ParentIndex = 0, RestRotation = new Quaternion(0, 0, 0, 2.0f) },
+        ]);
+        var profile = new RetargetProfile(source, ScaledTargetRig());
+
+        var sourceFrame = new AnimationFrame(2, NoCurves());
+        var targetFrame = new AnimationFrame(2, NoCurves());
+        profile.RetargetFrame(sourceFrame, targetFrame);
+
+        // Zero source rotation must sanitize to identity, never NaN.
+        Quaternion output = targetFrame.ReadRotations()[1];
+        output.Should().Be(Quaternion.Identity);
+        FastMath.InvertSafe(new Quaternion(0, 0, 0, 0)).Should().Be(Quaternion.Identity);
+    }
+
+    [Fact]
+    public void InvalidModes_ThrowAtConstruction()
+    {
+        Action badTranslation = () =>
+        {
+            _ = new RetargetProfile(SourceRig(), ScaledTargetRig())
+            {
+                TranslationMode = (RetargetTranslationMode)99,
+            };
+        };
+        badTranslation.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action badRotation = () =>
+        {
+            _ = new RetargetProfile(SourceRig(), ScaledTargetRig())
+            {
+                RotationMode = (RetargetRotationMode)99,
+            };
+        };
+        badRotation.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+    }
+
+    [Fact]
+    public void ExplicitStructMapping_WorksLikeTuples()
+    {
+        var profile = new RetargetProfile(SourceRig(), ScaledTargetRig(), new ExplicitBoneMapping("arm", "arm"));
+        profile.SourceToTargetMap.ToArray().Should().Equal(-1, 1);
+        profile.Bindings.Length.Should().Be(1);
+    }
+
+    [Fact]
     public void ZeroMappings_Throw()
     {
         var other = new Rig(new RigId("other"), [

@@ -12,6 +12,15 @@
     <Project Path="packages/Axrone.Simd/tests/Axrone.Simd.Tests.csproj" />
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
     <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
+    <Project Path="packages/Axrone.Execution/Axrone.Execution.csproj" />
+    <Project Path="packages/Axrone.Execution/tests/Axrone.Execution.Tests.csproj" />
+    <Project Path="packages/Axrone.Render.Core/Axrone.Render.Core.csproj" />
+    <Project Path="packages/Axrone.Render.Core/tests/Axrone.Render.Core.Tests.csproj" />
+    <Project Path="packages/Axrone.Render.OpenGL/Axrone.Render.OpenGL.csproj" />
+    <Project Path="packages/Axrone.Render.OpenGL/tests/Axrone.Render.OpenGL.Tests.csproj" />
+    <Project Path="packages/Axrone.Render.Effects/Axrone.Render.Effects.csproj" />
+    <Project Path="packages/Axrone.Render.Effects/tests/Axrone.Render.Effects.Tests.csproj" />
+    <Project Path="packages/Axrone.Render.OpenGL.Mock/Axrone.Render.OpenGL.Mock.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="packages/Axrone.Batching/benchmarks/Axrone.Batching.Benchmarks.csproj" />

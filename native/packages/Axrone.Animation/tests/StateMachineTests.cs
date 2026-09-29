@@ -29,6 +29,38 @@ public class StateMachineTests
         return new StateMachineInstance([idle, run], [], 0);
     }
 
+    private static readonly float[] s_halfTimes = new float[] { 0.0f, 1.0f };
+    private static readonly float[] s_staticValues = new float[] { 0, 0, 0, 0, 0, 0 };
+    private static readonly float[] s_movingValues = new float[] { 0, 0, 0, 2, 0, 0 };
+
+    [Fact]
+    public void RootDelta_MixesSourceAndTargetMidBlend()
+    {
+        var rig = new Rig(new RigId("r"), new BoneInfo[] { new() { Name = "root", ParentIndex = -1 } });
+        var parameters = new ParameterStore(Params());
+        var staticClip = new AnimationClip(
+            new ClipId("still"), 1.0f,
+            new AnimationChannel[] { new(0, ChannelTarget.Translation, InterpolationMode.Linear, s_halfTimes, s_staticValues) });
+        var movingClip = new AnimationClip(
+            new ClipId("move"), 1.0f,
+            new AnimationChannel[] { new(0, ChannelTarget.Translation, InterpolationMode.Linear, s_halfTimes, s_movingValues) });
+        var machine = new StateMachineInstance(
+            new AnimationState[]
+            {
+                new(new StateId("still"), new ClipMotionNode(staticClip)),
+                new(new StateId("move"), new ClipMotionNode(movingClip)),
+            },
+            Array.Empty<StateTransition>(), 0);
+
+        machine.CrossFade(1, duration: 1.0f);
+        machine.HasActiveTransition.Should().BeTrue();
+        machine.Update(0.5f, parameters, new List<ClipEvent>(), 1.0f);
+
+        machine.ExtractRootDelta(rig, out Vector3 delta, out _);
+        delta.X.Should().BeApproximately(0.5f, 1e-4f);
+        delta.Y.Should().BeApproximately(0.0f, 1e-6f);
+    }
+
     [Fact]
     public void EntryState_EvaluatesRest()
     {
@@ -88,6 +120,22 @@ public class StateMachineTests
     }
 
     [Fact]
+    public void InvalidAuthoring_ThrowsCodedValidation()
+    {
+        Action nanSpeed = () => { _ = new AnimationState(new StateId("x"), new ClipMotionNode(SlideClip(0.0f))) { Speed = float.NaN }; };
+        nanSpeed.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action negativeDuration = () => { _ = new StateTransition(1, -0.5f); };
+        negativeDuration.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+
+        Action nanOffset = () => { _ = new StateTransition(1, 0.1f) { Offset = float.NaN }; };
+        nanOffset.Should().Throw<ValidationException>()
+            .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
+    }
+
+    [Fact]
     public void ExitTime_GatesTransition()
     {
         var parameters = new ParameterStore(Params());
@@ -105,5 +153,13 @@ public class StateMachineTests
 
         machine.Update(0.5f, parameters, events, 1.0f);
         machine.CurrentStateIndex.Should().Be(0);
+
+        machine.ForceState(0, 0.95f);
+        machine.Update(0.2f, parameters, events, 1.0f);
+        machine.HasActiveTransition.Should().BeFalse();
+
+        machine.ForceState(0, 0.85f);
+        machine.Update(0.3f, parameters, events, 1.0f);
+        machine.HasActiveTransition.Should().BeTrue();
     }
 }

@@ -56,18 +56,30 @@ public sealed class AnimationChannel
     /// <summary>Target curve for curve channels.</summary>
     public CurveId? TargetCurveId { get; }
 
-    /// <summary>Creates a channel; validates the time/value packing.</summary>
+    /// <summary>
+    /// Bind-time resolved curve slot; -1 until <see cref="AnimationClip.Bind"/>
+    /// resolves it. Sampling falls back to dictionary lookup while unbound.
+    /// </summary>
+    public int CurveSlot { get; internal set; } = -1;
+
+    /// <summary>
+    /// Creates a channel; validates target, bone range, ascending finite times,
+    /// and the time/value packing. Anything malformed fails here — sampling trusts.
+    /// </summary>
     public AnimationChannel(int boneIndex, ChannelTarget target, InterpolationMode interpolation, float[] times, float[] values, CurveId? curveId = null)
     {
         ArgumentNullException.ThrowIfNull(times);
         ArgumentNullException.ThrowIfNull(values);
 
-        BoneIndex = boneIndex;
-        Target = target;
-        Interpolation = interpolation;
-        _keyTimes = times;
-        _keyValues = values;
-        TargetCurveId = curveId;
+        if (boneIndex < 0 && target != ChannelTarget.Curve)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Channel bone index {boneIndex} is negative.");
+        }
+
+        if ((uint)target > (uint)ChannelTarget.Curve)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Unknown channel target '{target}'.");
+        }
 
         int componentCount = target switch
         {
@@ -75,8 +87,27 @@ public sealed class AnimationChannel
             ChannelTarget.Rotation => 4,
             ChannelTarget.Scale => 3,
             ChannelTarget.Curve => 1,
-            _ => 3,
+            _ => throw new UnreachableException(),
         };
+
+        float previous = float.NegativeInfinity;
+        for (int i = 0; i < times.Length; i++)
+        {
+            float t = times[i];
+            if (!float.IsFinite(t) || t < previous)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Channel times must be finite and ascending (index {i}).");
+            }
+
+            previous = t;
+        }
+
+        BoneIndex = boneIndex;
+        Target = target;
+        Interpolation = interpolation;
+        _keyTimes = times;
+        _keyValues = values;
+        TargetCurveId = curveId;
 
         Stride = interpolation == InterpolationMode.CubicSpline ? componentCount * 3 : componentCount;
 
@@ -231,7 +262,7 @@ public readonly record struct FootContact(float StartTime, float EndTime, int Bo
 
         float n = (time - StartTime) / duration;
         float ramp = MathF.Min(n, 1.0f - n);
-        return MathF.Min(1.0f, MathF.Max(AnimationConstants.FootWeightFloor, ramp * 4.0f));
+        return MathF.Min(1.0f, MathF.Max(AnimationConstants.FootWeightFloor, ramp * AnimationConstants.FootEdgeRampGain));
     }
 }
 
@@ -321,11 +352,45 @@ public sealed class AnimationClip
         }
     }
 
-    /// <summary>Replaces channels (streaming merge).</summary>
+    /// <summary>Replaces channels (streaming merge). New channels start unbound.</summary>
     public void RebuildChannels(AnimationChannel[] newChannels)
     {
         ArgumentNullException.ThrowIfNull(newChannels);
         _channels = newChannels;
+    }
+
+    /// <summary>
+    /// Binds curve slots against a layout and validates bone indices against a
+    /// rig. Missing curve ids stay unbound (sampling fails loudly with a code);
+    /// out-of-range bones fail here, never mid-frame. Idempotent.
+    /// </summary>
+    public void Bind(in MotionBindingContext context)
+    {
+        AnimationChannel[] channels = _channels;
+        for (int i = 0; i < channels.Length; i++)
+        {
+            AnimationChannel channel = channels[i];
+            if (context.Rig is not null && channel.Target != ChannelTarget.Curve)
+            {
+                if ((uint)channel.BoneIndex >= (uint)context.Rig.BoneCount)
+                {
+                    AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipMismatch, $"Channel {i} bone index {channel.BoneIndex} out of range for '{Id}'.");
+                }
+            }
+
+            if (channel.Target == ChannelTarget.Curve && !channel.TargetCurveId.HasValue)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Curve channel {i} in '{Id}' names no curve.");
+            }
+
+            if (context.CurveLayout is not null
+                && channel.Target == ChannelTarget.Curve
+                && channel.TargetCurveId.HasValue
+                && context.CurveLayout.TryGetValue(channel.TargetCurveId.Value, out int slot))
+            {
+                channel.CurveSlot = slot;
+            }
+        }
     }
 
     /// <summary>Wraps or clamps time to the clip range.</summary>
@@ -350,6 +415,7 @@ public sealed class AnimationClip
     public void Sample(float time, AnimationFrame outFrame, bool isLooping = true)
     {
         ArgumentNullException.ThrowIfNull(outFrame);
+        AnimationTelemetry.RecordClipSampled();
         float t = WrapClipTime(time, isLooping);
         Span<float> component = stackalloc float[4];
 
@@ -376,18 +442,28 @@ public sealed class AnimationClip
                 case ChannelTarget.Curve:
                     if (channel.TargetCurveId.HasValue)
                     {
-                        outFrame.Curves.Write(channel.TargetCurveId.Value, component[0]);
+                        if (channel.CurveSlot >= 0)
+                        {
+                            outFrame.Curves.Write(new CurveHandle(channel.CurveSlot), component[0]);
+                        }
+                        else
+                        {
+                            outFrame.Curves.Write(channel.TargetCurveId.Value, component[0]);
+                        }
                     }
 
+                    break;
+                default:
+                    AnimationThrowHelper.ThrowUnreachable();
                     break;
             }
         }
     }
 
-    /// <summary>Collects events in (prev, cur], splitting across loop wraps.</summary>
-    public void CollectEvents(float prevTime, float curTime, ICollection<ClipEvent> outEvents)
+    /// <summary>Collects events in (prev, cur] into a zero-allocation sink.</summary>
+    public void CollectEvents<TSink>(float prevTime, float curTime, ref TSink sink)
+        where TSink : struct, IClipEventSink
     {
-        ArgumentNullException.ThrowIfNull(outEvents);
         if (Duration <= 0.0f || _events.Length == 0)
         {
             return;
@@ -395,23 +471,32 @@ public sealed class AnimationClip
 
         if (curTime >= prevTime)
         {
-            CollectEventsRange(prevTime, curTime, outEvents);
+            CollectEventsRange(prevTime, curTime, ref sink);
         }
         else
         {
-            CollectEventsRange(prevTime, Duration, outEvents);
-            CollectEventsRange(0.0f, curTime, outEvents);
+            CollectEventsRange(prevTime, Duration, ref sink);
+            CollectEventsRange(0.0f, curTime, ref sink);
         }
     }
 
-    private void CollectEventsRange(float start, float end, ICollection<ClipEvent> outEvents)
+    /// <summary>Collects events in (prev, cur] into a collection.</summary>
+    public void CollectEvents(float prevTime, float curTime, ICollection<ClipEvent> outEvents)
+    {
+        ArgumentNullException.ThrowIfNull(outEvents);
+        var adapter = new CollectionEventSinkAdapter(outEvents);
+        CollectEvents(prevTime, curTime, ref adapter);
+    }
+
+    private void CollectEventsRange<TSink>(float start, float end, ref TSink sink)
+        where TSink : struct, IClipEventSink
     {
         for (int i = 0; i < _events.Length; i++)
         {
             ClipEvent evt = _events[i];
             if (evt.Time > start && evt.Time <= end)
             {
-                outEvents.Add(evt);
+                sink.Emit(in evt);
             }
         }
     }

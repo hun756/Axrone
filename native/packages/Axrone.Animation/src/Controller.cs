@@ -45,6 +45,7 @@ public sealed class AnimationLayer
 public sealed class AnimationController : IDisposable
 {
     private readonly List<AnimationLayer> _layers = new();
+    private readonly Dictionary<CurveId, int> _curveLayout;
 
     /// <summary>Driven rig.</summary>
     public Rig Rig { get; }
@@ -66,9 +67,24 @@ public sealed class AnimationController : IDisposable
         ArgumentNullException.ThrowIfNull(curveLayout);
         Rig = rig;
         Parameters = parameters;
+        _curveLayout = curveLayout;
         CurrentFrame = new AnimationFrame(rig.BoneCount, curveLayout);
         Arena = new FrameArena(rig.BoneCount, curveLayout, arenaCapacity);
         CurrentFrame.ResetToRest(rig);
+    }
+
+    /// <summary>
+    /// Resolves every layer motion (parameters, curves, bone ranges) once before
+    /// the first update. Optional — unbound graphs keep working through the
+    /// compat path — but bound graphs skip all per-frame lookups.
+    /// </summary>
+    public void BindAll()
+    {
+        var context = new MotionBindingContext(Parameters, _curveLayout, Rig);
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            _layers[i].Machine.Bind(in context);
+        }
     }
 
     /// <summary>Adds a layer (index 0 is the base).</summary>

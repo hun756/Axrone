@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Execution</RootNamespace>
+    <AssemblyName>Axrone.Execution</AssemblyName>
+    <Description>Generic lock-free command-executor library: MPSC ring pump with static-abstract processors, pluggable spin backoff and telemetry. Render and engine executors derive from this package.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: byte-backed status enums — compact wire descriptors, intentional -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Execution.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Label="Dependencies">
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
