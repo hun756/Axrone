@@ -183,7 +183,8 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
         return null;
     }
 
-    if (input.source.kind === 'texture' && input.source.resourceId.trim() === '') {
+    const materialRef = typeof input.material === 'string' ? input.material.trim() : '';
+    if (input.source.kind === 'texture' && input.source.resourceId.trim() === '' && !materialRef) {
         return null;
     }
     const source =
