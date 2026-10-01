@@ -20,15 +20,32 @@ public enum ComputeBindingType
 }
 
 /// <summary>
+/// Declares how a compute pass accesses a bound resource, for frame-graph hazard tracking.
+/// </summary>
+public enum ComputeBindingAccess
+{
+    /// <summary>The pass only reads the resource.</summary>
+    Read = 0,
+
+    /// <summary>The pass only writes the resource.</summary>
+    Write = 1,
+
+    /// <summary>The pass reads and writes the resource.</summary>
+    ReadWrite = 2,
+}
+
+/// <summary>
 /// Describes a single resource binding for a compute pass.
 /// </summary>
 /// <param name="BindingPoint">The shader binding point (layout qualifier value).</param>
 /// <param name="ResourceName">The resource name in the <see cref="PassExecutionContext"/>.</param>
 /// <param name="Type">The binding type determining how the resource is bound.</param>
+/// <param name="Access">Whether the pass reads, writes, or both; drives frame-graph write edges.</param>
 public readonly record struct ComputeResourceBinding(
     uint BindingPoint,
     string ResourceName,
-    ComputeBindingType Type);
+    ComputeBindingType Type,
+    ComputeBindingAccess Access = ComputeBindingAccess.Read);
 
 /// <summary>
 /// Payload for the GPU compute dispatch pass, owning the pass's setup, validate and
@@ -59,7 +76,17 @@ public record struct ComputePassData
     {
         for (int i = 0; i < data.Bindings.Count; i++)
         {
-            builder.Reads(data.Bindings[i].ResourceName);
+            ComputeResourceBinding binding = data.Bindings[i];
+
+            if (binding.Access is ComputeBindingAccess.Write or ComputeBindingAccess.ReadWrite)
+            {
+                builder.Writes(binding.ResourceName);
+            }
+
+            if (binding.Access is ComputeBindingAccess.Read or ComputeBindingAccess.ReadWrite)
+            {
+                builder.Reads(binding.ResourceName);
+            }
         }
     }
 
