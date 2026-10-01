@@ -45,7 +45,7 @@ public sealed class AnimationLayer
 public sealed class AnimationController : IDisposable
 {
     private readonly List<AnimationLayer> _layers = new();
-    private readonly Dictionary<CurveId, int> _curveLayout;
+    private readonly CurveLayout _curveLayout;
 
     /// <summary>Driven rig.</summary>
     public Rig Rig { get; }
@@ -60,7 +60,7 @@ public sealed class AnimationController : IDisposable
     public FrameArena Arena { get; }
 
     /// <summary>Creates a controller over a rig.</summary>
-    public AnimationController(Rig rig, ParameterStore parameters, Dictionary<CurveId, int> curveLayout, int arenaCapacity = 64)
+    public AnimationController(Rig rig, ParameterStore parameters, CurveLayout? curveLayout, int arenaCapacity = 64)
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(parameters);
