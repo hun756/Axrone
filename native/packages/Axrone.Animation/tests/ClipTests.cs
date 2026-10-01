@@ -99,6 +99,52 @@ public class ClipTests
     }
 
     [Fact]
+    public void CubicTranslation_ClipSample_ClampsAndBlends()
+    {
+        // One triple (in-tangent/value/out-tangent) per key; zero tangents.
+        var channel = new AnimationChannel(
+            1, ChannelTarget.Translation, InterpolationMode.CubicSpline,
+            [0.0f, 1.0f],
+            [0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+             0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f]);
+        var clip = new AnimationClip(new ClipId("cubic"), 1.0f, [channel]);
+        var frame = new AnimationFrame(2, new Dictionary<CurveId, int>());
+
+        clip.Sample(-1.0f, frame);
+        frame.ReadTranslations()[1].X.Should().Be(0.0f);
+
+        clip.Sample(0.5f, frame);
+        frame.ReadTranslations()[1].X.Should().BeApproximately(5.0f, 1e-5f);
+
+        clip.Sample(5.0f, frame, isLooping: false);
+        frame.ReadTranslations()[1].X.Should().Be(10.0f);
+    }
+
+    [Fact]
+    public void CubicRotation_ClipSample_Normalizes()
+    {
+        var channel = new AnimationChannel(
+            0, ChannelTarget.Rotation, InterpolationMode.CubicSpline,
+            [0.0f, 1.0f],
+            [0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f]);
+        var clip = new AnimationClip(new ClipId("cubicrot"), 1.0f, [channel]);
+        var frame = new AnimationFrame(1, new Dictionary<CurveId, int>());
+
+        clip.Sample(-1.0f, frame);
+        frame.ReadRotations()[0].Should().Be(new Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+
+        clip.Sample(0.5f, frame);
+        Quaternion mid = frame.ReadRotations()[0];
+        float length = MathF.Sqrt((mid.X * mid.X) + (mid.Y * mid.Y) + (mid.Z * mid.Z) + (mid.W * mid.W));
+        length.Should().BeApproximately(1.0f, 1e-5f);
+        mid.Y.Should().BeApproximately(0.7071f, 1e-4f);
+
+        clip.Sample(5.0f, frame, isLooping: false);
+        frame.ReadRotations()[0].Should().Be(new Quaternion(0.0f, 1.0f, 0.0f, 0.0f));
+    }
+
+    [Fact]
     public void FootContact_WeightRamps()
     {
         var contact = new FootContact(0.0f, 1.0f, 3);
