@@ -76,16 +76,16 @@ public readonly record struct AnimationMask
 public readonly record struct CurveStore
 {
     private readonly float[] _values;
-    private readonly Dictionary<CurveId, int> _offsets;
+    private readonly CurveLayout _layout;
 
     /// <summary>Channel count.</summary>
     public int Count => _values.Length;
 
     /// <summary>Creates a store over a curve layout.</summary>
-    public CurveStore(Dictionary<CurveId, int> layout)
+    public CurveStore(CurveLayout? layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
-        _offsets = layout;
+        _layout = layout;
         _values = new float[layout.Count];
     }
 
@@ -97,27 +97,17 @@ public readonly record struct CurveStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CurveHandle ResolveHandle(CurveId id)
     {
-        if (!_offsets.TryGetValue(id, out int offset))
+        if (!_layout.TryGetSlot(id, out CurveHandle handle))
         {
             AnimationThrowHelper.ThrowCurveNotFound(id);
         }
 
-        return new CurveHandle(offset);
+        return handle;
     }
 
     /// <summary>Tries to resolve an id to a runtime slot.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryResolveHandle(CurveId id, out CurveHandle handle)
-    {
-        if (_offsets.TryGetValue(id, out int offset))
-        {
-            handle = new CurveHandle(offset);
-            return true;
-        }
-
-        handle = CurveHandle.Invalid;
-        return false;
-    }
+    public bool TryResolveHandle(CurveId id, out CurveHandle handle) => _layout.TryGetSlot(id, out handle);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int RequireSlot(in CurveHandle handle)
@@ -134,7 +124,7 @@ public readonly record struct CurveStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float Read(CurveId id)
     {
-        if (!_offsets.TryGetValue(id, out int offset))
+        if (!_layout.TryGetValue(id, out int offset))
         {
             AnimationThrowHelper.ThrowCurveNotFound(id);
         }
@@ -150,7 +140,7 @@ public readonly record struct CurveStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Write(CurveId id, float value)
     {
-        if (!_offsets.TryGetValue(id, out int offset))
+        if (!_layout.TryGetValue(id, out int offset))
         {
             AnimationThrowHelper.ThrowCurveNotFound(id);
         }
@@ -192,7 +182,7 @@ public sealed class AnimationFrame
     public CurveStore Curves { get; }
 
     /// <summary>Creates a frame.</summary>
-    public AnimationFrame(int boneCount, Dictionary<CurveId, int> curveLayout)
+    public AnimationFrame(int boneCount, CurveLayout? curveLayout)
     {
         ArgumentNullException.ThrowIfNull(curveLayout);
         if (boneCount <= 0)
@@ -264,7 +254,7 @@ public sealed class FrameArena
     private int _stackPointer;
 
     /// <summary>Preallocates scratch frames.</summary>
-    public FrameArena(int boneCount, Dictionary<CurveId, int> curveLayout, int capacity = 32)
+    public FrameArena(int boneCount, CurveLayout? curveLayout, int capacity = 32)
     {
         ArgumentNullException.ThrowIfNull(curveLayout);
         if (capacity <= 0)
