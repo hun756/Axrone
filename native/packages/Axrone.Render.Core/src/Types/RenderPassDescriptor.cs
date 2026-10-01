@@ -48,31 +48,31 @@ public struct ColorAttachmentArray : IEquatable<ColorAttachmentArray>
 /// Blittable-friendly zero-allocation value type.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct RenderPassDescriptor : IEquatable<RenderPassDescriptor>
+public readonly record struct RenderPassDescriptor : IDescriptor<RenderPassDescriptor>
 {
     /// <summary>Maximum number of color attachments supported.</summary>
     public const int MaxColorAttachments = ColorAttachmentArray.MaxColorAttachments;
 
     /// <summary>Target framebuffer ID (0 for the default backbuffer).</summary>
-    public readonly uint FramebufferId;
+    public uint FramebufferId { get; init; }
 
     /// <summary>Viewport rectangle in framebuffer pixels.</summary>
-    public readonly ViewportRect Viewport;
+    public ViewportRect Viewport { get; init; }
 
     /// <summary>Scissor rectangle in framebuffer pixels.</summary>
-    public readonly ScissorRect Scissor;
+    public ScissorRect Scissor { get; init; }
 
     /// <summary>Whether scissor testing is enabled for the pass.</summary>
-    public readonly bool ScissorTest;
+    public bool ScissorTest { get; init; }
 
     /// <summary>Number of active color attachments in the pass.</summary>
-    public readonly byte ColorAttachmentCount;
+    public byte ColorAttachmentCount { get; init; }
 
     /// <summary>Whether a depth/stencil attachment is bound.</summary>
-    public readonly bool HasDepthStencil;
+    public bool HasDepthStencil { get; init; }
 
     /// <summary>Depth/stencil attachment binding.</summary>
-    public readonly AttachmentDescriptor DepthStencilAttachment;
+    public AttachmentDescriptor DepthStencilAttachment { get; init; }
 
     private readonly ColorAttachmentArray _colorAttachments;
 
@@ -95,6 +95,7 @@ public readonly struct RenderPassDescriptor : IEquatable<RenderPassDescriptor>
         DepthStencilAttachment = default;
 
         int count = attachments.Length;
+        byte colorCount = 0;
         for (int i = 0; i < count; i++)
         {
             ref readonly var att = ref attachments[i];
@@ -105,14 +106,16 @@ public readonly struct RenderPassDescriptor : IEquatable<RenderPassDescriptor>
             }
             else
             {
-                if (ColorAttachmentCount >= MaxColorAttachments)
+                if (colorCount >= MaxColorAttachments)
                 {
                     ThrowHelper.ThrowArgumentOutOfRange(nameof(attachments), count, $"Color attachment count exceeds physical maximum of {MaxColorAttachments}");
                 }
 
-                _colorAttachments[ColorAttachmentCount++] = att;
+                _colorAttachments[colorCount++] = att;
             }
         }
+
+        ColorAttachmentCount = colorCount;
     }
 
     /// <summary>Initializes a render pass descriptor without scissor test.</summary>
@@ -190,60 +193,27 @@ public readonly struct RenderPassDescriptor : IEquatable<RenderPassDescriptor>
         params ReadOnlySpan<AttachmentDescriptor> attachments) =>
         new(framebufferId, viewport, scissor, scissorTest, attachments);
 
-    /// <inheritdoc/>
-    public bool Equals(RenderPassDescriptor other)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in RenderPassDescriptor descriptor)
     {
-        if (FramebufferId != other.FramebufferId ||
-            Viewport != other.Viewport ||
-            Scissor != other.Scissor ||
-            ScissorTest != other.ScissorTest ||
-            ColorAttachmentCount != other.ColorAttachmentCount ||
-            HasDepthStencil != other.HasDepthStencil)
+        int count = descriptor.ColorAttachmentCount;
+        if (count > MaxColorAttachments)
         {
-            return false;
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor), count, $"Color attachment count exceeds physical maximum of {MaxColorAttachments}");
         }
 
-        if (HasDepthStencil && !DepthStencilAttachment.Equals(other.DepthStencilAttachment))
+        for (int i = 0; i < count; i++)
         {
-            return false;
+            AttachmentDescriptor.Validate(in descriptor._colorAttachments[i]);
         }
 
-        for (int i = 0; i < ColorAttachmentCount; i++)
+        if (descriptor.HasDepthStencil)
         {
-            if (!_colorAttachments[i].Equals(other._colorAttachments[i]))
-            {
-                return false;
-            }
+            AttachmentDescriptor depthStencil = descriptor.DepthStencilAttachment;
+            AttachmentDescriptor.Validate(in depthStencil);
         }
-
-        return true;
     }
 
-    /// <inheritdoc/>
-    public override bool Equals([NotNullWhen(true)] object? obj) =>
-        obj is RenderPassDescriptor other && Equals(other);
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(FramebufferId);
-        hash.Add(Viewport);
-        hash.Add(Scissor);
-        hash.Add(ScissorTest);
-        hash.Add(ColorAttachmentCount);
-        hash.Add(HasDepthStencil);
-        if (HasDepthStencil) hash.Add(DepthStencilAttachment);
-        for (int i = 0; i < ColorAttachmentCount; i++)
-        {
-            hash.Add(_colorAttachments[i]);
-        }
-        return hash.ToHashCode();
-    }
-
-    /// <summary>Equality operator.</summary>
-    public static bool operator ==(in RenderPassDescriptor left, in RenderPassDescriptor right) => left.Equals(right);
-
-    /// <summary>Inequality operator.</summary>
-    public static bool operator !=(in RenderPassDescriptor left, in RenderPassDescriptor right) => !left.Equals(right);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in RenderPassDescriptor descriptor) => descriptor.ToString();
 }
