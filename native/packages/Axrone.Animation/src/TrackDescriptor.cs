@@ -1,3 +1,5 @@
+using Axrone.Utility.Descriptors;
+
 namespace Axrone.Animation;
 
 /// <summary>
@@ -17,7 +19,7 @@ namespace Axrone.Animation;
 /// track: a track with no keys reports <see cref="StartTime"/> and
 /// <see cref="EndTime"/> as <c>0</c>, never by indexing into a zero-length span.
 /// </summary>
-public readonly record struct TrackDescriptor
+public readonly record struct TrackDescriptor : IDescriptor<TrackDescriptor>
 {
     /// <summary>What the track drives.</summary>
     public ChannelTarget Target { get; init; }
@@ -88,6 +90,31 @@ public readonly record struct TrackDescriptor
             EndTime = endTime,
         };
     }
+
+    public static void Validate(in TrackDescriptor descriptor)
+    {
+        if (descriptor.KeyCount < 0)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Track key count {descriptor.KeyCount} is negative.");
+        }
+
+        if (descriptor.KeyCount == 0)
+        {
+            if (descriptor.StartTime != 0.0f || descriptor.EndTime != 0.0f)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, "Empty track must report zero start and end time.");
+            }
+
+            return;
+        }
+
+        if (descriptor.StartTime > descriptor.EndTime)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationClipDegenerateData, $"Track start time {descriptor.StartTime} exceeds end time {descriptor.EndTime}.");
+        }
+    }
+
+    public static string Describe(in TrackDescriptor descriptor) => descriptor.ToString();
 }
 
 /// <summary>
