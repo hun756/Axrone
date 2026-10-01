@@ -37,6 +37,12 @@ public sealed class GLCapabilities
     /// <summary>Gets the maximum samples for multisampling.</summary>
     public int MaxSamples { get; }
 
+    /// <summary>
+    /// Gets the maximum supported anisotropy level, or 0 when
+    /// EXT_texture_filter_anisotropic is unavailable.
+    /// </summary>
+    public int MaxTextureMaxAnisotropy { get; }
+
     /// <summary>Gets the vendor string.</summary>
     public string Vendor { get; }
 
@@ -81,12 +87,17 @@ public sealed class GLCapabilities
         gl.GetInteger(0x84E8, out int maxRB); // GL_MAX_RENDERBUFFER_SIZE
         MaxRenderbufferSize = Math.Max(0, maxRB);
 
-        gl.GetInteger(0x0D3A, out int maxVPW); // GL_MAX_VIEWPORT_DIMS
-        gl.GetInteger(0x0D3B, out int maxVPH);
-        MaxViewportDims = (Math.Max(0, maxVPW), Math.Max(0, maxVPH));
+        // GL_MAX_VIEWPORT_DIMS is a single pname that returns TWO integers (width, height).
+        // Querying a second pname for the height reads an unrelated enum and yields garbage.
+        Span<int> maxViewport = stackalloc int[2];
+        gl.GetInteger(0x0D3A, maxViewport); // GL_MAX_VIEWPORT_DIMS
+        MaxViewportDims = (Math.Max(0, maxViewport[0]), Math.Max(0, maxViewport[1]));
 
         gl.GetInteger(0x8D57, out int maxSamples); // GL_MAX_SAMPLES
         MaxSamples = Math.Max(0, maxSamples);
+
+        gl.GetInteger(0x84FF, out int maxAniso); // GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT (0 if unsupported)
+        MaxTextureMaxAnisotropy = Math.Max(0, maxAniso);
 
         Vendor = gl.GetString(0x1F00) ?? "Unknown"; // GL_VENDOR
         Renderer = gl.GetString(0x1F01) ?? "Unknown"; // GL_RENDERER
