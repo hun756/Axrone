@@ -181,20 +181,22 @@ public sealed class VertexLayout : IEquatable<VertexLayout>
     /// <param name="indexBuffer">The index buffer to bind.</param>
     /// <param name="vertexCount">The number of vertices.</param>
     /// <param name="indexCount">The number of indices to draw.</param>
+    /// <param name="indexType">The index element type (default: <see cref="GLConst.UnsignedInt"/>).</param>
     /// <returns>A configured <see cref="GLVertexArray"/>.</returns>
     public GLVertexArray BuildVertexArray(
         GLContext context,
         GLBuffer vertexBuffer,
         GLBuffer indexBuffer,
         int vertexCount,
-        int indexCount)
+        int indexCount,
+        uint indexType = GLConst.UnsignedInt)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(vertexBuffer);
         ArgumentNullException.ThrowIfNull(indexBuffer);
 
         var vao = new GLVertexArray(context, "mesh_vao");
-        vao.ConfigureLayout(vertexBuffer, indexBuffer, _attributes, vertexCount, indexCount);
+        vao.ConfigureLayout(vertexBuffer, indexBuffer, _attributes, vertexCount, indexCount, indexType);
         return vao;
     }
 
