@@ -111,8 +111,12 @@ public sealed class GLQuery : IGLResource, IDisposable
     public long GetResult()
     {
         EnsureAlive();
-        _gl.GetQueryParameter(Id, GLConst.QueryResult, out int result);
-        return result;
+
+        // Timer queries (TIME_ELAPSED / TIMESTAMP) produce 64-bit results; the 32-bit read
+        // truncates them once the value exceeds int.MaxValue (e.g. ~2.1s of nanoseconds, or
+        // any absolute GPU timestamp counter). Read the full 64-bit value.
+        _gl.GetQueryParameter(Id, GLConst.QueryResult, out ulong result);
+        return (long)result;
     }
 
     /// <summary>Checks if the query result is available.</summary>
