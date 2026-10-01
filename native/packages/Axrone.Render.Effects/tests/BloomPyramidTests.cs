@@ -163,11 +163,13 @@ public sealed class BloomPyramidTests : IDisposable
             // then 16, 32 accumulating back up, then the 64x64 output.
             ViewportWidthPerDraw().Should().Equal(32, 16, 8, 16, 32, 64);
 
-            // Program switches mark the stage boundaries. A fresh context leaves the
-            // state cache invalidated, so every bind is re-issued: one per draw, and
-            // the middle ones belong to the downsample and the upsample.
+            // Program switches mark the stage boundaries. With state-cache deduplication active,
+            // consecutive binds of the same program collapse to a single GL call: the prefilter
+            // binds _bright, the two downsamples and two upsamples all share _blur (one bind),
+            // and the composite binds _composite -> three distinct binds. The stage ORDER is
+            // still fully proven by the six draws and their viewport widths asserted above.
             List<int> useProgram = IndicesOf("UseProgram(");
-            useProgram.Should().HaveCount(6);
+            useProgram.Should().HaveCount(3);
             Log[useProgram[0]].Should().Be($"UseProgram({_bright.Id})");
             Log[useProgram[^1]].Should().Be($"UseProgram({_composite.Id})");
             for (int i = 1; i < useProgram.Count - 1; i++)
