@@ -121,6 +121,17 @@ public sealed class GLSampler : IGLResource, IDisposable
             _gl.SamplerParameter(Id, GLConst.TextureCompareMode, (int)_compareMode);
             _gl.SamplerParameter(Id, GLConst.TextureCompareFunc, (int)_compareFunc);
         }
+
+        // Anisotropic filtering (EXT_texture_filter_anisotropic). Clamp to the driver maximum and
+        // skip entirely when the extension is absent (max == 0) so we never raise GL_INVALID_ENUM.
+        if (_maxAnisotropy > 1.0f)
+        {
+            float maxSupported = _context.Capabilities.MaxTextureMaxAnisotropy;
+            if (maxSupported >= 1.0f)
+            {
+                _gl.SamplerParameter(Id, GLConst.TextureMaxAnisotropyExt, Math.Min(_maxAnisotropy, maxSupported));
+            }
+        }
     }
 
     /// <summary>Binds this sampler to a texture unit.</summary>
