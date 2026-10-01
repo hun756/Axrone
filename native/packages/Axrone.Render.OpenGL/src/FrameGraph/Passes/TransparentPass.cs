@@ -27,6 +27,9 @@ public record struct TransparentPassData
     /// <summary>Mesh entries rendered in this pass.</summary>
     public List<TransparentMeshEntry> Entries { get; set; }
 
+    /// <summary>Camera world position used as the origin for back-to-front sorting.</summary>
+    public Vector3 CameraPosition { get; set; }
+
     /// <inheritdoc/>
     public static void Declare(IRenderPassBuilder builder, ref TransparentPassData data)
     {
@@ -78,11 +81,15 @@ public record struct TransparentPassData
 
         state.UseProgram(data.Program.Id);
 
+        // Sort back-to-front relative to the CAMERA, not the world origin: alpha blending is only
+        // correct when fragments are drawn farthest-from-viewer first. Update CameraPosition each
+        // frame before execution so the order tracks the viewer.
+        Vector3 camera = data.CameraPosition;
         var entries = CollectionsMarshal.AsSpan(data.Entries);
-        entries.Sort(static (a, b) =>
+        entries.Sort((a, b) =>
         {
-            float distA = a.WorldPosition.LengthSquared();
-            float distB = b.WorldPosition.LengthSquared();
+            float distA = (a.WorldPosition - camera).LengthSquared();
+            float distB = (b.WorldPosition - camera).LengthSquared();
             return distB.CompareTo(distA);
         });
 
@@ -102,7 +109,8 @@ public static class TransparentPass
     public static RenderPass<TransparentPassData> Create(
         string name,
         GLProgram program,
-        string? targetFramebufferName = null)
+        string? targetFramebufferName = null,
+        Vector3 cameraPosition = default)
     {
         ArgumentNullException.ThrowIfNull(program);
         return new RenderPass<TransparentPassData>(
@@ -112,6 +120,7 @@ public static class TransparentPass
             {
                 Program = program,
                 TargetFramebufferName = targetFramebufferName,
+                CameraPosition = cameraPosition,
                 Entries = new List<TransparentMeshEntry>()
             });
     }
