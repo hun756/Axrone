@@ -325,6 +325,10 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             maxDelta: sceneOptions.maxDelta,
             maxSubSteps: sceneOptions.maxSubSteps,
             autoStart: false,
+            // Pause while the document is hidden so backgrounded tabs and
+            // Android activities stop burning CPU/GPU and the physics clock
+            // does not jump on resume. game-loop owns the visibility listener.
+            pauseWhenHidden: true,
             systems: loopSystems,
             errorPolicy: 'throw',
         });
