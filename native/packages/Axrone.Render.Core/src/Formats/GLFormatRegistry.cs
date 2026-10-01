@@ -17,7 +17,20 @@ public readonly record struct FormatDescriptor(
     uint Type,
     byte BytesPerPixel,
     bool HasDepth,
-    bool HasStencil);
+    bool HasStencil) : IDescriptor<FormatDescriptor>
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in FormatDescriptor descriptor)
+    {
+        if (descriptor.BytesPerPixel == 0)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor), descriptor.BytesPerPixel, "Format must report at least one byte per pixel.");
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in FormatDescriptor descriptor) => descriptor.ToString();
+}
 
 /// <summary>
 /// Registry of GL format descriptors for texture allocation. This is the
