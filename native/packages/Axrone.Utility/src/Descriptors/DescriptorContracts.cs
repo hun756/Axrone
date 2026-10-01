@@ -1,5 +1,12 @@
 namespace Axrone.Utility.Descriptors;
 
+public interface IDescriptor<TSelf>
+{
+    static abstract void Validate(in TSelf descriptor);
+
+    static abstract string Describe(in TSelf descriptor);
+}
+
 /// <summary>Zero-copy stack accessor over table memory.</summary>
 public interface IDescriptorAccessor<TDescriptor, TContext>
     where TDescriptor : unmanaged
