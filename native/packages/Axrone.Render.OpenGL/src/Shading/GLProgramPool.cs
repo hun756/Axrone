@@ -150,8 +150,8 @@ public sealed class GLProgramPool : IDisposable
 
     private static ulong ComputeKey(string vertexSource, string fragmentSource)
     {
-        uint vertexHash = Fnv1a32.Compute(vertexSource.AsSpan());
-        uint fragmentHash = Fnv1a32.Compute(fragmentSource.AsSpan());
+        uint vertexHash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(vertexSource.AsSpan())).Value;
+        uint fragmentHash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(fragmentSource.AsSpan())).Value;
         return ((ulong)vertexHash << 32) | fragmentHash;
     }
 
