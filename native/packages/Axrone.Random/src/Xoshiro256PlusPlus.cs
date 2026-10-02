@@ -19,7 +19,7 @@ namespace Axrone.Random;
 /// <c>{0x9D116F2BB0F0F001, 0x0280002BCefd1A5E, 0x04B4EDCF26259F85, 0x0003C03C3F3ECB19}</c>,
 /// with the x^256 term implicit.</para>
 /// </remarks>
-public struct Xoshiro256PlusPlus : IJumpableRandomSource<Xoshiro256PlusPlus>, IEquatable<Xoshiro256PlusPlus>
+public struct Xoshiro256PlusPlus : IJumpableRandomSource<Xoshiro256PlusPlus>, IRandomStateSnapshot<Xoshiro256PlusPlus>, IEquatable<Xoshiro256PlusPlus>
 {
     /// <summary>Coefficient words of <c>x^(2^128) mod p(x)</c>: the 2^128-step jump.</summary>
     private static ReadOnlySpan<ulong> JumpPolynomial =>
@@ -39,10 +39,17 @@ public struct Xoshiro256PlusPlus : IJumpableRandomSource<Xoshiro256PlusPlus>, IE
         0x39109BB02ACBE635UL
     ];
 
+    /// <summary>Number of 64-bit words in a state snapshot: the four state words.</summary>
+    public const int WordCount = 4;
+
     private ulong _s0;
     private ulong _s1;
     private ulong _s2;
     private ulong _s3;
+
+    /// <inheritdoc/>
+    /// <remarks>Implemented explicitly so the constant stays usable in a <c>stackalloc</c>.</remarks>
+    static int IRandomStateSnapshot<Xoshiro256PlusPlus>.WordCount => WordCount;
 
     /// <summary>Creates a state expanded from <paramref name="seed"/> through SplitMix64.</summary>
     /// <param name="seed">The seed; the same seed always yields the same stream.</param>
@@ -95,6 +102,40 @@ public struct Xoshiro256PlusPlus : IJumpableRandomSource<Xoshiro256PlusPlus>, IE
 
     /// <inheritdoc/>
     public static void LongJump(ref Xoshiro256PlusPlus source) => source.ApplyPolynomial(LongJumpPolynomial);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public readonly void CopyStateTo(Span<ulong> destination)
+    {
+        if (destination.Length < WordCount)
+        {
+            RandomThrowHelper.ThrowDestinationTooShortForState(WordCount, nameof(destination));
+        }
+
+        destination[0] = _s0;
+        destination[1] = _s1;
+        destination[2] = _s2;
+        destination[3] = _s3;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static Xoshiro256PlusPlus FromState(ReadOnlySpan<ulong> state)
+    {
+        if (state.Length != WordCount)
+        {
+            RandomThrowHelper.ThrowStateSpanLengthMismatch(WordCount, state.Length, nameof(state));
+        }
+
+        // A restored all-zero state is the unseeded state, not a dead one: the next draw reseeds
+        // from entropy, exactly as a default-constructed engine does.
+        Xoshiro256PlusPlus engine = default;
+        engine._s0 = state[0];
+        engine._s1 = state[1];
+        engine._s2 = state[2];
+        engine._s3 = state[3];
+        return engine;
+    }
 
     /// <summary>Compares the state words of two generators.</summary>
     /// <param name="other">The generator to compare against.</param>
