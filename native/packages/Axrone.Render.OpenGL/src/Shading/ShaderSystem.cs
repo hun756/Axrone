@@ -445,10 +445,8 @@ public sealed class ShaderInstance
 
         EnsureCacheFresh();
 
-        // FNV-1a over the bit patterns of both components.
-        uint hash = 2166136261u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(x)) * 16777619u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(y)) * 16777619u;
+        Span<float> lanes = stackalloc float[2] { x, y };
+        uint hash = Fnv1a32.Compute(lanes);
 
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
@@ -473,12 +471,8 @@ public sealed class ShaderInstance
 
         EnsureCacheFresh();
 
-        // FNV-1a over the bit patterns of all four components.
-        uint hash = 2166136261u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v0)) * 16777619u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v1)) * 16777619u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v2)) * 16777619u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v3)) * 16777619u;
+        Span<float> lanes = stackalloc float[4] { v0, v1, v2, v3 };
+        uint hash = Fnv1a32.Compute(lanes);
 
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
@@ -501,13 +495,7 @@ public sealed class ShaderInstance
         fixed (System.Numerics.Matrix4x4* ptr = &matrix)
         {
             float* f = (float*)ptr;
-
-            // Compute FNV-1a hash
-            uint hash = 2166136261u;
-            for (int i = 0; i < 16; i++)
-            {
-                hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(f[i])) * 16777619u;
-            }
+            uint hash = Fnv1a32.Compute(new ReadOnlySpan<float>(f, 16));
 
             if (_cache.CheckAndSet(Program.Id, location, hash))
             {
