@@ -690,16 +690,14 @@ public sealed class BloomPassExecutor : IRenderPass, IDisposable
             prefilter.SetInt(prefilterSource, 0);
             prefilter.SetVec2(prefilterTexelSize, 1f / source.Width, 1f / source.Height);
 
-            // vec4 has no cached setter, so the curve is uploaded directly; the
-            // location guard keeps a program that omits the uniform working.
-            if (prefilterCurve != InvalidUniformLocation)
-            {
-                gl.Uniform4(prefilterCurve,
-                    _threshold,
-                    BloomMath.ComputeKneeWidth(_threshold, _softKnee),
-                    1f,
-                    1f);
-            }
+            // Routed through the instance so identical curves skip the upload; the
+            // negative-location guard it carries keeps a program that omits the
+            // uniform working.
+            prefilter.SetVec4(prefilterCurve,
+                _threshold,
+                BloomMath.ComputeKneeWidth(_threshold, _softKnee),
+                1f,
+                1f);
 
             gl.DrawArrays(GLConst.Triangles, 0, 3);
         }
