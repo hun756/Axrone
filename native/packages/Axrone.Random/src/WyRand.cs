@@ -15,8 +15,12 @@ namespace Axrone.Random;
 /// defect. Every other seed is fully deterministic.</para>
 /// <para>The reference vector for seed <c>0</c> is not published for this generator; the
 /// determinism contract, not a magic constant, is what pins the stream.</para>
+/// <para><b>AOT cost.</b> WyRand's mixing is multiply-bound, and under ILC a 64x64-to-128
+/// widening multiply lowers to a schoolbook helper rather than a single hardware instruction,
+/// so the core loses its throughput edge in a Native AOT image. Prefer the xoroshiro family
+/// there, whose state updates are rotate/xor/add only.</para>
 /// </remarks>
-public struct WyRand : IRandomSource<WyRand>, IEquatable<WyRand>
+public struct WyRand : IRandomSource<WyRand>, IRandomStateSnapshot<WyRand>, IEquatable<WyRand>
 {
     /// <summary>State increment and mixing seed: the fractional part of sqrt(3) - 1.</summary>
     public const ulong Secret0 = 0x2D358DCCAA6C78A5UL;
@@ -24,7 +28,14 @@ public struct WyRand : IRandomSource<WyRand>, IEquatable<WyRand>
     /// <summary>Mixing multiplier, applied twice.</summary>
     public const ulong Secret1 = 0x8BB84B93962EACC9UL;
 
+    /// <summary>Number of 64-bit words in a state snapshot: the single state word.</summary>
+    public const int WordCount = 1;
+
     private ulong _state;
+
+    /// <inheritdoc/>
+    /// <remarks>Implemented explicitly so the constant stays usable in a <c>stackalloc</c>.</remarks>
+    static int IRandomStateSnapshot<WyRand>.WordCount => WordCount;
 
     /// <summary>Creates a state whose first draw is a pure function of <paramref name="seed"/>.</summary>
     /// <param name="seed">The seed word. Zero is legal and means "unseeded"; see the remarks.</param>
@@ -53,6 +64,32 @@ public struct WyRand : IRandomSource<WyRand>, IEquatable<WyRand>
     /// <remarks>Takes the high half of the 64-bit draw.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static uint NextUInt32(ref WyRand source) => (uint)(NextUInt64(ref source) >> 32);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public readonly void CopyStateTo(Span<ulong> destination)
+    {
+        if (destination.Length < WordCount)
+        {
+            RandomThrowHelper.ThrowDestinationTooShortForState(WordCount, nameof(destination));
+        }
+
+        destination[0] = _state;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static WyRand FromState(ReadOnlySpan<ulong> state)
+    {
+        if (state.Length != WordCount)
+        {
+            RandomThrowHelper.ThrowStateSpanLengthMismatch(WordCount, state.Length, nameof(state));
+        }
+
+        // A restored zero word is the unseeded state, not a dead one: the next draw reseeds from
+        // entropy, exactly as a default-constructed engine does.
+        return new WyRand(state[0]);
+    }
 
     /// <summary>Compares the state words of two generators.</summary>
     /// <param name="other">The generator to compare against.</param>
