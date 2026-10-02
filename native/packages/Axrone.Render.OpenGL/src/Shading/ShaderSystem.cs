@@ -446,7 +446,7 @@ public sealed class ShaderInstance
         EnsureCacheFresh();
 
         Span<float> lanes = stackalloc float[2] { x, y };
-        uint hash = Fnv1a32.Compute(lanes);
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(lanes)).Value;
 
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
@@ -472,7 +472,7 @@ public sealed class ShaderInstance
         EnsureCacheFresh();
 
         Span<float> lanes = stackalloc float[4] { v0, v1, v2, v3 };
-        uint hash = Fnv1a32.Compute(lanes);
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(lanes)).Value;
 
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
@@ -495,7 +495,7 @@ public sealed class ShaderInstance
         fixed (System.Numerics.Matrix4x4* ptr = &matrix)
         {
             float* f = (float*)ptr;
-            uint hash = Fnv1a32.Compute(new ReadOnlySpan<float>(f, 16));
+            uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(new ReadOnlySpan<float>(f, 16))).Value;
 
             if (_cache.CheckAndSet(Program.Id, location, hash))
             {
