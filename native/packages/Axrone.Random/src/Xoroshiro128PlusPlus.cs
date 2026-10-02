@@ -22,7 +22,7 @@ namespace Axrone.Random;
 /// polynomial of this triple is <c>{0x8DAE70779760B081, 0x0031BCF2F855D6E5}</c>, with the
 /// x^128 term implicit.</para>
 /// </remarks>
-public struct Xoroshiro128PlusPlus : IJumpableRandomSource<Xoroshiro128PlusPlus>, IEquatable<Xoroshiro128PlusPlus>
+public struct Xoroshiro128PlusPlus : IJumpableRandomSource<Xoroshiro128PlusPlus>, IRandomStateSnapshot<Xoroshiro128PlusPlus>, IEquatable<Xoroshiro128PlusPlus>
 {
     /// <summary>Coefficient words of <c>x^(2^64) mod p(x)</c>: the 2^64-step jump.</summary>
     private static ReadOnlySpan<ulong> JumpPolynomial => [0x2BD7A6A6E99C2DDCUL, 0x0992CCAF6A6FCA05UL];
@@ -30,8 +30,15 @@ public struct Xoroshiro128PlusPlus : IJumpableRandomSource<Xoroshiro128PlusPlus>
     /// <summary>Coefficient words of <c>x^(2^96) mod p(x)</c>: the 2^96-step long jump.</summary>
     private static ReadOnlySpan<ulong> LongJumpPolynomial => [0x360FD5F2CF8D5D99UL, 0x9C6E6877736C46E3UL];
 
+    /// <summary>Number of 64-bit words in a state snapshot: the two state words.</summary>
+    public const int WordCount = 2;
+
     private ulong _s0;
     private ulong _s1;
+
+    /// <inheritdoc/>
+    /// <remarks>Implemented explicitly so the constant stays usable in a <c>stackalloc</c>.</remarks>
+    static int IRandomStateSnapshot<Xoroshiro128PlusPlus>.WordCount => WordCount;
 
     /// <summary>Creates a state expanded from <paramref name="seed"/> through SplitMix64.</summary>
     /// <param name="seed">The seed; the same seed always yields the same stream.</param>
@@ -83,6 +90,36 @@ public struct Xoroshiro128PlusPlus : IJumpableRandomSource<Xoroshiro128PlusPlus>
 
     /// <inheritdoc/>
     public static void LongJump(ref Xoroshiro128PlusPlus source) => source.ApplyPolynomial(LongJumpPolynomial);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public readonly void CopyStateTo(Span<ulong> destination)
+    {
+        if (destination.Length < WordCount)
+        {
+            RandomThrowHelper.ThrowDestinationTooShortForState(WordCount, nameof(destination));
+        }
+
+        destination[0] = _s0;
+        destination[1] = _s1;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static Xoroshiro128PlusPlus FromState(ReadOnlySpan<ulong> state)
+    {
+        if (state.Length != WordCount)
+        {
+            RandomThrowHelper.ThrowStateSpanLengthMismatch(WordCount, state.Length, nameof(state));
+        }
+
+        // A restored all-zero state is the unseeded state, not a dead one: the next draw reseeds
+        // from entropy, exactly as a default-constructed engine does.
+        Xoroshiro128PlusPlus engine = default;
+        engine._s0 = state[0];
+        engine._s1 = state[1];
+        return engine;
+    }
 
     /// <summary>Compares the state words of two generators.</summary>
     /// <param name="other">The generator to compare against.</param>
