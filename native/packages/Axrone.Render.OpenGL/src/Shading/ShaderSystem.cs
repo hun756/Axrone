@@ -457,6 +457,36 @@ public sealed class ShaderInstance
     }
 
     /// <summary>
+    /// Sets a vec4 uniform. All four components share one cache entry, so a re-upload is
+    /// skipped only when the quad is bit-identical to the last upload.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="v0">The first component.</param>
+    /// <param name="v1">The second component.</param>
+    /// <param name="v2">The third component.</param>
+    /// <param name="v3">The fourth component.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetVec4(int location, float v0, float v1, float v2, float v3)
+    {
+        if (location < 0)
+            return;
+
+        EnsureCacheFresh();
+
+        // FNV-1a over the bit patterns of all four components.
+        uint hash = 2166136261u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v0)) * 16777619u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v1)) * 16777619u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v2)) * 16777619u;
+        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(v3)) * 16777619u;
+
+        if (_cache.CheckAndSet(Program.Id, location, hash))
+        {
+            _context.GL.Uniform4(location, v0, v1, v2, v3);
+        }
+    }
+
+    /// <summary>
     /// Sets a mat4 uniform.
     /// </summary>
     /// <param name="location">The uniform location.</param>
