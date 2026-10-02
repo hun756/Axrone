@@ -66,6 +66,62 @@ public interface IJumpableRandomSource<TSelf> : IRandomSource<TSelf>
 }
 
 /// <summary>
+/// A random source whose entire state fits a fixed number of 64-bit words, so the state can be
+/// exported to a span and rebuilt from one - the primitive a deterministic replay, a save/load
+/// or a crash-recovery checkpoint is written against.
+/// </summary>
+/// <typeparam name="TSelf">The implementing state type; see <see cref="IRandomSource{TSelf}"/>.</typeparam>
+/// <remarks>
+/// <para><b>The contract.</b> <see cref="WordCount"/> words are written in the engine's own state
+/// word order, first word first; a span longer than <see cref="WordCount"/> is filled only up to
+/// that point. <see cref="FromState(ReadOnlySpan{ulong})"/> accepts <em>exactly</em>
+/// that many words and nothing else, so a buffer built for one engine can never be silently
+/// restored into another. The pair of members is the inverse of each other:
+/// <c>FromState(words)</c> after <c>CopyStateTo(words)</c> reproduces a state that compares equal
+/// and therefore continues the stream identically.</para>
+/// <para><b>Eligibility.</b> The contract is deliberately limited to the <em>compact</em> engines
+/// - <see cref="WyRand"/> (one word), <see cref="Xoroshiro128PlusPlus"/> and
+/// <see cref="PcgEngine"/> (two words each) and <see cref="Xoshiro256PlusPlus"/> (four words) -
+/// so one <c>stackalloc</c> of at most four words covers every compact engine and the buffer
+/// size is a compile-time constant per engine.</para>
+/// <para><b>Mersenne Twister is exempt, by design.</b> Its state is 624 32-bit words
+/// (2 496 bytes) plus a read cursor: it cannot be expressed in the uniform 64-bit word contract
+/// without either 312 <see langword="ulong"/> words per snapshot or a packing scheme that would
+/// silently lose the cursor and invite a lossy round trip. Its snapshot API is therefore the
+/// engine's own <see cref="MersenneTwister.CopyStateTo(Span{uint})"/>, which already exports the
+/// full state in its native word type. <see cref="RandomEngineTypeExtensions.GetWordCount"/>
+/// reports <c>0</c> for it, which is how a caller discovers the exemption at runtime without
+/// a type test.</para>
+/// <para>Snapshot and restore are <em>cold</em> paths: they guard their span and can throw, so
+/// they are never inlined into a draw loop and allocate nothing.</para>
+/// </remarks>
+public interface IRandomStateSnapshot<TSelf>
+    where TSelf : allows ref struct
+{
+    /// <summary>Gets the number of 64-bit words one state snapshot occupies.</summary>
+    static abstract int WordCount { get; }
+
+    /// <summary>Copies the raw state words into <paramref name="destination"/>.</summary>
+    /// <param name="destination">
+    /// The span to fill. Must hold at least <see cref="WordCount"/> entries; entries past that
+    /// are left untouched.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="destination"/> is shorter than <see cref="WordCount"/>.
+    /// </exception>
+    void CopyStateTo(Span<ulong> destination);
+
+    /// <summary>Rebuilds a state from words previously written by <see cref="CopyStateTo"/>.</summary>
+    /// <param name="state">The exported words, in export order.</param>
+    /// <returns>A state that continues exactly where the exported one stood.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="state"/> does not hold exactly <see cref="WordCount"/> words, or holds a
+    /// word sequence this engine cannot resume from.
+    /// </exception>
+    static abstract TSelf FromState(ReadOnlySpan<ulong> state);
+}
+
+/// <summary>
 /// Cold-path exception factory for the source engines. Every entry is non-inlined and never
 /// returns, so no throw site, message or <see cref="ArgumentException"/> construction can
 /// reach a draw.
@@ -88,6 +144,26 @@ internal static class RandomThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static void ThrowDestinationTooShortForState(int required, string paramName) =>
         throw new ArgumentException($"Destination span must hold at least {required} words of engine state.", paramName);
+
+    /// <summary>Throws for a source span whose length is not the engine's snapshot word count.</summary>
+    /// <param name="required">The number of words a snapshot of this engine holds.</param>
+    /// <param name="actual">The length the caller supplied.</param>
+    /// <param name="paramName">The name of the rejected parameter.</param>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowStateSpanLengthMismatch(int required, int actual, string paramName) =>
+        throw new ArgumentException(
+            $"An engine state snapshot must hold exactly {required} words, but {actual} were supplied.",
+            paramName);
+
+    /// <summary>Throws for a restored PCG stream increment that is not odd.</summary>
+    /// <param name="paramName">The name of the rejected parameter.</param>
+    [DoesNotReturn]
+    [StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowStreamIncrementMustBeOdd(string paramName) =>
+        throw new ArgumentException("A PCG stream increment must be odd, otherwise the LCG does not run at full period.", paramName);
 }
 
 /// <summary>
