@@ -28,6 +28,11 @@ namespace Axrone.Random;
 /// field for every word. Engines whose state exceeds the budget are advanced through the
 /// field instead: copying a large state per word would cost more than the reload it
 /// avoids.</para>
+/// <para><b>Shuffles.</b> <see cref="Shuffle{T}(Span{T})"/> hoists the state the same way,
+/// and it matters more there: a permutation writes to its destination on every step, so a
+/// state reached through <c>this</c> — an opaque byref the JIT cannot prove disjoint from
+/// the destination — is re-materialised into the field around every single swap. Reached
+/// through a frame local, the same state stays in registers for the whole permutation.</para>
 /// </remarks>
 public struct RandomEngine<TEngine> : IEquatable<RandomEngine<TEngine>>
     where TEngine : struct, IRandomSource<TEngine>
@@ -449,13 +454,28 @@ public struct RandomEngine<TEngine> : IEquatable<RandomEngine<TEngine>>
     /// <summary>Shuffles the span in place with the Fisher-Yates algorithm.</summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="destination">The span to permute; spans shorter than two are a no-op.</param>
+    /// <remarks>
+    /// When the engine state fits <see cref="RandomConfig.MaxHoistableStateBytes"/>, the
+    /// state is hoisted into a local for the whole permutation and written back once. This is
+    /// a codegen requirement, not a style one: a permutation writes to the destination on
+    /// every step, and <c>this</c> is an opaque byref, so a state reached through
+    /// <c>this</c> may alias the destination as far as the JIT can prove. The state is
+    /// therefore re-materialised into the field before and after each swap. Reached through a
+    /// frame local instead, it can never alias the destination, so the loop keeps it in
+    /// registers. States above the budget keep advancing through the field, which for a
+    /// 2 500-byte Mersenne Twister state is cheaper than the copy it would avoid.
+    /// </remarks>
     public void Shuffle<T>(Span<T> destination)
     {
-        for (int i = destination.Length - 1; i > 0; i--)
+        if (Unsafe.SizeOf<TEngine>() <= _config.MaxHoistableStateBytes)
         {
-            int swap = (int)NextBoundedUInt32((uint)(i + 1));
-            (destination[i], destination[swap]) = (destination[swap], destination[i]);
+            TEngine engine = _engine;
+            ShuffleHoisted(ref engine, destination);
+            _engine = engine;
+            return;
         }
+
+        ShuffleThroughField(destination);
     }
 
     /// <summary>Selects one element uniformly from the sequence.</summary>
@@ -553,6 +573,35 @@ public struct RandomEngine<TEngine> : IEquatable<RandomEngine<TEngine>>
         }
     }
 
+    /// <summary>
+    /// Permutes the span against a hoisted local copy of the state. The state stays in
+    /// registers for the whole permutation and is copied back through the caller's reference
+    /// exactly once.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void ShuffleHoisted<T>(ref TEngine engine, Span<T> destination)
+    {
+        for (int i = destination.Length - 1; i > 0; i--)
+        {
+            int swap = (int)NextBoundedUInt32(ref engine, (uint)(i + 1));
+            (destination[i], destination[swap]) = (destination[swap], destination[i]);
+        }
+    }
+
+    /// <summary>
+    /// Permutes the span while advancing the state in its field. Used when the state exceeds
+    /// <see cref="RandomConfig.MaxHoistableStateBytes"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private void ShuffleThroughField<T>(Span<T> destination)
+    {
+        for (int i = destination.Length - 1; i > 0; i--)
+        {
+            int swap = (int)NextBoundedUInt32((uint)(i + 1));
+            (destination[i], destination[swap]) = (destination[swap], destination[i]);
+        }
+    }
+
     /// <summary>Writes a 64-bit word little-endian, byte 0 being the least significant.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static void WriteWordLittleEndian(Span<byte> destination, int offset, ulong value)
@@ -577,17 +626,34 @@ public struct RandomEngine<TEngine> : IEquatable<RandomEngine<TEngine>>
         }
     }
 
+    /// <summary>
+    /// Draws a bounded 32-bit value, reading and writing the state through this wrapper's
+    /// field. The state is copied in and out around the draw, exactly as a scalar draw does.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private uint NextBoundedUInt32(uint range)
+    {
+        TEngine engine = _engine;
+        uint value = NextBoundedUInt32(ref engine, range);
+        _engine = engine;
+        return value;
+    }
+
+    /// <summary>
+    /// Draws a bounded 32-bit value, advancing the state in place. Taking the state by
+    /// reference lets a bulk loop keep it in a local and off the field.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static uint NextBoundedUInt32(ref TEngine engine, uint range)
     {
         if (BitOperations.IsPow2(range))
         {
             // Power-of-two range: the mask closes the exclusive bound with a single AND.
-            return NextUInt32() & (range - 1);
+            return TEngine.NextUInt32(ref engine) & (range - 1);
         }
 
         // Lemire multiply-shift: the accepted draw is one 32x32 multiply and one shift.
-        ulong product = (ulong)NextUInt32() * range;
+        ulong product = (ulong)TEngine.NextUInt32(ref engine) * range;
         uint low = (uint)product;
         if (low >= range)
         {
@@ -599,7 +665,7 @@ public struct RandomEngine<TEngine> : IEquatable<RandomEngine<TEngine>>
         uint threshold = unchecked(0u - range) % range;
         while (low < threshold)
         {
-            product = (ulong)NextUInt32() * range;
+            product = (ulong)TEngine.NextUInt32(ref engine) * range;
             low = (uint)product;
         }
 
