@@ -8,31 +8,47 @@ public class Fnv1a32Tests
     [Fact]
     public void Empty_IsOffsetBasis()
     {
-        Fnv1a32.Compute(ReadOnlySpan<byte>.Empty).Should().Be(0x811C9DC5u);
+        Fnv1a32Algorithm.Hash(ReadOnlySpan<byte>.Empty).Value.Should().Be(0x811C9DC5u);
     }
 
     [Fact]
     public void KnownVector_A()
     {
         ReadOnlySpan<byte> data = [(byte)'a'];
-        Fnv1a32.Compute(data).Should().Be(0xE40C292Cu);
+        Fnv1a32Algorithm.Hash(data).Value.Should().Be(0xE40C292Cu);
+    }
+
+    [Fact]
+    public void Incremental_SplitMatchesOneshot()
+    {
+        ReadOnlySpan<byte> data = [(byte)'f', (byte)'o', (byte)'o', (byte)'b', (byte)'a', (byte)'r'];
+        uint expected = Fnv1a32Algorithm.Hash(data).Value;
+
+        var acc = Fnv1a32Algorithm.CreateAccumulator();
+        acc.Append(data[..3]);
+        acc.Append(data[3..]);
+        acc.GetDigest().Value.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Factory_ResolvesFnv1a32()
+    {
+        using var hasher = HashEngine.CreateHasher(HashAlgorithmId.Fnv1a32);
+        hasher.DigestLength.Should().Be(4);
+        ((ReadOnlySpan<byte>)hasher.ComputeHash([(byte)'a'])).ToArray()
+            .Should().Equal(0x2C, 0x29, 0x0C, 0xE4);
     }
 
     [Fact]
     public void FloatLanes_HashBitPatterns()
     {
-        ReadOnlySpan<float> zeros = [0f, 0f];
-        ReadOnlySpan<float> ones = [1f, 1f];
+        static uint HashOf(float a, float b)
+        {
+            Span<float> lanes = stackalloc float[2] { a, b };
+            return Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(lanes)).Value;
+        }
 
-        Fnv1a32.Compute(zeros).Should().NotBe(Fnv1a32.Compute(ones));
-        Fnv1a32.Compute(zeros).Should().Be(Fnv1a32.Compute([0f, 0f]));
-    }
-
-    [Fact]
-    public void CharSpan_MatchesByteView()
-    {
-        const string source = "void main() { }";
-        Fnv1a32.Compute(source.AsSpan()).Should().Be(
-            Fnv1a32.Compute(MemoryMarshal.AsBytes(source.AsSpan())));
+        HashOf(0f, 0f).Should().NotBe(HashOf(1f, 1f));
+        HashOf(0f, 0f).Should().Be(HashOf(0f, 0f));
     }
 }
