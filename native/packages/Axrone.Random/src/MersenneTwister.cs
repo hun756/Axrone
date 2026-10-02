@@ -20,6 +20,9 @@ namespace Axrone.Random;
 /// <para><b>Zero state.</b> The all-zero default state is treated as <em>unseeded</em>: the
 /// first draw initializes from operating-system entropy. A <c>default(MersenneTwister)</c>
 /// therefore still produces a live, non-zero stream.</para>
+/// <para><b>Seeding cost.</b> <c>init_genrand</c> runs 624 rounds of the recurrence before the
+/// first draw, so constructing an engine costs far more than drawing from one. Seed a long-lived
+/// engine once and share it; do not create a MersenneTwister per entity.</para>
 /// </remarks>
 public struct MersenneTwister : IRandomSource<MersenneTwister>, IEquatable<MersenneTwister>
 {
