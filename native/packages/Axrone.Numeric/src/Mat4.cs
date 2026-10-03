@@ -211,6 +211,7 @@ public struct Mat4 :
     IUnaryPlusOperators<Mat4, Mat4>,
     IAdditiveIdentity<Mat4, Mat4>,
     IMultiplicativeIdentity<Mat4, Mat4>,
+    IReadOnlyMatrix4x4<Mat4>,
     IMatrixStorage4x4<Mat4>
 {
     public const float MachineEpsilon = 1.1920929E-07F;
@@ -757,6 +758,120 @@ public struct Mat4 :
         }
         return hash.ToHashCode();
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly float Trace() => M11 + M22 + M33 + M44;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Mat4 Transpose()
+    {
+        if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
+        {
+            ref float m = ref Unsafe.AsRef(in M11);
+            Vector128<float> r0 = Vector128.LoadUnsafe(ref m, 0);
+            Vector128<float> r1 = Vector128.LoadUnsafe(ref m, 4);
+            Vector128<float> r2 = Vector128.LoadUnsafe(ref m, 8);
+            Vector128<float> r3 = Vector128.LoadUnsafe(ref m, 12);
+
+            Vector128<float> l12 = System.Runtime.Intrinsics.X86.Sse.UnpackLow(r0, r1);
+            Vector128<float> l34 = System.Runtime.Intrinsics.X86.Sse.UnpackLow(r2, r3);
+            Vector128<float> u12 = System.Runtime.Intrinsics.X86.Sse.UnpackHigh(r0, r1);
+            Vector128<float> u34 = System.Runtime.Intrinsics.X86.Sse.UnpackHigh(r2, r3);
+
+            Unsafe.SkipInit(out Mat4 res);
+            ref float dst = ref res.M11;
+            System.Runtime.Intrinsics.X86.Sse.MoveLowToHigh(l12, l34).StoreUnsafe(ref dst, 0);
+            System.Runtime.Intrinsics.X86.Sse.MoveHighToLow(l34, l12).StoreUnsafe(ref dst, 4);
+            System.Runtime.Intrinsics.X86.Sse.MoveLowToHigh(u12, u34).StoreUnsafe(ref dst, 8);
+            System.Runtime.Intrinsics.X86.Sse.MoveHighToLow(u34, u12).StoreUnsafe(ref dst, 12);
+            return res;
+        }
+
+        return new Mat4(
+            M11, M21, M31, M41,
+            M12, M22, M32, M42,
+            M13, M23, M33, M43,
+            M14, M24, M34, M44
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Transpose(Mat4 matrix) => matrix.Transpose();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly float Determinant()
+    {
+        float s0 = (M11 * M22) - (M12 * M21);
+        float s1 = (M11 * M23) - (M13 * M21);
+        float s2 = (M11 * M24) - (M14 * M21);
+        float s3 = (M12 * M23) - (M13 * M22);
+        float s4 = (M12 * M24) - (M14 * M22);
+        float s5 = (M13 * M24) - (M14 * M23);
+
+        float c5 = (M33 * M44) - (M34 * M43);
+        float c4 = (M32 * M44) - (M34 * M42);
+        float c3 = (M32 * M43) - (M33 * M42);
+        float c2 = (M31 * M44) - (M34 * M41);
+        float c1 = (M31 * M43) - (M33 * M41);
+        float c0 = (M31 * M42) - (M32 * M41);
+
+        return (s0 * c5) - (s1 * c4) + (s2 * c3) + (s3 * c2) - (s4 * c1) + (s5 * c0);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Invert(out Mat4 result)
+    {
+        float s0 = (M11 * M22) - (M12 * M21);
+        float s1 = (M11 * M23) - (M13 * M21);
+        float s2 = (M11 * M24) - (M14 * M21);
+        float s3 = (M12 * M23) - (M13 * M22);
+        float s4 = (M12 * M24) - (M14 * M22);
+        float s5 = (M13 * M24) - (M14 * M23);
+
+        float c5 = (M33 * M44) - (M34 * M43);
+        float c4 = (M32 * M44) - (M34 * M42);
+        float c3 = (M32 * M43) - (M33 * M42);
+        float c2 = (M31 * M44) - (M34 * M41);
+        float c1 = (M31 * M43) - (M33 * M41);
+        float c0 = (M31 * M42) - (M32 * M41);
+
+        float det = (s0 * c5) - (s1 * c4) + (s2 * c3) + (s3 * c2) - (s4 * c1) + (s5 * c0);
+
+        if (MathF.Abs(det) <= 1e-30f)
+        {
+            result = default;
+            return false;
+        }
+
+        float invDet = 1.0f / det;
+
+        result = new Mat4(
+            ((M22 * c5) - (M23 * c4) + (M24 * c3)) * invDet,
+            ((-M12 * c5) + (M13 * c4) - (M14 * c3)) * invDet,
+            ((M42 * s5) - (M43 * s4) + (M44 * s3)) * invDet,
+            ((-M32 * s5) + (M33 * s4) - (M34 * s3)) * invDet,
+
+            ((-M21 * c5) + (M23 * c2) - (M24 * c1)) * invDet,
+            ((M11 * c5) - (M13 * c2) + (M14 * c1)) * invDet,
+            ((-M41 * s5) + (M43 * s2) - (M44 * s1)) * invDet,
+            ((M31 * s5) - (M33 * s2) + (M34 * s1)) * invDet,
+
+            ((M21 * c4) - (M22 * c2) + (M24 * c0)) * invDet,
+            ((-M11 * c4) + (M12 * c2) - (M14 * c0)) * invDet,
+            ((M41 * s4) - (M42 * s2) + (M44 * s0)) * invDet,
+            ((-M31 * s4) + (M32 * s2) - (M34 * s0)) * invDet,
+
+            ((-M21 * c3) + (M22 * c1) - (M23 * c0)) * invDet,
+            ((M11 * c3) - (M12 * c1) + (M13 * c0)) * invDet,
+            ((-M41 * s3) + (M42 * s1) - (M43 * s0)) * invDet,
+            ((M31 * s3) - (M32 * s1) + (M33 * s0)) * invDet
+        );
+
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool Invert(Mat4 matrix, out Mat4 result) => matrix.Invert(out result);
 
     // __NEXT__
 }
