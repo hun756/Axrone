@@ -117,13 +117,6 @@ public class Vec3ArchTests
     }
 
     [Fact]
-    public void Builder_EnforcesOrder()
-    {
-        Vec3 built = Vec3Builder<StageEmpty>.Create().WithX(1f).WithY(2f).WithZ(3f).Build();
-        built.Should().Be(new Vec3(1f, 2f, 3f));
-    }
-
-    [Fact]
     public void UnitOverloads_AgreeWithPlain()
     {
         var v = new Vec3(1f, 2f, 3f);

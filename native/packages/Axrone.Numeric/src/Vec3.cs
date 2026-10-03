@@ -366,55 +366,6 @@ public readonly struct NormalizationResult : IEquatable<NormalizationResult>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static bool operator !=(NormalizationResult left, NormalizationResult right) => !left.Equals(right);
 }
-
-public readonly struct StageEmpty { }
-
-public readonly struct StageX { }
-
-public readonly struct StageXY { }
-
-public readonly struct StageComplete { }
-
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct Vec3Builder<TStage> where TStage : struct
-{
-    internal readonly float X;
-
-    internal readonly float Y;
-
-    internal readonly float Z;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    internal Vec3Builder(float x, float y, float z)
-    {
-        X = x;
-        Y = y;
-        Z = z;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3Builder<StageEmpty> Create() => new(0F, 0F, 0F);
-}
-
-public static class Vec3BuilderExtensions
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3Builder<StageX> WithX(this Vec3Builder<StageEmpty> _, float x) =>
-        new(x, 0F, 0F);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3Builder<StageXY> WithY(this Vec3Builder<StageX> builder, float y) =>
-        new(builder.X, y, 0F);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3Builder<StageComplete> WithZ(this Vec3Builder<StageXY> builder, float z) =>
-        new(builder.X, builder.Y, z);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Build(this Vec3Builder<StageComplete> builder) =>
-        new(builder.X, builder.Y, builder.Z);
-}
-
 public sealed class Vec3FormattingOptions
 {
     public string Separator
