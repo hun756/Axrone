@@ -151,6 +151,51 @@ public class Vec3ArchTests
     }
 
     [Fact]
+    public void Tolerance_FlowsThroughEqualityAndNormalize()
+    {
+        var a = new Vec3(1f, 2f, 3f);
+        var b = new Vec3(1f, 2f, 3.0005f);
+        a.Equals(b, Tolerance.Default).Should().BeFalse();
+        a.Equals(b, new Tolerance(0.001f)).Should().BeTrue();
+        Vec3.Equals(a, b, new Tolerance(0.001f)).Should().BeTrue();
+        Vec3.TryNormalize(Vec3.Zero, out _, Tolerance.Zero).Should().BeFalse();
+        Vec3.TryNormalize(new Vec3(1e-9f, 0f, 0f), out Vec3 tiny, Tolerance.Zero).Should().BeTrue();
+        tiny.Should().Be(Vec3.UnitX);
+        Vec3.TryNormalize(new Vec3(3f, 4f, 0f), out Vec3 u, new Tolerance(1e-6f)).Should().BeTrue();
+        u.Length().Should().BeApproximately(1f, 1e-5f);
+    }
+
+    [Fact]
+    public void AngleRadians_FlowsThroughRotations()
+    {
+        var v = Vec3.UnitX;
+        Vec3.RotateZ(v, AngleRadians.FromDegrees(90f)).Y.Should().BeApproximately(1f, 1e-5f);
+        v.RotateX(AngleRadians.FromDegrees(0f)).Should().Be(v);
+        Vec3.RotateAxis(Vec3.UnitX, Vec3.UnitZ, AngleRadians.FromDegrees(90f)).Y.Should().BeApproximately(1f, 1e-5f);
+    }
+
+    [Fact]
+    public void FormattingOptions_ShapeOutput()
+    {
+        var opts = new Vec3FormattingOptions { Separator = "|", Prefix = "[", Suffix = "]" };
+        new Vec3(1f, 2f, 3f).ToString(opts).Should().Be("[1|2|3]");
+        new Vec3(1f, 2f, 3f).ToString(new Vec3FormattingOptions()).Should().Be("1, 2, 3");
+    }
+
+    [Fact]
+    public void SpaceContracts_CoverAllThreeTypes()
+    {
+        static float Len<T>(T v) where T : struct, ISpatialVector<T> => v.Length();
+        static float DotOf<T>(T a, T b) where T : struct, IInnerProductSpace<T, float> => T.Dot(a, b);
+        Len(new Vec2(3f, 4f)).Should().BeApproximately(5f, 1e-5f);
+        Len(new Vec4(1f, 2f, 2f, 4f)).Should().BeApproximately(5f, 1e-5f);
+        DotOf(new Vec2(1f, 2f), new Vec2(3f, 4f)).Should().Be(11f);
+        DotOf(new Vec4(1f, 1f, 1f, 1f), new Vec4(1f, 1f, 1f, 1f)).Should().Be(4f);
+        Vec2.Normalize(new Vec2(3f, 4f)).Length().Should().BeApproximately(1f, 1e-6f);
+        Vec4.Normalize(new Vec4(0f, 0f, 0f, 5f)).Should().Be(Vec4.UnitW);
+    }
+
+    [Fact]
     public void Enumerator_YieldsComponents()
     {
         var v = new Vec3(1f, 2f, 3f);
