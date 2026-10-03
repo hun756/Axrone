@@ -185,6 +185,14 @@ public readonly record struct AngleRadians : IEquatable<AngleRadians>, IComparab
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public AngleRadians(float radians) => Value = radians;
 
+    public static AngleRadians Zero => new(0.0f);
+
+    public static AngleRadians Pi => new(MathF.PI);
+
+    public static AngleRadians TwoPi => new(MathF.PI * 2.0f);
+
+    public static AngleRadians HalfPi => new(MathF.PI * 0.5f);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static AngleRadians FromDegrees(float degrees) => new(degrees * (MathF.PI / 180.0f));
 

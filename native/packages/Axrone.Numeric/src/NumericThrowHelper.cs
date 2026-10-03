@@ -23,6 +23,12 @@ internal static class NumericThrowHelper
     [DoesNotReturn]
     [System.Diagnostics.StackTraceHidden]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowDegenerateQuaternion() =>
+        throw new InvalidOperationException("Cannot normalize a degenerate quaternion.");
+
+    internal static void ThrowInvalidAxis() =>
+        throw new ArgumentException("Axis must be a non-zero finite vector.", "vector");
+
     internal static void ThrowFormatException(string message) =>
         throw new FormatException(message);
 }
