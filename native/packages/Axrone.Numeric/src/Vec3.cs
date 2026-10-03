@@ -1919,6 +1919,31 @@ public struct Vec3 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vec3 RotateAxis(Vec3 axis, float angleRadians) => RotateAxis(this, axis, angleRadians);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 RotateX(Vec3 vector, AngleRadians angle) => RotateX(vector, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec3 RotateX(AngleRadians angle) => RotateX(this, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 RotateY(Vec3 vector, AngleRadians angle) => RotateY(vector, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec3 RotateY(AngleRadians angle) => RotateY(this, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 RotateZ(Vec3 vector, AngleRadians angle) => RotateZ(vector, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec3 RotateZ(AngleRadians angle) => RotateZ(this, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 RotateAxis(Vec3 vector, Vec3 axis, AngleRadians angle) =>
+        RotateAxis(vector, axis, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec3 RotateAxis(Vec3 axis, AngleRadians angle) => RotateAxis(this, axis, angle.Value);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 Inverse(Vec3 vector) =>
         new(1.0f / vector.X, 1.0f / vector.Y, 1.0f / vector.Z);
