@@ -388,6 +388,56 @@ public struct Vec4 :
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 16)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least sixteen bytes.");
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Span<Vec4> destination)
+    {
+        if (destination.IsEmpty)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least one vector.");
+        }
+
+        destination[0] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Vec4[] destination, int index)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        if ((uint)index >= (uint)destination.Length)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        destination[index] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool TryCopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 16)
+        {
+            return false;
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public ComponentEnumerator4 GetEnumerator() => new(in this);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vector128<float> AsVector128() => Vector128.Create(X, Y, Z, W);
 
@@ -455,6 +505,56 @@ public struct Vec4 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec4 LoadUnsafe(ref readonly float source, nuint elementOffset) =>
         LoadUnsafe(ref Unsafe.Add(ref Unsafe.AsRef(in source), elementOffset));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec4 Load(ReadOnlySpan<float> source)
+    {
+        if (source.Length < 4)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(source));
+        }
+
+        return new Vec4(source[0], source[1], source[2], source[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec4 LoadAligned(ref readonly float source)
+    {
+        Vector128<float> wide = Vector128.LoadAligned((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return new Vec4(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2), wide.GetElement(3));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec4 LoadAlignedNonTemporal(ref readonly float source)
+    {
+        Vector128<float> wide = Vector128.LoadAlignedNonTemporal((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return new Vec4(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2), wide.GetElement(3));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec4 LoadUnsafe(void* source)
+    {
+        float* components = (float*)source;
+        return new Vec4(components[0], components[1], components[2], components[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec4 LoadUnsafe(void* source, int offset)
+    {
+        if (offset < 0)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(offset));
+        }
+
+        float* components = (float*)source + offset;
+        return new Vec4(components[0], components[1], components[2], components[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec4 TransformCustom<TTransformer, TState>(Vec4 value, scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer4<TState>
+        where TState : allows ref struct =>
+        TTransformer.Transform(value, ref state);
 
     public static Vec4 SumAll(params ReadOnlySpan<Vec4> vectors)
     {
@@ -779,6 +879,13 @@ public struct Vec4 :
     public static bool Equals(Vec4 left, Vec4 right, float tolerance = DefaultTolerance) =>
         left.Equals(right, tolerance);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Vec4 other, Tolerance tolerance) => Equals(other, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool Equals(Vec4 left, Vec4 right, Tolerance tolerance) =>
+        left.Equals(right, tolerance.Value);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool BitEquals(Vec4 other) =>
         BitConverter.SingleToUInt32Bits(X) == BitConverter.SingleToUInt32Bits(other.X) &&
@@ -871,6 +978,37 @@ public struct Vec4 :
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool TryNormalize(Vec4 value, out Vec4 result, Tolerance tolerance) =>
+        TryNormalize(value, out result, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec4 ToUnit<TStrategy>(Vec4 value)
+        where TStrategy : struct, INormalizationStrategy
+    {
+        Vec4 normalized = Normalize<TStrategy>(value);
+        return new UnitVec4(normalized.X, normalized.Y, normalized.Z, normalized.W);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec4 ToUnit(Vec4 value) => ToUnit<StrictIeeeStrategy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static NormalizationResult4 TryNormalizeUnit(Vec4 value, Tolerance tolerance = default)
+    {
+        if (TryNormalize(value, out Vec4 result, tolerance.Value))
+        {
+            return new NormalizationResult4(new UnitVec4(result.X, result.Y, result.Z, result.W));
+        }
+
+        if (value.IsAnyNaN || value.IsAnyInfinity)
+        {
+            return new NormalizationResult4(NormalizationStatus.NonFinite);
+        }
+
+        return new NormalizationResult4(NormalizationStatus.DegenerateZero);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec4 Reflect(Vec4 vector, Vec4 normal)
     {
@@ -893,6 +1031,25 @@ public struct Vec4 :
         }
         float scale = Dot(vector, onNormal) / sqrMag;
         return onNormal * scale;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec4 Reflect(Vec4 vector, UnitVec4 normal)
+    {
+        float dot2 = Dot(vector, normal) * 2.0f;
+        return new Vec4(
+            vector.X - (normal.X * dot2),
+            vector.Y - (normal.Y * dot2),
+            vector.Z - (normal.Z * dot2),
+            vector.W - (normal.W * dot2)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec4 Project(Vec4 vector, UnitVec4 onNormal)
+    {
+        float scale = Dot(vector, onNormal);
+        return (Vec4)onNormal * scale;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -928,6 +1085,9 @@ public struct Vec4 :
         float cos = Dot(a, b) / (lenA * lenB);
         return MathF.Acos(Math.Clamp(cos, -1.0f, 1.0f));
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians AngleBetween(Vec4 from, Vec4 to) => new(Angle(from, to));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec4 Clamp(Vec4 value, Vec4 min, Vec4 max)
@@ -1698,5 +1858,76 @@ public struct Vec4 :
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static bool IsWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+    }
+}
+
+public ref struct ComponentEnumerator4
+{
+    private readonly Vec4 _vector;
+
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal ComponentEnumerator4(scoped ref readonly Vec4 vector)
+    {
+        _vector = vector;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 4;
+
+    public readonly ref readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 4U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return ref Unsafe.Add(ref Unsafe.AsRef(in _vector.X), (nint)(uint)_index);
+        }
+    }
+}
+
+public static class VectorBatchProcessor4
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void Transform<TTransformer, TState>(
+        ReadOnlySpan<Vec4> source,
+        Span<Vec4> destination,
+        scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer4<TState>
+        where TState : allows ref struct
+    {
+        if (destination.Length < source.Length)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span must be at least as long as source span.");
+        }
+
+        ref Vec4 srcRef = ref MemoryMarshal.GetReference(source);
+        ref Vec4 dstRef = ref MemoryMarshal.GetReference(destination);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            Unsafe.Add(ref dstRef, i) = TTransformer.Transform(Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void ForEach<TAction, TState>(
+        ReadOnlySpan<Vec4> source,
+        scoped ref TState state)
+        where TAction : struct, IVectorAction4<TState>
+        where TState : allows ref struct
+    {
+        ref Vec4 srcRef = ref MemoryMarshal.GetReference(source);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            TAction.Invoke(ref Unsafe.Add(ref srcRef, i), ref state);
+        }
     }
 }
