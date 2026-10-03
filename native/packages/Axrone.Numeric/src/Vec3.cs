@@ -1094,6 +1094,10 @@ public struct Vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool TryNormalize(Vec3 value, out Vec3 result, Tolerance tolerance) =>
+        TryNormalize(value, out result, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static UnitVec3 ToUnit<TStrategy>(Vec3 value)
         where TStrategy : struct, INormalizationStrategy
     {
@@ -1618,6 +1622,13 @@ public struct Vec3 :
         MathF.Abs(X - other.X) <= tolerance &&
         MathF.Abs(Y - other.Y) <= tolerance &&
         MathF.Abs(Z - other.Z) <= tolerance;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Vec3 other, Tolerance tolerance) => Equals(other, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool Equals(Vec3 left, Vec3 right, Tolerance tolerance) =>
+        left.Equals(right, tolerance.Value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool Equals(Vec3 left, Vec3 right, float tolerance = DefaultTolerance) =>
