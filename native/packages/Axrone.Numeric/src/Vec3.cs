@@ -1,5 +1,37 @@
 namespace Axrone.Numeric;
 
+public interface ISpatialVector<TSelf>
+    where TSelf : struct, ISpatialVector<TSelf>
+{
+    float Length();
+
+    float LengthSquared();
+
+    static abstract TSelf Normalize(TSelf value);
+}
+
+public interface IInnerProductSpace<TSelf, TScalar>
+    where TSelf : struct, IInnerProductSpace<TSelf, TScalar>
+    where TScalar : struct
+{
+    static abstract TScalar Dot(TSelf left, TSelf right);
+}
+
+public interface ICrossProductSpace<TSelf>
+    where TSelf : struct, ICrossProductSpace<TSelf>
+{
+    static abstract TSelf Cross(TSelf left, TSelf right);
+}
+
+public interface IInterpolatableSpace<TSelf, TScalar>
+    where TSelf : struct, IInterpolatableSpace<TSelf, TScalar>
+    where TScalar : struct
+{
+    static abstract TSelf Lerp(TSelf a, TSelf b, TScalar t);
+
+    static abstract TSelf Slerp(TSelf a, TSelf b, TScalar t);
+}
+
 public interface INormalizationStrategy
 {
     static abstract float ReciprocalSqrt(float lengthSquared);
@@ -21,10 +53,37 @@ public readonly struct FastApproximationStrategy : INormalizationStrategy
     }
 }
 
+public readonly struct HardwareIntrinsicsStrategy : INormalizationStrategy
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float ReciprocalSqrt(float lengthSquared)
+    {
+        if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
+        {
+            Vector128<float> vec = Vector128.CreateScalar(lengthSquared);
+            Vector128<float> estimate = System.Runtime.Intrinsics.X86.Sse.ReciprocalSqrt(vec);
+            Vector128<float> half = Vector128.CreateScalar(0.5f);
+            Vector128<float> onePointFive = Vector128.CreateScalar(1.5f);
+            Vector128<float> halfLen = Vector128.Multiply(half, vec);
+            Vector128<float> estSquared = Vector128.Multiply(estimate, estimate);
+            Vector128<float> factor = Vector128.Subtract(onePointFive, Vector128.Multiply(halfLen, estSquared));
+            return Vector128.Multiply(estimate, factor).ToScalar();
+        }
+
+        return FastApproximationStrategy.ReciprocalSqrt(lengthSquared);
+    }
+}
+
 public interface IVectorTransformer<TState>
     where TState : allows ref struct
 {
     static abstract Vec3 Transform(Vec3 value, scoped ref TState state);
+}
+
+public interface IVectorAction<TState>
+    where TState : allows ref struct
+{
+    static abstract void Invoke(scoped ref readonly Vec3 value, scoped ref TState state);
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
