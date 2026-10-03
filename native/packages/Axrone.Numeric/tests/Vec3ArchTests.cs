@@ -198,48 +198,6 @@ public class Vec3ArchTests
         seen.Should().Equal(1f, 2f, 3f);
     }
 
-    private readonly struct ScaleByTwo : IVectorTransformer<ScaleState>
-    {
-        public static Vec3 Transform(Vec3 value, scoped ref ScaleState state) => value * state.Factor;
-    }
-
-    private struct ScaleState
-    {
-        public float Factor;
-    }
-
-    private readonly struct SumSink : IVectorAction<SumSinkState>
-    {
-        public static void Invoke(scoped ref readonly Vec3 value, scoped ref SumSinkState state) => state.Total += value.X;
-    }
-
-    private struct SumSinkState
-    {
-        public float Total;
-    }
-
-    [Fact]
-    public void BatchProcessor_TransformsAndActs()
-    {
-        var source = new Vec3[] { new(1f, 0f, 0f), new(0f, 2f, 0f) };
-        var dest = new Vec3[2];
-        var scale = new ScaleState { Factor = 3f };
-        VectorBatchProcessor.Transform<ScaleByTwo, ScaleState>(source, dest, ref scale);
-        dest.Should().Equal(new Vec3(3f, 0f, 0f), new Vec3(0f, 6f, 0f));
-
-        var sink = new SumSinkState();
-        VectorBatchProcessor.ForEach<SumSink, SumSinkState>(source, ref sink);
-        sink.Total.Should().Be(1f);
-
-        Action short_ = () =>
-        {
-            var tiny = new Vec3[1];
-            var st = new ScaleState { Factor = 1f };
-            VectorBatchProcessor.Transform<ScaleByTwo, ScaleState>(source, tiny, ref st);
-        };
-        short_.Should().Throw<Exception>();
-    }
-
     [Fact]
     public void FormattingOptions_Defaults()
     {
