@@ -1,5 +1,7 @@
 namespace Axrone.Numeric;
 
+using System.Buffers;
+
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly record struct RowIndex : IEquatable<RowIndex>, IComparable<RowIndex>
 {
@@ -213,8 +215,16 @@ public struct Mat4 :
     IMultiplicativeIdentity<Mat4, Mat4>,
     IReadOnlyMatrix4x4<Mat4>,
     IAffineTransformable4x4<Mat4>,
-    IMatrixStorage4x4<Mat4>
+    IMatrixStorage4x4<Mat4>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Mat4>,
+    ISpanParsable<Mat4>,
+    IUtf8SpanParsable<Mat4>
 {
+    private static readonly SearchValues<char> Separators = SearchValues.Create(" ,;\t\r\n{}[]()");
+    private static readonly SearchValues<byte> SeparatorsUtf8 = SearchValues.Create(" ,;\t\r\n{}[]()"u8);
     public const float MachineEpsilon = 1.1920929E-07F;
 
     public const float DefaultTolerance = MachineEpsilon * 8F;
@@ -1149,7 +1159,248 @@ public struct Mat4 :
         TAction.Execute(in this, ref state);
     }
 
-    // __NEXT__
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public MatrixElementEnumerator GetEnumerator() => new(in this);
+
+    public MatrixRowEnumerable Rows
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public MatrixColumnEnumerable Columns
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[512];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return new string(buffer.Slice(0, charsWritten));
+        }
+        return "{ ... }";
+    }
+
+    public readonly bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        Span<char> temp = stackalloc char[512];
+        int written = 0;
+
+        temp[written++] = '{';
+        temp[written++] = ' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 16; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = ' ';
+        temp[written++] = '}';
+
+        if (destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(destination);
+        charsWritten = written;
+        return true;
+    }
+
+    public readonly bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        Span<byte> temp = stackalloc byte[512];
+        int written = 0;
+
+        temp[written++] = (byte)'{';
+        temp[written++] = (byte)' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 16; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = (byte)' ';
+        temp[written++] = (byte)'}';
+
+        if (utf8Destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(utf8Destination);
+        bytesWritten = written;
+        return true;
+    }
+
+    public static Mat4 Parse(string s, IFormatProvider? provider)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan(), provider);
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Mat4 result)
+    {
+        if (s is null)
+        {
+            result = default;
+            return false;
+        }
+        return TryParse(s.AsSpan(), provider, out result);
+    }
+
+    public static Mat4 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
+    {
+        if (!TryParse(s, provider, out Mat4 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat4 format string.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Mat4 result)
+    {
+        result = default;
+        ReadOnlySpan<char> remaining = s;
+        Unsafe.SkipInit(out Mat4 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 16)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(Separators);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(Separators);
+            ReadOnlySpan<char> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 16)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static Mat4 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
+    {
+        if (!TryParse(utf8Text, provider, out Mat4 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat4 UTF-8 format stream.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Mat4 result)
+    {
+        result = default;
+        ReadOnlySpan<byte> remaining = utf8Text;
+        Unsafe.SkipInit(out Mat4 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 16)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(SeparatorsUtf8);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(SeparatorsUtf8);
+            ReadOnlySpan<byte> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 16)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
 }
 
 public interface IMatrixTransformAction<TState> where TState : allows ref struct
@@ -1255,6 +1506,114 @@ public static class TransformPipelineExtensions
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat4 Build(this TransformPipeline<ScaledTransform> pipe) => pipe.Matrix;
+}
+
+public ref struct MatrixElementEnumerator
+{
+    private readonly Mat4 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixElementEnumerator(scoped ref readonly Mat4 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 16;
+
+    public readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 16U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return Unsafe.Add(ref Unsafe.AsRef(in _matrix.M11), (nuint)(uint)_index);
+        }
+    }
+}
+
+public ref struct MatrixRowEnumerable
+{
+    private readonly Mat4 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixRowEnumerable(scoped ref readonly Mat4 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public MatrixRowEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct MatrixRowEnumerator
+{
+    private readonly Mat4 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixRowEnumerator(scoped ref readonly Mat4 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 4;
+
+    public readonly Vec4 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Row0,
+            1 => _matrix.Row1,
+            2 => _matrix.Row2,
+            _ => _matrix.Row3
+        };
+    }
+}
+
+public ref struct MatrixColumnEnumerable
+{
+    private readonly Mat4 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixColumnEnumerable(scoped ref readonly Mat4 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public MatrixColumnEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct MatrixColumnEnumerator
+{
+    private readonly Mat4 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixColumnEnumerator(scoped ref readonly Mat4 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 4;
+
+    public readonly Vec4 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Column0,
+            1 => _matrix.Column1,
+            2 => _matrix.Column2,
+            _ => _matrix.Column3
+        };
+    }
 }
 
 public interface IProjectionPolicy
