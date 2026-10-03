@@ -20,7 +20,9 @@ public struct Vec4 :
     IUtf8SpanFormattable,
     IParsable<Vec4>,
     ISpanParsable<Vec4>,
-    IUtf8SpanParsable<Vec4>
+    IUtf8SpanParsable<Vec4>,
+    ISpatialVector<Vec4>,
+    IInnerProductSpace<Vec4, float>
 {
     public float X;
     public float Y;
