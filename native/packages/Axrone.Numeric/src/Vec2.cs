@@ -12,7 +12,15 @@ public struct Vec2 :
     IDivisionOperators<Vec2, float, Vec2>,
     IBitwiseOperators<Vec2, Vec2, Vec2>,
     IUnaryNegationOperators<Vec2, Vec2>,
-    IUnaryPlusOperators<Vec2, Vec2>
+    IUnaryPlusOperators<Vec2, Vec2>,
+    IAdditiveIdentity<Vec2, Vec2>,
+    IMultiplicativeIdentity<Vec2, float>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Vec2>,
+    ISpanParsable<Vec2>,
+    IUtf8SpanParsable<Vec2>
 {
     public float X;
     public float Y;
@@ -967,5 +975,309 @@ public struct Vec2 :
             (value.X * (1.0f - yy2 - zz2)) + (value.Y * (xy2 - wz2)),
             (value.X * (xy2 + wz2)) + (value.Y * (1.0f - xx2 - zz2))
         );
+    }
+
+
+
+    public static Vec2 AdditiveIdentity => Zero;
+
+    public static float MultiplicativeIdentity => 1.0f;
+
+    public static Vec2 GreaterThan(Vec2 left, Vec2 right) =>
+        new(
+            left.X > right.X ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            left.Y > right.Y ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool GreaterThanAll(Vec2 left, Vec2 right) =>
+        left.X > right.X && left.Y > right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool GreaterThanAny(Vec2 left, Vec2 right) =>
+        left.X > right.X || left.Y > right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 GreaterThanOrEqual(Vec2 left, Vec2 right) =>
+        new(
+            left.X >= right.X ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            left.Y >= right.Y ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool GreaterThanOrEqualAll(Vec2 left, Vec2 right) =>
+        left.X >= right.X && left.Y >= right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool GreaterThanOrEqualAny(Vec2 left, Vec2 right) =>
+        left.X >= right.X || left.Y >= right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 LessThan(Vec2 left, Vec2 right) =>
+        new(
+            left.X < right.X ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            left.Y < right.Y ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool LessThanAll(Vec2 left, Vec2 right) =>
+        left.X < right.X && left.Y < right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool LessThanAny(Vec2 left, Vec2 right) =>
+        left.X < right.X || left.Y < right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 LessThanOrEqual(Vec2 left, Vec2 right) =>
+        new(
+            left.X <= right.X ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            left.Y <= right.Y ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool LessThanOrEqualAll(Vec2 left, Vec2 right) =>
+        left.X <= right.X && left.Y <= right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool LessThanOrEqualAny(Vec2 left, Vec2 right) =>
+        left.X <= right.X || left.Y <= right.Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 ConditionalSelect(Vec2 condition, Vec2 left, Vec2 right) =>
+        (condition & left) | (~condition & right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int IndexOf(Vec2 vector, float value)
+    {
+        if (vector.X == value) return 0;
+        if (vector.Y == value) return 1;
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int LastIndexOf(Vec2 vector, float value)
+    {
+        if (vector.Y == value) return 1;
+        if (vector.X == value) return 0;
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int IndexOfWhereAllBitsSet(Vec2 vector)
+    {
+        if (BitConverter.SingleToUInt32Bits(vector.X) == 0xFFFF_FFFF) return 0;
+        if (BitConverter.SingleToUInt32Bits(vector.Y) == 0xFFFF_FFFF) return 1;
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int LastIndexOfWhereAllBitsSet(Vec2 vector)
+    {
+        if (BitConverter.SingleToUInt32Bits(vector.Y) == 0xFFFF_FFFF) return 1;
+        if (BitConverter.SingleToUInt32Bits(vector.X) == 0xFFFF_FFFF) return 0;
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Shuffle(Vec2 vector, byte xIndex, byte yIndex) =>
+        new(vector[(int)xIndex], vector[(int)yIndex]);
+
+    public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[64];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return new string(buffer.Slice(0, charsWritten));
+        }
+        return string.Create(formatProvider, $"<{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}>");
+    }
+
+    public readonly bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        Span<char> temp = stackalloc char[64];
+        int written = 0;
+
+        temp[written++] = '<';
+
+        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
+        written += xW;
+
+        var nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
+
+        if (temp.Length - written < separator.Length) return false;
+        separator.CopyTo(temp.Slice(written));
+        written += separator.Length;
+
+        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
+        written += yW;
+
+        if (temp.Length - written < 1) return false;
+        temp[written++] = '>';
+
+        if (destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(destination);
+        charsWritten = written;
+        return true;
+    }
+
+    public readonly bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        Span<byte> temp = stackalloc byte[64];
+        int written = 0;
+
+        temp[written++] = (byte)'<';
+
+        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
+        written += xW;
+
+        var nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
+
+        if (temp.Length - written < separator.Length) return false;
+        separator.CopyTo(temp.Slice(written));
+        written += separator.Length;
+
+        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
+        written += yW;
+
+        if (temp.Length - written < 1) return false;
+        temp[written++] = (byte)'>';
+
+        if (utf8Destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(utf8Destination);
+        bytesWritten = written;
+        return true;
+    }
+
+    public static Vec2 Parse(string s, IFormatProvider? provider)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan(), provider);
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec2 result)
+    {
+        if (s is null)
+        {
+            result = default;
+            return false;
+        }
+        return TryParse(s.AsSpan(), provider, out result);
+    }
+
+    public static Vec2 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
+    {
+        if (!TryParse(s, provider, out Vec2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Vec2 format string.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec2 result)
+    {
+        result = default;
+        s = s.Trim();
+        if (s.IsEmpty) return false;
+
+        if ((s[0] == '<' && s[^1] == '>') || (s[0] == '(' && s[^1] == ')') || (s[0] == '[' && s[^1] == ']'))
+        {
+            s = s.Slice(1, s.Length - 2).Trim();
+        }
+
+        char sep = s.Contains(';') ? ';' : ',';
+
+        int firstSep = s.IndexOf(sep);
+        if (firstSep < 0) return false;
+
+        ReadOnlySpan<char> xSpan = s.Slice(0, firstSep).Trim();
+        ReadOnlySpan<char> ySpan = s.Slice(firstSep + 1).Trim();
+
+        const NumberStyles styles = NumberStyles.Float;
+        if (!float.TryParse(xSpan, styles, provider, out float x) ||
+            !float.TryParse(ySpan, styles, provider, out float y))
+        {
+            return false;
+        }
+
+        result = new Vec2(x, y);
+        return true;
+    }
+
+    public static Vec2 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
+    {
+        if (!TryParse(utf8Text, provider, out Vec2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Vec2 UTF-8 format stream.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Vec2 result)
+    {
+        result = default;
+        utf8Text = TrimUtf8(utf8Text);
+        if (utf8Text.IsEmpty) return false;
+
+        if ((utf8Text[0] == (byte)'<' && utf8Text[^1] == (byte)'>') ||
+            (utf8Text[0] == (byte)'(' && utf8Text[^1] == (byte)')') ||
+            (utf8Text[0] == (byte)'[' && utf8Text[^1] == (byte)']'))
+        {
+            utf8Text = TrimUtf8(utf8Text.Slice(1, utf8Text.Length - 2));
+        }
+
+        byte sep = utf8Text.Contains((byte)';') ? (byte)';' : (byte)',';
+
+        int firstSep = utf8Text.IndexOf(sep);
+        if (firstSep < 0) return false;
+
+        ReadOnlySpan<byte> xSpan = TrimUtf8(utf8Text.Slice(0, firstSep));
+        ReadOnlySpan<byte> ySpan = TrimUtf8(utf8Text.Slice(firstSep + 1));
+
+        const NumberStyles styles = NumberStyles.Float;
+        if (!float.TryParse(xSpan, styles, provider, out float x) ||
+            !float.TryParse(ySpan, styles, provider, out float y))
+        {
+            return false;
+        }
+
+        result = new Vec2(x, y);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> span)
+    {
+        int start = 0;
+        while (start < span.Length && IsWhiteSpace(span[start])) start++;
+        int end = span.Length - 1;
+        while (end >= start && IsWhiteSpace(span[end])) end--;
+        return span.Slice(start, end - start + 1);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool IsWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
     }
 }
