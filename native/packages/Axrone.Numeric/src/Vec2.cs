@@ -1631,16 +1631,16 @@ public struct Vec2 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static bool IsOpeningBracket(char value) => value is '(' or '[' or '{';
+    private static bool IsOpeningBracket(char value) => value is '(' or '[' or '{' or '<';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static bool IsClosingBracket(char value) => value is ')' or ']' or '}';
+    private static bool IsClosingBracket(char value) => value is ')' or ']' or '}' or '>';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static bool IsOpeningBracketUtf8(byte value) => value is (byte)'(' or (byte)'[' or (byte)'{';
+    private static bool IsOpeningBracketUtf8(byte value) => value is (byte)'(' or (byte)'[' or (byte)'{' or (byte)'<';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static bool IsClosingBracketUtf8(byte value) => value is (byte)')' or (byte)']' or (byte)'}';
+    private static bool IsClosingBracketUtf8(byte value) => value is (byte)')' or (byte)']' or (byte)'}' or (byte)'>';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static bool IsWhiteSpaceUtf8(byte value) => value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
