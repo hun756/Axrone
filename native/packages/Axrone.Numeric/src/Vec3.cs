@@ -24,27 +24,27 @@ public readonly struct FastApproximationStrategy : INormalizationStrategy
 public interface IVectorTransformer<TState>
     where TState : allows ref struct
 {
-    static abstract vec3 Transform(vec3 value, scoped ref TState state);
+    static abstract Vec3 Transform(Vec3 value, scoped ref TState state);
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct vec3 :
-    IEquatable<vec3>,
-    IAdditionOperators<vec3, vec3, vec3>,
-    IAdditiveIdentity<vec3, vec3>,
-    ISubtractionOperators<vec3, vec3, vec3>,
-    IMultiplyOperators<vec3, vec3, vec3>,
-    IMultiplicativeIdentity<vec3, vec3>,
-    IDivisionOperators<vec3, vec3, vec3>,
-    IUnaryNegationOperators<vec3, vec3>,
-    IUnaryPlusOperators<vec3, vec3>,
-    IBitwiseOperators<vec3, vec3, vec3>,
+public struct Vec3 :
+    IEquatable<Vec3>,
+    IAdditionOperators<Vec3, Vec3, Vec3>,
+    IAdditiveIdentity<Vec3, Vec3>,
+    ISubtractionOperators<Vec3, Vec3, Vec3>,
+    IMultiplyOperators<Vec3, Vec3, Vec3>,
+    IMultiplicativeIdentity<Vec3, Vec3>,
+    IDivisionOperators<Vec3, Vec3, Vec3>,
+    IUnaryNegationOperators<Vec3, Vec3>,
+    IUnaryPlusOperators<Vec3, Vec3>,
+    IBitwiseOperators<Vec3, Vec3, Vec3>,
     IFormattable,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IParsable<vec3>,
-    ISpanParsable<vec3>,
-    IUtf8SpanParsable<vec3>
+    IParsable<Vec3>,
+    ISpanParsable<Vec3>,
+    IUtf8SpanParsable<Vec3>
 {
     public const float MachineEpsilon = 1.1920929E-07F;
 
@@ -54,41 +54,41 @@ public struct vec3 :
 
     private static readonly float s_allBitsSet = BitConverter.UInt32BitsToSingle(uint.MaxValue);
 
-    public static readonly vec3 Zero = new(0F, 0F, 0F);
+    public static readonly Vec3 Zero = new(0F, 0F, 0F);
 
-    public static readonly vec3 One = new(1F, 1F, 1F);
+    public static readonly Vec3 One = new(1F, 1F, 1F);
 
-    public static readonly vec3 UnitX = new(1F, 0F, 0F);
+    public static readonly Vec3 UnitX = new(1F, 0F, 0F);
 
-    public static readonly vec3 UnitY = new(0F, 1F, 0F);
+    public static readonly Vec3 UnitY = new(0F, 1F, 0F);
 
-    public static readonly vec3 UnitZ = new(0F, 0F, 1F);
+    public static readonly Vec3 UnitZ = new(0F, 0F, 1F);
 
-    public static readonly vec3 NegativeOne = new(-1F, -1F, -1F);
+    public static readonly Vec3 NegativeOne = new(-1F, -1F, -1F);
 
-    public static readonly vec3 NegativeUnitX = new(-1F, 0F, 0F);
+    public static readonly Vec3 NegativeUnitX = new(-1F, 0F, 0F);
 
-    public static readonly vec3 NegativeUnitY = new(0F, -1F, 0F);
+    public static readonly Vec3 NegativeUnitY = new(0F, -1F, 0F);
 
-    public static readonly vec3 NegativeUnitZ = new(0F, 0F, -1F);
+    public static readonly Vec3 NegativeUnitZ = new(0F, 0F, -1F);
 
-    public static readonly vec3 NegativeZero = new(-0F, -0F, -0F);
+    public static readonly Vec3 NegativeZero = new(-0F, -0F, -0F);
 
-    public static readonly vec3 PositiveInfinity = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+    public static readonly Vec3 PositiveInfinity = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
-    public static readonly vec3 NegativeInfinity = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+    public static readonly Vec3 NegativeInfinity = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
 
-    public static readonly vec3 NaN = new(float.NaN, float.NaN, float.NaN);
+    public static readonly Vec3 NaN = new(float.NaN, float.NaN, float.NaN);
 
-    public static readonly vec3 Epsilon = new(float.Epsilon, float.Epsilon, float.Epsilon);
+    public static readonly Vec3 Epsilon = new(float.Epsilon, float.Epsilon, float.Epsilon);
 
-    public static readonly vec3 Pi = new(MathF.PI, MathF.PI, MathF.PI);
+    public static readonly Vec3 Pi = new(MathF.PI, MathF.PI, MathF.PI);
 
-    public static readonly vec3 Tau = new(MathF.Tau, MathF.Tau, MathF.Tau);
+    public static readonly Vec3 Tau = new(MathF.Tau, MathF.Tau, MathF.Tau);
 
-    public static readonly vec3 E = new(MathF.E, MathF.E, MathF.E);
+    public static readonly Vec3 E = new(MathF.E, MathF.E, MathF.E);
 
-    public static readonly vec3 AllBitsSet = new(s_allBitsSet, s_allBitsSet, s_allBitsSet);
+    public static readonly Vec3 AllBitsSet = new(s_allBitsSet, s_allBitsSet, s_allBitsSet);
 
     public float X;
 
@@ -97,17 +97,17 @@ public struct vec3 :
     public float Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public vec3(float value) => X = Y = Z = value;
+    public Vec3(float value) => X = Y = Z = value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public vec3(float x, float y, float z)
+    public Vec3(float x, float y, float z)
     {
         X = x;
         Y = y;
         Z = z;
     }
 
-    public vec3(ReadOnlySpan<float> values)
+    public Vec3(ReadOnlySpan<float> values)
     {
         if (values.Length < 3)
         {
@@ -119,7 +119,7 @@ public struct vec3 :
         Z = values[2];
     }
 
-    // vec2 slice: vec3(vec2 xy, float z) — deferred until Axrone.Numeric.vec2 exists.
+    // vec2 slice: Vec3(vec2 xy, float z) — deferred until Axrone.Numeric.vec2 exists.
 
     public float this[int index]
     {
@@ -146,9 +146,9 @@ public struct vec3 :
         }
     }
 
-    public static vec3 AdditiveIdentity => Zero;
+    public static Vec3 AdditiveIdentity => Zero;
 
-    public static vec3 MultiplicativeIdentity => One;
+    public static Vec3 MultiplicativeIdentity => One;
 
     public readonly bool IsAllZero => X == 0F && Y == 0F && Z == 0F;
 
@@ -199,7 +199,7 @@ public struct vec3 :
         MemoryMarshal.Write(destination[8..], in z);
     }
 
-    public readonly void CopyTo(Span<vec3> destination)
+    public readonly void CopyTo(Span<Vec3> destination)
     {
         if (destination.IsEmpty)
         {
@@ -209,7 +209,7 @@ public struct vec3 :
         destination[0] = this;
     }
 
-    public readonly void CopyTo(vec3[] destination, int index)
+    public readonly void CopyTo(Vec3[] destination, int index)
     {
         ArgumentNullException.ThrowIfNull(destination);
 
@@ -237,39 +237,39 @@ public struct vec3 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vector128<float> AsVector128() => Vector128.Create(X, Y, Z, 0F);
 
-    public static explicit operator Vector128<float>(vec3 value) => value.AsVector128();
+    public static explicit operator Vector128<float>(Vec3 value) => value.AsVector128();
 
-    public static explicit operator vec3(Vector128<float> value) =>
+    public static explicit operator Vec3(Vector128<float> value) =>
         new(value.GetElement(0), value.GetElement(1), value.GetElement(2));
 
-    public static implicit operator vec3((float X, float Y, float Z) value) => new(value.X, value.Y, value.Z);
+    public static implicit operator Vec3((float X, float Y, float Z) value) => new(value.X, value.Y, value.Z);
 
-    public static implicit operator (float X, float Y, float Z)(vec3 value) => (value.X, value.Y, value.Z);
+    public static implicit operator (float X, float Y, float Z)(Vec3 value) => (value.X, value.Y, value.Z);
 
-    public static explicit operator System.Numerics.Vector3(vec3 value) => Unsafe.BitCast<vec3, System.Numerics.Vector3>(value);
+    public static explicit operator System.Numerics.Vector3(Vec3 value) => Unsafe.BitCast<Vec3, System.Numerics.Vector3>(value);
 
-    public static explicit operator vec3(System.Numerics.Vector3 value) => Unsafe.BitCast<System.Numerics.Vector3, vec3>(value);
+    public static explicit operator Vec3(System.Numerics.Vector3 value) => Unsafe.BitCast<System.Numerics.Vector3, Vec3>(value);
 
     public readonly System.Numerics.Vector3 ToSystemNumerics() => (System.Numerics.Vector3)this;
 
-    public static vec3 FromSystemNumerics(System.Numerics.Vector3 value) => (vec3)value;
+    public static Vec3 FromSystemNumerics(System.Numerics.Vector3 value) => (Vec3)value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Create(float x, float y, float z) => new(x, y, z);
+    public static Vec3 Create(float x, float y, float z) => new(x, y, z);
 
     // vec2 slice: Create(vec2 xy, float z) — deferred until Axrone.Numeric.vec2 exists.
 
-    // vec2 slice: Transform(vec3 value, Matrix4x4 transform) — deferred to the mat4 slice.
-    // vec2 slice: TransformNormal(vec3 value, Matrix4x4 transform) — deferred to the mat4 slice.
-    // vec2 slice: Transform(vec3 value, Quaternion rotation) — deferred to the quat slice.
+    // vec2 slice: Transform(Vec3 value, Matrix4x4 transform) — deferred to the mat4 slice.
+    // vec2 slice: TransformNormal(Vec3 value, Matrix4x4 transform) — deferred to the mat4 slice.
+    // vec2 slice: Transform(Vec3 value, Quaternion rotation) — deferred to the quat slice.
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 CreateScalar(float value) => new(value, value, value);
+    public static Vec3 CreateScalar(float value) => new(value, value, value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe vec3 CreateScalarUnsafe(float value)
+    public static unsafe Vec3 CreateScalarUnsafe(float value)
     {
-        Unsafe.SkipInit(out vec3 result);
+        Unsafe.SkipInit(out Vec3 result);
         float* destination = (float*)Unsafe.AsPointer(ref result);
         destination[0] = value;
         destination[1] = value;
@@ -278,39 +278,39 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Load(ReadOnlySpan<float> source)
+    public static Vec3 Load(ReadOnlySpan<float> source)
     {
         if (source.Length < 3)
         {
             NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(source));
         }
 
-        return new vec3(source[0], source[1], source[2]);
+        return new Vec3(source[0], source[1], source[2]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe vec3 LoadAligned(ref readonly float source)
+    public static unsafe Vec3 LoadAligned(ref readonly float source)
     {
         Vector128<float> wide = Vector128.LoadAligned((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
-        return new vec3(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2));
+        return new Vec3(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe vec3 LoadAlignedNonTemporal(ref readonly float source)
+    public static unsafe Vec3 LoadAlignedNonTemporal(ref readonly float source)
     {
         Vector128<float> wide = Vector128.LoadAlignedNonTemporal((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
-        return new vec3(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2));
+        return new Vec3(wide.GetElement(0), wide.GetElement(1), wide.GetElement(2));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe vec3 LoadUnsafe(void* source)
+    public static unsafe Vec3 LoadUnsafe(void* source)
     {
         float* components = (float*)source;
-        return new vec3(components[0], components[1], components[2]);
+        return new Vec3(components[0], components[1], components[2]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe vec3 LoadUnsafe(void* source, int offset)
+    public static unsafe Vec3 LoadUnsafe(void* source, int offset)
     {
         if (offset < 0)
         {
@@ -318,11 +318,11 @@ public struct vec3 :
         }
 
         float* components = (float*)source + offset;
-        return new vec3(components[0], components[1], components[2]);
+        return new Vec3(components[0], components[1], components[2]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Normalize<TStrategy>(vec3 value)
+    public static Vec3 Normalize<TStrategy>(Vec3 value)
         where TStrategy : struct, INormalizationStrategy
     {
         float lengthSquared = value.X * value.X + value.Y * value.Y + value.Z * value.Z;
@@ -331,85 +331,85 @@ public struct vec3 :
             float invLength = TStrategy.ReciprocalSqrt(lengthSquared);
             if (float.IsFinite(invLength) && invLength > 0.0f)
             {
-                return new vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
+                return new Vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
             }
             float len = MathF.Sqrt(lengthSquared);
             if (len > 0.0f)
             {
-                return new vec3(value.X / len, value.Y / len, value.Z / len);
+                return new Vec3(value.X / len, value.Y / len, value.Z / len);
             }
         }
         return Zero;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator +(vec3 left, vec3 right) =>
+    public static Vec3 operator +(Vec3 left, Vec3 right) =>
         new(left.X + right.X, left.Y + right.Y, left.Z + right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator -(vec3 left, vec3 right) =>
+    public static Vec3 operator -(Vec3 left, Vec3 right) =>
         new(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator *(vec3 left, vec3 right) =>
+    public static Vec3 operator *(Vec3 left, Vec3 right) =>
         new(left.X * right.X, left.Y * right.Y, left.Z * right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator *(vec3 left, float right) =>
+    public static Vec3 operator *(Vec3 left, float right) =>
         new(left.X * right, left.Y * right, left.Z * right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator *(float left, vec3 right) =>
+    public static Vec3 operator *(float left, Vec3 right) =>
         new(left * right.X, left * right.Y, left * right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator /(vec3 left, vec3 right) =>
+    public static Vec3 operator /(Vec3 left, Vec3 right) =>
         new(left.X / right.X, left.Y / right.Y, left.Z / right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator /(vec3 left, float right) =>
+    public static Vec3 operator /(Vec3 left, float right) =>
         new(left.X / right, left.Y / right, left.Z / right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator -(vec3 value) => new(-value.X, -value.Y, -value.Z);
+    public static Vec3 operator -(Vec3 value) => new(-value.X, -value.Y, -value.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator +(vec3 value) => value;
+    public static Vec3 operator +(Vec3 value) => value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator ~(vec3 value) =>
+    public static Vec3 operator ~(Vec3 value) =>
         new(BitConverter.Int32BitsToSingle(~BitConverter.SingleToInt32Bits(value.X)),
             BitConverter.Int32BitsToSingle(~BitConverter.SingleToInt32Bits(value.Y)),
             BitConverter.Int32BitsToSingle(~BitConverter.SingleToInt32Bits(value.Z)));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator &(vec3 left, vec3 right) =>
+    public static Vec3 operator &(Vec3 left, Vec3 right) =>
         new(BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.X) & BitConverter.SingleToInt32Bits(right.X)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Y) & BitConverter.SingleToInt32Bits(right.Y)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Z) & BitConverter.SingleToInt32Bits(right.Z)));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator |(vec3 left, vec3 right) =>
+    public static Vec3 operator |(Vec3 left, Vec3 right) =>
         new(BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.X) | BitConverter.SingleToInt32Bits(right.X)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Y) | BitConverter.SingleToInt32Bits(right.Y)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Z) | BitConverter.SingleToInt32Bits(right.Z)));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 operator ^(vec3 left, vec3 right) =>
+    public static Vec3 operator ^(Vec3 left, Vec3 right) =>
         new(BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.X) ^ BitConverter.SingleToInt32Bits(right.X)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Y) ^ BitConverter.SingleToInt32Bits(right.Y)),
             BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(left.Z) ^ BitConverter.SingleToInt32Bits(right.Z)));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator ==(vec3 left, vec3 right) => left.Equals(right);
+    public static bool operator ==(Vec3 left, Vec3 right) => left.Equals(right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator !=(vec3 left, vec3 right) => !left.Equals(right);
+    public static bool operator !=(Vec3 left, Vec3 right) => !left.Equals(right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool Equals(vec3 other) => X == other.X && Y == other.Y && Z == other.Z;
+    public readonly bool Equals(Vec3 other) => X == other.X && Y == other.Y && Z == other.Z;
 
-    public override readonly bool Equals([NotNullWhen(true)] object? obj) => obj is vec3 other && Equals(other);
+    public override readonly bool Equals([NotNullWhen(true)] object? obj) => obj is Vec3 other && Equals(other);
 
     public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z);
 
@@ -467,15 +467,15 @@ public struct vec3 :
         return true;
     }
 
-    public static vec3 Parse(string s, IFormatProvider? provider = null)
+    public static Vec3 Parse(string s, IFormatProvider? provider = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         return Parse(s.AsSpan(), provider);
     }
 
-    public static vec3 Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null)
+    public static Vec3 Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null)
     {
-        if (!TryParse(s, provider, out vec3 result))
+        if (!TryParse(s, provider, out Vec3 result))
         {
             NumericThrowHelper.ThrowFormatException("Expected three comma-separated floating-point components, for example \"1, 2, 3\".");
         }
@@ -483,9 +483,9 @@ public struct vec3 :
         return result;
     }
 
-    public static vec3 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider = null)
+    public static Vec3 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider = null)
     {
-        if (!TryParse(utf8Text, provider, out vec3 result))
+        if (!TryParse(utf8Text, provider, out Vec3 result))
         {
             NumericThrowHelper.ThrowFormatException("Expected three comma-separated floating-point components, for example \"1, 2, 3\".");
         }
@@ -493,10 +493,10 @@ public struct vec3 :
         return result;
     }
 
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out vec3 result) =>
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec3 result) =>
         TryParse(s.AsSpan(), provider, out result);
 
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out vec3 result)
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec3 result)
     {
         provider ??= CultureInfo.CurrentCulture;
         s = s.Trim();
@@ -531,11 +531,11 @@ public struct vec3 :
             return false;
         }
 
-        result = new vec3(components[0], components[1], components[2]);
+        result = new Vec3(components[0], components[1], components[2]);
         return true;
     }
 
-    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out vec3 result)
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Vec3 result)
     {
         int required = System.Text.Encoding.UTF8.GetCharCount(utf8Text);
         Span<char> characters = required <= StackTextCapacity ? stackalloc char[StackTextCapacity] : new char[required];
@@ -580,15 +580,15 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Dot(vec3 left, vec3 right) =>
+    public static float Dot(Vec3 left, Vec3 right) =>
         MathF.FusedMultiplyAdd(left.X, right.X, MathF.FusedMultiplyAdd(left.Y, right.Y, left.Z * right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float DotStrict(vec3 left, vec3 right) =>
+    public static float DotStrict(Vec3 left, Vec3 right) =>
         (left.X * right.X) + (left.Y * right.Y) + (left.Z * right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Cross(vec3 left, vec3 right) =>
+    public static Vec3 Cross(Vec3 left, Vec3 right) =>
         new(
             (left.Y * right.Z) - (left.Z * right.Y),
             (left.Z * right.X) - (left.X * right.Z),
@@ -602,7 +602,7 @@ public struct vec3 :
     public readonly float Length() => MathF.Sqrt(LengthSquared());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float DistanceSquared(vec3 value1, vec3 value2)
+    public static float DistanceSquared(Vec3 value1, Vec3 value2)
     {
         float dx = value1.X - value2.X;
         float dy = value1.Y - value2.Y;
@@ -611,11 +611,11 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Distance(vec3 value1, vec3 value2) =>
+    public static float Distance(Vec3 value1, Vec3 value2) =>
         MathF.Sqrt(DistanceSquared(value1, value2));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Normalize(vec3 value)
+    public static Vec3 Normalize(Vec3 value)
     {
         float lengthSquared = value.LengthSquared();
         if (lengthSquared > 0.0f)
@@ -623,13 +623,13 @@ public struct vec3 :
             float invLength = 1.0f / MathF.Sqrt(lengthSquared);
             if (float.IsFinite(invLength) && invLength > 0.0f)
             {
-                return new vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
+                return new Vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
             }
 
             float len = MathF.Sqrt(lengthSquared);
             if (len > 0.0f)
             {
-                return new vec3(value.X / len, value.Y / len, value.Z / len);
+                return new Vec3(value.X / len, value.Y / len, value.Z / len);
             }
         }
 
@@ -637,11 +637,11 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryNormalize(vec3 value, out vec3 result) =>
+    public static bool TryNormalize(Vec3 value, out Vec3 result) =>
         TryNormalize(value, out result, 0.0f);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryNormalize(vec3 value, out vec3 result, float tolerance)
+    public static bool TryNormalize(Vec3 value, out Vec3 result, float tolerance)
     {
         float lengthSquared = value.LengthSquared();
         float tolSquared = tolerance > 0.0f ? tolerance * tolerance : 0.0f;
@@ -650,14 +650,14 @@ public struct vec3 :
             float invLength = 1.0f / MathF.Sqrt(lengthSquared);
             if (float.IsFinite(invLength) && invLength > 0.0f)
             {
-                result = new vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
+                result = new Vec3(value.X * invLength, value.Y * invLength, value.Z * invLength);
                 return true;
             }
 
             float len = MathF.Sqrt(lengthSquared);
             if (len > 0.0f)
             {
-                result = new vec3(value.X / len, value.Y / len, value.Z / len);
+                result = new Vec3(value.X / len, value.Y / len, value.Z / len);
                 return true;
             }
         }
@@ -667,10 +667,10 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Reflect(vec3 vector, vec3 normal)
+    public static Vec3 Reflect(Vec3 vector, Vec3 normal)
     {
         float dot2 = Dot(vector, normal) * 2.0f;
-        return new vec3(
+        return new Vec3(
             vector.X - (normal.X * dot2),
             vector.Y - (normal.Y * dot2),
             vector.Z - (normal.Z * dot2)
@@ -678,7 +678,7 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Project(vec3 vector, vec3 onNormal)
+    public static Vec3 Project(Vec3 vector, Vec3 onNormal)
     {
         float sqrMag = Dot(onNormal, onNormal);
         if (sqrMag <= 0.0f)
@@ -691,11 +691,11 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 ProjectOnPlane(vec3 vector, vec3 planeNormal) =>
+    public static Vec3 ProjectOnPlane(Vec3 vector, Vec3 planeNormal) =>
         vector - Project(vector, planeNormal);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Slide(vec3 vector, vec3 normal)
+    public static Vec3 Slide(Vec3 vector, Vec3 normal)
     {
         float normalSq = Dot(normal, normal);
         if (normalSq <= 0.0f)
@@ -706,7 +706,7 @@ public struct vec3 :
         return vector - (normal * (Dot(vector, normal) / normalSq));
     }
 
-    public static float Angle(vec3 from, vec3 to)
+    public static float Angle(Vec3 from, Vec3 to)
     {
         float maxA = MathF.Max(MathF.Abs(from.X), MathF.Max(MathF.Abs(from.Y), MathF.Abs(from.Z)));
         float maxB = MathF.Max(MathF.Abs(to.X), MathF.Max(MathF.Abs(to.Y), MathF.Abs(to.Z)));
@@ -715,8 +715,8 @@ public struct vec3 :
             return 0.0f;
         }
 
-        vec3 a = from * (1.0f / maxA);
-        vec3 b = to * (1.0f / maxB);
+        Vec3 a = from * (1.0f / maxA);
+        Vec3 b = to * (1.0f / maxB);
 
         float lenA = a.Length();
         float lenB = b.Length();
@@ -729,16 +729,16 @@ public struct vec3 :
         return MathF.Acos(Math.Clamp(cos, -1.0f, 1.0f));
     }
 
-    public static float SignedAngle(vec3 from, vec3 to, vec3 axis)
+    public static float SignedAngle(Vec3 from, Vec3 to, Vec3 axis)
     {
         float unsignedAngle = Angle(from, to);
-        vec3 cross = Cross(from, to);
+        Vec3 cross = Cross(from, to);
         float sign = Dot(axis, cross);
         return sign < 0.0f ? -unsignedAngle : unsignedAngle;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Clamp(vec3 value, vec3 min, vec3 max)
+    public static Vec3 Clamp(Vec3 value, Vec3 min, Vec3 max)
     {
         float x = value.X;
         x = (x < min.X) ? min.X : x;
@@ -752,18 +752,18 @@ public struct vec3 :
         z = (z < min.Z) ? min.Z : z;
         z = (z > max.Z) ? max.Z : z;
 
-        return new vec3(x, y, z);
+        return new Vec3(x, y, z);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 ClampNative(vec3 value, vec3 min, vec3 max) => Clamp(value, min, max);
+    public static Vec3 ClampNative(Vec3 value, Vec3 min, Vec3 max) => Clamp(value, min, max);
 
-    public static vec3 ClampLength(vec3 value, float minLength, float maxLength)
+    public static Vec3 ClampLength(Vec3 value, float minLength, float maxLength)
     {
         float sqrMagnitude = value.LengthSquared();
         if (sqrMagnitude <= 0.0f)
         {
-            return minLength > 0.0f ? new vec3(minLength, 0.0f, 0.0f) : Zero;
+            return minLength > 0.0f ? new Vec3(minLength, 0.0f, 0.0f) : Zero;
         }
 
         float magnitude = MathF.Sqrt(sqrMagnitude);
@@ -781,49 +781,49 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Min(vec3 left, vec3 right) =>
+    public static Vec3 Min(Vec3 left, Vec3 right) =>
         new(MathF.Min(left.X, right.X), MathF.Min(left.Y, right.Y), MathF.Min(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Max(vec3 left, vec3 right) =>
+    public static Vec3 Max(Vec3 left, Vec3 right) =>
         new(MathF.Max(left.X, right.X), MathF.Max(left.Y, right.Y), MathF.Max(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MinNative(vec3 left, vec3 right) => Min(left, right);
+    public static Vec3 MinNative(Vec3 left, Vec3 right) => Min(left, right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MaxNative(vec3 left, vec3 right) => Max(left, right);
+    public static Vec3 MaxNative(Vec3 left, Vec3 right) => Max(left, right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MinNumber(vec3 left, vec3 right) =>
+    public static Vec3 MinNumber(Vec3 left, Vec3 right) =>
         new(float.MinNumber(left.X, right.X), float.MinNumber(left.Y, right.Y), float.MinNumber(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MaxNumber(vec3 left, vec3 right) =>
+    public static Vec3 MaxNumber(Vec3 left, Vec3 right) =>
         new(float.MaxNumber(left.X, right.X), float.MaxNumber(left.Y, right.Y), float.MaxNumber(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MinMagnitude(vec3 left, vec3 right) =>
+    public static Vec3 MinMagnitude(Vec3 left, Vec3 right) =>
         new(float.MinMagnitude(left.X, right.X), float.MinMagnitude(left.Y, right.Y), float.MinMagnitude(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MaxMagnitude(vec3 left, vec3 right) =>
+    public static Vec3 MaxMagnitude(Vec3 left, Vec3 right) =>
         new(float.MaxMagnitude(left.X, right.X), float.MaxMagnitude(left.Y, right.Y), float.MaxMagnitude(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MinMagnitudeNumber(vec3 left, vec3 right) =>
+    public static Vec3 MinMagnitudeNumber(Vec3 left, Vec3 right) =>
         new(float.MinMagnitudeNumber(left.X, right.X), float.MinMagnitudeNumber(left.Y, right.Y), float.MinMagnitudeNumber(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MaxMagnitudeNumber(vec3 left, vec3 right) =>
+    public static Vec3 MaxMagnitudeNumber(Vec3 left, Vec3 right) =>
         new(float.MaxMagnitudeNumber(left.X, right.X), float.MaxMagnitudeNumber(left.Y, right.Y), float.MaxMagnitudeNumber(left.Z, right.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 CopySign(vec3 value, vec3 sign) =>
+    public static Vec3 CopySign(Vec3 value, Vec3 sign) =>
         new(MathF.CopySign(value.X, sign.X), MathF.CopySign(value.Y, sign.Y), MathF.CopySign(value.Z, sign.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 FusedMultiplyAdd(vec3 left, vec3 right, vec3 addend) =>
+    public static Vec3 FusedMultiplyAdd(Vec3 left, Vec3 right, Vec3 addend) =>
         new(
             MathF.FusedMultiplyAdd(left.X, right.X, addend.X),
             MathF.FusedMultiplyAdd(left.Y, right.Y, addend.Y),
@@ -831,75 +831,75 @@ public struct vec3 :
         );
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 MultiplyAddEstimate(vec3 left, vec3 right, vec3 addend) =>
+    public static Vec3 MultiplyAddEstimate(Vec3 left, Vec3 right, Vec3 addend) =>
         FusedMultiplyAdd(left, right, addend);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Abs(vec3 value) =>
+    public static Vec3 Abs(Vec3 value) =>
         new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Sqrt(vec3 value) =>
+    public static Vec3 Sqrt(Vec3 value) =>
         new(MathF.Sqrt(value.X), MathF.Sqrt(value.Y), MathF.Sqrt(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 SquareRoot(vec3 value) => Sqrt(value);
+    public static Vec3 SquareRoot(Vec3 value) => Sqrt(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Sin(vec3 vector) =>
+    public static Vec3 Sin(Vec3 vector) =>
         new(MathF.Sin(vector.X), MathF.Sin(vector.Y), MathF.Sin(vector.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Cos(vec3 vector) =>
+    public static Vec3 Cos(Vec3 vector) =>
         new(MathF.Cos(vector.X), MathF.Cos(vector.Y), MathF.Cos(vector.Z));
 
-    public static (vec3 Sin, vec3 Cos) SinCos(vec3 vector)
+    public static (Vec3 Sin, Vec3 Cos) SinCos(Vec3 vector)
     {
         (float sX, float cX) = MathF.SinCos(vector.X);
         (float sY, float cY) = MathF.SinCos(vector.Y);
         (float sZ, float cZ) = MathF.SinCos(vector.Z);
-        return (new vec3(sX, sY, sZ), new vec3(cX, cY, cZ));
+        return (new Vec3(sX, sY, sZ), new Vec3(cX, cY, cZ));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Exp(vec3 vector) =>
+    public static Vec3 Exp(Vec3 vector) =>
         new(MathF.Exp(vector.X), MathF.Exp(vector.Y), MathF.Exp(vector.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Log(vec3 vector) =>
+    public static Vec3 Log(Vec3 vector) =>
         new(MathF.Log(vector.X), MathF.Log(vector.Y), MathF.Log(vector.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Log2(vec3 vector) =>
+    public static Vec3 Log2(Vec3 vector) =>
         new(MathF.Log2(vector.X), MathF.Log2(vector.Y), MathF.Log2(vector.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Hypot(vec3 x, vec3 y) => Sqrt((x * x) + (y * y));
+    public static Vec3 Hypot(Vec3 x, Vec3 y) => Sqrt((x * x) + (y * y));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 DegreesToRadians(vec3 degrees) => degrees * (MathF.PI / 180.0f);
+    public static Vec3 DegreesToRadians(Vec3 degrees) => degrees * (MathF.PI / 180.0f);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 RadiansToDegrees(vec3 radians) => radians * (180.0f / MathF.PI);
+    public static Vec3 RadiansToDegrees(Vec3 radians) => radians * (180.0f / MathF.PI);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Floor(vec3 value) =>
+    public static Vec3 Floor(Vec3 value) =>
         new(MathF.Floor(value.X), MathF.Floor(value.Y), MathF.Floor(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Ceiling(vec3 value) =>
+    public static Vec3 Ceiling(Vec3 value) =>
         new(MathF.Ceiling(value.X), MathF.Ceiling(value.Y), MathF.Ceiling(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Round(vec3 value) =>
+    public static Vec3 Round(Vec3 value) =>
         new(MathF.Round(value.X), MathF.Round(value.Y), MathF.Round(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Truncate(vec3 value) =>
+    public static Vec3 Truncate(Vec3 value) =>
         new(MathF.Truncate(value.X), MathF.Truncate(value.Y), MathF.Truncate(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Lerp(vec3 a, vec3 b, float t) =>
+    public static Vec3 Lerp(Vec3 a, Vec3 b, float t) =>
         new(
             MathF.FusedMultiplyAdd(b.X - a.X, t, a.X),
             MathF.FusedMultiplyAdd(b.Y - a.Y, t, a.Y),
@@ -907,17 +907,17 @@ public struct vec3 :
         );
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 LerpClamped(vec3 a, vec3 b, float t) =>
+    public static Vec3 LerpClamped(Vec3 a, Vec3 b, float t) =>
         Lerp(a, b, Math.Clamp(t, 0.0f, 1.0f));
 
-    public static vec3 SmoothStep(vec3 from, vec3 to, float amount)
+    public static Vec3 SmoothStep(Vec3 from, Vec3 to, float amount)
     {
         amount = Math.Clamp(amount, 0.0f, 1.0f);
         float factor = amount * amount * (3.0f - (2.0f * amount));
         return Lerp(from, to, factor);
     }
 
-    public static vec3 Slerp(vec3 a, vec3 b, float t)
+    public static Vec3 Slerp(Vec3 a, Vec3 b, float t)
     {
         float lenA = a.Length();
         float lenB = b.Length();
@@ -928,20 +928,20 @@ public struct vec3 :
         }
 
         float targetLength = MathF.FusedMultiplyAdd(lenB - lenA, t, lenA);
-        vec3 unitA = a / lenA;
-        vec3 unitB = b / lenB;
+        Vec3 unitA = a / lenA;
+        Vec3 unitB = b / lenB;
 
         float dot = Math.Clamp(Dot(unitA, unitB), -1.0f, 1.0f);
 
         if (dot > 0.9995f)
         {
-            vec3 result = Lerp(unitA, unitB, t);
+            Vec3 result = Lerp(unitA, unitB, t);
             return Normalize(result) * targetLength;
         }
 
         if (dot < -0.9995f)
         {
-            vec3 ortho = GetOrthogonal(unitA);
+            Vec3 ortho = GetOrthogonal(unitA);
             float angle = MathF.PI * t;
             return ((unitA * MathF.Cos(angle)) + (ortho * MathF.Sin(angle))) * targetLength;
         }
@@ -954,21 +954,21 @@ public struct vec3 :
         return ((unitA * factorA) + (unitB * factorB)) * targetLength;
     }
 
-    public static vec3 GetOrthogonal(vec3 v)
+    public static Vec3 GetOrthogonal(Vec3 v)
     {
         if (v.LengthSquared() <= 0.0f)
         {
             return UnitX;
         }
 
-        vec3 abs = Abs(v);
-        vec3 other = abs.X < abs.Y
+        Vec3 abs = Abs(v);
+        Vec3 other = abs.X < abs.Y
             ? (abs.X < abs.Z ? UnitX : UnitZ)
             : (abs.Y < abs.Z ? UnitY : UnitZ);
         return Normalize(Cross(v, other));
     }
 
-    public static vec3 MoveTowards(vec3 current, vec3 target, float maxDistanceDelta)
+    public static Vec3 MoveTowards(Vec3 current, Vec3 target, float maxDistanceDelta)
     {
         float dx = target.X - current.X;
         float dy = target.Y - current.Y;
@@ -982,7 +982,7 @@ public struct vec3 :
 
         float dist = MathF.Sqrt(distSq);
         float ratio = maxDistanceDelta / dist;
-        return new vec3(
+        return new Vec3(
             MathF.FusedMultiplyAdd(dx, ratio, current.X),
             MathF.FusedMultiplyAdd(dy, ratio, current.Y),
             MathF.FusedMultiplyAdd(dz, ratio, current.Z)
@@ -990,14 +990,14 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 TransformCustom<TTransformer, TState>(vec3 value, scoped ref TState state)
+    public static Vec3 TransformCustom<TTransformer, TState>(Vec3 value, scoped ref TState state)
         where TTransformer : IVectorTransformer<TState>
         where TState : allows ref struct =>
         TTransformer.Transform(value, ref state);
 
-    public static vec3 SumAll(params ReadOnlySpan<vec3> vectors)
+    public static Vec3 SumAll(params ReadOnlySpan<Vec3> vectors)
     {
-        vec3 accumulator = Zero;
+        Vec3 accumulator = Zero;
         for (int i = 0; i < vectors.Length; i++)
         {
             accumulator += vectors[i];
@@ -1006,7 +1006,7 @@ public struct vec3 :
         return accumulator;
     }
 
-    public static vec3 Average(params ReadOnlySpan<vec3> vectors)
+    public static Vec3 Average(params ReadOnlySpan<Vec3> vectors)
     {
         if (vectors.IsEmpty)
         {
@@ -1017,34 +1017,34 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Sum(vec3 vector) => vector.X + vector.Y + vector.Z;
+    public static float Sum(Vec3 vector) => vector.X + vector.Y + vector.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool All(vec3 vector) => vector.X != 0.0f && vector.Y != 0.0f && vector.Z != 0.0f;
+    public static bool All(Vec3 vector) => vector.X != 0.0f && vector.Y != 0.0f && vector.Z != 0.0f;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool AllWhereAllBitsSet(vec3 vector) =>
+    public static bool AllWhereAllBitsSet(Vec3 vector) =>
         BitConverter.SingleToUInt32Bits(vector.X) == 0xFFFF_FFFF &&
         BitConverter.SingleToUInt32Bits(vector.Y) == 0xFFFF_FFFF &&
         BitConverter.SingleToUInt32Bits(vector.Z) == 0xFFFF_FFFF;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Any(vec3 vector) => vector.X != 0.0f || vector.Y != 0.0f || vector.Z != 0.0f;
+    public static bool Any(Vec3 vector) => vector.X != 0.0f || vector.Y != 0.0f || vector.Z != 0.0f;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool AnyWhereAllBitsSet(vec3 vector) =>
+    public static bool AnyWhereAllBitsSet(Vec3 vector) =>
         BitConverter.SingleToUInt32Bits(vector.X) == 0xFFFF_FFFF ||
         BitConverter.SingleToUInt32Bits(vector.Y) == 0xFFFF_FFFF ||
         BitConverter.SingleToUInt32Bits(vector.Z) == 0xFFFF_FFFF;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool None(vec3 vector) => !Any(vector);
+    public static bool None(Vec3 vector) => !Any(vector);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool NoneWhereAllBitsSet(vec3 vector) => !AnyWhereAllBitsSet(vector);
+    public static bool NoneWhereAllBitsSet(Vec3 vector) => !AnyWhereAllBitsSet(vector);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int Count(vec3 vector)
+    public static int Count(Vec3 vector)
     {
         int count = 0;
         if (vector.X != 0.0f)
@@ -1066,7 +1066,7 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int CountWhereAllBitsSet(vec3 vector)
+    public static int CountWhereAllBitsSet(Vec3 vector)
     {
         int count = 0;
         if (BitConverter.SingleToUInt32Bits(vector.X) == 0xFFFF_FFFF)
@@ -1088,155 +1088,155 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool EqualsAll(vec3 left, vec3 right) => left == right;
+    public static bool EqualsAll(Vec3 left, Vec3 right) => left == right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool EqualsAny(vec3 left, vec3 right) =>
+    public static bool EqualsAny(Vec3 left, Vec3 right) =>
         left.X == right.X || left.Y == right.Y || left.Z == right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool Equals(vec3 other, float tolerance) =>
+    public readonly bool Equals(Vec3 other, float tolerance) =>
         MathF.Abs(X - other.X) <= tolerance &&
         MathF.Abs(Y - other.Y) <= tolerance &&
         MathF.Abs(Z - other.Z) <= tolerance;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Equals(vec3 left, vec3 right, float tolerance = DefaultTolerance) =>
+    public static bool Equals(Vec3 left, Vec3 right, float tolerance = DefaultTolerance) =>
         left.Equals(right, tolerance);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool BitEquals(vec3 other) =>
+    public readonly bool BitEquals(Vec3 other) =>
         BitConverter.SingleToUInt32Bits(X) == BitConverter.SingleToUInt32Bits(other.X) &&
         BitConverter.SingleToUInt32Bits(Y) == BitConverter.SingleToUInt32Bits(other.Y) &&
         BitConverter.SingleToUInt32Bits(Z) == BitConverter.SingleToUInt32Bits(other.Z);
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Add(vec3 left, vec3 right) => left + right;
+    public static Vec3 Add(Vec3 left, Vec3 right) => left + right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Subtract(vec3 left, vec3 right) => left - right;
+    public static Vec3 Subtract(Vec3 left, Vec3 right) => left - right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Multiply(vec3 left, vec3 right) => left * right;
+    public static Vec3 Multiply(Vec3 left, Vec3 right) => left * right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Multiply(vec3 value, float scalar) => value * scalar;
+    public static Vec3 Multiply(Vec3 value, float scalar) => value * scalar;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Multiply(float scalar, vec3 value) => scalar * value;
+    public static Vec3 Multiply(float scalar, Vec3 value) => scalar * value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Divide(vec3 left, vec3 right) => left / right;
+    public static Vec3 Divide(Vec3 left, Vec3 right) => left / right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Divide(vec3 value, float scalar) => value / scalar;
+    public static Vec3 Divide(Vec3 value, float scalar) => value / scalar;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Negate(vec3 value) => -value;
+    public static Vec3 Negate(Vec3 value) => -value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 BitwiseAnd(vec3 left, vec3 right) => left & right;
+    public static Vec3 BitwiseAnd(Vec3 left, Vec3 right) => left & right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 BitwiseOr(vec3 left, vec3 right) => left | right;
+    public static Vec3 BitwiseOr(Vec3 left, Vec3 right) => left | right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Xor(vec3 left, vec3 right) => left ^ right;
+    public static Vec3 Xor(Vec3 left, Vec3 right) => left ^ right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 OnesComplement(vec3 value) => ~value;
+    public static Vec3 OnesComplement(Vec3 value) => ~value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 AndNot(vec3 left, vec3 right) => left & ~right;
+    public static Vec3 AndNot(Vec3 left, Vec3 right) => left & ~right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static vec3 Mask(bool x, bool y, bool z) => new(
+    private static Vec3 Mask(bool x, bool y, bool z) => new(
         x ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFFu) : 0F,
         y ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFFu) : 0F,
         z ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFFu) : 0F);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsNaN(vec3 value) => Mask(float.IsNaN(value.X), float.IsNaN(value.Y), float.IsNaN(value.Z));
+    public static Vec3 IsNaN(Vec3 value) => Mask(float.IsNaN(value.X), float.IsNaN(value.Y), float.IsNaN(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsFinite(vec3 value) => Mask(float.IsFinite(value.X), float.IsFinite(value.Y), float.IsFinite(value.Z));
+    public static Vec3 IsFinite(Vec3 value) => Mask(float.IsFinite(value.X), float.IsFinite(value.Y), float.IsFinite(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsInfinity(vec3 value) => Mask(float.IsInfinity(value.X), float.IsInfinity(value.Y), float.IsInfinity(value.Z));
+    public static Vec3 IsInfinity(Vec3 value) => Mask(float.IsInfinity(value.X), float.IsInfinity(value.Y), float.IsInfinity(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsNormal(vec3 value) => Mask(float.IsNormal(value.X), float.IsNormal(value.Y), float.IsNormal(value.Z));
+    public static Vec3 IsNormal(Vec3 value) => Mask(float.IsNormal(value.X), float.IsNormal(value.Y), float.IsNormal(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsSubnormal(vec3 value) => Mask(float.IsSubnormal(value.X), float.IsSubnormal(value.Y), float.IsSubnormal(value.Z));
+    public static Vec3 IsSubnormal(Vec3 value) => Mask(float.IsSubnormal(value.X), float.IsSubnormal(value.Y), float.IsSubnormal(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsZero(vec3 value) => Mask(value.X == 0F, value.Y == 0F, value.Z == 0F);
+    public static Vec3 IsZero(Vec3 value) => Mask(value.X == 0F, value.Y == 0F, value.Z == 0F);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsNegative(vec3 value) => Mask(float.IsNegative(value.X), float.IsNegative(value.Y), float.IsNegative(value.Z));
+    public static Vec3 IsNegative(Vec3 value) => Mask(float.IsNegative(value.X), float.IsNegative(value.Y), float.IsNegative(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsPositive(vec3 value) => Mask(float.IsPositive(value.X), float.IsPositive(value.Y), float.IsPositive(value.Z));
+    public static Vec3 IsPositive(Vec3 value) => Mask(float.IsPositive(value.X), float.IsPositive(value.Y), float.IsPositive(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsNegativeInfinity(vec3 value) => Mask(float.IsNegativeInfinity(value.X), float.IsNegativeInfinity(value.Y), float.IsNegativeInfinity(value.Z));
+    public static Vec3 IsNegativeInfinity(Vec3 value) => Mask(float.IsNegativeInfinity(value.X), float.IsNegativeInfinity(value.Y), float.IsNegativeInfinity(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsPositiveInfinity(vec3 value) => Mask(float.IsPositiveInfinity(value.X), float.IsPositiveInfinity(value.Y), float.IsPositiveInfinity(value.Z));
+    public static Vec3 IsPositiveInfinity(Vec3 value) => Mask(float.IsPositiveInfinity(value.X), float.IsPositiveInfinity(value.Y), float.IsPositiveInfinity(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsInteger(vec3 value) => Mask(float.IsInteger(value.X), float.IsInteger(value.Y), float.IsInteger(value.Z));
+    public static Vec3 IsInteger(Vec3 value) => Mask(float.IsInteger(value.X), float.IsInteger(value.Y), float.IsInteger(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsEvenInteger(vec3 value) => Mask(float.IsEvenInteger(value.X), float.IsEvenInteger(value.Y), float.IsEvenInteger(value.Z));
+    public static Vec3 IsEvenInteger(Vec3 value) => Mask(float.IsEvenInteger(value.X), float.IsEvenInteger(value.Y), float.IsEvenInteger(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 IsOddInteger(vec3 value) => Mask(float.IsOddInteger(value.X), float.IsOddInteger(value.Y), float.IsOddInteger(value.Z));
+    public static Vec3 IsOddInteger(Vec3 value) => Mask(float.IsOddInteger(value.X), float.IsOddInteger(value.Y), float.IsOddInteger(value.Z));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 GreaterThan(vec3 left, vec3 right) => Mask(left.X > right.X, left.Y > right.Y, left.Z > right.Z);
+    public static Vec3 GreaterThan(Vec3 left, Vec3 right) => Mask(left.X > right.X, left.Y > right.Y, left.Z > right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GreaterThanAll(vec3 left, vec3 right) => left.X > right.X && left.Y > right.Y && left.Z > right.Z;
+    public static bool GreaterThanAll(Vec3 left, Vec3 right) => left.X > right.X && left.Y > right.Y && left.Z > right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GreaterThanAny(vec3 left, vec3 right) => left.X > right.X || left.Y > right.Y || left.Z > right.Z;
+    public static bool GreaterThanAny(Vec3 left, Vec3 right) => left.X > right.X || left.Y > right.Y || left.Z > right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 GreaterThanOrEqual(vec3 left, vec3 right) => Mask(left.X >= right.X, left.Y >= right.Y, left.Z >= right.Z);
+    public static Vec3 GreaterThanOrEqual(Vec3 left, Vec3 right) => Mask(left.X >= right.X, left.Y >= right.Y, left.Z >= right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GreaterThanOrEqualAll(vec3 left, vec3 right) => left.X >= right.X && left.Y >= right.Y && left.Z >= right.Z;
+    public static bool GreaterThanOrEqualAll(Vec3 left, Vec3 right) => left.X >= right.X && left.Y >= right.Y && left.Z >= right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GreaterThanOrEqualAny(vec3 left, vec3 right) => left.X >= right.X || left.Y >= right.Y || left.Z >= right.Z;
+    public static bool GreaterThanOrEqualAny(Vec3 left, Vec3 right) => left.X >= right.X || left.Y >= right.Y || left.Z >= right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 LessThan(vec3 left, vec3 right) => Mask(left.X < right.X, left.Y < right.Y, left.Z < right.Z);
+    public static Vec3 LessThan(Vec3 left, Vec3 right) => Mask(left.X < right.X, left.Y < right.Y, left.Z < right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool LessThanAll(vec3 left, vec3 right) => left.X < right.X && left.Y < right.Y && left.Z < right.Z;
+    public static bool LessThanAll(Vec3 left, Vec3 right) => left.X < right.X && left.Y < right.Y && left.Z < right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool LessThanAny(vec3 left, vec3 right) => left.X < right.X || left.Y < right.Y || left.Z < right.Z;
+    public static bool LessThanAny(Vec3 left, Vec3 right) => left.X < right.X || left.Y < right.Y || left.Z < right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 LessThanOrEqual(vec3 left, vec3 right) => Mask(left.X <= right.X, left.Y <= right.Y, left.Z <= right.Z);
+    public static Vec3 LessThanOrEqual(Vec3 left, Vec3 right) => Mask(left.X <= right.X, left.Y <= right.Y, left.Z <= right.Z);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool LessThanOrEqualAll(vec3 left, vec3 right) => left.X <= right.X && left.Y <= right.Y && left.Z <= right.Z;
+    public static bool LessThanOrEqualAll(Vec3 left, Vec3 right) => left.X <= right.X && left.Y <= right.Y && left.Z <= right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool LessThanOrEqualAny(vec3 left, vec3 right) => left.X <= right.X || left.Y <= right.Y || left.Z <= right.Z;
+    public static bool LessThanOrEqualAny(Vec3 left, Vec3 right) => left.X <= right.X || left.Y <= right.Y || left.Z <= right.Z;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 ConditionalSelect(vec3 condition, vec3 trueValue, vec3 falseValue) =>
+    public static Vec3 ConditionalSelect(Vec3 condition, Vec3 trueValue, Vec3 falseValue) =>
         (condition & trueValue) | (~condition & falseValue);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOf(vec3 value, vec3 target)
+    public static int IndexOf(Vec3 value, Vec3 target)
     {
         if (value.X == target.X)
         {
@@ -1257,7 +1257,7 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int LastIndexOf(vec3 value, vec3 target)
+    public static int LastIndexOf(Vec3 value, Vec3 target)
     {
         if (value.Z == target.Z)
         {
@@ -1278,7 +1278,7 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOfWhereAllBitsSet(vec3 value)
+    public static int IndexOfWhereAllBitsSet(Vec3 value)
     {
         if (BitConverter.SingleToUInt32Bits(value.X) == 0xFFFF_FFFFu)
         {
@@ -1299,7 +1299,7 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int LastIndexOfWhereAllBitsSet(vec3 value)
+    public static int LastIndexOfWhereAllBitsSet(Vec3 value)
     {
         if (BitConverter.SingleToUInt32Bits(value.Z) == 0xFFFF_FFFFu)
         {
@@ -1320,11 +1320,11 @@ public struct vec3 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static vec3 Shuffle(vec3 value, byte x, byte y, byte z)
+    public static Vec3 Shuffle(Vec3 value, byte x, byte y, byte z)
     {
         float rx = x == 0 ? value.X : x == 1 ? value.Y : x == 2 ? value.Z : 0F;
         float ry = y == 0 ? value.X : y == 1 ? value.Y : y == 2 ? value.Z : 0F;
         float rz = z == 0 ? value.X : z == 1 ? value.Y : z == 2 ? value.Z : 0F;
-        return new vec3(rx, ry, rz);
+        return new Vec3(rx, ry, rz);
     }
 }
