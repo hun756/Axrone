@@ -487,4 +487,485 @@ public struct Vec2 :
         obj is Vec2 other && Equals(other);
 
     public override readonly int GetHashCode() => HashCode.Combine(X, Y);
+
+    public static float Dot(Vec2 left, Vec2 right) =>
+        MathF.FusedMultiplyAdd(left.X, right.X, left.Y * right.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float DotStrict(Vec2 left, Vec2 right) =>
+        (left.X * right.X) + (left.Y * right.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Cross(Vec2 left, Vec2 right) =>
+        (left.X * right.Y) - (left.Y * right.X);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float LengthSquared() => Dot(this, this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float Length() => MathF.Sqrt(LengthSquared());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float DistanceSquared(Vec2 value1, Vec2 value2)
+    {
+        float dx = value1.X - value2.X;
+        float dy = value1.Y - value2.Y;
+        return (dx * dx) + (dy * dy);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Distance(Vec2 value1, Vec2 value2) =>
+        MathF.Sqrt(DistanceSquared(value1, value2));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Normalize(Vec2 value) => Normalize<StrictIeeeStrategy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Normalize<TStrategy>(Vec2 value)
+        where TStrategy : struct, INormalizationStrategy
+    {
+        float lengthSquared = value.LengthSquared();
+        if (lengthSquared > 0.0f)
+        {
+            float invLength = TStrategy.ReciprocalSqrt(lengthSquared);
+            if (float.IsFinite(invLength) && invLength > 0.0f)
+            {
+                return new Vec2(value.X * invLength, value.Y * invLength);
+            }
+            float len = MathF.Sqrt(lengthSquared);
+            if (len > 0.0f)
+            {
+                return new Vec2(value.X / len, value.Y / len);
+            }
+        }
+        return Zero;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryNormalize(Vec2 value, out Vec2 result) =>
+        TryNormalize(value, out result, 0.0f);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryNormalize(Vec2 value, out Vec2 result, float tolerance)
+    {
+        float lengthSquared = value.LengthSquared();
+        float tolSquared = tolerance > 0.0f ? tolerance * tolerance : 0.0f;
+        if (lengthSquared > tolSquared && lengthSquared > 0.0f)
+        {
+            float invLength = 1.0f / MathF.Sqrt(lengthSquared);
+            if (float.IsFinite(invLength))
+            {
+                result = new Vec2(value.X * invLength, value.Y * invLength);
+                return true;
+            }
+            float len = MathF.Sqrt(lengthSquared);
+            if (len > 0.0f)
+            {
+                result = new Vec2(value.X / len, value.Y / len);
+                return true;
+            }
+        }
+        result = Zero;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Reflect(Vec2 vector, Vec2 normal)
+    {
+        float dot2 = Dot(vector, normal) * 2.0f;
+        return new Vec2(
+            vector.X - (normal.X * dot2),
+            vector.Y - (normal.Y * dot2)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Project(Vec2 vector, Vec2 onNormal)
+    {
+        float sqrMag = Dot(onNormal, onNormal);
+        if (sqrMag <= 0.0f)
+        {
+            return Zero;
+        }
+        float scale = Dot(vector, onNormal) / sqrMag;
+        return onNormal * scale;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Slide(Vec2 vector, Vec2 normal)
+    {
+        float normalSq = Dot(normal, normal);
+        if (normalSq <= 0.0f)
+        {
+            return vector;
+        }
+        return vector - (normal * (Dot(vector, normal) / normalSq));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Perpendicular(Vec2 vector) => new(-vector.Y, vector.X);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 Perpendicular() => Perpendicular(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 PerpendicularClockwise(Vec2 vector) => new(vector.Y, -vector.X);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 PerpendicularClockwise() => PerpendicularClockwise(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Rotate(Vec2 vector, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians);
+        return new Vec2(
+            MathF.FusedMultiplyAdd(vector.X, cos, -(vector.Y * sin)),
+            MathF.FusedMultiplyAdd(vector.X, sin, vector.Y * cos)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 Rotate(float angleRadians) => Rotate(this, angleRadians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 RotateAround(Vec2 vector, Vec2 pivot, float angleRadians) =>
+        Rotate(vector - pivot, angleRadians) + pivot;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 RotateAround(Vec2 pivot, float angleRadians) => RotateAround(this, pivot, angleRadians);
+
+    public static float Angle(Vec2 from, Vec2 to)
+    {
+        float maxA = MathF.Max(MathF.Abs(from.X), MathF.Abs(from.Y));
+        float maxB = MathF.Max(MathF.Abs(to.X), MathF.Abs(to.Y));
+        if (maxA <= 0.0f || maxB <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        Vec2 a = from * (1.0f / maxA);
+        Vec2 b = to * (1.0f / maxB);
+
+        float lenA = a.Length();
+        float lenB = b.Length();
+        if (lenA <= 0.0f || lenB <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        float cos = Dot(a, b) / (lenA * lenB);
+        return MathF.Acos(Math.Clamp(cos, -1.0f, 1.0f));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float SignedAngle(Vec2 from, Vec2 to) =>
+        MathF.Atan2(Cross(from, to), Dot(from, to));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Clamp(Vec2 value, Vec2 min, Vec2 max)
+    {
+        float x = value.X;
+        x = (x < min.X) ? min.X : x;
+        x = (x > max.X) ? max.X : x;
+
+        float y = value.Y;
+        y = (y < min.Y) ? min.Y : y;
+        y = (y > max.Y) ? max.Y : y;
+
+        return new Vec2(x, y);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 ClampNative(Vec2 value, Vec2 min, Vec2 max) => Clamp(value, min, max);
+
+    public static Vec2 ClampLength(Vec2 value, float minLength, float maxLength)
+    {
+        float sqrMagnitude = value.LengthSquared();
+        if (sqrMagnitude <= 0.0f)
+        {
+            return minLength > 0.0f ? new Vec2(minLength, 0.0f) : Zero;
+        }
+
+        float magnitude = MathF.Sqrt(sqrMagnitude);
+        if (magnitude < minLength)
+        {
+            return value * (minLength / magnitude);
+        }
+        if (magnitude > maxLength)
+        {
+            return value * (maxLength / magnitude);
+        }
+        return value;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Min(Vec2 left, Vec2 right) =>
+        new(MathF.Min(left.X, right.X), MathF.Min(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Max(Vec2 left, Vec2 right) =>
+        new(MathF.Max(left.X, right.X), MathF.Max(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MinNative(Vec2 left, Vec2 right) => Min(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MaxNative(Vec2 left, Vec2 right) => Max(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MinNumber(Vec2 left, Vec2 right) =>
+        new(float.MinNumber(left.X, right.X), float.MinNumber(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MaxNumber(Vec2 left, Vec2 right) =>
+        new(float.MaxNumber(left.X, right.X), float.MaxNumber(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MinMagnitude(Vec2 left, Vec2 right) =>
+        new(float.MinMagnitude(left.X, right.X), float.MinMagnitude(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MaxMagnitude(Vec2 left, Vec2 right) =>
+        new(float.MaxMagnitude(left.X, right.X), float.MaxMagnitude(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MinMagnitudeNumber(Vec2 left, Vec2 right) =>
+        new(float.MinMagnitudeNumber(left.X, right.X), float.MinMagnitudeNumber(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MaxMagnitudeNumber(Vec2 left, Vec2 right) =>
+        new(float.MaxMagnitudeNumber(left.X, right.X), float.MaxMagnitudeNumber(left.Y, right.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 CopySign(Vec2 value, Vec2 sign) =>
+        new(MathF.CopySign(value.X, sign.X), MathF.CopySign(value.Y, sign.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 FusedMultiplyAdd(Vec2 left, Vec2 right, Vec2 addend) =>
+        new(
+            MathF.FusedMultiplyAdd(left.X, right.X, addend.X),
+            MathF.FusedMultiplyAdd(left.Y, right.Y, addend.Y)
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 MultiplyAddEstimate(Vec2 left, Vec2 right, Vec2 addend) =>
+        FusedMultiplyAdd(left, right, addend);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Abs(Vec2 value) =>
+        new(MathF.Abs(value.X), MathF.Abs(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Sqrt(Vec2 value) =>
+        new(MathF.Sqrt(value.X), MathF.Sqrt(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 SquareRoot(Vec2 value) => Sqrt(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Sin(Vec2 vector) =>
+        new(MathF.Sin(vector.X), MathF.Sin(vector.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Cos(Vec2 vector) =>
+        new(MathF.Cos(vector.X), MathF.Cos(vector.Y));
+
+    public static (Vec2 Sin, Vec2 Cos) SinCos(Vec2 vector)
+    {
+        var (sX, cX) = MathF.SinCos(vector.X);
+        var (sY, cY) = MathF.SinCos(vector.Y);
+        return (new Vec2(sX, sY), new Vec2(cX, cY));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Exp(Vec2 vector) =>
+        new(MathF.Exp(vector.X), MathF.Exp(vector.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Log(Vec2 vector) =>
+        new(MathF.Log(vector.X), MathF.Log(vector.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Log2(Vec2 vector) =>
+        new(MathF.Log2(vector.X), MathF.Log2(vector.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Hypot(Vec2 x, Vec2 y) => Sqrt((x * x) + (y * y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 DegreesToRadians(Vec2 degrees) => degrees * (MathF.PI / 180.0f);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 RadiansToDegrees(Vec2 radians) => radians * (180.0f / MathF.PI);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Floor(Vec2 value) =>
+        new(MathF.Floor(value.X), MathF.Floor(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Ceiling(Vec2 value) =>
+        new(MathF.Ceiling(value.X), MathF.Ceiling(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Round(Vec2 value) =>
+        new(MathF.Round(value.X), MathF.Round(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Truncate(Vec2 value) =>
+        new(MathF.Truncate(value.X), MathF.Truncate(value.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Lerp(Vec2 a, Vec2 b, float t) =>
+        new(
+            MathF.FusedMultiplyAdd(b.X - a.X, t, a.X),
+            MathF.FusedMultiplyAdd(b.Y - a.Y, t, a.Y)
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 LerpClamped(Vec2 a, Vec2 b, float t) =>
+        Lerp(a, b, Math.Clamp(t, 0.0f, 1.0f));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 SmoothStep(Vec2 from, Vec2 to, float amount)
+    {
+        amount = Math.Clamp(amount, 0.0f, 1.0f);
+        float factor = amount * amount * (3.0f - (2.0f * amount));
+        return Lerp(from, to, factor);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 SmootherStep(Vec2 from, Vec2 to, float amount)
+    {
+        amount = Math.Clamp(amount, 0.0f, 1.0f);
+        float inner = MathF.FusedMultiplyAdd(amount, 6.0f, -15.0f);
+        float poly = MathF.FusedMultiplyAdd(amount, inner, 10.0f);
+        float factor = amount * amount * amount * poly;
+        return Lerp(from, to, factor);
+    }
+
+    public static Vec2 MoveTowards(Vec2 current, Vec2 target, float maxDistanceDelta)
+    {
+        float dx = target.X - current.X;
+        float dy = target.Y - current.Y;
+        float distSq = (dx * dx) + (dy * dy);
+
+        if (distSq == 0.0f || (maxDistanceDelta >= 0.0f && distSq <= maxDistanceDelta * maxDistanceDelta))
+        {
+            return target;
+        }
+
+        float dist = MathF.Sqrt(distSq);
+        float ratio = maxDistanceDelta / dist;
+        return new Vec2(
+            MathF.FusedMultiplyAdd(dx, ratio, current.X),
+            MathF.FusedMultiplyAdd(dy, ratio, current.Y)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Inverse(Vec2 vector) =>
+        new(1.0f / vector.X, 1.0f / vector.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 Inverse() => Inverse(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 InverseSafe(Vec2 vector, float fallback = 0.0f)
+    {
+        float invX = 1.0f / vector.X;
+        float invY = 1.0f / vector.Y;
+        return new Vec2(
+            float.IsFinite(invX) ? invX : fallback,
+            float.IsFinite(invY) ? invY : fallback
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 InverseSafe(float fallback = 0.0f) => InverseSafe(this, fallback);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 DivideSafe(Vec2 left, Vec2 right, float fallback = 0.0f)
+    {
+        float x = left.X / right.X;
+        float y = left.Y / right.Y;
+        return new Vec2(
+            float.IsFinite(x) ? x : fallback,
+            float.IsFinite(y) ? y : fallback
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 DivideSafe(Vec2 left, float right, float fallback = 0.0f)
+    {
+        float inv = 1.0f / right;
+        return float.IsFinite(inv) ? left * inv : new Vec2(fallback);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ManhattanDistance(Vec2 a, Vec2 b) =>
+        MathF.Abs(a.X - b.X) + MathF.Abs(a.Y - b.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float ManhattanDistance(Vec2 destination) => ManhattanDistance(this, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ChebyshevDistance(Vec2 a, Vec2 b) =>
+        MathF.Max(MathF.Abs(a.X - b.X), MathF.Abs(a.Y - b.Y));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float ChebyshevDistance(Vec2 destination) => ChebyshevDistance(this, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 AddScalar(Vec2 vector, float scalar) =>
+        new(vector.X + scalar, vector.Y + scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 AddScalar(float scalar) => AddScalar(this, scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 SubtractScalar(Vec2 vector, float scalar) =>
+        new(vector.X - scalar, vector.Y - scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec2 SubtractScalar(float scalar) => SubtractScalar(this, scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Transform(Vec2 position, System.Numerics.Matrix3x2 matrix) =>
+        new(
+            MathF.FusedMultiplyAdd(position.X, matrix.M11, MathF.FusedMultiplyAdd(position.Y, matrix.M21, matrix.M31)),
+            MathF.FusedMultiplyAdd(position.X, matrix.M12, MathF.FusedMultiplyAdd(position.Y, matrix.M22, matrix.M32))
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 TransformNormal(Vec2 normal, System.Numerics.Matrix3x2 matrix) =>
+        new(
+            MathF.FusedMultiplyAdd(normal.X, matrix.M11, normal.Y * matrix.M21),
+            MathF.FusedMultiplyAdd(normal.X, matrix.M12, normal.Y * matrix.M22)
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Transform(Vec2 position, System.Numerics.Matrix4x4 matrix) =>
+        new(
+            MathF.FusedMultiplyAdd(position.X, matrix.M11, MathF.FusedMultiplyAdd(position.Y, matrix.M21, matrix.M41)),
+            MathF.FusedMultiplyAdd(position.X, matrix.M12, MathF.FusedMultiplyAdd(position.Y, matrix.M22, matrix.M42))
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Transform(Vec2 value, System.Numerics.Quaternion rotation)
+    {
+        float x2 = rotation.X + rotation.X;
+        float y2 = rotation.Y + rotation.Y;
+        float z2 = rotation.Z + rotation.Z;
+
+        float wz2 = rotation.W * z2;
+        float xx2 = rotation.X * x2;
+        float xy2 = rotation.X * y2;
+        float yy2 = rotation.Y * y2;
+        float zz2 = rotation.Z * z2;
+
+        return new Vec2(
+            (value.X * (1.0f - yy2 - zz2)) + (value.Y * (xy2 - wz2)),
+            (value.X * (xy2 + wz2)) + (value.Y * (1.0f - xx2 - zz2))
+        );
+    }
 }
