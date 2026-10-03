@@ -245,7 +245,16 @@ public struct Quat :
     IUnaryNegationOperators<Quat, Quat>,
     IUnaryPlusOperators<Quat, Quat>,
     IAdditiveIdentity<Quat, Quat>,
-    IMultiplicativeIdentity<Quat, Quat>
+    IMultiplicativeIdentity<Quat, Quat>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Quat>,
+    ISpanParsable<Quat>,
+    IUtf8SpanParsable<Quat>,
+    ISpatialVector<Quat>,
+    IInnerProductSpace<Quat, float>,
+    IInterpolatableSpace<Quat, float>
 {
     public readonly float X;
 
@@ -973,4 +982,246 @@ public struct Quat :
         obj is Quat other && Equals(other);
 
     public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z, W);
+
+    private const int StackTextCapacity = 256;
+
+    public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[StackTextCapacity];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return new string(buffer.Slice(0, charsWritten));
+        }
+
+        return string.Create(
+            formatProvider,
+            $"{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}, {Z.ToString(format, formatProvider)}, {W.ToString(format, formatProvider)}"
+        );
+    }
+
+    public readonly bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
+
+        if (!TryAppendComponentChar(destination, ref offset, X, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, Y, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, Z, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, W, format, provider))
+        {
+            charsWritten = 0;
+            return false;
+        }
+
+        charsWritten = offset;
+        return true;
+    }
+
+    public readonly bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
+
+        if (!TryAppendComponentUtf8(utf8Destination, ref offset, X, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, Y, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, Z, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, W, format, provider))
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        bytesWritten = offset;
+        return true;
+    }
+
+    public static Quat Parse(string s, IFormatProvider? provider = null)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan(), provider);
+    }
+
+    public static Quat Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null)
+    {
+        if (!TryParse(s, provider, out Quat result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected four comma-separated floating-point components, for example \"1, 2, 3, 4\".");
+        }
+
+        return result;
+    }
+
+    public static Quat Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider = null)
+    {
+        if (!TryParse(utf8Text, provider, out Quat result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected four comma-separated floating-point components, for example \"1, 2, 3, 4\".");
+        }
+
+        return result;
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Quat result) =>
+        TryParse(s.AsSpan(), provider, out result);
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Quat result)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        s = s.Trim();
+
+        if (s.Length >= 2 && IsOpeningBracket(s[0]) && IsClosingBracket(s[^1]))
+        {
+            s = s[1..^1];
+        }
+
+        Span<float> components = stackalloc float[4];
+        ReadOnlySpan<char> remaining = s;
+        bool sawTrailingSeparator = false;
+
+        for (int index = 0; index < 4; index++)
+        {
+            int separator = remaining.IndexOf(',');
+            ReadOnlySpan<char> component = (separator < 0 ? remaining : remaining[..separator]).Trim();
+
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
+
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
+
+        if (sawTrailingSeparator || !remaining.Trim().IsEmpty)
+        {
+            result = default;
+            return false;
+        }
+
+        result = new Quat(components[0], components[1], components[2], components[3]);
+        return true;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Quat result)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        ReadOnlySpan<byte> s = TrimUtf8(utf8Text);
+
+        if (s.Length >= 2 && IsOpeningBracketUtf8(s[0]) && IsClosingBracketUtf8(s[^1]))
+        {
+            s = s[1..^1];
+        }
+
+        Span<float> components = stackalloc float[4];
+        ReadOnlySpan<byte> remaining = s;
+        bool sawTrailingSeparator = false;
+
+        for (int index = 0; index < 4; index++)
+        {
+            int separator = remaining.IndexOf((byte)',');
+            ReadOnlySpan<byte> component = TrimUtf8(separator < 0 ? remaining : remaining[..separator]);
+
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
+
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
+
+        if (sawTrailingSeparator || !TrimUtf8(remaining).IsEmpty)
+        {
+            result = default;
+            return false;
+        }
+
+        result = new Quat(components[0], components[1], components[2], components[3]);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracket(char value) => value is '(' or '[' or '{' or '<';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracket(char value) => value is ')' or ']' or '}' or '>';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracketUtf8(byte value) => value is (byte)'(' or (byte)'[' or (byte)'{' or (byte)'<';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracketUtf8(byte value) => value is (byte)')' or (byte)']' or (byte)'}' or (byte)'>';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsWhiteSpaceUtf8(byte value) => value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> source)
+    {
+        int start = 0;
+        while (start < source.Length && IsWhiteSpaceUtf8(source[start]))
+        {
+            start++;
+        }
+
+        int end = source.Length - 1;
+        while (end >= start && IsWhiteSpaceUtf8(source[end]))
+        {
+            end--;
+        }
+
+        return source.Slice(start, end - start + 1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentChar(Span<char> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
+    {
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
+
+            destination[offset++] = ',';
+            destination[offset++] = ' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
+        {
+            return false;
+        }
+
+        offset += written;
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentUtf8(Span<byte> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
+    {
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
+
+            destination[offset++] = (byte)',';
+            destination[offset++] = (byte)' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
+        {
+            return false;
+        }
+
+        offset += written;
+        return true;
+    }
 }
