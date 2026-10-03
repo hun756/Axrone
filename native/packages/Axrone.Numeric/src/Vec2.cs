@@ -1,5 +1,200 @@
 namespace Axrone.Numeric;
 
+public interface IPlanarCrossProductSpace<TSelf, TScalar>
+    where TSelf : struct, IPlanarCrossProductSpace<TSelf, TScalar>
+    where TScalar : struct
+{
+    static abstract TScalar Cross(TSelf left, TSelf right);
+}
+
+public interface IVectorTransformer2D<TState>
+    where TState : allows ref struct
+{
+    static abstract Vec2 Transform(Vec2 value, scoped ref TState state);
+}
+
+public interface IVectorAction2D<TState>
+    where TState : allows ref struct
+{
+    static abstract void Invoke(scoped ref readonly Vec2 value, scoped ref TState state);
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly record struct ComponentIndex2D : IEquatable<ComponentIndex2D>, IComparable<ComponentIndex2D>
+{
+    public readonly byte Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private ComponentIndex2D(byte value) => Value = value;
+
+    public static readonly ComponentIndex2D X = new(0);
+
+    public static readonly ComponentIndex2D Y = new(1);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static ComponentIndex2D From(int index)
+    {
+        if ((uint)index >= 2U)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        return new ComponentIndex2D((byte)index);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator ComponentIndex2D(int index) => From(index);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator int(ComponentIndex2D index) => index.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int CompareTo(ComponentIndex2D other) => Value.CompareTo(other.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <(ComponentIndex2D left, ComponentIndex2D right) => left.Value < right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >(ComponentIndex2D left, ComponentIndex2D right) => left.Value > right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <=(ComponentIndex2D left, ComponentIndex2D right) => left.Value <= right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >=(ComponentIndex2D left, ComponentIndex2D right) => left.Value >= right.Value;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct UnitVec2 :
+    IEquatable<UnitVec2>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable
+{
+    public readonly float X;
+
+    public readonly float Y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal UnitVec2(float x, float y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public static UnitVec2 UnitX => new(1F, 0F);
+
+    public static UnitVec2 UnitY => new(0F, 1F);
+
+    public static UnitVec2 NegativeUnitX => new(-1F, 0F);
+
+    public static UnitVec2 NegativeUnitY => new(0F, -1F);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Vec2(UnitVec2 unit) => new(unit.X, unit.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static explicit operator UnitVec2(Vec2 value) => Vec2.ToUnit(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Vec2 AsVec2() => new(X, Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(UnitVec2 other) => X == other.X && Y == other.Y;
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is UnitVec2 other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(X, Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(UnitVec2 left, UnitVec2 right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(UnitVec2 left, UnitVec2 right) => !left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec2 operator -(UnitVec2 value) => new(-value.X, -value.Y);
+
+    public override string ToString() => AsVec2().ToString();
+
+    public string ToString(string? format, IFormatProvider? formatProvider) => AsVec2().ToString(format, formatProvider);
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec2().TryFormat(destination, out charsWritten, format, provider);
+
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec2().TryFormat(utf8Destination, out bytesWritten, format, provider);
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct NormalizationResult2D : IEquatable<NormalizationResult2D>
+{
+    public readonly UnitVec2 Value;
+
+    public readonly NormalizationStatus Status;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult2D(UnitVec2 value)
+    {
+        Value = value;
+        Status = NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult2D(NormalizationStatus status)
+    {
+        Value = default;
+        Status = status;
+    }
+
+    public bool IsSuccess => Status == NormalizationStatus.Success;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool TryGetUnit(out UnitVec2 unit)
+    {
+        unit = Value;
+        return Status == NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public TResult Match<TResult>(
+        Func<UnitVec2, TResult> onSuccess,
+        Func<TResult> onDegenerateZero,
+        Func<TResult> onNonFinite)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onDegenerateZero);
+        ArgumentNullException.ThrowIfNull(onNonFinite);
+
+        return Status switch
+        {
+            NormalizationStatus.Success => onSuccess(Value),
+            NormalizationStatus.DegenerateZero => onDegenerateZero(),
+            NormalizationStatus.NonFinite => onNonFinite(),
+            _ => ThrowMatch(),
+        };
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static TResult ThrowMatch() =>
+            throw new InvalidOperationException("Invalid normalization status discriminant.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(NormalizationResult2D other) =>
+        Status == other.Status && (Status != NormalizationStatus.Success || Value.Equals(other.Value));
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is NormalizationResult2D other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, Status);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(NormalizationResult2D left, NormalizationResult2D right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(NormalizationResult2D left, NormalizationResult2D right) => !left.Equals(right);
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Vec2 :
     IEquatable<Vec2>,
@@ -14,7 +209,7 @@ public struct Vec2 :
     IUnaryNegationOperators<Vec2, Vec2>,
     IUnaryPlusOperators<Vec2, Vec2>,
     IAdditiveIdentity<Vec2, Vec2>,
-    IMultiplicativeIdentity<Vec2, float>,
+    IMultiplicativeIdentity<Vec2, Vec2>,
     IFormattable,
     ISpanFormattable,
     IUtf8SpanFormattable,
@@ -22,13 +217,14 @@ public struct Vec2 :
     ISpanParsable<Vec2>,
     IUtf8SpanParsable<Vec2>,
     ISpatialVector<Vec2>,
-    IInnerProductSpace<Vec2, float>
+    IInnerProductSpace<Vec2, float>,
+    IPlanarCrossProductSpace<Vec2, float>
 {
     public float X;
     public float Y;
 
-    public const float MachineEpsilon = 1.192092896e-07f;
-    public const float DefaultTolerance = 1e-6f;
+    public const float MachineEpsilon = 1.1920929E-07F;
+    public const float DefaultTolerance = MachineEpsilon * 8F;
 
     public static Vec2 Zero => default;
     public static Vec2 One => new(1.0f, 1.0f);
@@ -90,6 +286,17 @@ public struct Vec2 :
         }
     }
 
+    #pragma warning disable CA1043 // ComponentIndex2D is the whole point: a 0..1 proof checked at construction.
+    public float this[ComponentIndex2D index]
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => Unsafe.Add(ref X, (nint)index.Value);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        set => Unsafe.Add(ref X, (nint)index.Value) = value;
+    }
+    #pragma warning restore CA1043
+
     public readonly bool IsAllZero => X == 0.0f && Y == 0.0f;
     public readonly bool IsAllFinite => float.IsFinite(X) && float.IsFinite(Y);
     public readonly bool IsAnyNaN => float.IsNaN(X) || float.IsNaN(Y);
@@ -103,7 +310,9 @@ public struct Vec2 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly ReadOnlySpan<float> AsSpan() => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in X), 2);
+    public Span<float> AsSpan() => MemoryMarshal.CreateSpan(ref X, 2);
+
+    public ReadOnlySpan<float> AsReadOnlySpan() => MemoryMarshal.CreateReadOnlySpan(ref X, 2);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly void CopyTo(Span<float> destination)
@@ -983,7 +1192,9 @@ public struct Vec2 :
 
     public static Vec2 AdditiveIdentity => Zero;
 
-    public static float MultiplicativeIdentity => 1.0f;
+    public static Vec2 NegativeOne => new(-1.0f, -1.0f);
+
+    public static Vec2 MultiplicativeIdentity => One;
 
     public static Vec2 GreaterThan(Vec2 left, Vec2 right) =>
         new(
