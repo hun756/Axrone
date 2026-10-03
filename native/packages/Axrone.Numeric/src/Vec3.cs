@@ -86,6 +86,142 @@ public interface IVectorAction<TState>
     static abstract void Invoke(scoped ref readonly Vec3 value, scoped ref TState state);
 }
 
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly record struct ComponentIndex : IEquatable<ComponentIndex>, IComparable<ComponentIndex>
+{
+    public readonly byte Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private ComponentIndex(byte value) => Value = value;
+
+    public static readonly ComponentIndex X = new(0);
+
+    public static readonly ComponentIndex Y = new(1);
+
+    public static readonly ComponentIndex Z = new(2);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static ComponentIndex From(int index)
+    {
+        if ((uint)index >= 3U)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        return new ComponentIndex((byte)index);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator ComponentIndex(int index) => From(index);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator int(ComponentIndex index) => index.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int CompareTo(ComponentIndex other) => Value.CompareTo(other.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <(ComponentIndex left, ComponentIndex right) => left.Value < right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >(ComponentIndex left, ComponentIndex right) => left.Value > right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <=(ComponentIndex left, ComponentIndex right) => left.Value <= right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >=(ComponentIndex left, ComponentIndex right) => left.Value >= right.Value;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct Tolerance : IEquatable<Tolerance>, IComparable<Tolerance>
+{
+    public readonly float Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Tolerance(float value)
+    {
+        if (value < 0.0f || float.IsNaN(value))
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(value));
+        }
+
+        Value = value;
+    }
+
+    public static Tolerance Zero => new(0.0f);
+
+    public static Tolerance Machine => new(Vec3.MachineEpsilon);
+
+    public static Tolerance Default => new(Vec3.DefaultTolerance);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Tolerance(float value) => new(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator float(Tolerance tolerance) => tolerance.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int CompareTo(Tolerance other) => Value.CompareTo(other.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <(Tolerance left, Tolerance right) => left.Value < right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >(Tolerance left, Tolerance right) => left.Value > right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <=(Tolerance left, Tolerance right) => left.Value <= right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >=(Tolerance left, Tolerance right) => left.Value >= right.Value;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct AngleRadians : IEquatable<AngleRadians>, IComparable<AngleRadians>
+{
+    public readonly float Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public AngleRadians(float radians) => Value = radians;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians FromDegrees(float degrees) => new(degrees * (MathF.PI / 180.0f));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public float ToDegrees() => Value * (180.0f / MathF.PI);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator AngleRadians(float radians) => new(radians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator float(AngleRadians angle) => angle.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int CompareTo(AngleRadians other) => Value.CompareTo(other.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians operator +(AngleRadians left, AngleRadians right) => new(left.Value + right.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians operator -(AngleRadians left, AngleRadians right) => new(left.Value - right.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians operator -(AngleRadians angle) => new(-angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <(AngleRadians left, AngleRadians right) => left.Value < right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >(AngleRadians left, AngleRadians right) => left.Value > right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <=(AngleRadians left, AngleRadians right) => left.Value <= right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >=(AngleRadians left, AngleRadians right) => left.Value >= right.Value;
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Vec3 :
     IEquatable<Vec3>,
@@ -204,6 +340,17 @@ public struct Vec3 :
             Unsafe.Add(ref X, index) = value;
         }
     }
+
+    #pragma warning disable CA1043 // ComponentIndex is the whole point: a 0..2 proof checked at construction.
+    public float this[ComponentIndex index]
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => Unsafe.Add(ref X, (nint)index.Value);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        set => Unsafe.Add(ref X, (nint)index.Value) = value;
+    }
+    #pragma warning restore CA1043
 
     public static Vec3 AdditiveIdentity => Zero;
 
