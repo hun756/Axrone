@@ -234,6 +234,8 @@ public readonly struct NormalizationOutcome : IEquatable<NormalizationOutcome>
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Quat :
+    IEquatable<Quat>,
+    IEqualityOperators<Quat, Quat, bool>,
     IAdditionOperators<Quat, Quat, Quat>,
     ISubtractionOperators<Quat, Quat, Quat>,
     IMultiplyOperators<Quat, Quat, Quat>,
@@ -848,4 +850,127 @@ public struct Quat :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Quat operator +(Quat value) => value;
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Quat left, Quat right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return Vector128.EqualsAll(left.AsVector128(), right.AsVector128());
+        }
+        return left.X == right.X && left.Y == right.Y && left.Z == right.Z && left.W == right.W;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Quat left, Quat right) => !(left == right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Add(Quat left, Quat right) => left + right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Subtract(Quat left, Quat right) => left - right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Multiply(Quat left, Quat right) => left * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Multiply(Quat left, float right) => left * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Multiply(float left, Quat right) => left * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Divide(Quat left, Quat right) => left / right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Divide(Quat left, float right) => left / right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Negate(Quat value) => -value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat IsNaN(Quat quaternion)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.IsNaN(quaternion.AsVector128()));
+        }
+        return new(
+            float.IsNaN(quaternion.X) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsNaN(quaternion.Y) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsNaN(quaternion.Z) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsNaN(quaternion.W) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat IsFinite(Quat quaternion) =>
+        new(
+            float.IsFinite(quaternion.X) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsFinite(quaternion.Y) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsFinite(quaternion.Z) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsFinite(quaternion.W) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat IsInfinity(Quat quaternion) =>
+        new(
+            float.IsInfinity(quaternion.X) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsInfinity(quaternion.Y) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsInfinity(quaternion.Z) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            float.IsInfinity(quaternion.W) ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat IsZero(Quat quaternion)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Equals(quaternion.AsVector128(), Vector128<float>.Zero));
+        }
+        return new(
+            quaternion.X == 0.0f ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            quaternion.Y == 0.0f ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            quaternion.Z == 0.0f ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f,
+            quaternion.W == 0.0f ? BitConverter.UInt32BitsToSingle(0xFFFF_FFFF) : 0.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly bool Equals(Quat other) => this == other;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Quat other, float tolerance) =>
+        MathF.Abs(X - other.X) <= tolerance &&
+        MathF.Abs(Y - other.Y) <= tolerance &&
+        MathF.Abs(Z - other.Z) <= tolerance &&
+        MathF.Abs(W - other.W) <= tolerance;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly bool Equals(Quat other, Tolerance tolerance) => Equals(other, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool Equals(Quat left, Quat right, float tolerance = DefaultTolerance) =>
+        left.Equals(right, tolerance);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool BitEquals(Quat other)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<int> left = AsVector128().AsInt32();
+            Vector128<int> right = other.AsVector128().AsInt32();
+            return Vector128.EqualsAll(left, right);
+        }
+        return BitConverter.SingleToUInt32Bits(X) == BitConverter.SingleToUInt32Bits(other.X) &&
+               BitConverter.SingleToUInt32Bits(Y) == BitConverter.SingleToUInt32Bits(other.Y) &&
+               BitConverter.SingleToUInt32Bits(Z) == BitConverter.SingleToUInt32Bits(other.Z) &&
+               BitConverter.SingleToUInt32Bits(W) == BitConverter.SingleToUInt32Bits(other.W);
+    }
+
+    public override readonly bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is Quat other && Equals(other);
+
+    public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z, W);
 }
