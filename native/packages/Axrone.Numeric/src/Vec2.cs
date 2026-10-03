@@ -1714,46 +1714,6 @@ public struct Vec2 :
         TTransformer.Transform(value, ref state);
 }
 
-public static class VectorBatchProcessor2D
-{
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void Transform<TTransformer, TState>(
-        ReadOnlySpan<Vec2> source,
-        Span<Vec2> destination,
-        scoped ref TState state)
-        where TTransformer : struct, IVectorTransformer2D<TState>
-        where TState : allows ref struct
-    {
-        if (destination.Length < source.Length)
-        {
-            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span must be at least as long as source span.");
-        }
-
-        ref Vec2 srcRef = ref MemoryMarshal.GetReference(source);
-        ref Vec2 dstRef = ref MemoryMarshal.GetReference(destination);
-
-        for (nint i = 0; i < (nint)source.Length; i++)
-        {
-            Unsafe.Add(ref dstRef, i) = TTransformer.Transform(Unsafe.Add(ref srcRef, i), ref state);
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void ForEach<TAction, TState>(
-        ReadOnlySpan<Vec2> source,
-        scoped ref TState state)
-        where TAction : struct, IVectorAction2D<TState>
-        where TState : allows ref struct
-    {
-        ref Vec2 srcRef = ref MemoryMarshal.GetReference(source);
-
-        for (nint i = 0; i < (nint)source.Length; i++)
-        {
-            TAction.Invoke(ref Unsafe.Add(ref srcRef, i), ref state);
-        }
-    }
-}
-
 public ref struct ComponentEnumerator2D
 {
     private readonly Vec2 _vector;
