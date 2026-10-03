@@ -233,7 +233,17 @@ public readonly struct NormalizationOutcome : IEquatable<NormalizationOutcome>
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct Quat
+public struct Quat :
+    IAdditionOperators<Quat, Quat, Quat>,
+    ISubtractionOperators<Quat, Quat, Quat>,
+    IMultiplyOperators<Quat, Quat, Quat>,
+    IMultiplyOperators<Quat, float, Quat>,
+    IDivisionOperators<Quat, Quat, Quat>,
+    IDivisionOperators<Quat, float, Quat>,
+    IUnaryNegationOperators<Quat, Quat>,
+    IUnaryPlusOperators<Quat, Quat>,
+    IAdditiveIdentity<Quat, Quat>,
+    IMultiplicativeIdentity<Quat, Quat>
 {
     public readonly float X;
 
@@ -334,4 +344,508 @@ public struct Quat
         z = Z;
         w = W;
     }
+
+
+    public static Quat AdditiveIdentity => Zero;
+
+    public static Quat MultiplicativeIdentity => Identity;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vector128<float> AsVector128() =>
+        Unsafe.BitCast<Quat, Vector128<float>>(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat FromVector128(Vector128<float> vector) =>
+        Unsafe.BitCast<Vector128<float>, Quat>(vector);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Quat(Vector128<float> vector) => FromVector128(vector);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Vector128<float>(Quat quaternion) => quaternion.AsVector128();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator (float X, float Y, float Z, float W)(Quat value) =>
+        (value.X, value.Y, value.Z, value.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Quat((float X, float Y, float Z, float W) value) =>
+        new(value.X, value.Y, value.Z, value.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator System.Numerics.Quaternion(Quat q) =>
+        Unsafe.BitCast<Quat, System.Numerics.Quaternion>(q);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Quat(System.Numerics.Quaternion q) =>
+        Unsafe.BitCast<System.Numerics.Quaternion, Quat>(q);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly System.Numerics.Quaternion ToSystemNumerics() => (System.Numerics.Quaternion)this;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat FromSystemNumerics(System.Numerics.Quaternion value) => (Quat)value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Vec4(Quat q) => new(q.X, q.Y, q.Z, q.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Quat(Vec4 v) => new(v.X, v.Y, v.Z, v.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float Dot(Quat left, Quat right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return Vector128.Dot(left.AsVector128(), right.AsVector128());
+        }
+        return MathF.FusedMultiplyAdd(left.X, right.X,
+            MathF.FusedMultiplyAdd(left.Y, right.Y,
+            MathF.FusedMultiplyAdd(left.Z, right.Z, left.W * right.W)));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float Dot<TArithmetic>(Quat left, Quat right)
+        where TArithmetic : struct, IArithmeticPolicy =>
+        TArithmetic.MultiplyAdd(left.X, right.X,
+            TArithmetic.MultiplyAdd(left.Y, right.Y,
+            TArithmetic.MultiplyAdd(left.Z, right.Z, left.W * right.W)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float DotStrict(Quat left, Quat right) =>
+        (left.X * right.X) + (left.Y * right.Y) + (left.Z * right.Z) + (left.W * right.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float LengthSquared() => Dot(this, this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float Length() => MathF.Sqrt(LengthSquared());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Quat Conjugate()
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<float> mask = Vector128.Create(-0.0f, -0.0f, -0.0f, 0.0f);
+            return FromVector128(Vector128.Xor(AsVector128(), mask));
+        }
+        return new Quat(-X, -Y, -Z, W);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Conjugate(Quat value) => value.Conjugate();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Quat Inverse() => Inverse<ReturnZeroPolicy>(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Inverse(Quat value) => Inverse<ReturnZeroPolicy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Inverse<TSingularPolicy>(Quat value)
+        where TSingularPolicy : struct, ISingularityPolicy
+    {
+        float lenSq = value.LengthSquared();
+        if (lenSq > 0.0f)
+        {
+            float inv = 1.0f / lenSq;
+            if (float.IsFinite(inv))
+            {
+                return new Quat(-value.X * inv, -value.Y * inv, -value.Z * inv, value.W * inv);
+            }
+        }
+        return TSingularPolicy.OnSingularity(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Quat Normalize() => Normalize<ReturnIdentityPolicy>(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Normalize(Quat value) => Normalize<ReturnIdentityPolicy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Normalize<TSingularPolicy>(Quat value)
+        where TSingularPolicy : struct, ISingularityPolicy
+    {
+        float lengthSquared = value.LengthSquared();
+        if (lengthSquared > 0.0f)
+        {
+            float invLength = 1.0f / MathF.Sqrt(lengthSquared);
+            if (float.IsFinite(invLength))
+            {
+                return value * invLength;
+            }
+        }
+        return TSingularPolicy.OnSingularity(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static NormalizationOutcome TryNormalizeExact(Quat value, float tolerance = 0.0f)
+    {
+        if (value.IsAnyNaN || value.IsAnyInfinity)
+        {
+            return NormalizationOutcome.Failure(NormalizationOutcomeTag.NonFinite);
+        }
+
+        float lenSq = value.LengthSquared();
+        if (lenSq == 0.0f)
+        {
+            return NormalizationOutcome.Failure(NormalizationOutcomeTag.ZeroMagnitude);
+        }
+
+        float tolSq = tolerance > 0.0f ? tolerance * tolerance : 0.0f;
+        if (lenSq <= tolSq)
+        {
+            return NormalizationOutcome.Failure(NormalizationOutcomeTag.Subnormal);
+        }
+
+        float invLen = 1.0f / MathF.Sqrt(lenSq);
+        if (!float.IsFinite(invLen))
+        {
+            return NormalizationOutcome.Failure(NormalizationOutcomeTag.Subnormal);
+        }
+
+        return NormalizationOutcome.Success(value * invLen);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryNormalize(Quat value, out Quat result) =>
+        TryNormalize(value, out result, 0.0f);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryNormalize(Quat value, out Quat result, float tolerance) =>
+        TryNormalizeExact(value, tolerance).TryGet(out result);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromAxisAngle(Vec3 axis, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians * 0.5f);
+        return new Quat(axis.X * sin, axis.Y * sin, axis.Z * sin, cos);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromAxisAngle(UnitAxis3 axis, AngleRadians angle)
+    {
+        var (sin, cos) = MathF.SinCos(angle.Value * 0.5f);
+        return new Quat(axis.X * sin, axis.Y * sin, axis.Z * sin, cos);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromYawPitchRoll(float yaw, float pitch, float roll) =>
+        CreateFromYawPitchRoll(new AngleRadians(yaw), new AngleRadians(pitch), new AngleRadians(roll));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromYawPitchRoll(AngleRadians yaw, AngleRadians pitch, AngleRadians roll)
+    {
+        var (sRoll, cRoll) = MathF.SinCos(roll.Value * 0.5f);
+        var (sPitch, cPitch) = MathF.SinCos(pitch.Value * 0.5f);
+        var (sYaw, cYaw) = MathF.SinCos(yaw.Value * 0.5f);
+
+        return new Quat(
+            MathF.FusedMultiplyAdd(cYaw * sPitch, cRoll, sYaw * cPitch * sRoll),
+            MathF.FusedMultiplyAdd(sYaw * cPitch, cRoll, -(cYaw * sPitch * sRoll)),
+            MathF.FusedMultiplyAdd(cYaw * cPitch, sRoll, -(sYaw * sPitch * cRoll)),
+            MathF.FusedMultiplyAdd(cYaw * cPitch, cRoll, sYaw * sPitch * sRoll)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromEuler(EulerAngles angles) =>
+        CreateFromEuler(angles.X, angles.Y, angles.Z, angles.Order);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromEuler(AngleRadians x, AngleRadians y, AngleRadians z, RotationOrder order)
+    {
+        var (sx, cx) = MathF.SinCos(x.Value * 0.5f);
+        var (sy, cy) = MathF.SinCos(y.Value * 0.5f);
+        var (sz, cz) = MathF.SinCos(z.Value * 0.5f);
+
+        Quat qx = new(sx, 0.0f, 0.0f, cx);
+        Quat qy = new(0.0f, sy, 0.0f, cy);
+        Quat qz = new(0.0f, 0.0f, sz, cz);
+
+        return order switch
+        {
+            RotationOrder.Zyx => qz * qy * qx,
+            RotationOrder.Xyz => qx * qy * qz,
+            RotationOrder.Xzy => qx * qz * qy,
+            RotationOrder.Yxz => qy * qx * qz,
+            RotationOrder.Yzx => qy * qz * qx,
+            RotationOrder.Zxy => qz * qx * qy,
+            _ => qz * qy * qx
+        };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromRotationMatrix(System.Numerics.Matrix4x4 matrix)
+    {
+        float trace = matrix.M11 + matrix.M22 + matrix.M33;
+
+        if (trace > 0.0f)
+        {
+            float s = MathF.Sqrt(trace + 1.0f);
+            float inv = 0.5f / s;
+            return new Quat(
+                (matrix.M23 - matrix.M32) * inv,
+                (matrix.M31 - matrix.M13) * inv,
+                (matrix.M12 - matrix.M21) * inv,
+                s * 0.5f
+            );
+        }
+
+        if (matrix.M11 >= matrix.M22 && matrix.M11 >= matrix.M33)
+        {
+            float s = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M11 - matrix.M22 - matrix.M33));
+            float inv = 0.5f / s;
+            return new Quat(
+                0.5f * s,
+                (matrix.M12 + matrix.M21) * inv,
+                (matrix.M13 + matrix.M31) * inv,
+                (matrix.M23 - matrix.M32) * inv
+            );
+        }
+
+        if (matrix.M22 > matrix.M33)
+        {
+            float s = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M22 - matrix.M11 - matrix.M33));
+            float inv = 0.5f / s;
+            return new Quat(
+                (matrix.M21 + matrix.M12) * inv,
+                0.5f * s,
+                (matrix.M32 + matrix.M23) * inv,
+                (matrix.M31 - matrix.M13) * inv
+            );
+        }
+
+        float sZ = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M33 - matrix.M11 - matrix.M22));
+        float invZ = 0.5f / sZ;
+        return new Quat(
+            (matrix.M31 + matrix.M13) * invZ,
+            (matrix.M32 + matrix.M23) * invZ,
+            0.5f * sZ,
+            (matrix.M12 - matrix.M21) * invZ
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat FromToRotation(Vec3 fromDirection, Vec3 toDirection)
+    {
+        float dot = Vec3.Dot(fromDirection, toDirection);
+
+        if (dot >= 0.999999f)
+        {
+            return Identity;
+        }
+
+        if (dot <= -0.999999f)
+        {
+            Vec3 axis = Vec3.GetOrthogonal(fromDirection);
+            return new Quat(axis.X, axis.Y, axis.Z, 0.0f);
+        }
+
+        Vec3 cross = Vec3.Cross(fromDirection, toDirection);
+        float s = MathF.Sqrt((1.0f + dot) * 2.0f);
+        float inv = 1.0f / s;
+
+        return new Quat(cross.X * inv, cross.Y * inv, cross.Z * inv, s * 0.5f);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static Quat LookRotation(Vec3 forward, Vec3 up)
+    {
+        forward = Vec3.Normalize(forward);
+        Vec3 right = Vec3.Normalize(Vec3.Cross(up, forward));
+        up = Vec3.Cross(forward, right);
+
+        System.Numerics.Matrix4x4 m = new(
+            right.X, right.Y, right.Z, 0.0f,
+            up.X, up.Y, up.Z, 0.0f,
+            forward.X, forward.Y, forward.Z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+
+        return CreateFromRotationMatrix(m);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void DecomposeSwingTwist(UnitAxis3 twistAxis, out Quat swing, out Quat twist)
+    {
+        Vec3 axis = twistAxis.AsVec3();
+        Vec3 projection = axis * Vec3.Dot(new Vec3(X, Y, Z), axis);
+        Quat rawTwist = new(projection.X, projection.Y, projection.Z, W);
+        if (!TryNormalize(rawTwist, out twist))
+        {
+            twist = Identity;
+        }
+        swing = this * twist.Conjugate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void GetAxisAngle(out Vec3 axis, out float angleRadians)
+    {
+        float clampedW = Math.Clamp(W, -1.0f, 1.0f);
+        angleRadians = MathF.Acos(clampedW) * 2.0f;
+        float s = MathF.Sqrt(1.0f - (clampedW * clampedW));
+
+        if (s <= 0.0001f)
+        {
+            axis = Vec3.UnitX;
+        }
+        else
+        {
+            axis = new Vec3(X / s, Y / s, Z / s);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void GetAxisAngle(out UnitAxis3 axis, out AngleRadians angle)
+    {
+        GetAxisAngle(out Vec3 vAxis, out float angleRad);
+        axis = UnitAxis3.CreateUnchecked(vAxis.X, vAxis.Y, vAxis.Z);
+        angle = new AngleRadians(angleRad);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float Angle(Quat a, Quat b)
+    {
+        float dot = MathF.Abs(Dot(a, b));
+        return dot > 0.999999f ? 0.0f : MathF.Acos(Math.Clamp(dot, -1.0f, 1.0f)) * 2.0f;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AngleRadians AngleBetween(Quat a, Quat b) => new(Angle(a, b));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Lerp(Quat a, Quat b, float t)
+    {
+        float cosHalfTheta = Dot(a, b);
+        float scale = cosHalfTheta < 0.0f ? -t : t;
+        float invT = 1.0f - t;
+
+        return Normalize(new Quat(
+            MathF.FusedMultiplyAdd(b.X, scale, a.X * invT),
+            MathF.FusedMultiplyAdd(b.Y, scale, a.Y * invT),
+            MathF.FusedMultiplyAdd(b.Z, scale, a.Z * invT),
+            MathF.FusedMultiplyAdd(b.W, scale, a.W * invT)
+        ));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Slerp(Quat a, Quat b, float t) =>
+        Slerp<ShortestPathPolicy>(a, b, t);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Slerp<TPathPolicy>(Quat a, Quat b, float t)
+        where TPathPolicy : struct, ISlerpPathPolicy
+    {
+        float cosHalfTheta = Dot(a, b);
+        Quat target = TPathPolicy.AdjustTarget(b, cosHalfTheta);
+        cosHalfTheta = MathF.Abs(cosHalfTheta);
+
+        if (cosHalfTheta > 0.9995f)
+        {
+            return Lerp(a, target, t);
+        }
+
+        float halfTheta = MathF.Acos(Math.Clamp(cosHalfTheta, -1.0f, 1.0f));
+        float sinHalfTheta = MathF.Sin(halfTheta);
+        float invSin = 1.0f / sinHalfTheta;
+        float ratioA = MathF.Sin((1.0f - t) * halfTheta) * invSin;
+        float ratioB = MathF.Sin(t * halfTheta) * invSin;
+
+        return new Quat(
+            MathF.FusedMultiplyAdd(a.X, ratioA, target.X * ratioB),
+            MathF.FusedMultiplyAdd(a.Y, ratioA, target.Y * ratioB),
+            MathF.FusedMultiplyAdd(a.Z, ratioA, target.Z * ratioB),
+            MathF.FusedMultiplyAdd(a.W, ratioA, target.W * ratioB)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat Squad(Quat p, Quat a, Quat b, Quat q, float t)
+    {
+        Quat slerpPq = Slerp(p, q, t);
+        Quat slerpAb = Slerp(a, b, t);
+        return Slerp(slerpPq, slerpAb, 2.0f * t * (1.0f - t));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Concatenate(Quat value1, Quat value2) => value2 * value1;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator +(Quat left, Quat right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Add(left.AsVector128(), right.AsVector128()));
+        }
+        return new(left.X + right.X, left.Y + right.Y, left.Z + right.Z, left.W + right.W);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator -(Quat left, Quat right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Subtract(left.AsVector128(), right.AsVector128()));
+        }
+        return new(left.X - right.X, left.Y - right.Y, left.Z - right.Z, left.W - right.W);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator *(Quat left, Quat right) =>
+        new(
+            MathF.FusedMultiplyAdd(left.W, right.X, MathF.FusedMultiplyAdd(left.X, right.W, MathF.FusedMultiplyAdd(left.Y, right.Z, -(left.Z * right.Y)))),
+            MathF.FusedMultiplyAdd(left.W, right.Y, MathF.FusedMultiplyAdd(left.Y, right.W, MathF.FusedMultiplyAdd(left.Z, right.X, -(left.X * right.Z)))),
+            MathF.FusedMultiplyAdd(left.W, right.Z, MathF.FusedMultiplyAdd(left.Z, right.W, MathF.FusedMultiplyAdd(left.X, right.Y, -(left.Y * right.X)))),
+            MathF.FusedMultiplyAdd(left.W, right.W, -(MathF.FusedMultiplyAdd(left.X, right.X, MathF.FusedMultiplyAdd(left.Y, right.Y, left.Z * right.Z))))
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 operator *(Quat rotation, Vec3 point)
+    {
+        Vec3 qv = rotation.VectorPart;
+        Vec3 t = Vec3.Cross(qv, point) * 2.0f;
+        return point + (t * rotation.W) + Vec3.Cross(qv, t);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator *(Quat left, float right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Multiply(left.AsVector128(), Vector128.Create(right)));
+        }
+        return new(left.X * right, left.Y * right, left.Z * right, left.W * right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat operator *(float left, Quat right) => right * left;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat operator /(Quat left, Quat right) => left * right.Inverse();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator /(Quat left, float right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Divide(left.AsVector128(), Vector128.Create(right)));
+        }
+        float inv = 1.0f / right;
+        return new(left.X * inv, left.Y * inv, left.Z * inv, left.W * inv);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat operator -(Quat value)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            return FromVector128(Vector128.Negate(value.AsVector128()));
+        }
+        return new(-value.X, -value.Y, -value.Z, -value.W);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat operator +(Quat value) => value;
 }
