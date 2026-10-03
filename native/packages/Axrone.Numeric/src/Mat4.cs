@@ -1059,7 +1059,202 @@ public struct Mat4 :
         );
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly MatrixDecompositionResult Decompose()
+    {
+        Vec3 translation = new(M41, M42, M43);
+
+        float sx = new Vec3(M11, M12, M13).Length();
+        float sy = new Vec3(M21, M22, M23).Length();
+        float sz = new Vec3(M31, M32, M33).Length();
+
+        if (Determinant() < 0.0f)
+        {
+            sx = -sx;
+        }
+
+        Vec3 scale = new(sx, sy, sz);
+
+        if (MathF.Abs(sx) <= 1e-30f || MathF.Abs(sy) <= 1e-30f || MathF.Abs(sz) <= 1e-30f)
+        {
+            return new MatrixDecompositionResult(scale, Quat.Identity, translation, DecompositionStatus.DegenerateScale);
+        }
+
+        Mat4 rotMat = new(
+            M11 / sx, M12 / sx, M13 / sx, 0.0f,
+            M21 / sy, M22 / sy, M23 / sy, 0.0f,
+            M31 / sz, M32 / sz, M33 / sz, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+
+        Quat rotation = Quat.CreateFromRotationMatrix((Matrix4x4)rotMat);
+        return new MatrixDecompositionResult(scale, rotation, translation, DecompositionStatus.Success);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Decompose(out Vec3 scale, out Quat rotation, out Vec3 translation)
+    {
+        MatrixDecompositionResult result = Decompose();
+        scale = result.Scale;
+        rotation = result.Rotation;
+        translation = result.Translation;
+        return result.IsSuccess;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Lerp(Mat4 a, Mat4 b, float amount)
+    {
+        Unsafe.SkipInit(out Mat4 result);
+        ref float aRef = ref Unsafe.AsRef(in a.M11);
+        ref float bRef = ref Unsafe.AsRef(in b.M11);
+        ref float dst = ref result.M11;
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            Vector256<float> amt256 = Vector256.Create(amount);
+            Vector256<float> a0 = Vector256.LoadUnsafe(ref aRef, 0);
+            Vector256<float> a1 = Vector256.LoadUnsafe(ref aRef, 8);
+            Vector256<float> b0 = Vector256.LoadUnsafe(ref bRef, 0);
+            Vector256<float> b1 = Vector256.LoadUnsafe(ref bRef, 8);
+
+            Vector256.FusedMultiplyAdd(b0 - a0, amt256, a0).StoreUnsafe(ref dst, 0);
+            Vector256.FusedMultiplyAdd(b1 - a1, amt256, a1).StoreUnsafe(ref dst, 8);
+            return result;
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<float> amt128 = Vector128.Create(amount);
+            for (nuint i = 0; i < 16; i += 4)
+            {
+                Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
+                Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
+                Vector128.FusedMultiplyAdd(bv - av, amt128, av).StoreUnsafe(ref dst, i);
+            }
+            return result;
+        }
+
+        for (nuint i = 0; i < 16; i++)
+        {
+            Unsafe.Add(ref dst, i) = MathF.FusedMultiplyAdd(Unsafe.Add(ref bRef, i) - Unsafe.Add(ref aRef, i), amount, Unsafe.Add(ref aRef, i));
+        }
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void Apply<TAction, TState>(ref TState state)
+        where TAction : struct, IMatrixTransformAction<TState>
+        where TState : allows ref struct
+    {
+        TAction.Execute(in this, ref state);
+    }
+
     // __NEXT__
+}
+
+public interface IMatrixTransformAction<TState> where TState : allows ref struct
+{
+    static abstract void Execute(ref readonly Mat4 matrix, ref TState state);
+}
+
+public enum DecompositionStatus : byte
+{
+    Success = 0,
+    DegenerateScale = 1,
+    Singular = 2
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct MatrixDecompositionResult
+{
+    public readonly Vec3 Scale;
+    public readonly Quat Rotation;
+    public readonly Vec3 Translation;
+    public readonly DecompositionStatus Status;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal MatrixDecompositionResult(Vec3 scale, Quat rotation, Vec3 translation, DecompositionStatus status)
+    {
+        Scale = scale;
+        Rotation = rotation;
+        Translation = translation;
+        Status = status;
+    }
+
+    public bool IsSuccess => Status == DecompositionStatus.Success;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public TResult Match<TResult>(
+        Func<Vec3, Quat, Vec3, TResult> onSuccess,
+        Func<DecompositionStatus, TResult> onFailure)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onFailure);
+
+        return Status switch
+        {
+            DecompositionStatus.Success => onSuccess(Scale, Rotation, Translation),
+            DecompositionStatus.DegenerateScale => onFailure(DecompositionStatus.DegenerateScale),
+            DecompositionStatus.Singular => onFailure(DecompositionStatus.Singular),
+            _ => onFailure(Status)
+        };
+    }
+}
+
+public readonly struct EmptyTransform;
+public readonly struct ScaledTransform;
+public readonly struct RotatedTransform;
+public readonly struct TranslatedTransform;
+
+public readonly struct TransformPipeline<TPhase>
+{
+    internal readonly Mat4 Matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal TransformPipeline(Mat4 matrix) => Matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<EmptyTransform> Begin() => new(Mat4.Identity);
+}
+
+public static class TransformPipelineExtensions
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<ScaledTransform> Scale(this TransformPipeline<EmptyTransform> pipe, Vec3 scale) =>
+        new(Mat4.CreateScale(scale));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<ScaledTransform> Scale(this TransformPipeline<EmptyTransform> pipe, float uniformScale) =>
+        new(Mat4.CreateScale(uniformScale));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<RotatedTransform> Rotate(this TransformPipeline<ScaledTransform> pipe, Quat rotation) =>
+        new(pipe.Matrix * Mat4.CreateFromQuaternion(rotation));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<RotatedTransform> Rotate(this TransformPipeline<EmptyTransform> pipe, Quat rotation) =>
+        new(Mat4.CreateFromQuaternion(rotation));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<TranslatedTransform> Translate(this TransformPipeline<RotatedTransform> pipe, Vec3 translation) =>
+        new(pipe.Matrix * Mat4.CreateTranslation(translation));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<TranslatedTransform> Translate(this TransformPipeline<ScaledTransform> pipe, Vec3 translation) =>
+        new(pipe.Matrix * Mat4.CreateTranslation(translation));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static TransformPipeline<TranslatedTransform> Translate(this TransformPipeline<EmptyTransform> pipe, Vec3 translation) =>
+        new(Mat4.CreateTranslation(translation));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Build(this TransformPipeline<TranslatedTransform> pipe) => pipe.Matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Build(this TransformPipeline<RotatedTransform> pipe) => pipe.Matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Build(this TransformPipeline<ScaledTransform> pipe) => pipe.Matrix;
 }
 
 public interface IProjectionPolicy
