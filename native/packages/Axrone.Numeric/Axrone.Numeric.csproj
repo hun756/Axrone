@@ -28,6 +28,10 @@
          type tokens used only for static-abstract dispatch. They carry no data, are never
          compared, and an equality surface on them would be an API nobody should call. -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1000: Static members on generic types — Vec3Builder.Create is the typestate entry point. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

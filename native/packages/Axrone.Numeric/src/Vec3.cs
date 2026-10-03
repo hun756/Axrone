@@ -453,7 +453,11 @@ public struct Vec3 :
     IUtf8SpanFormattable,
     IParsable<Vec3>,
     ISpanParsable<Vec3>,
-    IUtf8SpanParsable<Vec3>
+    IUtf8SpanParsable<Vec3>,
+    ISpatialVector<Vec3>,
+    IInnerProductSpace<Vec3, float>,
+    ICrossProductSpace<Vec3>,
+    IInterpolatableSpace<Vec3, float>
 {
     public const float MachineEpsilon = 1.1920929E-07F;
 
@@ -585,6 +589,9 @@ public struct Vec3 :
         y = Y;
         z = Z;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public ComponentEnumerator GetEnumerator() => new(in this);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Span<float> AsSpan() => MemoryMarshal.CreateSpan(ref X, 3);
@@ -1086,6 +1093,33 @@ public struct Vec3 :
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec3 ToUnit<TStrategy>(Vec3 value)
+        where TStrategy : struct, INormalizationStrategy
+    {
+        Vec3 normalized = Normalize<TStrategy>(value);
+        return new UnitVec3(normalized.X, normalized.Y, normalized.Z);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec3 ToUnit(Vec3 value) => ToUnit<StrictIeeeStrategy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static NormalizationResult TryNormalizeUnit(Vec3 value, Tolerance tolerance = default)
+    {
+        if (TryNormalize(value, out Vec3 result, tolerance.Value))
+        {
+            return new NormalizationResult(new UnitVec3(result.X, result.Y, result.Z));
+        }
+
+        if (value.IsAnyNaN || value.IsAnyInfinity)
+        {
+            return new NormalizationResult(NormalizationStatus.NonFinite);
+        }
+
+        return new NormalizationResult(NormalizationStatus.DegenerateZero);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 Reflect(Vec3 vector, Vec3 normal)
     {
@@ -1110,8 +1144,30 @@ public struct Vec3 :
         return onNormal * scale;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Reflect(Vec3 vector, UnitVec3 normal)
+    {
+        float dot2 = Dot(vector, normal) * 2.0f;
+        return new Vec3(
+            vector.X - (normal.X * dot2),
+            vector.Y - (normal.Y * dot2),
+            vector.Z - (normal.Z * dot2)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Project(Vec3 vector, UnitVec3 onNormal)
+    {
+        float scale = Dot(vector, onNormal);
+        return (Vec3)onNormal * scale;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 ProjectOnPlane(Vec3 vector, Vec3 planeNormal) =>
+        vector - Project(vector, planeNormal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 ProjectOnPlane(Vec3 vector, UnitVec3 planeNormal) =>
         vector - Project(vector, planeNormal);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1156,6 +1212,12 @@ public struct Vec3 :
         float sign = Dot(axis, cross);
         return sign < 0.0f ? -unsignedAngle : unsignedAngle;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians AngleBetween(Vec3 from, Vec3 to) => new(Angle(from, to));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians SignedAngleBetween(Vec3 from, Vec3 to, Vec3 axis) => new(SignedAngle(from, to, axis));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 Clamp(Vec3 value, Vec3 min, Vec3 max)
@@ -1897,4 +1959,75 @@ public struct Vec3 :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vec3 SubtractScalar(float scalar) => SubtractScalar(this, scalar);
+}
+
+public ref struct ComponentEnumerator
+{
+    private readonly Vec3 _vector;
+
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal ComponentEnumerator(scoped ref readonly Vec3 vector)
+    {
+        _vector = vector;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 3;
+
+    public readonly ref readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 3U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return ref Unsafe.Add(ref Unsafe.AsRef(in _vector.X), (nint)(uint)_index);
+        }
+    }
+}
+
+public static class VectorBatchProcessor
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void Transform<TTransformer, TState>(
+        ReadOnlySpan<Vec3> source,
+        Span<Vec3> destination,
+        scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer<TState>
+        where TState : allows ref struct
+    {
+        if (destination.Length < source.Length)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span must be at least as long as source span.");
+        }
+
+        ref Vec3 srcRef = ref MemoryMarshal.GetReference(source);
+        ref Vec3 dstRef = ref MemoryMarshal.GetReference(destination);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            Unsafe.Add(ref dstRef, i) = TTransformer.Transform(Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void ForEach<TAction, TState>(
+        ReadOnlySpan<Vec3> source,
+        scoped ref TState state)
+        where TAction : struct, IVectorAction<TState>
+        where TState : allows ref struct
+    {
+        ref Vec3 srcRef = ref MemoryMarshal.GetReference(source);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            TAction.Invoke(ref Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
 }
