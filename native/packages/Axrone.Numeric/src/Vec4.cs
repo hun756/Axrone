@@ -1,5 +1,203 @@
 namespace Axrone.Numeric;
 
+public interface IVectorTransformer4<TState>
+    where TState : allows ref struct
+{
+    static abstract Vec4 Transform(Vec4 value, scoped ref TState state);
+}
+
+public interface IVectorAction4<TState>
+    where TState : allows ref struct
+{
+    static abstract void Invoke(scoped ref readonly Vec4 value, scoped ref TState state);
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly record struct ComponentIndex4 : IEquatable<ComponentIndex4>, IComparable<ComponentIndex4>
+{
+    public readonly byte Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private ComponentIndex4(byte value) => Value = value;
+
+    public static readonly ComponentIndex4 X = new(0);
+
+    public static readonly ComponentIndex4 Y = new(1);
+
+    public static readonly ComponentIndex4 Z = new(2);
+
+    public static readonly ComponentIndex4 W = new(3);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static ComponentIndex4 From(int index)
+    {
+        if ((uint)index >= 4U)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        return new ComponentIndex4((byte)index);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator ComponentIndex4(int index) => From(index);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator int(ComponentIndex4 index) => index.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int CompareTo(ComponentIndex4 other) => Value.CompareTo(other.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <(ComponentIndex4 left, ComponentIndex4 right) => left.Value < right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >(ComponentIndex4 left, ComponentIndex4 right) => left.Value > right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator <=(ComponentIndex4 left, ComponentIndex4 right) => left.Value <= right.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator >=(ComponentIndex4 left, ComponentIndex4 right) => left.Value >= right.Value;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct UnitVec4 :
+    IEquatable<UnitVec4>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable
+{
+    public readonly float X;
+
+    public readonly float Y;
+
+    public readonly float Z;
+
+    public readonly float W;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal UnitVec4(float x, float y, float z, float w)
+    {
+        X = x;
+        Y = y;
+        Z = z;
+        W = w;
+    }
+
+    public static UnitVec4 UnitX => new(1F, 0F, 0F, 0F);
+    public static UnitVec4 UnitY => new(0F, 1F, 0F, 0F);
+    public static UnitVec4 UnitZ => new(0F, 0F, 1F, 0F);
+    public static UnitVec4 UnitW => new(0F, 0F, 0F, 1F);
+    public static UnitVec4 NegativeUnitX => new(-1F, 0F, 0F, 0F);
+    public static UnitVec4 NegativeUnitY => new(0F, -1F, 0F, 0F);
+    public static UnitVec4 NegativeUnitZ => new(0F, 0F, -1F, 0F);
+    public static UnitVec4 NegativeUnitW => new(0F, 0F, 0F, -1F);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Vec4(UnitVec4 unit) => new(unit.X, unit.Y, unit.Z, unit.W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static explicit operator UnitVec4(Vec4 value) => Vec4.ToUnit(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Vec4 AsVec4() => new(X, Y, Z, W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(UnitVec4 other) => X == other.X && Y == other.Y && Z == other.Z && W == other.W;
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is UnitVec4 other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(X, Y, Z, W);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(UnitVec4 left, UnitVec4 right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(UnitVec4 left, UnitVec4 right) => !left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec4 operator -(UnitVec4 value) => new(-value.X, -value.Y, -value.Z, -value.W);
+
+    public override string ToString() => AsVec4().ToString();
+
+    public string ToString(string? format, IFormatProvider? formatProvider) => AsVec4().ToString(format, formatProvider);
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec4().TryFormat(destination, out charsWritten, format, provider);
+
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec4().TryFormat(utf8Destination, out bytesWritten, format, provider);
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct NormalizationResult4 : IEquatable<NormalizationResult4>
+{
+    public readonly UnitVec4 Value;
+    public readonly NormalizationStatus Status;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult4(UnitVec4 value)
+    {
+        Value = value;
+        Status = NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult4(NormalizationStatus status)
+    {
+        Value = default;
+        Status = status;
+    }
+
+    public bool IsSuccess => Status == NormalizationStatus.Success;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool TryGetUnit(out UnitVec4 unit)
+    {
+        unit = Value;
+        return Status == NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public TResult Match<TResult>(
+        Func<UnitVec4, TResult> onSuccess,
+        Func<TResult> onDegenerateZero,
+        Func<TResult> onNonFinite)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onDegenerateZero);
+        ArgumentNullException.ThrowIfNull(onNonFinite);
+
+        return Status switch
+        {
+            NormalizationStatus.Success => onSuccess(Value),
+            NormalizationStatus.DegenerateZero => onDegenerateZero(),
+            NormalizationStatus.NonFinite => onNonFinite(),
+            _ => ThrowMatch(),
+        };
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static TResult ThrowMatch() =>
+            throw new InvalidOperationException("Invalid normalization status discriminant.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(NormalizationResult4 other) =>
+        Status == other.Status && (Status != NormalizationStatus.Success || Value.Equals(other.Value));
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is NormalizationResult4 other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, Status);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(NormalizationResult4 left, NormalizationResult4 right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(NormalizationResult4 left, NormalizationResult4 right) => !left.Equals(right);
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Vec4 :
     IEquatable<Vec4>,
@@ -14,7 +212,7 @@ public struct Vec4 :
     IUnaryNegationOperators<Vec4, Vec4>,
     IUnaryPlusOperators<Vec4, Vec4>,
     IAdditiveIdentity<Vec4, Vec4>,
-    IMultiplicativeIdentity<Vec4, float>,
+    IMultiplicativeIdentity<Vec4, Vec4>,
     IFormattable,
     ISpanFormattable,
     IUtf8SpanFormattable,
@@ -29,8 +227,8 @@ public struct Vec4 :
     public float Z;
     public float W;
 
-    public const float MachineEpsilon = 1.192092896e-07f;
-    public const float DefaultTolerance = 1e-6f;
+    public const float MachineEpsilon = 1.1920929E-07F;
+    public const float DefaultTolerance = MachineEpsilon * 8F;
 
     public static Vec4 Zero => default;
     public static Vec4 One => new(1.0f, 1.0f, 1.0f, 1.0f);
@@ -42,6 +240,7 @@ public struct Vec4 :
     public static Vec4 NegativeUnitY => new(0.0f, -1.0f, 0.0f, 0.0f);
     public static Vec4 NegativeUnitZ => new(0.0f, 0.0f, -1.0f, 0.0f);
     public static Vec4 NegativeUnitW => new(0.0f, 0.0f, 0.0f, -1.0f);
+    public static Vec4 NegativeOne => new(-1.0f, -1.0f, -1.0f, -1.0f);
     public static Vec4 PositiveInfinity => new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
     public static Vec4 NegativeInfinity => new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
     public static Vec4 NaN => new(float.NaN, float.NaN, float.NaN, float.NaN);
@@ -111,6 +310,17 @@ public struct Vec4 :
         }
     }
 
+    #pragma warning disable CA1043 // ComponentIndex4 is the whole point: a 0..3 proof checked at construction.
+    public float this[ComponentIndex4 index]
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => Unsafe.Add(ref X, (nint)index.Value);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        set => Unsafe.Add(ref X, (nint)index.Value) = value;
+    }
+    #pragma warning restore CA1043
+
     public readonly bool IsAllZero => X == 0.0f && Y == 0.0f && Z == 0.0f && W == 0.0f;
     public readonly bool IsAllFinite => float.IsFinite(X) && float.IsFinite(Y) && float.IsFinite(Z) && float.IsFinite(W);
     public readonly bool IsAnyNaN => float.IsNaN(X) || float.IsNaN(Y) || float.IsNaN(Z) || float.IsNaN(W);
@@ -126,7 +336,9 @@ public struct Vec4 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly ReadOnlySpan<float> AsSpan() => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in X), 4);
+    public Span<float> AsSpan() => MemoryMarshal.CreateSpan(ref X, 4);
+
+    public ReadOnlySpan<float> AsReadOnlySpan() => MemoryMarshal.CreateReadOnlySpan(ref X, 4);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly void CopyTo(Span<float> destination)
@@ -1115,7 +1327,7 @@ public struct Vec4 :
 
     public static Vec4 AdditiveIdentity => Zero;
 
-    public static float MultiplicativeIdentity => 1.0f;
+    public static Vec4 MultiplicativeIdentity => One;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec4 GreaterThan(Vec4 left, Vec4 right) =>
