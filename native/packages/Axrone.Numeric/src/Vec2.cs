@@ -356,6 +356,56 @@ public struct Vec2 :
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 8)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least eight bytes.");
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Span<Vec2> destination)
+    {
+        if (destination.IsEmpty)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least one vector.");
+        }
+
+        destination[0] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void CopyTo(Vec2[] destination, int index)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        if ((uint)index >= (uint)destination.Length)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        destination[index] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool TryCopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 8)
+        {
+            return false;
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public ComponentEnumerator2D GetEnumerator() => new(in this);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vector64<float> AsVector64() => Vector64.Create(X, Y);
 
@@ -417,6 +467,50 @@ public struct Vec2 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec2 LoadUnsafe(ref readonly float source, nuint elementOffset) =>
         LoadUnsafe(ref Unsafe.Add(ref Unsafe.AsRef(in source), elementOffset));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 Load(ReadOnlySpan<float> source)
+    {
+        if (source.Length < 2)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(source));
+        }
+
+        return new Vec2(source[0], source[1]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec2 LoadAligned(ref readonly float source)
+    {
+        Vector64<float> wide = Vector64.LoadAligned((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return new Vec2(wide.GetElement(0), wide.GetElement(1));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec2 LoadAlignedNonTemporal(ref readonly float source)
+    {
+        Vector64<float> wide = Vector64.LoadAlignedNonTemporal((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return new Vec2(wide.GetElement(0), wide.GetElement(1));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec2 LoadUnsafe(void* source)
+    {
+        float* components = (float*)source;
+        return new Vec2(components[0], components[1]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe Vec2 LoadUnsafe(void* source, int offset)
+    {
+        if (offset < 0)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(offset));
+        }
+
+        float* components = (float*)source + offset;
+        return new Vec2(components[0], components[1]);
+    }
 
     public static Vec2 SumAll(params ReadOnlySpan<Vec2> vectors)
     {
@@ -1377,206 +1471,243 @@ public struct Vec2 :
     public static Vec2 Shuffle(Vec2 vector, byte xIndex, byte yIndex) =>
         new(vector[(int)xIndex], vector[(int)yIndex]);
 
+    private const int StackTextCapacity = 64;
+
     public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
 
     public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
 
     public readonly string ToString(string? format, IFormatProvider? formatProvider)
     {
-        Span<char> buffer = stackalloc char[64];
+        Span<char> buffer = stackalloc char[StackTextCapacity];
         if (TryFormat(buffer, out int charsWritten, format, formatProvider))
         {
             return new string(buffer.Slice(0, charsWritten));
         }
-        return string.Create(formatProvider, $"<{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}>");
+
+        return string.Create(
+            formatProvider,
+            $"{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}"
+        );
     }
 
-    public readonly bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format = default,
-        IFormatProvider? provider = null)
+    public readonly bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
     {
-        charsWritten = 0;
-        Span<char> temp = stackalloc char[64];
-        int written = 0;
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
 
-        temp[written++] = '<';
-
-        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
-        written += xW;
-
-        var nfi = NumberFormatInfo.GetInstance(provider);
-        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
-        written += yW;
-
-        if (temp.Length - written < 1) return false;
-        temp[written++] = '>';
-
-        if (destination.Length < written)
+        if (!TryAppendComponentChar(destination, ref offset, X, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, Y, format, provider))
         {
+            charsWritten = 0;
             return false;
         }
 
-        temp.Slice(0, written).CopyTo(destination);
-        charsWritten = written;
+        charsWritten = offset;
         return true;
     }
 
-    public readonly bool TryFormat(
-        Span<byte> utf8Destination,
-        out int bytesWritten,
-        ReadOnlySpan<char> format = default,
-        IFormatProvider? provider = null)
+    public readonly bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
     {
-        bytesWritten = 0;
-        Span<byte> temp = stackalloc byte[64];
-        int written = 0;
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
 
-        temp[written++] = (byte)'<';
-
-        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
-        written += xW;
-
-        var nfi = NumberFormatInfo.GetInstance(provider);
-        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
-        written += yW;
-
-        if (temp.Length - written < 1) return false;
-        temp[written++] = (byte)'>';
-
-        if (utf8Destination.Length < written)
+        if (!TryAppendComponentUtf8(utf8Destination, ref offset, X, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, Y, format, provider))
         {
+            bytesWritten = 0;
             return false;
         }
 
-        temp.Slice(0, written).CopyTo(utf8Destination);
-        bytesWritten = written;
+        bytesWritten = offset;
         return true;
     }
 
-    public static Vec2 Parse(string s, IFormatProvider? provider)
+    public static Vec2 Parse(string s, IFormatProvider? provider = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         return Parse(s.AsSpan(), provider);
     }
 
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec2 result)
+    public static Vec2 Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null)
     {
-        if (s is null)
+        if (!TryParse(s, provider, out Vec2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected two comma-separated floating-point components, for example \"1, 2\".");
+        }
+
+        return result;
+    }
+
+    public static Vec2 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider = null)
+    {
+        if (!TryParse(utf8Text, provider, out Vec2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected two comma-separated floating-point components, for example \"1, 2\".");
+        }
+
+        return result;
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec2 result) =>
+        TryParse(s.AsSpan(), provider, out result);
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec2 result)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        s = s.Trim();
+
+        if (s.Length >= 2 && IsOpeningBracket(s[0]) && IsClosingBracket(s[^1]))
+        {
+            s = s[1..^1];
+        }
+
+        Span<float> components = stackalloc float[2];
+        ReadOnlySpan<char> remaining = s;
+        bool sawTrailingSeparator = false;
+
+        for (int index = 0; index < 2; index++)
+        {
+            int separator = remaining.IndexOf(',');
+            ReadOnlySpan<char> component = (separator < 0 ? remaining : remaining[..separator]).Trim();
+
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
+
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
+
+        if (sawTrailingSeparator || !remaining.Trim().IsEmpty)
         {
             result = default;
             return false;
         }
-        return TryParse(s.AsSpan(), provider, out result);
-    }
 
-    public static Vec2 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
-    {
-        if (!TryParse(s, provider, out Vec2 result))
-        {
-            NumericThrowHelper.ThrowFormatException("Invalid Vec2 format string.");
-        }
-        return result;
-    }
-
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec2 result)
-    {
-        result = default;
-        s = s.Trim();
-        if (s.IsEmpty) return false;
-
-        if ((s[0] == '<' && s[^1] == '>') || (s[0] == '(' && s[^1] == ')') || (s[0] == '[' && s[^1] == ']'))
-        {
-            s = s.Slice(1, s.Length - 2).Trim();
-        }
-
-        char sep = s.Contains(';') ? ';' : ',';
-
-        int firstSep = s.IndexOf(sep);
-        if (firstSep < 0) return false;
-
-        ReadOnlySpan<char> xSpan = s.Slice(0, firstSep).Trim();
-        ReadOnlySpan<char> ySpan = s.Slice(firstSep + 1).Trim();
-
-        const NumberStyles styles = NumberStyles.Float;
-        if (!float.TryParse(xSpan, styles, provider, out float x) ||
-            !float.TryParse(ySpan, styles, provider, out float y))
-        {
-            return false;
-        }
-
-        result = new Vec2(x, y);
+        result = new Vec2(components[0], components[1]);
         return true;
-    }
-
-    public static Vec2 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
-    {
-        if (!TryParse(utf8Text, provider, out Vec2 result))
-        {
-            NumericThrowHelper.ThrowFormatException("Invalid Vec2 UTF-8 format stream.");
-        }
-        return result;
     }
 
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Vec2 result)
     {
-        result = default;
-        utf8Text = TrimUtf8(utf8Text);
-        if (utf8Text.IsEmpty) return false;
+        provider ??= CultureInfo.InvariantCulture;
+        ReadOnlySpan<byte> s = TrimUtf8(utf8Text);
 
-        if ((utf8Text[0] == (byte)'<' && utf8Text[^1] == (byte)'>') ||
-            (utf8Text[0] == (byte)'(' && utf8Text[^1] == (byte)')') ||
-            (utf8Text[0] == (byte)'[' && utf8Text[^1] == (byte)']'))
+        if (s.Length >= 2 && IsOpeningBracketUtf8(s[0]) && IsClosingBracketUtf8(s[^1]))
         {
-            utf8Text = TrimUtf8(utf8Text.Slice(1, utf8Text.Length - 2));
+            s = s[1..^1];
         }
 
-        byte sep = utf8Text.Contains((byte)';') ? (byte)';' : (byte)',';
+        Span<float> components = stackalloc float[2];
+        ReadOnlySpan<byte> remaining = s;
+        bool sawTrailingSeparator = false;
 
-        int firstSep = utf8Text.IndexOf(sep);
-        if (firstSep < 0) return false;
+        for (int index = 0; index < 2; index++)
+        {
+            int separator = remaining.IndexOf((byte)',');
+            ReadOnlySpan<byte> component = TrimUtf8(separator < 0 ? remaining : remaining[..separator]);
 
-        ReadOnlySpan<byte> xSpan = TrimUtf8(utf8Text.Slice(0, firstSep));
-        ReadOnlySpan<byte> ySpan = TrimUtf8(utf8Text.Slice(firstSep + 1));
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
 
-        const NumberStyles styles = NumberStyles.Float;
-        if (!float.TryParse(xSpan, styles, provider, out float x) ||
-            !float.TryParse(ySpan, styles, provider, out float y))
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
+
+        if (sawTrailingSeparator || !TrimUtf8(remaining).IsEmpty)
+        {
+            result = default;
+            return false;
+        }
+
+        result = new Vec2(components[0], components[1]);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracket(char value) => value is '(' or '[' or '{';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracket(char value) => value is ')' or ']' or '}';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracketUtf8(byte value) => value is (byte)'(' or (byte)'[' or (byte)'{';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracketUtf8(byte value) => value is (byte)')' or (byte)']' or (byte)'}';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsWhiteSpaceUtf8(byte value) => value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> source)
+    {
+        int start = 0;
+        while (start < source.Length && IsWhiteSpaceUtf8(source[start]))
+        {
+            start++;
+        }
+
+        int end = source.Length - 1;
+        while (end >= start && IsWhiteSpaceUtf8(source[end]))
+        {
+            end--;
+        }
+
+        return source.Slice(start, end - start + 1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentChar(Span<char> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
+    {
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
+
+            destination[offset++] = ',';
+            destination[offset++] = ' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
         {
             return false;
         }
 
-        result = new Vec2(x, y);
+        offset += written;
         return true;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> span)
-    {
-        int start = 0;
-        while (start < span.Length && IsWhiteSpace(span[start])) start++;
-        int end = span.Length - 1;
-        while (end >= start && IsWhiteSpace(span[end])) end--;
-        return span.Slice(start, end - start + 1);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool IsWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
-    }
-
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentUtf8(Span<byte> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
+    {
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
+
+            destination[offset++] = (byte)',';
+            destination[offset++] = (byte)' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
+        {
+            return false;
+        }
+
+        offset += written;
+        return true;
+    }
     public static Vec2 TransformCustom<TTransformer, TState>(Vec2 value, scoped ref TState state)
         where TTransformer : struct, IVectorTransformer2D<TState>
         where TState : allows ref struct =>
@@ -1619,6 +1750,37 @@ public static class VectorBatchProcessor2D
         for (nint i = 0; i < (nint)source.Length; i++)
         {
             TAction.Invoke(ref Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
+}
+
+public ref struct ComponentEnumerator2D
+{
+    private readonly Vec2 _vector;
+
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal ComponentEnumerator2D(scoped ref readonly Vec2 vector)
+    {
+        _vector = vector;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 2;
+
+    public readonly ref readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 2U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return ref Unsafe.Add(ref Unsafe.AsRef(in _vector.X), (nint)(uint)_index);
         }
     }
 }
