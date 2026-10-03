@@ -844,6 +844,15 @@ public struct Vec3 :
 
     public string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
 
+    public string ToString(Vec3FormattingOptions? options)
+    {
+        options ??= new Vec3FormattingOptions();
+        return options.Prefix
+            + X.ToString(null, CultureInfo.InvariantCulture) + options.Separator
+            + Y.ToString(null, CultureInfo.InvariantCulture) + options.Separator
+            + Z.ToString(null, CultureInfo.InvariantCulture) + options.Suffix;
+    }
+
     public string ToString(string? format, IFormatProvider? formatProvider)
     {
         Span<char> buffer = stackalloc char[StackTextCapacity];
