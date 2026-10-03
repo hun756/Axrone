@@ -1170,6 +1170,10 @@ public struct Vec3 :
     public static Vec3 ProjectOnPlane(Vec3 vector, UnitVec3 planeNormal) =>
         vector - Project(vector, planeNormal);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Slide(Vec3 vector, UnitVec3 normal) =>
+        vector - ((Vec3)normal * Dot(vector, normal));
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 Slide(Vec3 vector, Vec3 normal)
     {
@@ -1215,6 +1219,39 @@ public struct Vec3 :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static AngleRadians AngleBetween(Vec3 from, Vec3 to) => new(Angle(from, to));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static float Angle(UnitVec3 from, UnitVec3 to) =>
+        MathF.Acos(Math.Clamp(
+            from.X * to.X + from.Y * to.Y + from.Z * to.Z,
+            -1.0f, 1.0f));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Slerp(UnitVec3 a, UnitVec3 b, float t)
+    {
+        float dot = Math.Clamp(
+            a.X * b.X + a.Y * b.Y + a.Z * b.Z,
+            -1.0f, 1.0f);
+
+        if (dot > 0.9995f)
+        {
+            return Normalize(Lerp(a, b, t));
+        }
+
+        if (dot < -0.9995f)
+        {
+            Vec3 ortho = GetOrthogonal(a);
+            float angle = MathF.PI * t;
+            return ((Vec3)a * MathF.Cos(angle)) + (ortho * MathF.Sin(angle));
+        }
+
+        float theta = MathF.Acos(dot);
+        float sinTheta = MathF.Sin(theta);
+        float factorA = MathF.Sin((1.0f - t) * theta) / sinTheta;
+        float factorB = MathF.Sin(t * theta) / sinTheta;
+
+        return ((Vec3)a * factorA) + ((Vec3)b * factorB);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static AngleRadians SignedAngleBetween(Vec3 from, Vec3 to, Vec3 axis) => new(SignedAngle(from, to, axis));
