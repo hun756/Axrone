@@ -1327,4 +1327,154 @@ public struct Vec3 :
         float rz = z == 0 ? value.X : z == 1 ? value.Y : z == 2 ? value.Z : 0F;
         return new Vec3(rx, ry, rz);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 RotateX(Vec3 vector, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians);
+        return new Vec3(
+            vector.X,
+            MathF.FusedMultiplyAdd(vector.Y, cos, -(vector.Z * sin)),
+            MathF.FusedMultiplyAdd(vector.Y, sin, vector.Z * cos)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 RotateX(float angleRadians) => RotateX(this, angleRadians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 RotateY(Vec3 vector, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians);
+        return new Vec3(
+            MathF.FusedMultiplyAdd(vector.X, cos, vector.Z * sin),
+            vector.Y,
+            MathF.FusedMultiplyAdd(vector.Z, cos, -(vector.X * sin))
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 RotateY(float angleRadians) => RotateY(this, angleRadians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 RotateZ(Vec3 vector, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians);
+        return new Vec3(
+            MathF.FusedMultiplyAdd(vector.X, cos, -(vector.Y * sin)),
+            MathF.FusedMultiplyAdd(vector.X, sin, vector.Y * cos),
+            vector.Z
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 RotateZ(float angleRadians) => RotateZ(this, angleRadians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 RotateAxis(Vec3 vector, Vec3 axis, float angleRadians)
+    {
+        var (sin, cos) = MathF.SinCos(angleRadians);
+        float oneMinusCos = 1.0f - cos;
+        float dot = Dot(axis, vector);
+        Vec3 cross = Cross(axis, vector);
+        float scale = dot * oneMinusCos;
+
+        return new Vec3(
+            MathF.FusedMultiplyAdd(vector.X, cos, MathF.FusedMultiplyAdd(cross.X, sin, axis.X * scale)),
+            MathF.FusedMultiplyAdd(vector.Y, cos, MathF.FusedMultiplyAdd(cross.Y, sin, axis.Y * scale)),
+            MathF.FusedMultiplyAdd(vector.Z, cos, MathF.FusedMultiplyAdd(cross.Z, sin, axis.Z * scale))
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 RotateAxis(Vec3 axis, float angleRadians) => RotateAxis(this, axis, angleRadians);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 Inverse(Vec3 vector) =>
+        new(1.0f / vector.X, 1.0f / vector.Y, 1.0f / vector.Z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 Inverse() => Inverse(this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 InverseSafe(Vec3 vector, float fallback = 0.0f)
+    {
+        float invX = 1.0f / vector.X;
+        float invY = 1.0f / vector.Y;
+        float invZ = 1.0f / vector.Z;
+
+        return new Vec3(
+            float.IsFinite(invX) ? invX : fallback,
+            float.IsFinite(invY) ? invY : fallback,
+            float.IsFinite(invZ) ? invZ : fallback
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 InverseSafe(float fallback = 0.0f) => InverseSafe(this, fallback);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 DivideSafe(Vec3 left, Vec3 right, float fallback = 0.0f)
+    {
+        float x = left.X / right.X;
+        float y = left.Y / right.Y;
+        float z = left.Z / right.Z;
+
+        return new Vec3(
+            float.IsFinite(x) ? x : fallback,
+            float.IsFinite(y) ? y : fallback,
+            float.IsFinite(z) ? z : fallback
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 DivideSafe(Vec3 left, float right, float fallback = 0.0f)
+    {
+        float inv = 1.0f / right;
+        return float.IsFinite(inv) ? left * inv : new Vec3(fallback);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ManhattanDistance(Vec3 a, Vec3 b) =>
+        MathF.Abs(a.X - b.X) + MathF.Abs(a.Y - b.Y) + MathF.Abs(a.Z - b.Z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float ManhattanDistance(Vec3 destination) => ManhattanDistance(this, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ChebyshevDistance(Vec3 a, Vec3 b)
+    {
+        float dx = MathF.Abs(a.X - b.X);
+        float dy = MathF.Abs(a.Y - b.Y);
+        float dz = MathF.Abs(a.Z - b.Z);
+        return MathF.Max(dx, MathF.Max(dy, dz));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly float ChebyshevDistance(Vec3 destination) => ChebyshevDistance(this, destination);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 SmootherStep(Vec3 from, Vec3 to, float amount)
+    {
+        amount = Math.Clamp(amount, 0.0f, 1.0f);
+        float inner = MathF.FusedMultiplyAdd(amount, 6.0f, -15.0f);
+        float poly = MathF.FusedMultiplyAdd(amount, inner, 10.0f);
+        float factor = amount * amount * amount * poly;
+
+        return Lerp(from, to, factor);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 AddScalar(Vec3 vector, float scalar) =>
+        new(vector.X + scalar, vector.Y + scalar, vector.Z + scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 AddScalar(float scalar) => AddScalar(this, scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 SubtractScalar(Vec3 vector, float scalar) =>
+        new(vector.X - scalar, vector.Y - scalar, vector.Z - scalar);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vec3 SubtractScalar(float scalar) => SubtractScalar(this, scalar);
 }
