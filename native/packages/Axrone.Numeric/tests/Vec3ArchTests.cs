@@ -136,6 +136,21 @@ public class Vec3ArchTests
     }
 
     [Fact]
+    public void UnitPaths_MatchPlainPaths()
+    {
+        var v = new Vec3(1f, 2f, 3f);
+        var n = Vec3.ToUnit(new Vec3(0f, 1f, 0f));
+        Vec3.Slide(v, n).Should().Be(Vec3.Slide(v, new Vec3(0f, 1f, 0f)));
+        Vec3.Angle(UnitVec3.UnitX, UnitVec3.UnitY).Should().BeApproximately(
+            Vec3.Angle(Vec3.UnitX, Vec3.UnitY), 1e-6f);
+        Vec3 u = Vec3.Slerp(UnitVec3.UnitX, UnitVec3.UnitY, 0.5f);
+        u.Length().Should().BeApproximately(1f, 1e-5f);
+        u.Should().Be(Vec3.Slerp(Vec3.UnitX, Vec3.UnitY, 0.5f));
+        Vec3.Slerp(UnitVec3.UnitX, UnitVec3.NegativeUnitX, 0.5f).Length().Should().BeApproximately(1f, 1e-4f);
+        Vec3.Slerp(UnitVec3.UnitX, UnitVec3.UnitX, 0.3f).Should().Be(Vec3.UnitX);
+    }
+
+    [Fact]
     public void Enumerator_YieldsComponents()
     {
         var v = new Vec3(1f, 2f, 3f);
