@@ -223,6 +223,220 @@ public readonly record struct AngleRadians : IEquatable<AngleRadians>, IComparab
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct UnitVec3 :
+    IEquatable<UnitVec3>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable
+{
+    public readonly float X;
+
+    public readonly float Y;
+
+    public readonly float Z;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal UnitVec3(float x, float y, float z)
+    {
+        X = x;
+        Y = y;
+        Z = z;
+    }
+
+    public static UnitVec3 UnitX => new(1F, 0F, 0F);
+
+    public static UnitVec3 UnitY => new(0F, 1F, 0F);
+
+    public static UnitVec3 UnitZ => new(0F, 0F, 1F);
+
+    public static UnitVec3 NegativeUnitX => new(-1F, 0F, 0F);
+
+    public static UnitVec3 NegativeUnitY => new(0F, -1F, 0F);
+
+    public static UnitVec3 NegativeUnitZ => new(0F, 0F, -1F);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static implicit operator Vec3(UnitVec3 unit) => new(unit.X, unit.Y, unit.Z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static explicit operator UnitVec3(Vec3 value) => Vec3.ToUnit(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Vec3 AsVec3() => new(X, Y, Z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(UnitVec3 other) => X == other.X && Y == other.Y && Z == other.Z;
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is UnitVec3 other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(X, Y, Z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(UnitVec3 left, UnitVec3 right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(UnitVec3 left, UnitVec3 right) => !left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec3 operator -(UnitVec3 value) => new(-value.X, -value.Y, -value.Z);
+
+    public override string ToString() => AsVec3().ToString();
+
+    public string ToString(string? format, IFormatProvider? formatProvider) => AsVec3().ToString(format, formatProvider);
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec3().TryFormat(destination, out charsWritten, format, provider);
+
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        AsVec3().TryFormat(utf8Destination, out bytesWritten, format, provider);
+}
+
+public enum NormalizationStatus : byte
+{
+    Success = 0,
+    DegenerateZero = 1,
+    NonFinite = 2
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct NormalizationResult : IEquatable<NormalizationResult>
+{
+    public readonly UnitVec3 Value;
+
+    public readonly NormalizationStatus Status;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult(UnitVec3 value)
+    {
+        Value = value;
+        Status = NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public NormalizationResult(NormalizationStatus status)
+    {
+        Value = default;
+        Status = status;
+    }
+
+    public bool IsSuccess => Status == NormalizationStatus.Success;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool TryGetUnit(out UnitVec3 unit)
+    {
+        unit = Value;
+        return Status == NormalizationStatus.Success;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public TResult Match<TResult>(
+        Func<UnitVec3, TResult> onSuccess,
+        Func<TResult> onDegenerateZero,
+        Func<TResult> onNonFinite)
+    {
+        ArgumentNullException.ThrowIfNull(onSuccess);
+        ArgumentNullException.ThrowIfNull(onDegenerateZero);
+        ArgumentNullException.ThrowIfNull(onNonFinite);
+
+        return Status switch
+        {
+            NormalizationStatus.Success => onSuccess(Value),
+            NormalizationStatus.DegenerateZero => onDegenerateZero(),
+            NormalizationStatus.NonFinite => onNonFinite(),
+            _ => ThrowMatch(),
+        };
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static TResult ThrowMatch() =>
+            throw new InvalidOperationException("Invalid normalization status discriminant.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Equals(NormalizationResult other) =>
+        Status == other.Status && (Status != NormalizationStatus.Success || Value.Equals(other.Value));
+
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is NormalizationResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, Status);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(NormalizationResult left, NormalizationResult right) => left.Equals(right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator !=(NormalizationResult left, NormalizationResult right) => !left.Equals(right);
+}
+
+public readonly struct StageEmpty { }
+
+public readonly struct StageX { }
+
+public readonly struct StageXY { }
+
+public readonly struct StageComplete { }
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct Vec3Builder<TStage> where TStage : struct
+{
+    internal readonly float X;
+
+    internal readonly float Y;
+
+    internal readonly float Z;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Vec3Builder(float x, float y, float z)
+    {
+        X = x;
+        Y = y;
+        Z = z;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3Builder<StageEmpty> Create() => new(0F, 0F, 0F);
+}
+
+public static class Vec3BuilderExtensions
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3Builder<StageX> WithX(this Vec3Builder<StageEmpty> _, float x) =>
+        new(x, 0F, 0F);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3Builder<StageXY> WithY(this Vec3Builder<StageX> builder, float y) =>
+        new(builder.X, y, 0F);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3Builder<StageComplete> WithZ(this Vec3Builder<StageXY> builder, float z) =>
+        new(builder.X, builder.Y, z);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Build(this Vec3Builder<StageComplete> builder) =>
+        new(builder.X, builder.Y, builder.Z);
+}
+
+public sealed class Vec3FormattingOptions
+{
+    public string Separator
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = ", ";
+
+    public string Prefix
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = "";
+
+    public string Suffix
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = "";
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Vec3 :
     IEquatable<Vec3>,
     IAdditionOperators<Vec3, Vec3, Vec3>,
