@@ -23,6 +23,14 @@ internal static class NumericThrowHelper
     [DoesNotReturn]
     [System.Diagnostics.StackTraceHidden]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowArgumentOutOfRangeException(string paramName, string message) =>
+        throw new ArgumentOutOfRangeException(paramName, message);
+
+
+
+    [DoesNotReturn]
+    [System.Diagnostics.StackTraceHidden]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     internal static void ThrowDegenerateQuaternion() =>
         throw new InvalidOperationException("Cannot normalize a degenerate quaternion.");
 
