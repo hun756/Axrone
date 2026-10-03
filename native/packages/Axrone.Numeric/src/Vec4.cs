@@ -6,12 +6,6 @@ public interface IVectorTransformer4<TState>
     static abstract Vec4 Transform(Vec4 value, scoped ref TState state);
 }
 
-public interface IVectorAction4<TState>
-    where TState : allows ref struct
-{
-    static abstract void Invoke(scoped ref readonly Vec4 value, scoped ref TState state);
-}
-
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly record struct ComponentIndex4 : IEquatable<ComponentIndex4>, IComparable<ComponentIndex4>
 {
