@@ -1605,259 +1605,246 @@ public struct Vec4 :
     public static Vec4 Shuffle(Vec4 vector, byte xIndex, byte yIndex, byte zIndex, byte wIndex) =>
         new(vector[(int)xIndex], vector[(int)yIndex], vector[(int)zIndex], vector[(int)wIndex]);
 
+    private const int StackTextCapacity = 256;
+
     public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
 
     public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
 
     public readonly string ToString(string? format, IFormatProvider? formatProvider)
     {
-        Span<char> buffer = stackalloc char[128];
+        Span<char> buffer = stackalloc char[StackTextCapacity];
         if (TryFormat(buffer, out int charsWritten, format, formatProvider))
         {
             return new string(buffer.Slice(0, charsWritten));
         }
-        return string.Create(formatProvider, $"<{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}, {Z.ToString(format, formatProvider)}, {W.ToString(format, formatProvider)}>");
+
+        return string.Create(
+            formatProvider,
+            $"{X.ToString(format, formatProvider)}, {Y.ToString(format, formatProvider)}, {Z.ToString(format, formatProvider)}, {W.ToString(format, formatProvider)}"
+        );
     }
 
-    public readonly bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format = default,
-        IFormatProvider? provider = null)
+    public readonly bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
     {
-        charsWritten = 0;
-        Span<char> temp = stackalloc char[128];
-        int written = 0;
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
 
-        temp[written++] = '<';
-
-        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
-        written += xW;
-
-        var nfi = NumberFormatInfo.GetInstance(provider);
-        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
-        written += yW;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Z.TryFormat(temp.Slice(written), out int zW, format, provider)) return false;
-        written += zW;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!W.TryFormat(temp.Slice(written), out int wW, format, provider)) return false;
-        written += wW;
-
-        if (temp.Length - written < 1) return false;
-        temp[written++] = '>';
-
-        if (destination.Length < written)
+        if (!TryAppendComponentChar(destination, ref offset, X, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, Y, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, Z, format, provider) ||
+            !TryAppendComponentChar(destination, ref offset, W, format, provider))
         {
+            charsWritten = 0;
             return false;
         }
 
-        temp.Slice(0, written).CopyTo(destination);
-        charsWritten = written;
+        charsWritten = offset;
         return true;
     }
 
-    public readonly bool TryFormat(
-        Span<byte> utf8Destination,
-        out int bytesWritten,
-        ReadOnlySpan<char> format = default,
-        IFormatProvider? provider = null)
+    public readonly bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
     {
-        bytesWritten = 0;
-        Span<byte> temp = stackalloc byte[128];
-        int written = 0;
+        provider ??= CultureInfo.InvariantCulture;
+        int offset = 0;
 
-        temp[written++] = (byte)'<';
-
-        if (!X.TryFormat(temp.Slice(written), out int xW, format, provider)) return false;
-        written += xW;
-
-        var nfi = NumberFormatInfo.GetInstance(provider);
-        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Y.TryFormat(temp.Slice(written), out int yW, format, provider)) return false;
-        written += yW;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!Z.TryFormat(temp.Slice(written), out int zW, format, provider)) return false;
-        written += zW;
-
-        if (temp.Length - written < separator.Length) return false;
-        separator.CopyTo(temp.Slice(written));
-        written += separator.Length;
-
-        if (!W.TryFormat(temp.Slice(written), out int wW, format, provider)) return false;
-        written += wW;
-
-        if (temp.Length - written < 1) return false;
-        temp[written++] = (byte)'>';
-
-        if (utf8Destination.Length < written)
+        if (!TryAppendComponentUtf8(utf8Destination, ref offset, X, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, Y, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, Z, format, provider) ||
+            !TryAppendComponentUtf8(utf8Destination, ref offset, W, format, provider))
         {
+            bytesWritten = 0;
             return false;
         }
 
-        temp.Slice(0, written).CopyTo(utf8Destination);
-        bytesWritten = written;
+        bytesWritten = offset;
         return true;
     }
 
-    public static Vec4 Parse(string s, IFormatProvider? provider)
+    public static Vec4 Parse(string s, IFormatProvider? provider = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         return Parse(s.AsSpan(), provider);
     }
 
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec4 result)
+    public static Vec4 Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null)
     {
-        if (s is null)
+        if (!TryParse(s, provider, out Vec4 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected four comma-separated floating-point components, for example \"1, 2, 3, 4\".");
+        }
+
+        return result;
+    }
+
+    public static Vec4 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider = null)
+    {
+        if (!TryParse(utf8Text, provider, out Vec4 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Expected four comma-separated floating-point components, for example \"1, 2, 3, 4\".");
+        }
+
+        return result;
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Vec4 result) =>
+        TryParse(s.AsSpan(), provider, out result);
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec4 result)
+    {
+        provider ??= CultureInfo.InvariantCulture;
+        s = s.Trim();
+
+        if (s.Length >= 2 && IsOpeningBracket(s[0]) && IsClosingBracket(s[^1]))
+        {
+            s = s[1..^1];
+        }
+
+        Span<float> components = stackalloc float[4];
+        ReadOnlySpan<char> remaining = s;
+        bool sawTrailingSeparator = false;
+
+        for (int index = 0; index < 4; index++)
+        {
+            int separator = remaining.IndexOf(',');
+            ReadOnlySpan<char> component = (separator < 0 ? remaining : remaining[..separator]).Trim();
+
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
+
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
+
+        if (sawTrailingSeparator || !remaining.Trim().IsEmpty)
         {
             result = default;
             return false;
         }
-        return TryParse(s.AsSpan(), provider, out result);
-    }
 
-    public static Vec4 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
-    {
-        if (!TryParse(s, provider, out Vec4 result))
-        {
-            NumericThrowHelper.ThrowFormatException("Invalid Vec4 format string.");
-        }
-        return result;
-    }
-
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Vec4 result)
-    {
-        result = default;
-        s = s.Trim();
-        if (s.IsEmpty) return false;
-
-        if ((s[0] == '<' && s[^1] == '>') || (s[0] == '(' && s[^1] == ')') || (s[0] == '[' && s[^1] == ']'))
-        {
-            s = s.Slice(1, s.Length - 2).Trim();
-        }
-
-        char sep = s.Contains(';') ? ';' : ',';
-
-        int firstSep = s.IndexOf(sep);
-        if (firstSep < 0) return false;
-
-        ReadOnlySpan<char> xSpan = s.Slice(0, firstSep).Trim();
-        s = s.Slice(firstSep + 1);
-
-        int secondSep = s.IndexOf(sep);
-        if (secondSep < 0) return false;
-
-        ReadOnlySpan<char> ySpan = s.Slice(0, secondSep).Trim();
-        s = s.Slice(secondSep + 1);
-
-        int thirdSep = s.IndexOf(sep);
-        if (thirdSep < 0) return false;
-
-        ReadOnlySpan<char> zSpan = s.Slice(0, thirdSep).Trim();
-        ReadOnlySpan<char> wSpan = s.Slice(thirdSep + 1).Trim();
-
-        const NumberStyles styles = NumberStyles.Float;
-        if (!float.TryParse(xSpan, styles, provider, out float x) ||
-            !float.TryParse(ySpan, styles, provider, out float y) ||
-            !float.TryParse(zSpan, styles, provider, out float z) ||
-            !float.TryParse(wSpan, styles, provider, out float w))
-        {
-            return false;
-        }
-
-        result = new Vec4(x, y, z, w);
+        result = new Vec4(components[0], components[1], components[2], components[3]);
         return true;
-    }
-
-    public static Vec4 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
-    {
-        if (!TryParse(utf8Text, provider, out Vec4 result))
-        {
-            NumericThrowHelper.ThrowFormatException("Invalid Vec4 UTF-8 format stream.");
-        }
-        return result;
     }
 
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Vec4 result)
     {
-        result = default;
-        utf8Text = TrimUtf8(utf8Text);
-        if (utf8Text.IsEmpty) return false;
+        provider ??= CultureInfo.InvariantCulture;
+        ReadOnlySpan<byte> s = TrimUtf8(utf8Text);
 
-        if ((utf8Text[0] == (byte)'<' && utf8Text[^1] == (byte)'>') ||
-            (utf8Text[0] == (byte)'(' && utf8Text[^1] == (byte)')') ||
-            (utf8Text[0] == (byte)'[' && utf8Text[^1] == (byte)']'))
+        if (s.Length >= 2 && IsOpeningBracketUtf8(s[0]) && IsClosingBracketUtf8(s[^1]))
         {
-            utf8Text = TrimUtf8(utf8Text.Slice(1, utf8Text.Length - 2));
+            s = s[1..^1];
         }
 
-        byte sep = utf8Text.Contains((byte)';') ? (byte)';' : (byte)',';
+        Span<float> components = stackalloc float[4];
+        ReadOnlySpan<byte> remaining = s;
+        bool sawTrailingSeparator = false;
 
-        int firstSep = utf8Text.IndexOf(sep);
-        if (firstSep < 0) return false;
+        for (int index = 0; index < 4; index++)
+        {
+            int separator = remaining.IndexOf((byte)',');
+            ReadOnlySpan<byte> component = TrimUtf8(separator < 0 ? remaining : remaining[..separator]);
 
-        ReadOnlySpan<byte> xSpan = TrimUtf8(utf8Text.Slice(0, firstSep));
-        utf8Text = utf8Text.Slice(firstSep + 1);
+            if (!float.TryParse(component, NumberStyles.Float, provider, out components[index]))
+            {
+                result = default;
+                return false;
+            }
 
-        int secondSep = utf8Text.IndexOf(sep);
-        if (secondSep < 0) return false;
+            sawTrailingSeparator = separator >= 0;
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+        }
 
-        ReadOnlySpan<byte> ySpan = TrimUtf8(utf8Text.Slice(0, secondSep));
-        utf8Text = utf8Text.Slice(secondSep + 1);
+        if (sawTrailingSeparator || !TrimUtf8(remaining).IsEmpty)
+        {
+            result = default;
+            return false;
+        }
 
-        int thirdSep = utf8Text.IndexOf(sep);
-        if (thirdSep < 0) return false;
+        result = new Vec4(components[0], components[1], components[2], components[3]);
+        return true;
+    }
 
-        ReadOnlySpan<byte> zSpan = TrimUtf8(utf8Text.Slice(0, thirdSep));
-        ReadOnlySpan<byte> wSpan = TrimUtf8(utf8Text.Slice(thirdSep + 1));
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracket(char value) => value is '(' or '[' or '{' or '<';
 
-        const NumberStyles styles = NumberStyles.Float;
-        if (!float.TryParse(xSpan, styles, provider, out float x) ||
-            !float.TryParse(ySpan, styles, provider, out float y) ||
-            !float.TryParse(zSpan, styles, provider, out float z) ||
-            !float.TryParse(wSpan, styles, provider, out float w))
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracket(char value) => value is ')' or ']' or '}' or '>';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsOpeningBracketUtf8(byte value) => value is (byte)'(' or (byte)'[' or (byte)'{' or (byte)'<';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsClosingBracketUtf8(byte value) => value is (byte)')' or (byte)']' or (byte)'}' or (byte)'>';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool IsWhiteSpaceUtf8(byte value) => value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> source)
+    {
+        int start = 0;
+        while (start < source.Length && IsWhiteSpaceUtf8(source[start]))
+        {
+            start++;
+        }
+
+        int end = source.Length - 1;
+        while (end >= start && IsWhiteSpaceUtf8(source[end]))
+        {
+            end--;
+        }
+
+        return source.Slice(start, end - start + 1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentChar(Span<char> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
+    {
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
+
+            destination[offset++] = ',';
+            destination[offset++] = ' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
         {
             return false;
         }
 
-        result = new Vec4(x, y, z, w);
+        offset += written;
         return true;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySpan<byte> TrimUtf8(ReadOnlySpan<byte> span)
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool TryAppendComponentUtf8(Span<byte> destination, ref int offset, float value, ReadOnlySpan<char> format, IFormatProvider provider)
     {
-        int start = 0;
-        while (start < span.Length && IsWhiteSpace(span[start])) start++;
-        int end = span.Length - 1;
-        while (end >= start && IsWhiteSpace(span[end])) end--;
-        return span.Slice(start, end - start + 1);
+        if (offset > 0)
+        {
+            if ((uint)destination.Length <= (uint)(offset + 1))
+            {
+                return false;
+            }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool IsWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+            destination[offset++] = (byte)',';
+            destination[offset++] = (byte)' ';
+        }
+
+        if (!value.TryFormat(destination[offset..], out int written, format, provider))
+        {
+            return false;
+        }
+
+        offset += written;
+        return true;
     }
 }
 
