@@ -697,6 +697,13 @@ public struct Vec2 :
     public static bool Equals(Vec2 left, Vec2 right, float tolerance = DefaultTolerance) =>
         left.Equals(right, tolerance);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Vec2 other, Tolerance tolerance) => Equals(other, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool Equals(Vec2 left, Vec2 right, Tolerance tolerance) =>
+        left.Equals(right, tolerance.Value);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool BitEquals(Vec2 other) =>
         BitConverter.SingleToUInt32Bits(X) == BitConverter.SingleToUInt32Bits(other.X) &&
@@ -788,6 +795,37 @@ public struct Vec2 :
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool TryNormalize(Vec2 value, out Vec2 result, Tolerance tolerance) =>
+        TryNormalize(value, out result, tolerance.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec2 ToUnit<TStrategy>(Vec2 value)
+        where TStrategy : struct, INormalizationStrategy
+    {
+        Vec2 normalized = Normalize<TStrategy>(value);
+        return new UnitVec2(normalized.X, normalized.Y);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static UnitVec2 ToUnit(Vec2 value) => ToUnit<StrictIeeeStrategy>(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static NormalizationResult2D TryNormalizeUnit(Vec2 value, Tolerance tolerance = default)
+    {
+        if (TryNormalize(value, out Vec2 result, tolerance.Value))
+        {
+            return new NormalizationResult2D(new UnitVec2(result.X, result.Y));
+        }
+
+        if (value.IsAnyNaN || value.IsAnyInfinity)
+        {
+            return new NormalizationResult2D(NormalizationStatus.NonFinite);
+        }
+
+        return new NormalizationResult2D(NormalizationStatus.DegenerateZero);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec2 Reflect(Vec2 vector, Vec2 normal)
     {
@@ -809,6 +847,31 @@ public struct Vec2 :
         float scale = Dot(vector, onNormal) / sqrMag;
         return onNormal * scale;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 Reflect(Vec2 vector, UnitVec2 normal)
+    {
+        float dot2 = Dot(vector, normal) * 2.0f;
+        return new Vec2(
+            vector.X - (normal.X * dot2),
+            vector.Y - (normal.Y * dot2)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 Project(Vec2 vector, UnitVec2 onNormal)
+    {
+        float scale = Dot(vector, onNormal);
+        return (Vec2)onNormal * scale;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 ProjectOnLine(Vec2 vector, Vec2 lineNormal) =>
+        vector - Project(vector, lineNormal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 ProjectOnLine(Vec2 vector, UnitVec2 lineNormal) =>
+        vector - Project(vector, lineNormal);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec2 Slide(Vec2 vector, Vec2 normal)
@@ -846,6 +909,19 @@ public struct Vec2 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vec2 Rotate(float angleRadians) => Rotate(this, angleRadians);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 Rotate(Vec2 vector, AngleRadians angle) => Rotate(vector, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec2 Rotate(AngleRadians angle) => Rotate(this, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 RotateAround(Vec2 vector, Vec2 pivot, AngleRadians angle) =>
+        RotateAround(vector, pivot, angle.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Vec2 RotateAround(Vec2 pivot, AngleRadians angle) => RotateAround(this, pivot, angle.Value);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec2 RotateAround(Vec2 vector, Vec2 pivot, float angleRadians) =>
         Rotate(vector - pivot, angleRadians) + pivot;
@@ -879,6 +955,12 @@ public struct Vec2 :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float SignedAngle(Vec2 from, Vec2 to) =>
         MathF.Atan2(Cross(from, to), Dot(from, to));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians AngleBetween(Vec2 from, Vec2 to) => new(Angle(from, to));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static AngleRadians SignedAngleBetween(Vec2 from, Vec2 to) => new(SignedAngle(from, to));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec2 Clamp(Vec2 value, Vec2 min, Vec2 max)
@@ -1492,5 +1574,51 @@ public struct Vec2 :
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static bool IsWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 TransformCustom<TTransformer, TState>(Vec2 value, scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer2D<TState>
+        where TState : allows ref struct =>
+        TTransformer.Transform(value, ref state);
+}
+
+public static class VectorBatchProcessor2D
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void Transform<TTransformer, TState>(
+        ReadOnlySpan<Vec2> source,
+        Span<Vec2> destination,
+        scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer2D<TState>
+        where TState : allows ref struct
+    {
+        if (destination.Length < source.Length)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span must be at least as long as source span.");
+        }
+
+        ref Vec2 srcRef = ref MemoryMarshal.GetReference(source);
+        ref Vec2 dstRef = ref MemoryMarshal.GetReference(destination);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            Unsafe.Add(ref dstRef, i) = TTransformer.Transform(Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void ForEach<TAction, TState>(
+        ReadOnlySpan<Vec2> source,
+        scoped ref TState state)
+        where TAction : struct, IVectorAction2D<TState>
+        where TState : allows ref struct
+    {
+        ref Vec2 srcRef = ref MemoryMarshal.GetReference(source);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            TAction.Invoke(ref Unsafe.Add(ref srcRef, i), ref state);
+        }
     }
 }
