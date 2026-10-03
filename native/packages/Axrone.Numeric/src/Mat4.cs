@@ -212,6 +212,7 @@ public struct Mat4 :
     IAdditiveIdentity<Mat4, Mat4>,
     IMultiplicativeIdentity<Mat4, Mat4>,
     IReadOnlyMatrix4x4<Mat4>,
+    IAffineTransformable4x4<Mat4>,
     IMatrixStorage4x4<Mat4>
 {
     public const float MachineEpsilon = 1.1920929E-07F;
@@ -873,5 +874,325 @@ public struct Mat4 :
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static bool Invert(Mat4 matrix, out Mat4 result) => matrix.Invert(out result);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateTranslation(Vec3 position) =>
+        new(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            position.X, position.Y, position.Z, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateTranslation(float x, float y, float z) =>
+        new(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            x, y, z, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateScale(Vec3 scales) =>
+        new(
+            scales.X, 0.0f, 0.0f, 0.0f,
+            0.0f, scales.Y, 0.0f, 0.0f,
+            0.0f, 0.0f, scales.Z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateScale(float scale) => CreateScale(new Vec3(scale));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateScale(float xScale, float yScale, float zScale) =>
+        CreateScale(new Vec3(xScale, yScale, zScale));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationX(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat4(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, cos, sin, 0.0f,
+            0.0f, -sin, cos, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationX(float angleRadians) => CreateRotationX(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationY(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat4(
+            cos, 0.0f, -sin, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            sin, 0.0f, cos, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationY(float angleRadians) => CreateRotationY(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationZ(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat4(
+            cos, sin, 0.0f, 0.0f,
+            -sin, cos, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateRotationZ(float angleRadians) => CreateRotationZ(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateFromAxisAngle(UnitAxis3 axis, AngleRadians angle)
+    {
+        float x = axis.X, y = axis.Y, z = axis.Z;
+        (float sa, float ca) = MathF.SinCos(angle.Value);
+        float xx = x * x, yy = y * y, zz = z * z;
+        float xy = x * y, xz = x * z, yz = y * z;
+
+        return new Mat4(
+            xx + (ca * (1.0f - xx)),
+            (xy - (ca * xy)) + (sa * z),
+            (xz - (ca * xz)) - (sa * y),
+            0.0f,
+            (xy - (ca * xy)) - (sa * z),
+            yy + (ca * (1.0f - yy)),
+            (yz - (ca * yz)) + (sa * x),
+            0.0f,
+            (xz - (ca * xz)) + (sa * y),
+            (yz - (ca * yz)) - (sa * x),
+            zz + (ca * (1.0f - zz)),
+            0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateFromAxisAngle(Vec3 axis, float angleRadians) =>
+        CreateFromAxisAngle(UnitAxis3.Create(axis), new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateFromQuaternion(Quat rotation)
+    {
+        float xx = rotation.X * rotation.X;
+        float yy = rotation.Y * rotation.Y;
+        float zz = rotation.Z * rotation.Z;
+        float xy = rotation.X * rotation.Y;
+        float wz = rotation.Z * rotation.W;
+        float xz = rotation.Z * rotation.X;
+        float wy = rotation.Y * rotation.W;
+        float yz = rotation.Y * rotation.Z;
+        float wx = rotation.X * rotation.W;
+
+        return new Mat4(
+            1.0f - (2.0f * (yy + zz)), 2.0f * (xy + wz), 2.0f * (xz - wy), 0.0f,
+            2.0f * (xy - wz), 1.0f - (2.0f * (zz + xx)), 2.0f * (yz + wx), 0.0f,
+            2.0f * (xz + wy), 2.0f * (yz - wx), 1.0f - (2.0f * (yy + xx)), 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateFromYawPitchRoll(AngleRadians yaw, AngleRadians pitch, AngleRadians roll) =>
+        CreateFromQuaternion(Quat.CreateFromYawPitchRoll(yaw, pitch, roll));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateFromYawPitchRoll(float yaw, float pitch, float roll) =>
+        CreateFromYawPitchRoll(new AngleRadians(yaw), new AngleRadians(pitch), new AngleRadians(roll));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreatePerspectiveFieldOfView<TPolicy>(AngleRadians fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance)
+        where TPolicy : struct, IProjectionPolicy =>
+        TPolicy.CreatePerspective(fieldOfView, aspectRatio, nearPlaneDistance, farPlaneDistance);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance, float farPlaneDistance) =>
+        CreatePerspectiveFieldOfView<RightHandedZeroToOne>(new AngleRadians(fieldOfView), aspectRatio, nearPlaneDistance, farPlaneDistance);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateOrthographic<TPolicy>(float width, float height, float zNearPlane, float zFarPlane)
+        where TPolicy : struct, IProjectionPolicy =>
+        TPolicy.CreateOrthographic(width, height, zNearPlane, zFarPlane);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateOrthographic(float width, float height, float zNearPlane, float zFarPlane) =>
+        CreateOrthographic<RightHandedZeroToOne>(width, height, zNearPlane, zFarPlane);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateLookAt(Vec3 cameraPosition, Vec3 cameraTarget, Vec3 cameraUpVector)
+    {
+        Vec3 zaxis = Vec3.Normalize(cameraPosition - cameraTarget);
+        Vec3 xaxis = Vec3.Normalize(Vec3.Cross(cameraUpVector, zaxis));
+        Vec3 yaxis = Vec3.Cross(zaxis, xaxis);
+
+        return new Mat4(
+            xaxis.X, yaxis.X, zaxis.X, 0.0f,
+            xaxis.Y, yaxis.Y, zaxis.Y, 0.0f,
+            xaxis.Z, yaxis.Z, zaxis.Z, 0.0f,
+            -Vec3.Dot(xaxis, cameraPosition), -Vec3.Dot(yaxis, cameraPosition), -Vec3.Dot(zaxis, cameraPosition), 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateWorld(Vec3 position, Vec3 forward, Vec3 up)
+    {
+        Vec3 zaxis = Vec3.Normalize(-forward);
+        Vec3 xaxis = Vec3.Normalize(Vec3.Cross(up, zaxis));
+        Vec3 yaxis = Vec3.Cross(zaxis, xaxis);
+
+        return new Mat4(
+            xaxis.X, xaxis.Y, xaxis.Z, 0.0f,
+            yaxis.X, yaxis.Y, yaxis.Z, 0.0f,
+            zaxis.X, zaxis.Y, zaxis.Z, 0.0f,
+            position.X, position.Y, position.Z, 1.0f
+        );
+    }
+
     // __NEXT__
+}
+
+public interface IProjectionPolicy
+{
+    static abstract Mat4 CreatePerspective(AngleRadians fieldOfViewY, float aspectRatio, float nearPlane, float farPlane);
+    static abstract Mat4 CreateOrthographic(float width, float height, float nearPlane, float farPlane);
+}
+
+public readonly struct RightHandedZeroToOne : IProjectionPolicy
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreatePerspective(AngleRadians fieldOfViewY, float aspectRatio, float nearPlane, float farPlane)
+    {
+        if (fieldOfViewY.Value <= 0.0f || fieldOfViewY.Value >= MathF.PI)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(fieldOfViewY), "Field of view must be in range (0, PI).");
+        }
+        if (nearPlane <= 0.0f)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(nearPlane), "Near plane must be positive.");
+        }
+        if (farPlane <= 0.0f || nearPlane >= farPlane)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(farPlane), "Far plane must be greater than near plane.");
+        }
+
+        float yScale = 1.0f / MathF.Tan(fieldOfViewY.Value * 0.5f);
+        float xScale = yScale / aspectRatio;
+        float negFarRange = float.IsPositiveInfinity(farPlane) ? -1.0f : farPlane / (nearPlane - farPlane);
+
+        return new Mat4(
+            xScale, 0.0f, 0.0f, 0.0f,
+            0.0f, yScale, 0.0f, 0.0f,
+            0.0f, 0.0f, negFarRange, -1.0f,
+            0.0f, 0.0f, nearPlane * negFarRange, 0.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateOrthographic(float width, float height, float nearPlane, float farPlane)
+    {
+        float range = nearPlane - farPlane;
+        return new Mat4(
+            2.0f / width, 0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f / height, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f / range, 0.0f,
+            0.0f, 0.0f, nearPlane / range, 1.0f
+        );
+    }
+}
+
+public readonly struct RightHandedNegOneToOne : IProjectionPolicy
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreatePerspective(AngleRadians fieldOfViewY, float aspectRatio, float nearPlane, float farPlane)
+    {
+        if (fieldOfViewY.Value <= 0.0f || fieldOfViewY.Value >= MathF.PI)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(fieldOfViewY), "Field of view must be in range (0, PI).");
+        }
+        if (nearPlane <= 0.0f)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(nearPlane), "Near plane must be positive.");
+        }
+        if (farPlane <= 0.0f || nearPlane >= farPlane)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(farPlane), "Far plane must be greater than near plane.");
+        }
+
+        float yScale = 1.0f / MathF.Tan(fieldOfViewY.Value * 0.5f);
+        float xScale = yScale / aspectRatio;
+        float range = nearPlane - farPlane;
+
+        return new Mat4(
+            xScale, 0.0f, 0.0f, 0.0f,
+            0.0f, yScale, 0.0f, 0.0f,
+            0.0f, 0.0f, (farPlane + nearPlane) / range, -1.0f,
+            0.0f, 0.0f, (2.0f * farPlane * nearPlane) / range, 0.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateOrthographic(float width, float height, float nearPlane, float farPlane)
+    {
+        float range = nearPlane - farPlane;
+        return new Mat4(
+            2.0f / width, 0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f / height, 0.0f, 0.0f,
+            0.0f, 0.0f, 2.0f / range, 0.0f,
+            0.0f, 0.0f, (farPlane + nearPlane) / range, 1.0f
+        );
+    }
+}
+
+public readonly struct LeftHandedZeroToOne : IProjectionPolicy
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreatePerspective(AngleRadians fieldOfViewY, float aspectRatio, float nearPlane, float farPlane)
+    {
+        if (fieldOfViewY.Value <= 0.0f || fieldOfViewY.Value >= MathF.PI)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(fieldOfViewY), "Field of view must be in range (0, PI).");
+        }
+        if (nearPlane <= 0.0f)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(nearPlane), "Near plane must be positive.");
+        }
+        if (farPlane <= 0.0f || nearPlane >= farPlane)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(farPlane), "Far plane must be greater than near plane.");
+        }
+
+        float yScale = 1.0f / MathF.Tan(fieldOfViewY.Value * 0.5f);
+        float xScale = yScale / aspectRatio;
+        float range = farPlane - nearPlane;
+
+        return new Mat4(
+            xScale, 0.0f, 0.0f, 0.0f,
+            0.0f, yScale, 0.0f, 0.0f,
+            0.0f, 0.0f, farPlane / range, 1.0f,
+            0.0f, 0.0f, -nearPlane * farPlane / range, 0.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 CreateOrthographic(float width, float height, float nearPlane, float farPlane)
+    {
+        float range = farPlane - nearPlane;
+        return new Mat4(
+            2.0f / width, 0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f / height, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f / range, 0.0f,
+            0.0f, 0.0f, -nearPlane / range, 1.0f
+        );
+    }
 }
