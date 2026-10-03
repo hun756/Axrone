@@ -356,6 +356,174 @@ public struct Quat :
         w = W;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Span<float> AsSpan() => MemoryMarshal.CreateSpan(ref Unsafe.AsRef(in X), 4);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly ReadOnlySpan<float> AsReadOnlySpan() => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in X), 4);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(Span<float> destination)
+    {
+        if (destination.Length < 4)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span is shorter than 4 elements.");
+        }
+        destination[0] = X;
+        destination[1] = Y;
+        destination[2] = Z;
+        destination[3] = W;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 16)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least sixteen bytes.");
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(Span<Quat> destination)
+    {
+        if (destination.IsEmpty)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination must hold at least one quaternion.");
+        }
+
+        destination[0] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(float[] destination) => CopyTo(destination, 0);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(float[] destination, int index)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        if (index < 0 || index > destination.Length)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+        if (destination.Length - index < 4)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination array does not have enough capacity.");
+        }
+        destination[index] = X;
+        destination[index + 1] = Y;
+        destination[index + 2] = Z;
+        destination[index + 3] = W;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void CopyTo(Quat[] destination, int index)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        if ((uint)index >= (uint)destination.Length)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(index));
+        }
+
+        destination[index] = this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly bool TryCopyTo(Span<float> destination)
+    {
+        if (destination.Length >= 4)
+        {
+            destination[0] = X;
+            destination[1] = Y;
+            destination[2] = Z;
+            destination[3] = W;
+            return true;
+        }
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly bool TryCopyTo(Span<byte> destination)
+    {
+        if (destination.Length < 16)
+        {
+            return false;
+        }
+
+        Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), this);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Create(float x, float y, float z, float w) => new(x, y, z, w);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Create(ReadOnlySpan<float> values) => new(values);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat Load(ReadOnlySpan<float> source)
+    {
+        if (source.Length < 4)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(source));
+        }
+
+        return new Quat(source[0], source[1], source[2], source[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadAligned(ref readonly float source)
+    {
+        Vector128<float> wide = Vector128.LoadAligned((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return FromVector128(wide);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadAlignedNonTemporal(ref readonly float source)
+    {
+        Vector128<float> wide = Vector128.LoadAlignedNonTemporal((float*)Unsafe.AsPointer(ref Unsafe.AsRef(in source)));
+        return FromVector128(wide);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadUnsafe(void* source)
+    {
+        float* components = (float*)source;
+        return new Quat(components[0], components[1], components[2], components[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadUnsafe(void* source, int offset)
+    {
+        if (offset < 0)
+        {
+            NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(offset));
+        }
+
+        float* components = (float*)source + offset;
+        return new Quat(components[0], components[1], components[2], components[3]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat Load(float* source) => new(source[0], source[1], source[2], source[3]);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadAligned(float* source) => FromVector128(Vector128.LoadAligned(source));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe Quat LoadAlignedNonTemporal(float* source) => FromVector128(Vector128.LoadAlignedNonTemporal(source));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat LoadUnsafe(ref readonly float source) =>
+        new(source, Unsafe.Add(ref Unsafe.AsRef(in source), 1), Unsafe.Add(ref Unsafe.AsRef(in source), 2), Unsafe.Add(ref Unsafe.AsRef(in source), 3));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quat LoadUnsafe(ref readonly float source, nuint elementOffset) =>
+        LoadUnsafe(ref Unsafe.Add(ref Unsafe.AsRef(in source), elementOffset));
+
 
     public static Quat AdditiveIdentity => Zero;
 
@@ -396,6 +564,25 @@ public struct Quat :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Quat FromSystemNumerics(System.Numerics.Quaternion value) => (Quat)value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void Inspect<TVisitor, TState>(ref TState state)
+        where TVisitor : struct, IQuatVisitor<TState>
+        where TState : allows ref struct
+    {
+        TVisitor.Visit(ref state, X, 0);
+        TVisitor.Visit(ref state, Y, 1);
+        TVisitor.Visit(ref state, Z, 2);
+        TVisitor.Visit(ref state, W, 3);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void Project<TConsumer, TContext>(ref TContext context)
+        where TConsumer : struct, IQuatSpanConsumer<TContext>
+        where TContext : allows ref struct
+    {
+        TConsumer.Consume(AsReadOnlySpan(), ref context);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator Vec4(Quat q) => new(q.X, q.Y, q.Z, q.W);
@@ -946,6 +1133,17 @@ public struct Quat :
         );
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static int CountWhereAllBitsSet(Quat value)
+    {
+        int count = 0;
+        if (BitConverter.SingleToUInt32Bits(value.X) == 0xFFFF_FFFF) count++;
+        if (BitConverter.SingleToUInt32Bits(value.Y) == 0xFFFF_FFFF) count++;
+        if (BitConverter.SingleToUInt32Bits(value.Z) == 0xFFFF_FFFF) count++;
+        if (BitConverter.SingleToUInt32Bits(value.W) == 0xFFFF_FFFF) count++;
+        return count;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool Equals(Quat other) => this == other;
 
@@ -1223,5 +1421,83 @@ public struct Quat :
 
         offset += written;
         return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public QuatComponentEnumerator GetEnumerator() => new(in this);
+}
+
+public ref struct QuatComponentEnumerator
+{
+    private readonly Quat _quat;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal QuatComponentEnumerator(scoped ref readonly Quat quat)
+    {
+        _quat = quat;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool MoveNext()
+    {
+        int next = _index + 1;
+        if (next < 4)
+        {
+            _index = next;
+            return true;
+        }
+        return false;
+    }
+
+    public readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _quat[(nuint)(uint)_index];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Reset() => _index = -1;
+}
+
+public static class VectorBatchProcessor4
+{
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void Transform<TTransformer, TState>(
+        ReadOnlySpan<Quat> source,
+        Span<Vec4> destination,
+        scoped ref TState state)
+        where TTransformer : struct, IVectorTransformer4<TState>
+        where TState : allows ref struct
+    {
+        if (destination.Length < source.Length)
+        {
+            NumericThrowHelper.ThrowArgumentException(nameof(destination), "Destination span must be at least as long as source span.");
+        }
+
+        ref Quat srcRef = ref MemoryMarshal.GetReference(source);
+        ref Vec4 dstRef = ref MemoryMarshal.GetReference(destination);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            Unsafe.Add(ref dstRef, i) = TTransformer.Transform((Vec4)Unsafe.Add(ref srcRef, i), ref state);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void ForEach<TAction, TState>(
+        ReadOnlySpan<Quat> source,
+        scoped ref TState state)
+        where TAction : struct, IVectorAction4<TState>
+        where TState : allows ref struct
+    {
+        ref Quat srcRef = ref MemoryMarshal.GetReference(source);
+
+        for (nint i = 0; i < (nint)source.Length; i++)
+        {
+            Vec4 v = (Vec4)Unsafe.Add(ref srcRef, i);
+            TAction.Invoke(in v, ref state);
+        }
     }
 }
