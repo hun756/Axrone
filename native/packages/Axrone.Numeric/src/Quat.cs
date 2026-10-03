@@ -168,6 +168,7 @@ public readonly struct NormalizationOutcome : IEquatable<NormalizationOutcome>
 
     public NormalizationOutcomeTag Tag => _tag;
     public bool IsNormalized => _tag == NormalizationOutcomeTag.Normalized;
+    public bool IsSuccess => _tag == NormalizationOutcomeTag.Normalized;
     public Quat Value => _value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
