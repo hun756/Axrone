@@ -149,6 +149,12 @@ public static class SimdRuntime
         get => IsSupported(SimdFeature.Vector512HardwareAccelerated);
     }
 
+    internal static bool UseFmaPath
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => IsSupported(SimdFeature.Fma);
+    }
+
     /// <summary>Point-in-time counter snapshot.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SimdTelemetrySnapshot GetTelemetrySnapshot() => Telemetry.CreateSnapshot();
