@@ -328,6 +328,7 @@ internal static class Arm64Prober
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static FeatureBitmask256 Probe()
     {
+        ulong p0 = 0;
         ulong p1 = 0;
 
         if (ArmBase.IsSupported)
@@ -336,6 +337,7 @@ internal static class Arm64Prober
             if (AdvSimd.IsSupported)
             {
                 p1 |= 1UL << ((byte)SimdFeature.AdvSimd - 64);
+                p0 |= 1UL << (byte)SimdFeature.Fma;
             }
 
             if (System.Runtime.Intrinsics.Arm.Aes.IsSupported)
@@ -408,7 +410,7 @@ internal static class Arm64Prober
             }
         }
 
-        return new FeatureBitmask256(0UL, p1, 0UL, 0UL);
+        return new FeatureBitmask256(p0, p1, 0UL, 0UL);
     }
 }
 
