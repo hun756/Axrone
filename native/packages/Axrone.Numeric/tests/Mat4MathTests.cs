@@ -60,6 +60,27 @@ public class Mat4MathTests
     }
 
     [Fact]
+    public void Multiply_OutParameter_MatchesOperator_BitExact()
+    {
+        var cases = new (Mat4 Left, Mat4 Right)[]
+        {
+            (Mat4.Identity, Mat4.Identity),
+            (Mat4.Zero, Mat4.Identity),
+            (Mat4.CreateScale(new Vec3(2f, 3f, 4f)), Mat4.CreateTranslation(new Vec3(5f, 6f, 7f))),
+            (
+                new Mat4(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f),
+                new Mat4(16f, 15f, 14f, 13f, 12f, 11f, 10f, 9f, 8f, 7f, 6f, 5f, 4f, 3f, 2f, 1f)
+            ),
+        };
+
+        foreach (var (left, right) in cases)
+        {
+            Mat4.Multiply(in left, in right, out Mat4 product);
+            product.Should().Be(left * right);
+        }
+    }
+
+    [Fact]
     public void Transpose_IsInvolution_AndMatchesScalarPath()
     {
         var m = new Mat4(
