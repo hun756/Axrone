@@ -712,9 +712,19 @@ public struct Mat4 :
             Vector128<float> row2 = Vector128.LoadUnsafe(ref mRef, 8);
             Vector128<float> row3 = Vector128.LoadUnsafe(ref mRef, 12);
 
-            Vector128<float> res = Vector128.FusedMultiplyAdd(Vector128.Create(vector.X), row0,
-                Vector128.FusedMultiplyAdd(Vector128.Create(vector.Y), row1,
-                Vector128.FusedMultiplyAdd(Vector128.Create(vector.Z), row2, Vector128.Create(vector.W) * row3)));
+            Vector128<float> res;
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            {
+                res = Vector128.FusedMultiplyAdd(Vector128.Create(vector.X), row0,
+                    Vector128.FusedMultiplyAdd(Vector128.Create(vector.Y), row1,
+                    Vector128.FusedMultiplyAdd(Vector128.Create(vector.Z), row2, Vector128.Create(vector.W) * row3)));
+            }
+            else
+            {
+                res = Vector128.Add(Vector128.Multiply(Vector128.Create(vector.X), row0),
+                    Vector128.Add(Vector128.Multiply(Vector128.Create(vector.Y), row1),
+                    Vector128.Add(Vector128.Multiply(Vector128.Create(vector.Z), row2), Vector128.Multiply(Vector128.Create(vector.W), row3))));
+            }
 
             Unsafe.SkipInit(out Vec4 result);
             res.StoreUnsafe(ref result.X);
@@ -1161,7 +1171,7 @@ public struct Mat4 :
         ref float bRef = ref Unsafe.AsRef(in b.M11);
         ref float dst = ref result.M11;
 
-        if (Vector256.IsHardwareAccelerated)
+        if (Vector256.IsHardwareAccelerated && System.Runtime.Intrinsics.X86.Fma.IsSupported)
         {
             Vector256<float> amt256 = Vector256.Create(amount);
             Vector256<float> a0 = Vector256.LoadUnsafe(ref aRef, 0);
@@ -1177,11 +1187,23 @@ public struct Mat4 :
         if (Vector128.IsHardwareAccelerated)
         {
             Vector128<float> amt128 = Vector128.Create(amount);
-            for (nuint i = 0; i < 16; i += 4)
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
             {
-                Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
-                Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
-                Vector128.FusedMultiplyAdd(bv - av, amt128, av).StoreUnsafe(ref dst, i);
+                for (nuint i = 0; i < 16; i += 4)
+                {
+                    Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
+                    Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
+                    Vector128.FusedMultiplyAdd(bv - av, amt128, av).StoreUnsafe(ref dst, i);
+                }
+            }
+            else
+            {
+                for (nuint i = 0; i < 16; i += 4)
+                {
+                    Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
+                    Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
+                    Vector128.Add(Vector128.Multiply(bv - av, amt128), av).StoreUnsafe(ref dst, i);
+                }
             }
             return result;
         }
