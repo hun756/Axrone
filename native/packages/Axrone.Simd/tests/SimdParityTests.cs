@@ -1,5 +1,7 @@
 namespace Axrone.Simd.Tests;
 
+using System.Runtime.Intrinsics;
+
 [Collection("SimdRuntime")]
 public class SimdParityTests
 {
@@ -133,6 +135,30 @@ public class SimdParityTests
         }
 
         fused.Should().NotEqual(plain);
+    }
+
+    [Fact]
+    public void SimdRow32_FusedTierMatchesScalarTier()
+    {
+        var b0 = Vector128.Create(1f, 2f, 3f, 4f);
+        var b1 = Vector128.Create(5f, 6f, 7f, 8f);
+        var b2 = Vector128.Create(9f, 10f, 11f, 12f);
+        var b3 = Vector128.Create(13f, 14f, 15f, 16f);
+
+        Vector128<float> fused;
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: true)))
+        {
+            fused = SimdRow32.MultiplyAddRowFused(0.5f, -1.25f, 2f, 0.1f, b0, b1, b2, b3);
+        }
+
+        Vector128<float> plain;
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: false)))
+        {
+            plain = SimdRow32.MultiplyAddRowPlain(0.5f, -1.25f, 2f, 0.1f, b0, b1, b2, b3);
+        }
+
+        for (int i = 0; i < 4; i++)
+            fused.GetElement(i).Should().BeApproximately(plain.GetElement(i), 1e-5f);
     }
 
     [Fact]
