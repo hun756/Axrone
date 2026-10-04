@@ -38,7 +38,10 @@
     <InternalsVisibleTo Include="Axrone.Numeric.Tests" />
   </ItemGroup>
 
-  <!-- No ProjectReference on purpose: the vec3 core is dependency-free by contract. -->
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Simd/Axrone.Simd.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />

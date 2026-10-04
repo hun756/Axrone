@@ -1,6 +1,7 @@
 namespace Axrone.Numeric;
 
 using System.Buffers;
+using Axrone.Simd;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly record struct RowIndex : IEquatable<RowIndex>, IComparable<RowIndex>
@@ -577,100 +578,29 @@ public struct Mat4 :
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void Multiply(in Mat4 left, in Mat4 right, out Mat4 result)
     {
-        if (Vector128.IsHardwareAccelerated)
+        ref float bRef = ref Unsafe.AsRef(in right.M11);
+        Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
+        Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
+        Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
+        Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
+
+        Unsafe.SkipInit(out result);
+        ref float resRef = ref Unsafe.AsRef(in result.M11);
+
+        if (SimdRow32.IsFusedMultiplyAddSupported)
         {
-            // Vector128.FusedMultiplyAdd lowers to Fma on x64 and to AdvSimd.Arm64 (fmla) on ARM64,
-            // so the fused tree is valid on both ISAs; the guard just has to admit both.
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
-            {
-                MultiplyFused(in left, in right, out result);
-                return;
-            }
-            MultiplySimd(in left, in right, out result);
+            SimdRow32.MultiplyAddRowFused(left.M11, left.M12, left.M13, left.M14, b0, b1, b2, b3).StoreUnsafe(ref resRef, 0);
+            SimdRow32.MultiplyAddRowFused(left.M21, left.M22, left.M23, left.M24, b0, b1, b2, b3).StoreUnsafe(ref resRef, 4);
+            SimdRow32.MultiplyAddRowFused(left.M31, left.M32, left.M33, left.M34, b0, b1, b2, b3).StoreUnsafe(ref resRef, 8);
+            SimdRow32.MultiplyAddRowFused(left.M41, left.M42, left.M43, left.M44, b0, b1, b2, b3).StoreUnsafe(ref resRef, 12);
             return;
         }
 
-        MultiplyScalar(in left, in right, out result);
+        SimdRow32.MultiplyAddRowPlain(left.M11, left.M12, left.M13, left.M14, b0, b1, b2, b3).StoreUnsafe(ref resRef, 0);
+        SimdRow32.MultiplyAddRowPlain(left.M21, left.M22, left.M23, left.M24, b0, b1, b2, b3).StoreUnsafe(ref resRef, 4);
+        SimdRow32.MultiplyAddRowPlain(left.M31, left.M32, left.M33, left.M34, b0, b1, b2, b3).StoreUnsafe(ref resRef, 8);
+        SimdRow32.MultiplyAddRowPlain(left.M41, left.M42, left.M43, left.M44, b0, b1, b2, b3).StoreUnsafe(ref resRef, 12);
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    internal static void MultiplyFused(in Mat4 a, in Mat4 b, out Mat4 result)
-    {
-        ref float bRef = ref Unsafe.AsRef(in b.M11);
-        Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
-        Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
-        Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
-        Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
-
-        Unsafe.SkipInit(out result);
-        ref float resRef = ref Unsafe.AsRef(in result.M11);
-
-        Vector128.FusedMultiplyAdd(Vector128.Create(a.M11), b0,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M12), b1,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M13), b2, Vector128.Create(a.M14) * b3))).StoreUnsafe(ref resRef, 0);
-
-        Vector128.FusedMultiplyAdd(Vector128.Create(a.M21), b0,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M22), b1,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M23), b2, Vector128.Create(a.M24) * b3))).StoreUnsafe(ref resRef, 4);
-
-        Vector128.FusedMultiplyAdd(Vector128.Create(a.M31), b0,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M32), b1,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M33), b2, Vector128.Create(a.M34) * b3))).StoreUnsafe(ref resRef, 8);
-
-        Vector128.FusedMultiplyAdd(Vector128.Create(a.M41), b0,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M42), b1,
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M43), b2, Vector128.Create(a.M44) * b3))).StoreUnsafe(ref resRef, 12);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    internal static void MultiplySimd(in Mat4 a, in Mat4 b, out Mat4 result)
-    {
-        ref float bRef = ref Unsafe.AsRef(in b.M11);
-        Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
-        Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
-        Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
-        Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
-
-        Unsafe.SkipInit(out result);
-        ref float resRef = ref Unsafe.AsRef(in result.M11);
-
-        MultiplyAddRow(a.M11, a.M12, a.M13, a.M14, b0, b1, b2, b3).StoreUnsafe(ref resRef, 0);
-        MultiplyAddRow(a.M21, a.M22, a.M23, a.M24, b0, b1, b2, b3).StoreUnsafe(ref resRef, 4);
-        MultiplyAddRow(a.M31, a.M32, a.M33, a.M34, b0, b1, b2, b3).StoreUnsafe(ref resRef, 8);
-        MultiplyAddRow(a.M41, a.M42, a.M43, a.M44, b0, b1, b2, b3).StoreUnsafe(ref resRef, 12);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static Vector128<float> MultiplyAddRow(
-        float x, float y, float z, float w,
-        Vector128<float> b0, Vector128<float> b1, Vector128<float> b2, Vector128<float> b3) =>
-        Vector128.Add(Vector128.Multiply(Vector128.Create(x), b0),
-            Vector128.Add(Vector128.Multiply(Vector128.Create(y), b1),
-            Vector128.Add(Vector128.Multiply(Vector128.Create(z), b2), Vector128.Multiply(Vector128.Create(w), b3))));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    internal static void MultiplyScalar(in Mat4 a, in Mat4 b, out Mat4 result) =>
-        result = new Mat4(
-            a.M11 * b.M11 + a.M12 * b.M21 + a.M13 * b.M31 + a.M14 * b.M41,
-            a.M11 * b.M12 + a.M12 * b.M22 + a.M13 * b.M32 + a.M14 * b.M42,
-            a.M11 * b.M13 + a.M12 * b.M23 + a.M13 * b.M33 + a.M14 * b.M43,
-            a.M11 * b.M14 + a.M12 * b.M24 + a.M13 * b.M34 + a.M14 * b.M44,
-
-            a.M21 * b.M11 + a.M22 * b.M21 + a.M23 * b.M31 + a.M24 * b.M41,
-            a.M21 * b.M12 + a.M22 * b.M22 + a.M23 * b.M32 + a.M24 * b.M42,
-            a.M21 * b.M13 + a.M22 * b.M23 + a.M23 * b.M33 + a.M24 * b.M43,
-            a.M21 * b.M14 + a.M22 * b.M24 + a.M23 * b.M34 + a.M24 * b.M44,
-
-            a.M31 * b.M11 + a.M32 * b.M21 + a.M33 * b.M31 + a.M34 * b.M41,
-            a.M31 * b.M12 + a.M32 * b.M22 + a.M33 * b.M32 + a.M34 * b.M42,
-            a.M31 * b.M13 + a.M32 * b.M23 + a.M33 * b.M33 + a.M34 * b.M43,
-            a.M31 * b.M14 + a.M32 * b.M24 + a.M33 * b.M34 + a.M34 * b.M44,
-
-            a.M41 * b.M11 + a.M42 * b.M21 + a.M43 * b.M31 + a.M44 * b.M41,
-            a.M41 * b.M12 + a.M42 * b.M22 + a.M43 * b.M32 + a.M44 * b.M42,
-            a.M41 * b.M13 + a.M42 * b.M23 + a.M43 * b.M33 + a.M44 * b.M43,
-            a.M41 * b.M14 + a.M42 * b.M24 + a.M43 * b.M34 + a.M44 * b.M44
-        );
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat4 operator *(Mat4 left, float scalar)
@@ -711,40 +641,19 @@ public struct Mat4 :
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Vec4 operator *(Mat4 matrix, Vec4 vector)
     {
-        if (Vector128.IsHardwareAccelerated)
-        {
-            ref float mRef = ref Unsafe.AsRef(in matrix.M11);
-            Vector128<float> row0 = Vector128.LoadUnsafe(ref mRef, 0);
-            Vector128<float> row1 = Vector128.LoadUnsafe(ref mRef, 4);
-            Vector128<float> row2 = Vector128.LoadUnsafe(ref mRef, 8);
-            Vector128<float> row3 = Vector128.LoadUnsafe(ref mRef, 12);
+        ref float mRef = ref Unsafe.AsRef(in matrix.M11);
+        Vector128<float> row0 = Vector128.LoadUnsafe(ref mRef, 0);
+        Vector128<float> row1 = Vector128.LoadUnsafe(ref mRef, 4);
+        Vector128<float> row2 = Vector128.LoadUnsafe(ref mRef, 8);
+        Vector128<float> row3 = Vector128.LoadUnsafe(ref mRef, 12);
 
-            Vector128<float> res;
-            // Same dual-ISA guard as Multiply: Vector128.FusedMultiplyAdd lowers to fmla on ARM64.
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
-            {
-                res = Vector128.FusedMultiplyAdd(Vector128.Create(vector.X), row0,
-                    Vector128.FusedMultiplyAdd(Vector128.Create(vector.Y), row1,
-                    Vector128.FusedMultiplyAdd(Vector128.Create(vector.Z), row2, Vector128.Create(vector.W) * row3)));
-            }
-            else
-            {
-                res = Vector128.Add(Vector128.Multiply(Vector128.Create(vector.X), row0),
-                    Vector128.Add(Vector128.Multiply(Vector128.Create(vector.Y), row1),
-                    Vector128.Add(Vector128.Multiply(Vector128.Create(vector.Z), row2), Vector128.Multiply(Vector128.Create(vector.W), row3))));
-            }
+        Vector128<float> res = SimdRow32.IsFusedMultiplyAddSupported
+            ? SimdRow32.MultiplyAddRowFused(vector.X, vector.Y, vector.Z, vector.W, row0, row1, row2, row3)
+            : SimdRow32.MultiplyAddRowPlain(vector.X, vector.Y, vector.Z, vector.W, row0, row1, row2, row3);
 
-            Unsafe.SkipInit(out Vec4 result);
-            res.StoreUnsafe(ref result.X);
-            return result;
-        }
-
-        return new Vec4(
-            MathF.FusedMultiplyAdd(vector.X, matrix.M11, MathF.FusedMultiplyAdd(vector.Y, matrix.M21, MathF.FusedMultiplyAdd(vector.Z, matrix.M31, vector.W * matrix.M41))),
-            MathF.FusedMultiplyAdd(vector.X, matrix.M12, MathF.FusedMultiplyAdd(vector.Y, matrix.M22, MathF.FusedMultiplyAdd(vector.Z, matrix.M32, vector.W * matrix.M42))),
-            MathF.FusedMultiplyAdd(vector.X, matrix.M13, MathF.FusedMultiplyAdd(vector.Y, matrix.M23, MathF.FusedMultiplyAdd(vector.Z, matrix.M33, vector.W * matrix.M43))),
-            MathF.FusedMultiplyAdd(vector.X, matrix.M14, MathF.FusedMultiplyAdd(vector.Y, matrix.M24, MathF.FusedMultiplyAdd(vector.Z, matrix.M34, vector.W * matrix.M44)))
-        );
+        Unsafe.SkipInit(out Vec4 result);
+        res.StoreUnsafe(ref result.X);
+        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -1179,7 +1088,7 @@ public struct Mat4 :
         ref float bRef = ref Unsafe.AsRef(in b.M11);
         ref float dst = ref result.M11;
 
-        if (Vector256.IsHardwareAccelerated && System.Runtime.Intrinsics.X86.Fma.IsSupported)
+        if (Vector256.IsHardwareAccelerated && SimdRow32.IsFusedMultiplyAddSupported)
         {
             Vector256<float> amt256 = Vector256.Create(amount);
             Vector256<float> a0 = Vector256.LoadUnsafe(ref aRef, 0);
@@ -1195,24 +1104,24 @@ public struct Mat4 :
         if (Vector128.IsHardwareAccelerated)
         {
             Vector128<float> amt128 = Vector128.Create(amount);
-            // ARM64 has no Vector256 hardware, so Lerp reaches this Vector128 branch;
-            // the fused form lowers to fmla there, hence the dual-ISA guard.
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
+            if (SimdRow32.IsFusedMultiplyAddSupported)
             {
                 for (nuint i = 0; i < 16; i += 4)
                 {
-                    Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
-                    Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
-                    Vector128.FusedMultiplyAdd(bv - av, amt128, av).StoreUnsafe(ref dst, i);
+                    SimdRow32.LerpRowFused(
+                        Vector128.LoadUnsafe(ref aRef, i),
+                        Vector128.LoadUnsafe(ref bRef, i),
+                        amt128).StoreUnsafe(ref dst, i);
                 }
             }
             else
             {
                 for (nuint i = 0; i < 16; i += 4)
                 {
-                    Vector128<float> av = Vector128.LoadUnsafe(ref aRef, i);
-                    Vector128<float> bv = Vector128.LoadUnsafe(ref bRef, i);
-                    Vector128.Add(Vector128.Multiply(bv - av, amt128), av).StoreUnsafe(ref dst, i);
+                    SimdRow32.LerpRowPlain(
+                        Vector128.LoadUnsafe(ref aRef, i),
+                        Vector128.LoadUnsafe(ref bRef, i),
+                        amt128).StoreUnsafe(ref dst, i);
                 }
             }
             return result;
