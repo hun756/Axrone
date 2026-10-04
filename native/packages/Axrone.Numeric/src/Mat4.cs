@@ -579,7 +579,9 @@ public struct Mat4 :
     {
         if (Vector128.IsHardwareAccelerated)
         {
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            // Vector128.FusedMultiplyAdd lowers to Fma on x64 and to AdvSimd.Arm64 (fmla) on ARM64,
+            // so the fused tree is valid on both ISAs; the guard just has to admit both.
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
             {
                 MultiplyFused(in left, in right, out result);
                 return;
@@ -718,7 +720,8 @@ public struct Mat4 :
             Vector128<float> row3 = Vector128.LoadUnsafe(ref mRef, 12);
 
             Vector128<float> res;
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            // Same dual-ISA guard as Multiply: Vector128.FusedMultiplyAdd lowers to fmla on ARM64.
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
             {
                 res = Vector128.FusedMultiplyAdd(Vector128.Create(vector.X), row0,
                     Vector128.FusedMultiplyAdd(Vector128.Create(vector.Y), row1,
@@ -1192,7 +1195,9 @@ public struct Mat4 :
         if (Vector128.IsHardwareAccelerated)
         {
             Vector128<float> amt128 = Vector128.Create(amount);
-            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            // ARM64 has no Vector256 hardware, so Lerp reaches this Vector128 branch;
+            // the fused form lowers to fmla there, hence the dual-ISA guard.
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported || System.Runtime.Intrinsics.Arm.AdvSimd.Arm64.IsSupported)
             {
                 for (nuint i = 0; i < 16; i += 4)
                 {
