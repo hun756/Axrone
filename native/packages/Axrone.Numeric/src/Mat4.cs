@@ -565,39 +565,85 @@ public struct Mat4 :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Mat4 operator *(Mat4 a, Mat4 b)
+    public static Mat4 operator *(Mat4 a, Mat4 b) => Multiply(in a, in b);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat4 Multiply(in Mat4 left, in Mat4 right)
     {
         if (Vector128.IsHardwareAccelerated)
         {
-            ref float bRef = ref Unsafe.AsRef(in b.M11);
-            Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
-            Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
-            Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
-            Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
-
-            Unsafe.SkipInit(out Mat4 res);
-            ref float resRef = ref res.M11;
-
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M11), b0,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M12), b1,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M13), b2, Vector128.Create(a.M14) * b3))).StoreUnsafe(ref resRef, 0);
-
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M21), b0,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M22), b1,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M23), b2, Vector128.Create(a.M24) * b3))).StoreUnsafe(ref resRef, 4);
-
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M31), b0,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M32), b1,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M33), b2, Vector128.Create(a.M34) * b3))).StoreUnsafe(ref resRef, 8);
-
-            Vector128.FusedMultiplyAdd(Vector128.Create(a.M41), b0,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M42), b1,
-                Vector128.FusedMultiplyAdd(Vector128.Create(a.M43), b2, Vector128.Create(a.M44) * b3))).StoreUnsafe(ref resRef, 12);
-
-            return res;
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            {
+                return MultiplyFused(in left, in right);
+            }
+            return MultiplySimd(in left, in right);
         }
 
-        return new Mat4(
+        return MultiplyScalar(in left, in right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static Mat4 MultiplyFused(in Mat4 a, in Mat4 b)
+    {
+        ref float bRef = ref Unsafe.AsRef(in b.M11);
+        Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
+        Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
+        Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
+        Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
+
+        Unsafe.SkipInit(out Mat4 res);
+        ref float resRef = ref res.M11;
+
+        Vector128.FusedMultiplyAdd(Vector128.Create(a.M11), b0,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M12), b1,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M13), b2, Vector128.Create(a.M14) * b3))).StoreUnsafe(ref resRef, 0);
+
+        Vector128.FusedMultiplyAdd(Vector128.Create(a.M21), b0,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M22), b1,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M23), b2, Vector128.Create(a.M24) * b3))).StoreUnsafe(ref resRef, 4);
+
+        Vector128.FusedMultiplyAdd(Vector128.Create(a.M31), b0,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M32), b1,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M33), b2, Vector128.Create(a.M34) * b3))).StoreUnsafe(ref resRef, 8);
+
+        Vector128.FusedMultiplyAdd(Vector128.Create(a.M41), b0,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M42), b1,
+            Vector128.FusedMultiplyAdd(Vector128.Create(a.M43), b2, Vector128.Create(a.M44) * b3))).StoreUnsafe(ref resRef, 12);
+
+        return res;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static Mat4 MultiplySimd(in Mat4 a, in Mat4 b)
+    {
+        ref float bRef = ref Unsafe.AsRef(in b.M11);
+        Vector128<float> b0 = Vector128.LoadUnsafe(ref bRef, 0);
+        Vector128<float> b1 = Vector128.LoadUnsafe(ref bRef, 4);
+        Vector128<float> b2 = Vector128.LoadUnsafe(ref bRef, 8);
+        Vector128<float> b3 = Vector128.LoadUnsafe(ref bRef, 12);
+
+        Unsafe.SkipInit(out Mat4 res);
+        ref float resRef = ref res.M11;
+
+        MultiplyAddRow(a.M11, a.M12, a.M13, a.M14, b0, b1, b2, b3).StoreUnsafe(ref resRef, 0);
+        MultiplyAddRow(a.M21, a.M22, a.M23, a.M24, b0, b1, b2, b3).StoreUnsafe(ref resRef, 4);
+        MultiplyAddRow(a.M31, a.M32, a.M33, a.M34, b0, b1, b2, b3).StoreUnsafe(ref resRef, 8);
+        MultiplyAddRow(a.M41, a.M42, a.M43, a.M44, b0, b1, b2, b3).StoreUnsafe(ref resRef, 12);
+
+        return res;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static Vector128<float> MultiplyAddRow(
+        float x, float y, float z, float w,
+        Vector128<float> b0, Vector128<float> b1, Vector128<float> b2, Vector128<float> b3) =>
+        Vector128.Add(Vector128.Multiply(Vector128.Create(x), b0),
+            Vector128.Add(Vector128.Multiply(Vector128.Create(y), b1),
+            Vector128.Add(Vector128.Multiply(Vector128.Create(z), b2), Vector128.Multiply(Vector128.Create(w), b3))));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static Mat4 MultiplyScalar(in Mat4 a, in Mat4 b) =>
+        new Mat4(
             a.M11 * b.M11 + a.M12 * b.M21 + a.M13 * b.M31 + a.M14 * b.M41,
             a.M11 * b.M12 + a.M12 * b.M22 + a.M13 * b.M32 + a.M14 * b.M42,
             a.M11 * b.M13 + a.M12 * b.M23 + a.M13 * b.M33 + a.M14 * b.M43,
@@ -618,7 +664,6 @@ public struct Mat4 :
             a.M41 * b.M13 + a.M42 * b.M23 + a.M43 * b.M33 + a.M44 * b.M43,
             a.M41 * b.M14 + a.M42 * b.M24 + a.M43 * b.M34 + a.M44 * b.M44
         );
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat4 operator *(Mat4 left, float scalar)
@@ -727,9 +772,6 @@ public struct Mat4 :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat4 Subtract(Mat4 left, Mat4 right) => left - right;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Mat4 Multiply(Mat4 left, Mat4 right) => left * right;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat4 Multiply(Mat4 left, float scalar) => left * scalar;
