@@ -1,6 +1,7 @@
 namespace Axrone.Numeric;
 
 using Axrone.Simd;
+using System.Buffers;
 
 public interface IReadOnlyMatrix3x3<TSelf>
     where TSelf : struct, IReadOnlyMatrix3x3<TSelf>
@@ -52,8 +53,16 @@ public struct Mat3 :
     IMultiplicativeIdentity<Mat3, Mat3>,
     IReadOnlyMatrix3x3<Mat3>,
     IAffineTransformable3x3<Mat3>,
-    IMatrixStorage3x3<Mat3>
+    IMatrixStorage3x3<Mat3>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Mat3>,
+    ISpanParsable<Mat3>,
+    IUtf8SpanParsable<Mat3>
 {
+    private static readonly SearchValues<char> Separators = SearchValues.Create(" ,;\t\r\n{}[]()");
+    private static readonly SearchValues<byte> SeparatorsUtf8 = SearchValues.Create(" ,;\t\r\n{}[]()"u8);
     public const float MachineEpsilon = 1.1920929E-07F;
 
     public const float DefaultTolerance = MachineEpsilon * 8F;
@@ -527,9 +536,9 @@ public struct Mat3 :
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Vec3 operator *(Mat3 matrix, Vec3 vector) =>
         new(
-            MathF.FusedMultiplyAdd(matrix.M11, vector.X, MathF.FusedMultiplyAdd(matrix.M12, vector.Y, matrix.M13 * vector.Z)),
-            MathF.FusedMultiplyAdd(matrix.M21, vector.X, MathF.FusedMultiplyAdd(matrix.M22, vector.Y, matrix.M23 * vector.Z)),
-            MathF.FusedMultiplyAdd(matrix.M31, vector.X, MathF.FusedMultiplyAdd(matrix.M32, vector.Y, matrix.M33 * vector.Z))
+            MathF.FusedMultiplyAdd(vector.X, matrix.M11, MathF.FusedMultiplyAdd(vector.Y, matrix.M21, vector.Z * matrix.M31)),
+            MathF.FusedMultiplyAdd(vector.X, matrix.M12, MathF.FusedMultiplyAdd(vector.Y, matrix.M22, vector.Z * matrix.M32)),
+            MathF.FusedMultiplyAdd(vector.X, matrix.M13, MathF.FusedMultiplyAdd(vector.Y, matrix.M23, vector.Z * matrix.M33))
         );
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -636,5 +645,450 @@ public struct Mat3 :
             hash.Add(Unsafe.Add(ref self, i));
         }
         return hash.ToHashCode();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateTranslation(Vec2 position) =>
+        new(
+            1.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            position.X, position.Y, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateTranslation(float x, float y) =>
+        new(
+            1.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            x, y, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationX(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat3(
+            1.0f, 0.0f, 0.0f,
+            0.0f, cos, sin,
+            0.0f, -sin, cos
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationX(float angleRadians) => CreateRotationX(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationY(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat3(
+            cos, 0.0f, -sin,
+            0.0f, 1.0f, 0.0f,
+            sin, 0.0f, cos
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationY(float angleRadians) => CreateRotationY(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationZ(AngleRadians angle)
+    {
+        (float sin, float cos) = MathF.SinCos(angle.Value);
+        return new Mat3(
+            cos, sin, 0.0f,
+            -sin, cos, 0.0f,
+            0.0f, 0.0f, 1.0f
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateRotationZ(float angleRadians) => CreateRotationZ(new AngleRadians(angleRadians));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateFromYawPitchRoll(AngleRadians yaw, AngleRadians pitch, AngleRadians roll) =>
+        CreateFromQuaternion(Quat.CreateFromYawPitchRoll(yaw, pitch, roll));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 CreateFromYawPitchRoll(float yaw, float pitch, float roll) =>
+        CreateFromYawPitchRoll(new AngleRadians(yaw), new AngleRadians(pitch), new AngleRadians(roll));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Mat4 ToMat4() =>
+        new(
+            M11, M12, M13, 0.0f,
+            M21, M22, M23, 0.0f,
+            M31, M32, M33, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 FromMat4(in Mat4 matrix) =>
+        new(
+            matrix.M11, matrix.M12, matrix.M13,
+            matrix.M21, matrix.M22, matrix.M23,
+            matrix.M31, matrix.M32, matrix.M33
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void Apply<TAction, TState>(ref TState state)
+        where TAction : struct, IMat3TransformAction<TState>
+        where TState : allows ref struct
+    {
+        TAction.Execute(in this, ref state);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat3ElementEnumerator GetEnumerator() => new(in this);
+
+    public Mat3RowEnumerable Rows
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public Mat3ColumnEnumerable Columns
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[320];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return new string(buffer.Slice(0, charsWritten));
+        }
+        return "{ ... }";
+    }
+
+    public readonly bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        Span<char> temp = stackalloc char[320];
+        int written = 0;
+
+        temp[written++] = '{';
+        temp[written++] = ' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 9; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = ' ';
+        temp[written++] = '}';
+
+        if (destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(destination);
+        charsWritten = written;
+        return true;
+    }
+
+    public readonly bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        Span<byte> temp = stackalloc byte[320];
+        int written = 0;
+
+        temp[written++] = (byte)'{';
+        temp[written++] = (byte)' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 9; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = (byte)' ';
+        temp[written++] = (byte)'}';
+
+        if (utf8Destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(utf8Destination);
+        bytesWritten = written;
+        return true;
+    }
+
+    public static Mat3 Parse(string s, IFormatProvider? provider)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan(), provider);
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Mat3 result)
+    {
+        if (s is null)
+        {
+            result = default;
+            return false;
+        }
+        return TryParse(s.AsSpan(), provider, out result);
+    }
+
+    public static Mat3 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
+    {
+        if (!TryParse(s, provider, out Mat3 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat3 format string.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Mat3 result)
+    {
+        result = default;
+        ReadOnlySpan<char> remaining = s;
+        Unsafe.SkipInit(out Mat3 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 9)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(Separators);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(Separators);
+            ReadOnlySpan<char> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 9)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static Mat3 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
+    {
+        if (!TryParse(utf8Text, provider, out Mat3 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat3 UTF-8 format stream.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Mat3 result)
+    {
+        result = default;
+        ReadOnlySpan<byte> remaining = utf8Text;
+        Unsafe.SkipInit(out Mat3 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 9)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(SeparatorsUtf8);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(SeparatorsUtf8);
+            ReadOnlySpan<byte> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 9)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
+}
+
+public interface IMat3TransformAction<TState> where TState : allows ref struct
+{
+    static abstract void Execute(ref readonly Mat3 matrix, ref TState state);
+}
+
+public ref struct Mat3ElementEnumerator
+{
+    private readonly Mat3 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat3ElementEnumerator(scoped ref readonly Mat3 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 9;
+
+    public readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 9U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return Unsafe.Add(ref Unsafe.AsRef(in _matrix.M11), (nuint)(uint)_index);
+        }
+    }
+}
+
+public ref struct Mat3RowEnumerable
+{
+    private readonly Mat3 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat3RowEnumerable(scoped ref readonly Mat3 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat3RowEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct Mat3RowEnumerator
+{
+    private readonly Mat3 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat3RowEnumerator(scoped ref readonly Mat3 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 3;
+
+    public readonly Vec3 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Row0,
+            1 => _matrix.Row1,
+            _ => _matrix.Row2
+        };
+    }
+}
+
+public ref struct Mat3ColumnEnumerable
+{
+    private readonly Mat3 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat3ColumnEnumerable(scoped ref readonly Mat3 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat3ColumnEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct Mat3ColumnEnumerator
+{
+    private readonly Mat3 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat3ColumnEnumerator(scoped ref readonly Mat3 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 3;
+
+    public readonly Vec3 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Column0,
+            1 => _matrix.Column1,
+            _ => _matrix.Column2
+        };
     }
 }
