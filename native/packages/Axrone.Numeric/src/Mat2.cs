@@ -1,5 +1,7 @@
 namespace Axrone.Numeric;
 
+using Axrone.Simd;
+
 public interface IReadOnlyMatrix2x2<TSelf>
     where TSelf : struct, IReadOnlyMatrix2x2<TSelf>
 {
@@ -37,6 +39,14 @@ public interface IMatrixStorage2x2<TSelf>
 public struct Mat2 :
     IEquatable<Mat2>,
     IEqualityOperators<Mat2, Mat2, bool>,
+    IAdditionOperators<Mat2, Mat2, Mat2>,
+    ISubtractionOperators<Mat2, Mat2, Mat2>,
+    IMultiplyOperators<Mat2, Mat2, Mat2>,
+    IMultiplyOperators<Mat2, float, Mat2>,
+    IUnaryNegationOperators<Mat2, Mat2>,
+    IUnaryPlusOperators<Mat2, Mat2>,
+    IAdditiveIdentity<Mat2, Mat2>,
+    IMultiplicativeIdentity<Mat2, Mat2>,
     IReadOnlyMatrix2x2<Mat2>,
     IAffineTransformable2x2<Mat2>,
     IMatrixStorage2x2<Mat2>
@@ -303,10 +313,181 @@ public struct Mat2 :
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Mat2 CreateRotation(float angleRadians) => CreateRotation(new AngleRadians(angleRadians));
 
+    public static Mat2 AdditiveIdentity => Zero;
+    public static Mat2 MultiplicativeIdentity => Identity;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static bool operator ==(Mat2 left, Mat2 right) =>
-        left.M11 == right.M11 && left.M12 == right.M12 &&
-        left.M21 == right.M21 && left.M22 == right.M22;
+    public static Mat2 operator +(Mat2 left, Mat2 right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Unsafe.SkipInit(out Mat2 result);
+            ref float l = ref Unsafe.AsRef(in left.M11);
+            ref float r = ref Unsafe.AsRef(in right.M11);
+            ref float dst = ref result.M11;
+            (Vector128.LoadUnsafe(ref l) + Vector128.LoadUnsafe(ref r)).StoreUnsafe(ref dst);
+            return result;
+        }
+
+        return new Mat2(
+            left.M11 + right.M11, left.M12 + right.M12,
+            left.M21 + right.M21, left.M22 + right.M22
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator -(Mat2 left, Mat2 right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Unsafe.SkipInit(out Mat2 result);
+            ref float l = ref Unsafe.AsRef(in left.M11);
+            ref float r = ref Unsafe.AsRef(in right.M11);
+            ref float dst = ref result.M11;
+            (Vector128.LoadUnsafe(ref l) - Vector128.LoadUnsafe(ref r)).StoreUnsafe(ref dst);
+            return result;
+        }
+
+        return new Mat2(
+            left.M11 - right.M11, left.M12 - right.M12,
+            left.M21 - right.M21, left.M22 - right.M22
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator *(Mat2 a, Mat2 b) => Multiply(in a, in b);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Multiply(in Mat2 left, in Mat2 right)
+    {
+        Multiply(in left, in right, out Mat2 result);
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Multiply(in Mat2 left, in Mat2 right, out Mat2 result)
+    {
+        float l11 = left.M11, l12 = left.M12;
+        float l21 = left.M21, l22 = left.M22;
+
+        float r11 = right.M11, r12 = right.M12;
+        float r21 = right.M21, r22 = right.M22;
+
+        result = new Mat2(
+            ((l11 * r11) + (l12 * r21)),
+            ((l11 * r12) + (l12 * r22)),
+            ((l21 * r11) + (l22 * r21)),
+            ((l21 * r12) + (l22 * r22))
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator *(Mat2 left, float scalar)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Unsafe.SkipInit(out Mat2 result);
+            ref float l = ref Unsafe.AsRef(in left.M11);
+            ref float dst = ref result.M11;
+            (Vector128.LoadUnsafe(ref l) * Vector128.Create(scalar)).StoreUnsafe(ref dst);
+            return result;
+        }
+
+        return new Mat2(
+            left.M11 * scalar, left.M12 * scalar,
+            left.M21 * scalar, left.M22 * scalar
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator *(float scalar, Mat2 matrix) => matrix * scalar;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 operator *(Mat2 matrix, Vec2 vector) =>
+        new(
+            MathF.FusedMultiplyAdd(vector.X, matrix.M11, vector.Y * matrix.M21),
+            MathF.FusedMultiplyAdd(vector.X, matrix.M12, vector.Y * matrix.M22)
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 operator *(Vec2 vector, Mat2 matrix) => matrix * vector;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator -(Mat2 value) => value * -1.0f;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 operator +(Mat2 value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Add(in Mat2 left, in Mat2 right) => left + right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Subtract(in Mat2 left, in Mat2 right) => left - right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Multiply(in Mat2 left, float scalar) => left * scalar;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Negate(Mat2 value) => -value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 Lerp(Mat2 a, Mat2 b, float amount)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Unsafe.SkipInit(out Mat2 result);
+            ref float aRef = ref Unsafe.AsRef(in a.M11);
+            ref float bRef = ref Unsafe.AsRef(in b.M11);
+            ref float dst = ref result.M11;
+            Vector128<float> amt = Vector128.Create(amount);
+
+            (SimdRow32.IsFusedMultiplyAddSupported
+                ? SimdRow32.LerpRowFused(Vector128.LoadUnsafe(ref aRef), Vector128.LoadUnsafe(ref bRef), amt)
+                : SimdRow32.LerpRowPlain(Vector128.LoadUnsafe(ref aRef), Vector128.LoadUnsafe(ref bRef), amt)
+            ).StoreUnsafe(ref dst);
+            return result;
+        }
+
+        Unsafe.SkipInit(out Mat2 scalar);
+        ref float sa = ref Unsafe.AsRef(in a.M11);
+        ref float sb = ref Unsafe.AsRef(in b.M11);
+        ref float dd = ref scalar.M11;
+        for (nuint i = 0; i < 4; i++)
+        {
+            Unsafe.Add(ref dd, i) = MathF.FusedMultiplyAdd(Unsafe.Add(ref sb, i) - Unsafe.Add(ref sa, i), amount, Unsafe.Add(ref sa, i));
+        }
+        return scalar;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Mat2 other, float tolerance = DefaultTolerance)
+    {
+        ref float a = ref Unsafe.AsRef(in M11);
+        ref float b = ref Unsafe.AsRef(in other.M11);
+
+        for (nuint i = 0; i < 4; i++)
+        {
+            if (MathF.Abs(Unsafe.Add(ref a, i) - Unsafe.Add(ref b, i)) > tolerance)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool operator ==(Mat2 left, Mat2 right)
+    {
+        if (Vector128.IsHardwareAccelerated)
+        {
+            ref float l = ref Unsafe.AsRef(in left.M11);
+            ref float r = ref Unsafe.AsRef(in right.M11);
+            return Vector128.EqualsAll(Vector128.LoadUnsafe(ref l), Vector128.LoadUnsafe(ref r));
+        }
+
+        return left.M11 == right.M11 && left.M12 == right.M12 &&
+            left.M21 == right.M21 && left.M22 == right.M22;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static bool operator !=(Mat2 left, Mat2 right) => !(left == right);
