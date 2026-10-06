@@ -1,5 +1,7 @@
 namespace Axrone.Numeric;
 
+using Axrone.Simd;
+
 public interface IReadOnlyMatrix3x3<TSelf>
     where TSelf : struct, IReadOnlyMatrix3x3<TSelf>
 {
@@ -40,6 +42,14 @@ public interface IMatrixStorage3x3<TSelf>
 public struct Mat3 :
     IEquatable<Mat3>,
     IEqualityOperators<Mat3, Mat3, bool>,
+    IAdditionOperators<Mat3, Mat3, Mat3>,
+    ISubtractionOperators<Mat3, Mat3, Mat3>,
+    IMultiplyOperators<Mat3, Mat3, Mat3>,
+    IMultiplyOperators<Mat3, float, Mat3>,
+    IUnaryNegationOperators<Mat3, Mat3>,
+    IUnaryPlusOperators<Mat3, Mat3>,
+    IAdditiveIdentity<Mat3, Mat3>,
+    IMultiplicativeIdentity<Mat3, Mat3>,
     IReadOnlyMatrix3x3<Mat3>,
     IAffineTransformable3x3<Mat3>,
     IMatrixStorage3x3<Mat3>
@@ -381,6 +391,225 @@ public struct Mat3 :
             2.0f * (xy - wz), 1.0f - (2.0f * (zz + xx)), 2.0f * (yz + wx),
             2.0f * (xz + wy), 2.0f * (yz - wx), 1.0f - (2.0f * (yy + xx))
         );
+    }
+
+    public static Mat3 AdditiveIdentity => Zero;
+    public static Mat3 MultiplicativeIdentity => Identity;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator +(Mat3 left, Mat3 right)
+    {
+        Unsafe.SkipInit(out Mat3 result);
+        ref float l = ref Unsafe.AsRef(in left.M11);
+        ref float r = ref Unsafe.AsRef(in right.M11);
+        ref float dst = ref result.M11;
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            (Vector256.LoadUnsafe(ref l, 0) + Vector256.LoadUnsafe(ref r, 0)).StoreUnsafe(ref dst, 0);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) + Unsafe.Add(ref r, 8);
+            return result;
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            (Vector128.LoadUnsafe(ref l, 0) + Vector128.LoadUnsafe(ref r, 0)).StoreUnsafe(ref dst, 0);
+            (Vector128.LoadUnsafe(ref l, 4) + Vector128.LoadUnsafe(ref r, 4)).StoreUnsafe(ref dst, 4);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) + Unsafe.Add(ref r, 8);
+            return result;
+        }
+
+        return new Mat3(
+            left.M11 + right.M11, left.M12 + right.M12, left.M13 + right.M13,
+            left.M21 + right.M21, left.M22 + right.M22, left.M23 + right.M23,
+            left.M31 + right.M31, left.M32 + right.M32, left.M33 + right.M33
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator -(Mat3 left, Mat3 right)
+    {
+        Unsafe.SkipInit(out Mat3 result);
+        ref float l = ref Unsafe.AsRef(in left.M11);
+        ref float r = ref Unsafe.AsRef(in right.M11);
+        ref float dst = ref result.M11;
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            (Vector256.LoadUnsafe(ref l, 0) - Vector256.LoadUnsafe(ref r, 0)).StoreUnsafe(ref dst, 0);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) - Unsafe.Add(ref r, 8);
+            return result;
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            (Vector128.LoadUnsafe(ref l, 0) - Vector128.LoadUnsafe(ref r, 0)).StoreUnsafe(ref dst, 0);
+            (Vector128.LoadUnsafe(ref l, 4) - Vector128.LoadUnsafe(ref r, 4)).StoreUnsafe(ref dst, 4);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) - Unsafe.Add(ref r, 8);
+            return result;
+        }
+
+        return new Mat3(
+            left.M11 - right.M11, left.M12 - right.M12, left.M13 - right.M13,
+            left.M21 - right.M21, left.M22 - right.M22, left.M23 - right.M23,
+            left.M31 - right.M31, left.M32 - right.M32, left.M33 - right.M33
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator *(Mat3 a, Mat3 b) => Multiply(in a, in b);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Multiply(in Mat3 left, in Mat3 right)
+    {
+        Multiply(in left, in right, out Mat3 result);
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Multiply(in Mat3 left, in Mat3 right, out Mat3 result)
+    {
+        float l11 = left.M11, l12 = left.M12, l13 = left.M13;
+        float l21 = left.M21, l22 = left.M22, l23 = left.M23;
+        float l31 = left.M31, l32 = left.M32, l33 = left.M33;
+
+        float r11 = right.M11, r12 = right.M12, r13 = right.M13;
+        float r21 = right.M21, r22 = right.M22, r23 = right.M23;
+        float r31 = right.M31, r32 = right.M32, r33 = right.M33;
+
+        result = new Mat3(
+            ((l11 * r11) + (l12 * r21)) + (l13 * r31),
+            ((l11 * r12) + (l12 * r22)) + (l13 * r32),
+            ((l11 * r13) + (l12 * r23)) + (l13 * r33),
+            ((l21 * r11) + (l22 * r21)) + (l23 * r31),
+            ((l21 * r12) + (l22 * r22)) + (l23 * r32),
+            ((l21 * r13) + (l22 * r23)) + (l23 * r33),
+            ((l31 * r11) + (l32 * r21)) + (l33 * r31),
+            ((l31 * r12) + (l32 * r22)) + (l33 * r32),
+            ((l31 * r13) + (l32 * r23)) + (l33 * r33)
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator *(Mat3 left, float scalar)
+    {
+        Unsafe.SkipInit(out Mat3 result);
+        ref float l = ref Unsafe.AsRef(in left.M11);
+        ref float dst = ref result.M11;
+
+        if (Vector256.IsHardwareAccelerated)
+        {
+            Vector256<float> s = Vector256.Create(scalar);
+            (Vector256.LoadUnsafe(ref l, 0) * s).StoreUnsafe(ref dst, 0);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) * scalar;
+            return result;
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<float> s = Vector128.Create(scalar);
+            (Vector128.LoadUnsafe(ref l, 0) * s).StoreUnsafe(ref dst, 0);
+            (Vector128.LoadUnsafe(ref l, 4) * s).StoreUnsafe(ref dst, 4);
+            Unsafe.Add(ref dst, 8) = Unsafe.Add(ref l, 8) * scalar;
+            return result;
+        }
+
+        return new Mat3(
+            left.M11 * scalar, left.M12 * scalar, left.M13 * scalar,
+            left.M21 * scalar, left.M22 * scalar, left.M23 * scalar,
+            left.M31 * scalar, left.M32 * scalar, left.M33 * scalar
+        );
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator *(float scalar, Mat3 matrix) => matrix * scalar;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 operator *(Mat3 matrix, Vec3 vector) =>
+        new(
+            MathF.FusedMultiplyAdd(matrix.M11, vector.X, MathF.FusedMultiplyAdd(matrix.M12, vector.Y, matrix.M13 * vector.Z)),
+            MathF.FusedMultiplyAdd(matrix.M21, vector.X, MathF.FusedMultiplyAdd(matrix.M22, vector.Y, matrix.M23 * vector.Z)),
+            MathF.FusedMultiplyAdd(matrix.M31, vector.X, MathF.FusedMultiplyAdd(matrix.M32, vector.Y, matrix.M33 * vector.Z))
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 operator *(Vec3 vector, Mat3 matrix) => matrix * vector;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator -(Mat3 value) => value * -1.0f;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 operator +(Mat3 value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Add(in Mat3 left, in Mat3 right) => left + right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Subtract(in Mat3 left, in Mat3 right) => left - right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Multiply(in Mat3 left, float scalar) => left * scalar;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Negate(Mat3 value) => -value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat3 Lerp(Mat3 a, Mat3 b, float amount)
+    {
+        Unsafe.SkipInit(out Mat3 result);
+        ref float aRef = ref Unsafe.AsRef(in a.M11);
+        ref float bRef = ref Unsafe.AsRef(in b.M11);
+        ref float dst = ref result.M11;
+
+        if (Vector256.IsHardwareAccelerated && SimdRow32.IsFusedMultiplyAddSupported)
+        {
+            Vector256<float> amt256 = Vector256.Create(amount);
+            Vector256<float> a0 = Vector256.LoadUnsafe(ref aRef, 0);
+            Vector256<float> b0 = Vector256.LoadUnsafe(ref bRef, 0);
+
+            Vector256.FusedMultiplyAdd(b0 - a0, amt256, a0).StoreUnsafe(ref dst, 0);
+            Unsafe.Add(ref dst, 8) = MathF.FusedMultiplyAdd(Unsafe.Add(ref bRef, 8) - Unsafe.Add(ref aRef, 8), amount, Unsafe.Add(ref aRef, 8));
+            return result;
+        }
+
+        if (Vector128.IsHardwareAccelerated)
+        {
+            Vector128<float> amt128 = Vector128.Create(amount);
+            if (SimdRow32.IsFusedMultiplyAddSupported)
+            {
+                SimdRow32.LerpRowFused(Vector128.LoadUnsafe(ref aRef, 0), Vector128.LoadUnsafe(ref bRef, 0), amt128).StoreUnsafe(ref dst, 0);
+                SimdRow32.LerpRowFused(Vector128.LoadUnsafe(ref aRef, 4), Vector128.LoadUnsafe(ref bRef, 4), amt128).StoreUnsafe(ref dst, 4);
+            }
+            else
+            {
+                SimdRow32.LerpRowPlain(Vector128.LoadUnsafe(ref aRef, 0), Vector128.LoadUnsafe(ref bRef, 0), amt128).StoreUnsafe(ref dst, 0);
+                SimdRow32.LerpRowPlain(Vector128.LoadUnsafe(ref aRef, 4), Vector128.LoadUnsafe(ref bRef, 4), amt128).StoreUnsafe(ref dst, 4);
+            }
+            Unsafe.Add(ref dst, 8) = MathF.FusedMultiplyAdd(Unsafe.Add(ref bRef, 8) - Unsafe.Add(ref aRef, 8), amount, Unsafe.Add(ref aRef, 8));
+            return result;
+        }
+
+        for (nuint i = 0; i < 9; i++)
+        {
+            Unsafe.Add(ref dst, i) = MathF.FusedMultiplyAdd(Unsafe.Add(ref bRef, i) - Unsafe.Add(ref aRef, i), amount, Unsafe.Add(ref aRef, i));
+        }
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Mat3 other, float tolerance = DefaultTolerance)
+    {
+        ref float a = ref Unsafe.AsRef(in M11);
+        ref float b = ref Unsafe.AsRef(in other.M11);
+
+        for (nuint i = 0; i < 9; i++)
+        {
+            if (MathF.Abs(Unsafe.Add(ref a, i) - Unsafe.Add(ref b, i)) > tolerance)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
