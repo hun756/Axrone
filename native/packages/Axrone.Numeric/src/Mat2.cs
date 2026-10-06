@@ -1,6 +1,7 @@
 namespace Axrone.Numeric;
 
 using Axrone.Simd;
+using System.Buffers;
 
 public interface IReadOnlyMatrix2x2<TSelf>
     where TSelf : struct, IReadOnlyMatrix2x2<TSelf>
@@ -49,8 +50,16 @@ public struct Mat2 :
     IMultiplicativeIdentity<Mat2, Mat2>,
     IReadOnlyMatrix2x2<Mat2>,
     IAffineTransformable2x2<Mat2>,
-    IMatrixStorage2x2<Mat2>
+    IMatrixStorage2x2<Mat2>,
+    IFormattable,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IParsable<Mat2>,
+    ISpanParsable<Mat2>,
+    IUtf8SpanParsable<Mat2>
 {
+    private static readonly SearchValues<char> Separators = SearchValues.Create(" ,;\t\r\n{}[]()");
+    private static readonly SearchValues<byte> SeparatorsUtf8 = SearchValues.Create(" ,;\t\r\n{}[]()"u8);
     public const float MachineEpsilon = 1.1920929E-07F;
 
     public const float DefaultTolerance = MachineEpsilon * 8F;
@@ -507,5 +516,389 @@ public struct Mat2 :
             hash.Add(Unsafe.Add(ref self, i));
         }
         return hash.ToHashCode();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Mat3 ToMat3() =>
+        new(
+            M11, M12, 0.0f,
+            M21, M22, 0.0f,
+            0.0f, 0.0f, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Mat2 FromMat3(in Mat3 matrix) =>
+        new(
+            matrix.M11, matrix.M12,
+            matrix.M21, matrix.M22
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Mat4 ToMat4() =>
+        new(
+            M11, M12, 0.0f, 0.0f,
+            M21, M22, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly void Apply<TAction, TState>(ref TState state)
+        where TAction : struct, IMat2TransformAction<TState>
+        where TState : allows ref struct
+    {
+        TAction.Execute(in this, ref state);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat2ElementEnumerator GetEnumerator() => new(in this);
+
+    public Mat2RowEnumerable Rows
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public Mat2ColumnEnumerable Columns
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => new(in this);
+    }
+
+    public override readonly string ToString() => ToString(null, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    public readonly string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer = stackalloc char[192];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return new string(buffer.Slice(0, charsWritten));
+        }
+        return "{ ... }";
+    }
+
+    public readonly bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        charsWritten = 0;
+        Span<char> temp = stackalloc char[192];
+        int written = 0;
+
+        temp[written++] = '{';
+        temp[written++] = ' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<char> separator = nfi.NumberDecimalSeparator == "," ? "; " : ", ";
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 4; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = ' ';
+        temp[written++] = '}';
+
+        if (destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(destination);
+        charsWritten = written;
+        return true;
+    }
+
+    public readonly bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        bytesWritten = 0;
+        Span<byte> temp = stackalloc byte[192];
+        int written = 0;
+
+        temp[written++] = (byte)'{';
+        temp[written++] = (byte)' ';
+
+        NumberFormatInfo nfi = NumberFormatInfo.GetInstance(provider);
+        ReadOnlySpan<byte> separator = nfi.NumberDecimalSeparator == "," ? "; "u8 : ", "u8;
+
+        ref float baseRef = ref Unsafe.AsRef(in M11);
+        for (nuint i = 0; i < 4; i++)
+        {
+            if (i > 0)
+            {
+                if (temp.Length - written < separator.Length)
+                {
+                    return false;
+                }
+                separator.CopyTo(temp.Slice(written));
+                written += separator.Length;
+            }
+
+            if (!Unsafe.Add(ref baseRef, i).TryFormat(temp.Slice(written), out int w, format, provider))
+            {
+                return false;
+            }
+            written += w;
+        }
+
+        if (temp.Length - written < 2)
+        {
+            return false;
+        }
+        temp[written++] = (byte)' ';
+        temp[written++] = (byte)'}';
+
+        if (utf8Destination.Length < written)
+        {
+            return false;
+        }
+
+        temp.Slice(0, written).CopyTo(utf8Destination);
+        bytesWritten = written;
+        return true;
+    }
+
+    public static Mat2 Parse(string s, IFormatProvider? provider)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan(), provider);
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Mat2 result)
+    {
+        if (s is null)
+        {
+            result = default;
+            return false;
+        }
+        return TryParse(s.AsSpan(), provider, out result);
+    }
+
+    public static Mat2 Parse(ReadOnlySpan<char> s, IFormatProvider? provider)
+    {
+        if (!TryParse(s, provider, out Mat2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat2 format string.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Mat2 result)
+    {
+        result = default;
+        ReadOnlySpan<char> remaining = s;
+        Unsafe.SkipInit(out Mat2 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 4)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(Separators);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(Separators);
+            ReadOnlySpan<char> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 4)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static Mat2 Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider)
+    {
+        if (!TryParse(utf8Text, provider, out Mat2 result))
+        {
+            NumericThrowHelper.ThrowFormatException("Invalid Mat2 UTF-8 format stream.");
+        }
+        return result;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Mat2 result)
+    {
+        result = default;
+        ReadOnlySpan<byte> remaining = utf8Text;
+        Unsafe.SkipInit(out Mat2 m);
+        ref float baseRef = ref m.M11;
+        int count = 0;
+
+        while (!remaining.IsEmpty && count < 4)
+        {
+            int tokenStart = remaining.IndexOfAnyExcept(SeparatorsUtf8);
+            if (tokenStart < 0)
+            {
+                break;
+            }
+            remaining = remaining.Slice(tokenStart);
+
+            int tokenEnd = remaining.IndexOfAny(SeparatorsUtf8);
+            ReadOnlySpan<byte> token = tokenEnd < 0 ? remaining : remaining.Slice(0, tokenEnd);
+            remaining = tokenEnd < 0 ? default : remaining.Slice(tokenEnd);
+
+            if (!float.TryParse(token, NumberStyles.Float, provider, out Unsafe.Add(ref baseRef, (nuint)count)))
+            {
+                return false;
+            }
+            count++;
+        }
+
+        if (count == 4)
+        {
+            result = m;
+            return true;
+        }
+
+        return false;
+    }
+}
+
+public interface IMat2TransformAction<TState> where TState : allows ref struct
+{
+    static abstract void Execute(ref readonly Mat2 matrix, ref TState state);
+}
+
+public ref struct Mat2ElementEnumerator
+{
+    private readonly Mat2 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat2ElementEnumerator(scoped ref readonly Mat2 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 4;
+
+    public readonly float Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            if ((uint)_index >= 4U)
+            {
+                NumericThrowHelper.ThrowArgumentOutOfRangeException(nameof(_index));
+            }
+
+            return Unsafe.Add(ref Unsafe.AsRef(in _matrix.M11), (nuint)(uint)_index);
+        }
+    }
+}
+
+public ref struct Mat2RowEnumerable
+{
+    private readonly Mat2 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat2RowEnumerable(scoped ref readonly Mat2 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat2RowEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct Mat2RowEnumerator
+{
+    private readonly Mat2 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat2RowEnumerator(scoped ref readonly Mat2 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 2;
+
+    public readonly Vec2 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Row0,
+            _ => _matrix.Row1
+        };
+    }
+}
+
+public ref struct Mat2ColumnEnumerable
+{
+    private readonly Mat2 _matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat2ColumnEnumerable(scoped ref readonly Mat2 matrix) => _matrix = matrix;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public Mat2ColumnEnumerator GetEnumerator() => new(in _matrix);
+}
+
+public ref struct Mat2ColumnEnumerator
+{
+    private readonly Mat2 _matrix;
+    private int _index;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal Mat2ColumnEnumerator(scoped ref readonly Mat2 matrix)
+    {
+        _matrix = matrix;
+        _index = -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool MoveNext() => ++_index < 2;
+
+    public readonly Vec2 Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => _index switch
+        {
+            0 => _matrix.Column0,
+            _ => _matrix.Column1
+        };
     }
 }
