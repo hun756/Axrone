@@ -145,6 +145,114 @@ public struct Rect :
         other.Y < Bottom && Y < other.Bottom;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Intersects(Rect other, out Rect result)
+    {
+        float left = MathF.Max(X, other.X);
+        float top = MathF.Max(Y, other.Y);
+        float right = MathF.Min(Right, other.Right);
+        float bottom = MathF.Min(Bottom, other.Bottom);
+
+        if (right > left && bottom > top)
+        {
+            result = new Rect(left, top, right - left, bottom - top);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Union(Rect a, Rect b)
+    {
+        float left = MathF.Min(a.X, b.X);
+        float top = MathF.Min(a.Y, b.Y);
+        float right = MathF.Max(a.Right, b.Right);
+        float bottom = MathF.Max(a.Bottom, b.Bottom);
+        return new Rect(left, top, right - left, bottom - top);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Union(Rect value, Vec2 point)
+    {
+        float left = MathF.Min(value.X, point.X);
+        float top = MathF.Min(value.Y, point.Y);
+        float right = MathF.Max(value.Right, point.X);
+        float bottom = MathF.Max(value.Bottom, point.Y);
+        return new Rect(left, top, right - left, bottom - top);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void Inflate(float horizontalAmount, float verticalAmount)
+    {
+        X -= horizontalAmount;
+        Y -= verticalAmount;
+        Width += horizontalAmount * 2.0f;
+        Height += verticalAmount * 2.0f;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Inflate(Rect value, float horizontalAmount, float verticalAmount)
+    {
+        value.Inflate(horizontalAmount, verticalAmount);
+        return value;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void Offset(float offsetX, float offsetY)
+    {
+        X += offsetX;
+        Y += offsetY;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void Offset(Vec2 amount) => Offset(amount.X, amount.Y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Offset(Rect value, float offsetX, float offsetY)
+    {
+        value.Offset(offsetX, offsetY);
+        return value;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Offset(Rect value, Vec2 amount)
+    {
+        value.Offset(amount);
+        return value;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Scale(Rect value, Vec2 factor) =>
+        new(
+            value.X * factor.X,
+            value.Y * factor.Y,
+            value.Width * factor.X,
+            value.Height * factor.Y
+        );
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Rect Scale(Rect value, float factor) => Scale(value, new Vec2(factor));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool Equals(Rect other, float tolerance = DefaultTolerance) =>
+        MathF.Abs(X - other.X) <= tolerance &&
+        MathF.Abs(Y - other.Y) <= tolerance &&
+        MathF.Abs(Width - other.Width) <= tolerance &&
+        MathF.Abs(Height - other.Height) <= tolerance;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool Equals(Rect left, Rect right, float tolerance = DefaultTolerance) =>
+        left.Equals(right, tolerance);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly bool BitEquals(Rect other) =>
+        BitConverter.SingleToUInt32Bits(X) == BitConverter.SingleToUInt32Bits(other.X) &&
+        BitConverter.SingleToUInt32Bits(Y) == BitConverter.SingleToUInt32Bits(other.Y) &&
+        BitConverter.SingleToUInt32Bits(Width) == BitConverter.SingleToUInt32Bits(other.Width) &&
+        BitConverter.SingleToUInt32Bits(Height) == BitConverter.SingleToUInt32Bits(other.Height);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static bool operator ==(Rect left, Rect right)
     {
         if (Vector128.IsHardwareAccelerated)
