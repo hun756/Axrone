@@ -826,6 +826,68 @@ public struct Quat :
         );
     }
 
+    /// <summary>
+    /// Converts this rotation to its 4x4 matrix form. This is the inverse of
+    /// <see cref="Mat4.CreateFromQuaternion(Quat)"/> and round-trips with it.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public readonly Mat4 ToMat4() => Mat4.CreateFromQuaternion(this);
+
+    /// <summary>
+    /// Creates a rotation quaternion from a rotation matrix.
+    /// </summary>
+    /// <param name="matrix">A matrix whose upper 3x3 is a pure rotation.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Quat CreateFromRotationMatrix(Mat4 matrix)
+    {
+        float trace = matrix.M11 + matrix.M22 + matrix.M33;
+
+        if (trace > 0.0f)
+        {
+            float s = MathF.Sqrt(trace + 1.0f);
+            float inv = 0.5f / s;
+            return new Quat(
+                (matrix.M23 - matrix.M32) * inv,
+                (matrix.M31 - matrix.M13) * inv,
+                (matrix.M12 - matrix.M21) * inv,
+                s * 0.5f
+            );
+        }
+
+        if (matrix.M11 >= matrix.M22 && matrix.M11 >= matrix.M33)
+        {
+            float s = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M11 - matrix.M22 - matrix.M33));
+            float inv = 0.5f / s;
+            return new Quat(
+                0.5f * s,
+                (matrix.M12 + matrix.M21) * inv,
+                (matrix.M13 + matrix.M31) * inv,
+                (matrix.M23 - matrix.M32) * inv
+            );
+        }
+
+        if (matrix.M22 > matrix.M33)
+        {
+            float s = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M22 - matrix.M11 - matrix.M33));
+            float inv = 0.5f / s;
+            return new Quat(
+                (matrix.M21 + matrix.M12) * inv,
+                0.5f * s,
+                (matrix.M32 + matrix.M23) * inv,
+                (matrix.M31 - matrix.M13) * inv
+            );
+        }
+
+        float sZ = MathF.Sqrt(MathF.Max(0.0f, 1.0f + matrix.M33 - matrix.M11 - matrix.M22));
+        float invZ = 0.5f / sZ;
+        return new Quat(
+            (matrix.M31 + matrix.M13) * invZ,
+            (matrix.M32 + matrix.M23) * invZ,
+            0.5f * sZ,
+            (matrix.M12 - matrix.M21) * invZ
+        );
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Quat FromToRotation(Vec3 fromDirection, Vec3 toDirection)
     {
