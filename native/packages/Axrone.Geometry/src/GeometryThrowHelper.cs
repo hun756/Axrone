@@ -21,6 +21,28 @@ internal static class ThrowHelper
             "Capacity must be at least 16.");
 
     /// <summary>
+    /// Rejects a fattening margin that is negative, which would shrink stored bounds
+    /// instead of padding them and let a moving item outrun its own box.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static float ThrowNegativeMargin()
+    {
+        throw new ArgumentOutOfRangeException("FatteningMargin", "Margin value must be non-negative.");
+    }
+
+    /// <summary>
+    /// Rejects a velocity multiplier that is negative, which would shrink the margin of
+    /// a fast-moving item instead of growing it.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static float ThrowNegativeMultiplier()
+    {
+        throw new ArgumentOutOfRangeException("VelocityMultiplier", "Velocity multiplier must be non-negative.");
+    }
+
+    /// <summary>
     /// Rejects a coordinate axis that is outside the 2D/3D projection surface.
     /// </summary>
     /// <typeparam name="T">The <see cref="ArgumentOutOfRangeException"/> type the caller folds into its own control flow.</typeparam>

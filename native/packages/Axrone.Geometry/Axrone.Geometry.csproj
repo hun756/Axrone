@@ -27,6 +27,11 @@
          classified against geometry rather than compared for equality, so Equals/GetHashCode
          plus the ==/!= pair would be surface the frustum contract does not use. -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1716: ISpatialLifecycle.Complete reports the fault that ended the bulk-drain
+         stream, and "error" is the name callers pass it under. The parameter is
+         positionally optional, so the reserved-word clash only bites callers that name it
+         in another language; the clarity of the drain-failure contract wins. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
