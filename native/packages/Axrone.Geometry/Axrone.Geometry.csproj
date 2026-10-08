@@ -32,6 +32,10 @@
          positionally optional, so the reserved-word clash only bites callers that name it
          in another language; the clarity of the drain-failure contract wins. -->
     <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA2007: the bulk-drain lifecycle awaits its own spin/yield loop, which is built on
+          Task.Yield and carries no captured-context dependency; the awaits stay bare so the
+          drain behaves identically on the worker thread and on a pooled caller. -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
