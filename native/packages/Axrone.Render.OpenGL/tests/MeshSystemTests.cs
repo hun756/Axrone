@@ -1,3 +1,5 @@
+using Axrone.Geometry;
+using Axrone.Numeric;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.Mesh;
 using Axrone.Render.OpenGL.Native;
@@ -6,7 +8,7 @@ using Axrone.Render.OpenGL.Resources;
 namespace Axrone.Render.OpenGL.Tests;
 
 /// <summary>
-/// Tests for the mesh system: <see cref="VertexLayout"/>, <see cref="Bounds3D"/>,
+/// Tests for the mesh system: <see cref="VertexLayout"/>, <see cref="Aabb3D"/>,
 /// <see cref="MeshGenerators"/>, and <see cref="GLMesh"/>.
 /// </summary>
 public sealed class MeshSystemTests : IDisposable
@@ -95,96 +97,93 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     // ========================================================================
-    // Bounds3D tests
+    // Aabb3D tests
     // ========================================================================
 
     [Fact]
-    public void Bounds3D_Empty_HasCorrectSentinelValues()
+    public void Bounds3D_Empty_IsInvalid()
     {
-        var empty = Bounds3D.Empty;
+        var empty = Aabb3D.Empty;
 
-        empty.Min.X.Should().Be(float.MaxValue);
-        empty.Min.Y.Should().Be(float.MaxValue);
-        empty.Min.Z.Should().Be(float.MaxValue);
-        empty.Max.X.Should().Be(float.MinValue);
-        empty.Max.Y.Should().Be(float.MinValue);
-        empty.Max.Z.Should().Be(float.MinValue);
+        empty.IsValid.Should().BeFalse();
+        empty.IsEmpty.Should().BeTrue();
+        empty.Min.X.Should().Be(float.PositiveInfinity);
+        empty.Max.X.Should().Be(float.NegativeInfinity);
     }
 
     [Fact]
     public void Bounds3D_FromPoints_ComputesCorrectBounds()
     {
-        Vector3[] points =
+        Vec3[] points =
         [
             new(-1, -2, -3),
             new(4, 5, 6),
             new(0, 0, 0),
         ];
 
-        var bounds = Bounds3D.FromPoints(points);
+        var bounds = Aabb3D.CreateFromPoints(points);
 
-        bounds.Min.Should().Be(new Vector3(-1, -2, -3));
-        bounds.Max.Should().Be(new Vector3(4, 5, 6));
+        bounds.Min.Should().Be(new Vec3(-1, -2, -3));
+        bounds.Max.Should().Be(new Vec3(4, 5, 6));
     }
 
     [Fact]
     public void Bounds3D_FromPoints_EmptySpan_ReturnsEmpty()
     {
-        var bounds = Bounds3D.FromPoints(ReadOnlySpan<Vector3>.Empty);
+        var bounds = Aabb3D.CreateFromPoints(ReadOnlySpan<Vec3>.Empty);
 
-        bounds.Min.X.Should().Be(float.MaxValue);
-        bounds.Max.X.Should().Be(float.MinValue);
+        bounds.IsEmpty.Should().BeTrue();
     }
 
     [Fact]
     public void Bounds3D_Contains_PointInside_ReturnsTrue()
     {
-        var bounds = new Bounds3D(new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
+        var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
-        bounds.Contains(Vector3.Zero).Should().BeTrue();
+        bounds.Contains(Vec3.Zero).Should().BeTrue();
     }
 
     [Fact]
     public void Bounds3D_Contains_PointOutside_ReturnsFalse()
     {
-        var bounds = new Bounds3D(new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
+        var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
-        bounds.Contains(new Vector3(2, 0, 0)).Should().BeFalse();
+        bounds.Contains(new Vec3(2, 0, 0)).Should().BeFalse();
     }
 
     [Fact]
     public void Bounds3D_Contains_PointOnBoundary_ReturnsTrue()
     {
-        var bounds = new Bounds3D(new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
+        var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
-        bounds.Contains(new Vector3(1, 1, 1)).Should().BeTrue();
+        bounds.Contains(new Vec3(1, 1, 1)).Should().BeTrue();
     }
 
     [Fact]
     public void Bounds3D_Intersects_Overlapping_ReturnsTrue()
     {
-        var a = new Bounds3D(new Vector3(-1, -1, -1), new Vector3(1, 1, 1));
-        var b = new Bounds3D(new Vector3(0, 0, 0), new Vector3(2, 2, 2));
+        var a = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
+        var b = new Aabb3D(new Vec3(0, 0, 0), new Vec3(2, 2, 2));
 
-        a.Intersects(b).Should().BeTrue();
+        a.Overlaps(in b).Should().BeTrue();
     }
 
     [Fact]
     public void Bounds3D_Intersects_NonOverlapping_ReturnsFalse()
     {
-        var a = new Bounds3D(new Vector3(-1, -1, -1), new Vector3(0, 0, 0));
-        var b = new Bounds3D(new Vector3(1, 1, 1), new Vector3(2, 2, 2));
+        var a = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(0, 0, 0));
+        var b = new Aabb3D(new Vec3(1, 1, 1), new Vec3(2, 2, 2));
 
-        a.Intersects(b).Should().BeFalse();
+        a.Overlaps(in b).Should().BeFalse();
     }
 
     [Fact]
     public void Bounds3D_Intersects_Touching_ReturnsTrue()
     {
-        var a = new Bounds3D(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
-        var b = new Bounds3D(new Vector3(1, 1, 1), new Vector3(2, 2, 2));
+        var a = new Aabb3D(new Vec3(0, 0, 0), new Vec3(1, 1, 1));
+        var b = new Aabb3D(new Vec3(1, 1, 1), new Vec3(2, 2, 2));
 
-        a.Intersects(b).Should().BeTrue();
+        a.Overlaps(in b).Should().BeTrue();
     }
 
     // ========================================================================

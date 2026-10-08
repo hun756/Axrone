@@ -62,7 +62,7 @@ public static class MeshGenerators
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
         byte[] indexBytes = MemoryMarshal.AsBytes(indices.AsSpan()).ToArray();
-        Bounds3D bounds = ComputeBoundsFromInterleaved(vertexBytes, DefaultLayout, 0);
+        Aabb3D bounds = ComputeBoundsFromInterleaved(vertexBytes, DefaultLayout, 0);
 
         return new GLMesh(context, DefaultLayout, vertexBytes, indexBytes, bounds, GLConst.Triangles, label);
     }
@@ -133,7 +133,7 @@ public static class MeshGenerators
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
         byte[] indexBytes = MemoryMarshal.AsBytes(indices.AsSpan()).ToArray();
-        Bounds3D bounds = new(new Vector3(-h, -h, -h), new Vector3(h, h, h));
+        Aabb3D bounds = new((Vec3)new Vector3(-h, -h, -h), (Vec3)new Vector3(h, h, h));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, indexBytes, bounds, GLConst.Triangles, label);
     }
@@ -226,9 +226,9 @@ public static class MeshGenerators
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
         byte[] indexBytes = MemoryMarshal.AsBytes(indices.AsSpan()).ToArray();
-        Bounds3D bounds = new(
-            new Vector3(-radius, -radius, -radius),
-            new Vector3(radius, radius, radius));
+        Aabb3D bounds = new(
+            (Vec3)new Vector3(-radius, -radius, -radius),
+            (Vec3)new Vector3(radius, radius, radius));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, indexBytes, bounds, GLConst.Triangles, label);
     }
@@ -255,29 +255,29 @@ public static class MeshGenerators
         ];
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
-        Bounds3D bounds = new(new Vector3(-1, -1, 0), new Vector3(3, 3, 0));
+        Aabb3D bounds = new((Vec3)new Vector3(-1, -1, 0), (Vec3)new Vector3(3, 3, 0));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, default, bounds, GLConst.Triangles, label);
     }
 
     /// <summary>
-    /// Computes a <see cref="Bounds3D"/> from interleaved vertex data using the position attribute
+    /// Computes an <see cref="Aabb3D"/> from interleaved vertex data using the position attribute
     /// from <see cref="DefaultLayout"/> (location 0, offset 0, 3 floats).
     /// </summary>
     /// <param name="vertexData">The raw interleaved vertex data.</param>
     /// <param name="layout">The vertex layout.</param>
     /// <param name="positionOffset">The byte offset of position data within each vertex.</param>
     /// <returns>The computed bounding box.</returns>
-    private static Bounds3D ComputeBoundsFromInterleaved(
+    private static Aabb3D ComputeBoundsFromInterleaved(
         ReadOnlySpan<byte> vertexData,
         VertexLayout layout,
         int positionOffset)
     {
         int vertexCount = vertexData.Length / layout.VertexStride;
         if (vertexCount == 0)
-            return Bounds3D.Empty;
+            return Aabb3D.Empty;
 
-        var bounds = Bounds3D.Empty;
+        var bounds = Aabb3D.Empty;
 
         ReadOnlySpan<float> floats = MemoryMarshal.Cast<byte, float>(vertexData);
         int floatsPerVertex = layout.VertexStride / sizeof(float);
@@ -286,8 +286,9 @@ public static class MeshGenerators
         for (int i = 0; i < vertexCount; i++)
         {
             int baseIndex = i * floatsPerVertex + positionFloatOffset;
-            var pos = new Vector3(floats[baseIndex], floats[baseIndex + 1], floats[baseIndex + 2]);
-            bounds = bounds.Expand(pos);
+            var pos = new Vec3(floats[baseIndex], floats[baseIndex + 1], floats[baseIndex + 2]);
+            var point = new Aabb3D(pos, pos);
+            bounds = Aabb3D.CreateMerged(in bounds, in point);
         }
 
         return bounds;

@@ -5,6 +5,7 @@ namespace Axrone.Render.OpenGL.Mesh;
 /// <summary>
 /// Axis-aligned bounding box (AABB) for 3D mesh bounds.
 /// </summary>
+[Obsolete("Use Aabb3D from Axrone.Geometry; this type will be removed.")]
 public readonly record struct Bounds3D(Vector3 Min, Vector3 Max)
 {
 

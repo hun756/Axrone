@@ -60,7 +60,7 @@ public sealed class GLMesh : IGLResource, IDisposable
     /// <summary>
     /// Gets the axis-aligned bounding box of this mesh.
     /// </summary>
-    public Bounds3D Bounds { get; }
+    public Aabb3D Bounds { get; }
 
     /// <summary>
     /// Gets the debug label.
@@ -99,7 +99,7 @@ public sealed class GLMesh : IGLResource, IDisposable
         VertexLayout layout,
         ReadOnlySpan<byte> vertexData,
         ReadOnlySpan<byte> indexData,
-        Bounds3D bounds,
+        Aabb3D bounds,
         uint topology = GLConst.Triangles,
         string label = "mesh",
         uint indexType = GLConst.UnsignedInt)

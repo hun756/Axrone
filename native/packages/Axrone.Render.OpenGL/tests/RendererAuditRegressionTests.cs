@@ -1,5 +1,6 @@
 namespace Axrone.Render.OpenGL.Tests;
 
+using Axrone.Geometry;
 using Axrone.Render.Core.Abstractions;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.FrameGraph;
@@ -112,7 +113,7 @@ public sealed class RendererAuditRegressionTests
             MeshGenerators.DefaultLayout,
             vertexBytes,
             indexBytes,
-            Bounds3D.Empty,
+            Aabb3D.Empty,
             GLConst.Triangles,
             "m16",
             GLConst.UnsignedShort);

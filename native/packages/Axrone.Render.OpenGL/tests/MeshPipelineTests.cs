@@ -1,6 +1,8 @@
 namespace Axrone.Render.OpenGL.Tests;
 
 using System.Runtime.InteropServices;
+using Axrone.Geometry;
+using Axrone.Numeric;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.Mesh;
 using Axrone.Render.OpenGL.Native;
@@ -120,7 +122,7 @@ public sealed class MeshPipelineTests : IDisposable
         ];
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
-        Bounds3D bounds = new(new Vector3(-1, -1, 0), new Vector3(1, 1, 0));
+        Aabb3D bounds = new(new Vec3(-1, -1, 0), new Vec3(1, 1, 0));
 
         // Act: create mesh with custom layout
         var mesh = new GLMesh(_context, layout, vertexBytes, default, bounds, GLConst.Triangles, "custom_mesh");
@@ -197,9 +199,9 @@ public sealed class MeshPipelineTests : IDisposable
         // Verify bounds actually contain vertex positions by checking the vertex data
         // The sphere vertex data is stored in the vertex buffer snapshot
         // We can verify by checking that the bounds contain the poles and equator points
-        sphere.Bounds.Contains(new Vector3(0, radius, 0)).Should().BeTrue("north pole should be within bounds");
-        sphere.Bounds.Contains(new Vector3(0, -radius, 0)).Should().BeTrue("south pole should be within bounds");
-        sphere.Bounds.Contains(new Vector3(radius, 0, 0)).Should().BeTrue("equator point should be within bounds");
+        sphere.Bounds.Contains(new Vec3(0, radius, 0)).Should().BeTrue("north pole should be within bounds");
+        sphere.Bounds.Contains(new Vec3(0, -radius, 0)).Should().BeTrue("south pole should be within bounds");
+        sphere.Bounds.Contains(new Vec3(radius, 0, 0)).Should().BeTrue("equator point should be within bounds");
     }
 
     [Fact]
@@ -211,15 +213,15 @@ public sealed class MeshPipelineTests : IDisposable
         var cube = MeshGenerators.CreateCube(_context, size, "bounds_cube");
 
         // Assert: bounds should encompass the full cube
-        cube.Bounds.Min.Should().Be(new Vector3(-h, -h, -h));
-        cube.Bounds.Max.Should().Be(new Vector3(h, h, h));
+        cube.Bounds.Min.Should().Be(new Vec3(-h, -h, -h));
+        cube.Bounds.Max.Should().Be(new Vec3(h, h, h));
 
         // All 8 corners should be contained
-        cube.Bounds.Contains(new Vector3(h, h, h)).Should().BeTrue();
-        cube.Bounds.Contains(new Vector3(-h, h, h)).Should().BeTrue();
-        cube.Bounds.Contains(new Vector3(h, -h, h)).Should().BeTrue();
-        cube.Bounds.Contains(new Vector3(h, h, -h)).Should().BeTrue();
-        cube.Bounds.Contains(new Vector3(-h, -h, -h)).Should().BeTrue();
+        cube.Bounds.Contains(new Vec3(h, h, h)).Should().BeTrue();
+        cube.Bounds.Contains(new Vec3(-h, h, h)).Should().BeTrue();
+        cube.Bounds.Contains(new Vec3(h, -h, h)).Should().BeTrue();
+        cube.Bounds.Contains(new Vec3(h, h, -h)).Should().BeTrue();
+        cube.Bounds.Contains(new Vec3(-h, -h, -h)).Should().BeTrue();
     }
 
     [Fact]
