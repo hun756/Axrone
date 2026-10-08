@@ -3,13 +3,11 @@ namespace Axrone.Batching.Tests;
 using Axrone.Geometry;
 using Axrone.Numeric;
 
-#pragma warning disable CS0618 // Legacy Aabb overload under test for kernel parity; removal is tracked separately.
-
 /// <summary>
-/// Parity coverage for the canonical <see cref="Aabb3D"/> bound kernel against
-/// the legacy <c>Aabb</c> kernel and the scalar center/extent identity.
+/// Coverage for the canonical <see cref="Aabb3D"/> bound kernel against the
+/// scalar center/extent identity.
 /// </summary>
-public class BatchBoundsAabb3DParityTests
+public class BatchBoundsAabb3DKernelTests
 {
     private const float Tolerance = 1e-3f;
 
@@ -35,8 +33,17 @@ public class BatchBoundsAabb3DParityTests
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 0f,
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 1f);
 
-    private static Aabb ToLegacy(in Aabb3D box) =>
-        new(box.Min.X, box.Min.Y, box.Min.Z, box.Max.X, box.Max.Y, box.Max.Z);
+    private static Aabb3D TransformScalar(in Aabb3D box, in Matrix4x4 matrix)
+    {
+        Vec3 boxCenter = box.Center;
+        var center = Vector3.Transform(new Vector3(boxCenter.X, boxCenter.Y, boxCenter.Z), matrix);
+        Vec3 boxExtent = box.Extents;
+        var extent = new Vector3(
+            (MathF.Abs(matrix.M11) * boxExtent.X) + (MathF.Abs(matrix.M21) * boxExtent.Y) + (MathF.Abs(matrix.M31) * boxExtent.Z),
+            (MathF.Abs(matrix.M12) * boxExtent.X) + (MathF.Abs(matrix.M22) * boxExtent.Y) + (MathF.Abs(matrix.M32) * boxExtent.Z),
+            (MathF.Abs(matrix.M13) * boxExtent.X) + (MathF.Abs(matrix.M23) * boxExtent.Y) + (MathF.Abs(matrix.M33) * boxExtent.Z));
+        return Aabb3D.FromCenterExtents(new Vec3(center.X, center.Y, center.Z), new Vec3(extent.X, extent.Y, extent.Z));
+    }
 
     [Theory]
     [InlineData(0)]
@@ -46,32 +53,24 @@ public class BatchBoundsAabb3DParityTests
     [InlineData(9)]
     [InlineData(17)]
     [InlineData(65)]
-    public void TransformAabb_MatchesLegacyKernel(int count)
+    public void TransformAabb_MatchesScalarIdentity(int count)
     {
         var rng = new SeededRng((ulong)count + 701);
         var source = BuildBoxes(count, rng);
         var matrix = BuildMatrix(rng);
+        var destination = new Aabb3D[count];
 
-        var legacySource = new Aabb[count];
-        for (var i = 0; i < count; i++)
-        {
-            legacySource[i] = ToLegacy(in source[i]);
-        }
-
-        var expected = new Aabb[count];
-        SimdBatchKernels.TransformAabb(legacySource, expected, in matrix);
-
-        var actual = new Aabb3D[count];
-        SimdBatchKernels.TransformAabb(source, actual, in matrix);
+        SimdBatchKernels.TransformAabb(source, destination, in matrix);
 
         for (var i = 0; i < count; i++)
         {
-            actual[i].Min.X.Should().BeApproximately(expected[i].MinX, Tolerance);
-            actual[i].Min.Y.Should().BeApproximately(expected[i].MinY, Tolerance);
-            actual[i].Min.Z.Should().BeApproximately(expected[i].MinZ, Tolerance);
-            actual[i].Max.X.Should().BeApproximately(expected[i].MaxX, Tolerance);
-            actual[i].Max.Y.Should().BeApproximately(expected[i].MaxY, Tolerance);
-            actual[i].Max.Z.Should().BeApproximately(expected[i].MaxZ, Tolerance);
+            Aabb3D expected = TransformScalar(in source[i], in matrix);
+            destination[i].Min.X.Should().BeApproximately(expected.Min.X, Tolerance);
+            destination[i].Min.Y.Should().BeApproximately(expected.Min.Y, Tolerance);
+            destination[i].Min.Z.Should().BeApproximately(expected.Min.Z, Tolerance);
+            destination[i].Max.X.Should().BeApproximately(expected.Max.X, Tolerance);
+            destination[i].Max.Y.Should().BeApproximately(expected.Max.Y, Tolerance);
+            destination[i].Max.Z.Should().BeApproximately(expected.Max.Z, Tolerance);
         }
     }
 
