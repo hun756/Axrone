@@ -19,4 +19,15 @@ internal static class ThrowHelper
         throw new ArgumentOutOfRangeException(
             "InitialCapacity",
             "Capacity must be at least 16.");
+
+    /// <summary>
+    /// Rejects a coordinate axis that is outside the 2D/3D projection surface.
+    /// </summary>
+    /// <typeparam name="T">The <see cref="ArgumentOutOfRangeException"/> type the caller folds into its own control flow.</typeparam>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T ThrowInvalidAxis<T>()
+    {
+        throw new ArgumentOutOfRangeException("axis", "Invalid coordinate axis for 2D/3D projection.");
+    }
 }
