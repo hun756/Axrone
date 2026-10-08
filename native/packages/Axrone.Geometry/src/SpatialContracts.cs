@@ -58,8 +58,7 @@ public interface ISpatialReader<TUserData>
     /// <param name="context">Traversal state handed to the visitor.</param>
     /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
     /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <returns>Number of hits reported.</returns>
-    int RayCast<TVisitor, TContext>(in Ray3D ray, float maxDistance, ref TVisitor visitor, ref TContext context)
+    void RayCast<TVisitor, TContext>(in Ray3D ray, float maxDistance, ref TVisitor visitor, ref TContext context)
         where TVisitor : struct, IRayHitVisitor<TUserData, TContext>
         where TContext : allows ref struct;
 
@@ -69,19 +68,17 @@ public interface ISpatialReader<TUserData>
     /// <param name="context">Traversal state handed to the visitor.</param>
     /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
     /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <returns>Number of visible items reported.</returns>
-    int FrustumCull<TVisitor, TContext>(in Frustum3 frustum, ref TVisitor visitor, ref TContext context)
+    void FrustumCull<TVisitor, TContext>(in Frustum3 frustum, ref TVisitor visitor, ref TContext context)
         where TVisitor : struct, IFrustumVisitor<TUserData, TContext>
         where TContext : allows ref struct;
 
     /// <summary>Reports each pair of overlapping items once, in stable identity order.</summary>
     /// <param name="visitor">The visitor that receives each pair.</param>
     /// <param name="context">Traversal state handed to the visitor.</param>
-    /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
+    /// <typeparam name="TPairVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
     /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <returns>Number of pairs reported.</returns>
-    int FindPairs<TVisitor, TContext>(ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, IPairVisitor<TUserData, TContext>
+    void FindPairs<TPairVisitor, TContext>(ref TPairVisitor visitor, ref TContext context)
+        where TPairVisitor : struct, IPairVisitor<TUserData, TContext>
         where TContext : allows ref struct;
 
     /// <summary>Fills the nearest items to <paramref name="point"/>, ordered by ascending squared distance.</summary>
