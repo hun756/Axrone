@@ -5,7 +5,7 @@ namespace Axrone.Geometry;
 /// <see cref="Plane"/> with an inward-pointing normal, so a point lies inside the frustum
 /// exactly when it satisfies all six half-space tests and a box is classified by probing
 /// the two corners furthest along each normal. The planes come from
-/// <see cref="System.Numerics.Matrix4x4"/> directly, so a frustum is just the extracted
+/// <see cref="Mat4"/> directly, so a frustum is just the extracted
 /// plane data with no extra state to keep in sync.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 16)]
@@ -55,7 +55,7 @@ public readonly struct Frustum3
     /// <param name="m">The combined view-projection matrix; row-vector convention.</param>
     /// <returns>The frustum described by <paramref name="m"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Frustum3 CreateFromMatrix(in System.Numerics.Matrix4x4 m)
+    public static Frustum3 CreateFromMatrix(in Mat4 m)
     {
         Plane left = Plane.Normalize(new Plane(m.M14 + m.M11, m.M24 + m.M21, m.M34 + m.M31, m.M44 + m.M41));
         Plane right = Plane.Normalize(new Plane(m.M14 - m.M11, m.M24 - m.M21, m.M34 - m.M31, m.M44 - m.M41));

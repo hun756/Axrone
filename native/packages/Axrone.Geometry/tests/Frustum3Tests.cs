@@ -2,7 +2,6 @@ namespace Axrone.Geometry.Tests;
 
 using Xunit;
 using FluentAssertions;
-using System.Numerics;
 using Axrone.Numeric;
 
 public class Frustum3Tests
@@ -61,7 +60,7 @@ public class Frustum3Tests
     [Fact]
     public void CreateFromMatrix_Identity_CenterBoxNotDisjoint()
     {
-        Frustum3 frustum = Frustum3.CreateFromMatrix(Matrix4x4.Identity);
+        Frustum3 frustum = Frustum3.CreateFromMatrix(Mat4.Identity);
         Aabb3D box = new(-0.5F, -0.5F, -0.5F, 0.5F, 0.5F, 0.5F);
 
         // Only disjointness is asserted: whether the box reports Contains or Intersects here
@@ -73,7 +72,7 @@ public class Frustum3Tests
     [Fact]
     public void CreateFromMatrix_Identity_FarBoxDisjoint()
     {
-        Frustum3 frustum = Frustum3.CreateFromMatrix(Matrix4x4.Identity);
+        Frustum3 frustum = Frustum3.CreateFromMatrix(Mat4.Identity);
         Aabb3D box = new(50.0F, 50.0F, 50.0F, 51.0F, 51.0F, 51.0F);
 
         frustum.Contains(in box).Should().Be(ContainmentType.Disjoint);
