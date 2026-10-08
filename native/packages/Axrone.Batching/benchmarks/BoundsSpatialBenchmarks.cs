@@ -1,6 +1,6 @@
-using System.Numerics;
 using Axrone.Batching;
 using Axrone.Geometry;
+using Axrone.Numeric;
 using BenchmarkDotNet.Attributes;
 
 namespace Axrone.Batching.Benchmarks;
@@ -20,15 +20,15 @@ public class BoundsSpatialBenchmarks
 
     private Aabb3D[] _boxes = [];
     private Aabb3D[] _scratchBoxes = [];
-    private Vector4[] _spheres = [];
-    private Vector4[] _scratchSpheres = [];
+    private Vec4[] _spheres = [];
+    private Vec4[] _scratchSpheres = [];
     private uint[] _x = [];
     private uint[] _y = [];
     private uint[] _z = [];
     private uint[] _scratchMorton = [];
     private float[] _scanSource = [];
     private int[] _scratchIndices = [];
-    private Matrix4x4 _matrix;
+    private Mat4 _matrix;
 
     [GlobalSetup]
     public void Setup()
@@ -36,8 +36,8 @@ public class BoundsSpatialBenchmarks
         var random = new Random(20260921);
         _boxes = new Aabb3D[Count];
         _scratchBoxes = new Aabb3D[Count];
-        _spheres = new Vector4[Count];
-        _scratchSpheres = new Vector4[Count];
+        _spheres = new Vec4[Count];
+        _scratchSpheres = new Vec4[Count];
         _x = new uint[Count];
         _y = new uint[Count];
         _z = new uint[Count];
@@ -53,14 +53,14 @@ public class BoundsSpatialBenchmarks
             var minZ = Next();
             _boxes[i] = new Aabb3D(minX, minY, minZ,
                 minX + random.Next(0, 41) / 4f, minY + random.Next(0, 41) / 4f, minZ + random.Next(0, 41) / 4f);
-            _spheres[i] = new Vector4(Next(), Next(), Next(), random.Next(0, 41) / 4f);
+            _spheres[i] = new Vec4(Next(), Next(), Next(), random.Next(0, 41) / 4f);
             _x[i] = (uint)random.Next();
             _y[i] = (uint)random.Next();
             _z[i] = (uint)random.Next();
             _scanSource[i] = i % 5 == 0 ? float.NaN : Next();
         }
 
-        _matrix = new Matrix4x4(
+        _matrix = new Mat4(
             1.4f, 0.3f, -0.2f, 0f,
             0.1f, 0.7f, 0.4f, 0f,
             0.5f, -0.1f, 2.1f, 0f,
@@ -86,8 +86,8 @@ public class BoundsSpatialBenchmarks
         const float maxScale = 1.5f;
         for (var i = 0; i < Count; i++)
         {
-            var center = Vector3.Transform(new Vector3(_spheres[i].X, _spheres[i].Y, _spheres[i].Z), _matrix);
-            _scratchSpheres[i] = new Vector4(center.X, center.Y, center.Z, _spheres[i].W * maxScale);
+            var center = Vec3.Transform(new Vec3(_spheres[i].X, _spheres[i].Y, _spheres[i].Z), _matrix);
+            _scratchSpheres[i] = new Vec4(center.X, center.Y, center.Z, _spheres[i].W * maxScale);
         }
     }
 

@@ -1,5 +1,9 @@
 namespace Axrone.Batching;
 
+// BitOperations only — the vector/matrix primitives now come from Axrone.Numeric, so this file
+// asks for the one System.Numerics type it still needs instead of taking the whole namespace.
+using System.Numerics;
+
 /// <summary>
 /// Chase-Lev work-stealing deque: owner pushes/pops one end, thieves steal the other.
 /// </summary>

@@ -1,7 +1,6 @@
 namespace Axrone.Batching;
 
 using Axrone.Geometry;
-using Axrone.Numeric;
 
 /// <summary>
 /// Batch bound transforms: AABB by matrix, bounding spheres by matrix plus uniform radius scale.
@@ -23,7 +22,7 @@ public static unsafe partial class SimdBatchKernels
     /// <param name="destination">Receives the results; must be at least <paramref name="source"/>.Length.</param>
     /// <param name="matrix">Row-major transform.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <paramref name="source"/>.</exception>
-    public static void TransformAabb(ReadOnlySpan<Aabb3D> source, Span<Aabb3D> destination, in Matrix4x4 matrix)
+    public static void TransformAabb(ReadOnlySpan<Aabb3D> source, Span<Aabb3D> destination, in Mat4 matrix)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
@@ -144,13 +143,13 @@ public static unsafe partial class SimdBatchKernels
         {
             var i = (int)index;
             Vec3 sourceCenter = source[i].Center;
-            var center = Vector3.Transform(new Vector3(sourceCenter.X, sourceCenter.Y, sourceCenter.Z), matrix);
+            var center = Vec3.Transform(sourceCenter, matrix);
             Vec3 sourceExtent = source[i].Extents;
-            var extent = new Vector3(
+            var extent = new Vec3(
                 (MathF.Abs(matrix.M11) * sourceExtent.X) + (MathF.Abs(matrix.M21) * sourceExtent.Y) + (MathF.Abs(matrix.M31) * sourceExtent.Z),
                 (MathF.Abs(matrix.M12) * sourceExtent.X) + (MathF.Abs(matrix.M22) * sourceExtent.Y) + (MathF.Abs(matrix.M32) * sourceExtent.Z),
                 (MathF.Abs(matrix.M13) * sourceExtent.X) + (MathF.Abs(matrix.M23) * sourceExtent.Y) + (MathF.Abs(matrix.M33) * sourceExtent.Z));
-            destination[i] = Aabb3D.FromCenterExtents(new Vec3(center.X, center.Y, center.Z), new Vec3(extent.X, extent.Y, extent.Z));
+            destination[i] = Aabb3D.FromCenterExtents(center, extent);
         }
     }
 
@@ -169,7 +168,7 @@ public static unsafe partial class SimdBatchKernels
     /// loop; the caller computes it once per matrix, not once per sphere.
     /// </remarks>
     public static void TransformBoundingSpheres(
-        ReadOnlySpan<Vector4> source, Span<Vector4> destination, in Matrix4x4 matrix, float maxScale)
+        ReadOnlySpan<Vec4> source, Span<Vec4> destination, in Mat4 matrix, float maxScale)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
         if (maxScale < 0f || !float.IsFinite(maxScale))
@@ -183,8 +182,8 @@ public static unsafe partial class SimdBatchKernels
             return;
         }
 
-        ref float sourceBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector4, float>(source));
-        ref float targetBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector4, float>(destination));
+        ref float sourceBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec4, float>(source));
+        ref float targetBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec4, float>(destination));
         nuint index = 0;
 
         if (Vector256.IsHardwareAccelerated && count >= 2)
@@ -231,8 +230,8 @@ public static unsafe partial class SimdBatchKernels
         for (; index < count; index++)
         {
             var i = (int)index;
-            var center = Vector3.Transform(new Vector3(source[i].X, source[i].Y, source[i].Z), matrix);
-            destination[i] = new Vector4(center.X, center.Y, center.Z, source[i].W * maxScale);
+            var center = Vec3.Transform(new Vec3(source[i].X, source[i].Y, source[i].Z), matrix);
+            destination[i] = new Vec4(center.X, center.Y, center.Z, source[i].W * maxScale);
         }
     }
 }

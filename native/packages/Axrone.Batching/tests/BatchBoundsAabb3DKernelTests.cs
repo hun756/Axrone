@@ -1,7 +1,6 @@
 namespace Axrone.Batching.Tests;
 
 using Axrone.Geometry;
-using Axrone.Numeric;
 
 /// <summary>
 /// Coverage for the canonical <see cref="Aabb3D"/> bound kernel against the
@@ -27,22 +26,22 @@ public class BatchBoundsAabb3DKernelTests
         return data;
     }
 
-    private static Matrix4x4 BuildMatrix(SeededRng rng) => new(
+    private static Mat4 BuildMatrix(SeededRng rng) => new(
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 0f,
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 0f,
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 0f,
         rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, rng.Next(-8, 9) / 4f, 1f);
 
-    private static Aabb3D TransformScalar(in Aabb3D box, in Matrix4x4 matrix)
+    private static Aabb3D TransformScalar(in Aabb3D box, in Mat4 matrix)
     {
         Vec3 boxCenter = box.Center;
-        var center = Vector3.Transform(new Vector3(boxCenter.X, boxCenter.Y, boxCenter.Z), matrix);
+        var center = Vec3.Transform(boxCenter, matrix);
         Vec3 boxExtent = box.Extents;
-        var extent = new Vector3(
+        var extent = new Vec3(
             (MathF.Abs(matrix.M11) * boxExtent.X) + (MathF.Abs(matrix.M21) * boxExtent.Y) + (MathF.Abs(matrix.M31) * boxExtent.Z),
             (MathF.Abs(matrix.M12) * boxExtent.X) + (MathF.Abs(matrix.M22) * boxExtent.Y) + (MathF.Abs(matrix.M32) * boxExtent.Z),
             (MathF.Abs(matrix.M13) * boxExtent.X) + (MathF.Abs(matrix.M23) * boxExtent.Y) + (MathF.Abs(matrix.M33) * boxExtent.Z));
-        return Aabb3D.FromCenterExtents(new Vec3(center.X, center.Y, center.Z), new Vec3(extent.X, extent.Y, extent.Z));
+        return Aabb3D.FromCenterExtents(center, extent);
     }
 
     [Theory]
@@ -79,7 +78,7 @@ public class BatchBoundsAabb3DKernelTests
     {
         var source = BuildBoxes(4, new SeededRng(702));
         var destination = new Aabb3D[3];
-        var matrix = Matrix4x4.Identity;
+        var matrix = Mat4.Identity;
 
         Action act = () => SimdBatchKernels.TransformAabb(source, destination, in matrix);
 
@@ -91,7 +90,7 @@ public class BatchBoundsAabb3DKernelTests
     {
         var source = BuildBoxes(10, new SeededRng(703));
         var destination = new Aabb3D[source.Length];
-        var matrix = Matrix4x4.Identity;
+        var matrix = Mat4.Identity;
 
         SimdBatchKernels.TransformAabb(source, destination, in matrix);
 
