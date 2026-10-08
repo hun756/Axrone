@@ -112,4 +112,95 @@ public sealed class RenderPassDescriptorTests
         var descDifferScissorTest = RenderPassDescriptor.Create(10, vp1, sc1, false, list1);
         (desc1 == descDifferScissorTest).Should().BeFalse();
     }
+
+    [Fact]
+    public void With_ReplacingOneMember_LeavesEveryOtherMemberEqual()
+    {
+        var vp = new ViewportRect(0, 0, 1280, 720);
+        Span<AttachmentDescriptor> attachments = stackalloc AttachmentDescriptor[2]
+        {
+            AttachmentDescriptor.Color(0, AttachmentLoadAction.Clear, AttachmentStoreAction.Store),
+            AttachmentDescriptor.DepthStencil(AttachmentLoadAction.Clear, AttachmentStoreAction.Store, 1f, 0)
+        };
+
+        var desc = RenderPassDescriptor.Create(7, vp, attachments);
+        var moved = desc with { FramebufferId = 8 };
+
+        moved.Should().NotBe(desc);
+        (moved == desc).Should().BeFalse();
+        (moved != desc).Should().BeTrue();
+
+        moved.Viewport.Should().Be(desc.Viewport);
+        moved.Scissor.Should().Be(desc.Scissor);
+        moved.ScissorTest.Should().Be(desc.ScissorTest);
+        moved.ColorAttachmentCount.Should().Be(desc.ColorAttachmentCount);
+        moved.HasDepthStencil.Should().Be(desc.HasDepthStencil);
+        moved.DepthStencilAttachment.Should().Be(desc.DepthStencilAttachment);
+        moved.GetColorAttachment(0).Should().Be(desc.GetColorAttachment(0));
+        moved.FramebufferId.Should().Be(8);
+    }
+
+    [Fact]
+    public void With_WithoutChanges_IsEqualToTheSource()
+    {
+        var desc = RenderPassDescriptor.CreateDefault(new ViewportRect(0, 0, 800, 600), new ClearColorValue(0.25f, 0.5f, 0.75f, 1f));
+        var copy = desc with { };
+
+        copy.Should().Be(desc);
+        (copy == desc).Should().BeTrue();
+        copy.GetHashCode().Should().Be(desc.GetHashCode());
+    }
+
+    [Fact]
+    public void Validate_AcceptsAConstructorBuiltDescriptor()
+    {
+        var vp = new ViewportRect(0, 0, 800, 600);
+        Span<AttachmentDescriptor> attachments = stackalloc AttachmentDescriptor[2]
+        {
+            AttachmentDescriptor.Color(3, AttachmentLoadAction.Clear, AttachmentStoreAction.Store),
+            AttachmentDescriptor.DepthStencil(AttachmentLoadAction.Clear, AttachmentStoreAction.Discard, 0.5f, 1)
+        };
+
+        var desc = RenderPassDescriptor.Create(4, vp, attachments);
+
+        var action = () => RenderPassDescriptor.Validate(in desc);
+        action.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenColorAttachmentCountExceedsThePhysicalMaximum()
+    {
+        var desc = RenderPassDescriptor.CreateDefault(new ViewportRect(0, 0, 800, 600)) with { ColorAttachmentCount = 9 };
+
+        var action = () => RenderPassDescriptor.Validate(in desc);
+        action.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenTheBoundDepthStencilAttachmentCarriesAnOutOfRangeSlot()
+    {
+        var desc = RenderPassDescriptor.CreateDefault(new ViewportRect(0, 0, 800, 600))
+            with
+            {
+                HasDepthStencil = true,
+                DepthStencilAttachment = AttachmentDescriptor.DepthStencil() with { Slot = 8 }
+            };
+
+        var action = () => RenderPassDescriptor.Validate(in desc);
+        action.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Describe_IsNonEmptyAndNamesTheFramebuffer()
+    {
+        var vp = new ViewportRect(0, 0, 1920, 1080);
+        var desc = RenderPassDescriptor.Create(4711, vp, AttachmentDescriptor.Color(0, AttachmentLoadAction.Clear, AttachmentStoreAction.Store));
+
+        string text = RenderPassDescriptor.Describe(in desc);
+
+        text.Should().NotBeNullOrEmpty();
+        text.Should().Contain("4711");
+        text.Should().Contain(nameof(RenderPassDescriptor.FramebufferId));
+        text.Should().Be(desc.ToString());
+    }
 }

@@ -1,5 +1,8 @@
 namespace Axrone.Batching;
 
+using Axrone.Geometry;
+using Axrone.Numeric;
+
 /// <summary>
 /// Batch bound transforms: AABB by matrix, bounding spheres by matrix plus uniform radius scale.
 /// </summary>
@@ -10,14 +13,17 @@ namespace Axrone.Batching;
 /// </remarks>
 public static unsafe partial class SimdBatchKernels
 {
+
     /// <summary>
-    /// Transforms axis-aligned boxes by <paramref name="matrix"/>.
+    /// Transforms axis-aligned boxes by <paramref name="matrix"/>. This is the
+    /// canonical overload: boxes are <see cref="Aabb3D"/> from Axrone.Geometry,
+    /// so bounds flow through the engine in a single representation.
     /// </summary>
     /// <param name="source">Boxes to transform.</param>
     /// <param name="destination">Receives the results; must be at least <paramref name="source"/>.Length.</param>
     /// <param name="matrix">Row-major transform.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <paramref name="source"/>.</exception>
-    public static void TransformAabb(ReadOnlySpan<Aabb> source, Span<Aabb> destination, in Matrix4x4 matrix)
+    public static void TransformAabb(ReadOnlySpan<Aabb3D> source, Span<Aabb3D> destination, in Matrix4x4 matrix)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
@@ -56,43 +62,43 @@ public static unsafe partial class SimdBatchKernels
 
             var half = Vector256.Create(0.5f);
 
-            ref Aabb sourceBase = ref MemoryMarshal.GetReference(source);
-            ref Aabb targetBase = ref MemoryMarshal.GetReference(destination);
+            ref Aabb3D sourceBase = ref MemoryMarshal.GetReference(source);
+            ref Aabb3D targetBase = ref MemoryMarshal.GetReference(destination);
 
             nuint step = 8, limit = count - step + 1;
             for (; index < limit; index += step)
             {
                 var i = (int)index;
                 var minX = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MinX, Unsafe.Add(ref sourceBase, i + 1).MinX,
-                    Unsafe.Add(ref sourceBase, i + 2).MinX, Unsafe.Add(ref sourceBase, i + 3).MinX,
-                    Unsafe.Add(ref sourceBase, i + 4).MinX, Unsafe.Add(ref sourceBase, i + 5).MinX,
-                    Unsafe.Add(ref sourceBase, i + 6).MinX, Unsafe.Add(ref sourceBase, i + 7).MinX);
+                    Unsafe.Add(ref sourceBase, i).Min.X, Unsafe.Add(ref sourceBase, i + 1).Min.X,
+                    Unsafe.Add(ref sourceBase, i + 2).Min.X, Unsafe.Add(ref sourceBase, i + 3).Min.X,
+                    Unsafe.Add(ref sourceBase, i + 4).Min.X, Unsafe.Add(ref sourceBase, i + 5).Min.X,
+                    Unsafe.Add(ref sourceBase, i + 6).Min.X, Unsafe.Add(ref sourceBase, i + 7).Min.X);
                 var minY = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MinY, Unsafe.Add(ref sourceBase, i + 1).MinY,
-                    Unsafe.Add(ref sourceBase, i + 2).MinY, Unsafe.Add(ref sourceBase, i + 3).MinY,
-                    Unsafe.Add(ref sourceBase, i + 4).MinY, Unsafe.Add(ref sourceBase, i + 5).MinY,
-                    Unsafe.Add(ref sourceBase, i + 6).MinY, Unsafe.Add(ref sourceBase, i + 7).MinY);
+                    Unsafe.Add(ref sourceBase, i).Min.Y, Unsafe.Add(ref sourceBase, i + 1).Min.Y,
+                    Unsafe.Add(ref sourceBase, i + 2).Min.Y, Unsafe.Add(ref sourceBase, i + 3).Min.Y,
+                    Unsafe.Add(ref sourceBase, i + 4).Min.Y, Unsafe.Add(ref sourceBase, i + 5).Min.Y,
+                    Unsafe.Add(ref sourceBase, i + 6).Min.Y, Unsafe.Add(ref sourceBase, i + 7).Min.Y);
                 var minZ = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MinZ, Unsafe.Add(ref sourceBase, i + 1).MinZ,
-                    Unsafe.Add(ref sourceBase, i + 2).MinZ, Unsafe.Add(ref sourceBase, i + 3).MinZ,
-                    Unsafe.Add(ref sourceBase, i + 4).MinZ, Unsafe.Add(ref sourceBase, i + 5).MinZ,
-                    Unsafe.Add(ref sourceBase, i + 6).MinZ, Unsafe.Add(ref sourceBase, i + 7).MinZ);
+                    Unsafe.Add(ref sourceBase, i).Min.Z, Unsafe.Add(ref sourceBase, i + 1).Min.Z,
+                    Unsafe.Add(ref sourceBase, i + 2).Min.Z, Unsafe.Add(ref sourceBase, i + 3).Min.Z,
+                    Unsafe.Add(ref sourceBase, i + 4).Min.Z, Unsafe.Add(ref sourceBase, i + 5).Min.Z,
+                    Unsafe.Add(ref sourceBase, i + 6).Min.Z, Unsafe.Add(ref sourceBase, i + 7).Min.Z);
                 var maxX = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MaxX, Unsafe.Add(ref sourceBase, i + 1).MaxX,
-                    Unsafe.Add(ref sourceBase, i + 2).MaxX, Unsafe.Add(ref sourceBase, i + 3).MaxX,
-                    Unsafe.Add(ref sourceBase, i + 4).MaxX, Unsafe.Add(ref sourceBase, i + 5).MaxX,
-                    Unsafe.Add(ref sourceBase, i + 6).MaxX, Unsafe.Add(ref sourceBase, i + 7).MaxX);
+                    Unsafe.Add(ref sourceBase, i).Max.X, Unsafe.Add(ref sourceBase, i + 1).Max.X,
+                    Unsafe.Add(ref sourceBase, i + 2).Max.X, Unsafe.Add(ref sourceBase, i + 3).Max.X,
+                    Unsafe.Add(ref sourceBase, i + 4).Max.X, Unsafe.Add(ref sourceBase, i + 5).Max.X,
+                    Unsafe.Add(ref sourceBase, i + 6).Max.X, Unsafe.Add(ref sourceBase, i + 7).Max.X);
                 var maxY = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MaxY, Unsafe.Add(ref sourceBase, i + 1).MaxY,
-                    Unsafe.Add(ref sourceBase, i + 2).MaxY, Unsafe.Add(ref sourceBase, i + 3).MaxY,
-                    Unsafe.Add(ref sourceBase, i + 4).MaxY, Unsafe.Add(ref sourceBase, i + 5).MaxY,
-                    Unsafe.Add(ref sourceBase, i + 6).MaxY, Unsafe.Add(ref sourceBase, i + 7).MaxY);
+                    Unsafe.Add(ref sourceBase, i).Max.Y, Unsafe.Add(ref sourceBase, i + 1).Max.Y,
+                    Unsafe.Add(ref sourceBase, i + 2).Max.Y, Unsafe.Add(ref sourceBase, i + 3).Max.Y,
+                    Unsafe.Add(ref sourceBase, i + 4).Max.Y, Unsafe.Add(ref sourceBase, i + 5).Max.Y,
+                    Unsafe.Add(ref sourceBase, i + 6).Max.Y, Unsafe.Add(ref sourceBase, i + 7).Max.Y);
                 var maxZ = Vector256.Create(
-                    Unsafe.Add(ref sourceBase, i).MaxZ, Unsafe.Add(ref sourceBase, i + 1).MaxZ,
-                    Unsafe.Add(ref sourceBase, i + 2).MaxZ, Unsafe.Add(ref sourceBase, i + 3).MaxZ,
-                    Unsafe.Add(ref sourceBase, i + 4).MaxZ, Unsafe.Add(ref sourceBase, i + 5).MaxZ,
-                    Unsafe.Add(ref sourceBase, i + 6).MaxZ, Unsafe.Add(ref sourceBase, i + 7).MaxZ);
+                    Unsafe.Add(ref sourceBase, i).Max.Z, Unsafe.Add(ref sourceBase, i + 1).Max.Z,
+                    Unsafe.Add(ref sourceBase, i + 2).Max.Z, Unsafe.Add(ref sourceBase, i + 3).Max.Z,
+                    Unsafe.Add(ref sourceBase, i + 4).Max.Z, Unsafe.Add(ref sourceBase, i + 5).Max.Z,
+                    Unsafe.Add(ref sourceBase, i + 6).Max.Z, Unsafe.Add(ref sourceBase, i + 7).Max.Z);
 
                 var cx = Vector256.Multiply(Vector256.Add(minX, maxX), half);
                 var cy = Vector256.Multiply(Vector256.Add(minY, maxY), half);
@@ -123,7 +129,7 @@ public static unsafe partial class SimdBatchKernels
 
                 for (var lane = 0; lane < 8; lane++)
                 {
-                    Unsafe.Add(ref targetBase, i + lane) = new Aabb(
+                    Unsafe.Add(ref targetBase, i + lane) = new Aabb3D(
                         ncx.GetElement(lane) - nex.GetElement(lane),
                         ncy.GetElement(lane) - ney.GetElement(lane),
                         ncz.GetElement(lane) - nez.GetElement(lane),
@@ -137,13 +143,14 @@ public static unsafe partial class SimdBatchKernels
         for (; index < count; index++)
         {
             var i = (int)index;
-            var center = Vector3.Transform(source[i].Center, matrix);
-            var sourceExtent = source[i].Extent;
+            Vec3 sourceCenter = source[i].Center;
+            var center = Vector3.Transform(new Vector3(sourceCenter.X, sourceCenter.Y, sourceCenter.Z), matrix);
+            Vec3 sourceExtent = source[i].Extents;
             var extent = new Vector3(
                 (MathF.Abs(matrix.M11) * sourceExtent.X) + (MathF.Abs(matrix.M21) * sourceExtent.Y) + (MathF.Abs(matrix.M31) * sourceExtent.Z),
                 (MathF.Abs(matrix.M12) * sourceExtent.X) + (MathF.Abs(matrix.M22) * sourceExtent.Y) + (MathF.Abs(matrix.M32) * sourceExtent.Z),
                 (MathF.Abs(matrix.M13) * sourceExtent.X) + (MathF.Abs(matrix.M23) * sourceExtent.Y) + (MathF.Abs(matrix.M33) * sourceExtent.Z));
-            destination[i] = Aabb.FromCenterExtent(center, extent);
+            destination[i] = Aabb3D.FromCenterExtents(new Vec3(center.X, center.Y, center.Z), new Vec3(extent.X, extent.Y, extent.Z));
         }
     }
 

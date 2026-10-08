@@ -5,6 +5,12 @@ using Axrone.Simd;
 /// <summary>Branch-lean quaternion and time math for the animation hot path.</summary>
 public static class FastMath
 {
+    /// <summary>
+    /// Squared length below which a vector is treated as degenerate, derived from
+    /// the package epsilon so the floor means "shorter than one epsilon".
+    /// </summary>
+    private const float DegenerateVectorLengthSq = AnimationConstants.SoaEpsilon * AnimationConstants.SoaEpsilon;
+
     /// <summary>Clamps to the unit interval.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Clamp01(float value)
@@ -34,6 +40,42 @@ public static class FastMath
 
         float invLen = 1.0f / MathF.Sqrt(lenSq);
         return new Quaternion(q.X * invLen, q.Y * invLen, q.Z * invLen, q.W * invLen);
+    }
+
+    /// <summary>
+    /// Zero-safe vector normalization; degenerate vectors become
+    /// <see cref="Vector3.Zero"/>, mirroring the quaternion overload's contract.
+    /// The vector path goes through the SIMD runtime so forced-scalar test
+    /// overrides apply here too, and both tiers accumulate the squared length in
+    /// the same order (<c>(x² + y²) + z²</c>) with the same reciprocal scale, so
+    /// switching tiers cannot move a single bit of the result.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vector3 Normalize(in Vector3 v)
+    {
+        if (SimdRuntime.IsSupported(SimdFeature.Vector128HardwareAccelerated))
+        {
+            Vector128<float> value = Vector128.Create(v.X, v.Y, v.Z, 0.0f);
+            Vector128<float> squares = value * value;
+            float lenSq = (squares[0] + squares[1]) + squares[2];
+            if (lenSq < DegenerateVectorLengthSq)
+            {
+                return Vector3.Zero;
+            }
+
+            float invLen = 1.0f / MathF.Sqrt(lenSq);
+            Vector128<float> scaled = value * Vector128.Create(invLen);
+            return new Vector3(scaled[0], scaled[1], scaled[2]);
+        }
+
+        float scalarLenSq = (v.X * v.X) + (v.Y * v.Y) + (v.Z * v.Z);
+        if (scalarLenSq < DegenerateVectorLengthSq)
+        {
+            return Vector3.Zero;
+        }
+
+        float scalarInvLen = 1.0f / MathF.Sqrt(scalarLenSq);
+        return new Vector3(v.X * scalarInvLen, v.Y * scalarInvLen, v.Z * scalarInvLen);
     }
 
     /// <summary>Spherical interpolation with antipodal fix and linear fallback.</summary>
@@ -115,6 +157,97 @@ public static class FastMath
         float m = time % duration;
         return m < 0.0f ? m + duration : m;
     }
+
+    /// <summary>
+    /// Finds the key segment a time falls into: the index <c>i</c> with
+    /// <c>times[i] &lt;= time</c> and <c>time &lt; times[i + 1]</c>, clamped into
+    /// <c>[0, times.Length - 2]</c> so the result always names a readable pair of
+    /// adjacent keys. Out-of-range times therefore clamp to the first or last
+    /// segment instead of faulting, which is what lets callers sample without
+    /// pre-clamping. Binary search, logarithmic in the key count.
+    /// </summary>
+    /// <param name="times">Ascending key times, as validated by the channel ctor.</param>
+    /// <param name="time">Time to locate.</param>
+    /// <returns>The segment index holding <paramref name="time"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int FindSegment(ReadOnlySpan<float> times, float time)
+    {
+        int low = 0;
+        int high = times.Length - 1;
+        while (low <= high)
+        {
+            int mid = (low + high) >> 1;
+            if (times[mid] <= time)
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return Math.Clamp(low - 1, 0, times.Length - 2);
+    }
+
+    /// <summary>
+    /// Hinted <see cref="FindSegment(ReadOnlySpan{float}, float)"/>: same result,
+    /// but a repeated walk through one channel in playback order resolves in a
+    /// constant number of comparisons instead of a fresh binary search per frame.
+    /// The hint is only ever a starting guess — the candidate is verified against
+    /// the key times before it is returned, so a stale or wrong hint costs one
+    /// binary search and can never change the answer. That verification is also
+    /// what makes the hint safe to share across threads: a racing writer costs
+    /// speed, never correctness.
+    /// </summary>
+    /// <param name="times">Ascending key times, as validated by the channel ctor.</param>
+    /// <param name="time">Time to locate.</param>
+    /// <param name="hint">
+    /// Previous result for this channel, and the slot the new result is written
+    /// back to. A hint outside the valid range is discarded.
+    /// </param>
+    /// <returns>The segment index holding <paramref name="time"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int FindSegment(ReadOnlySpan<float> times, float time, ref int hint)
+    {
+        int lastSegment = times.Length - 2;
+        if (lastSegment < 0)
+        {
+            // Fewer than two keys: no segment pair exists to name, so there is
+            // nothing a hint could ever improve on. Callers sample single-key and
+            // empty channels before reaching the search.
+            hint = 0;
+            return 0;
+        }
+
+        int candidate = (uint)hint <= (uint)lastSegment ? hint : 0;
+        if (IsSegment(times, time, candidate, lastSegment))
+        {
+            hint = candidate;
+            return candidate;
+        }
+
+        if (candidate < lastSegment && IsSegment(times, time, candidate + 1, lastSegment))
+        {
+            hint = candidate + 1;
+            return candidate + 1;
+        }
+
+        int segment = FindSegment(times, time);
+        hint = segment;
+        return segment;
+    }
+
+    /// <summary>
+    /// Tests whether <paramref name="segment"/> is the segment holding
+    /// <paramref name="time"/>. Because the key times ascend, a segment that
+    /// brackets the time is uniquely the right answer; the last segment also
+    /// absorbs every time past its start, which is what the clamp in the
+    /// unhinted search encodes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsSegment(ReadOnlySpan<float> times, float time, int segment, int lastSegment) =>
+        times[segment] <= time && (segment == lastSegment || time < times[segment + 1]);
 
     /// <summary>Rotates a vector without building a matrix.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

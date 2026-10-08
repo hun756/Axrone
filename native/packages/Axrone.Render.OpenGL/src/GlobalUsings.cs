@@ -18,4 +18,7 @@ global using Axrone.Render.OpenGL.Native;
 global using Axrone.Render.OpenGL.Resources;
 global using Axrone.Render.OpenGL.Shading;
 global using Axrone.Render.OpenGL.Texture;
+global using Axrone.Hash;
 global using Axrone.Utility.Descriptors;
+global using Axrone.Geometry;
+global using Axrone.Numeric;

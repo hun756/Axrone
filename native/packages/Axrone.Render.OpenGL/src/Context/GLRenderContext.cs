@@ -296,7 +296,19 @@ public sealed class GLRenderContext : IRenderContext
     public void BindTexture(uint slot, uint textureId, uint target = 0)
     {
         _context.AssertRenderThread();
-        _context.State.BindTexture2D(slot, textureId);
+
+        // Honor the caller's target. A cube map / 3D / 2D-array texture object cannot be bound
+        // to TEXTURE_2D (GL_INVALID_OPERATION), so only the 2D path uses the cached per-unit
+        // BindTexture2D; other targets bind directly on the selected unit.
+        if (target == 0 || target == GLConst.Texture2D)
+        {
+            _context.State.BindTexture2D(slot, textureId);
+        }
+        else
+        {
+            _context.State.ActiveTexture(slot);
+            _context.State.BindTexture(target, textureId);
+        }
     }
 
     /// <inheritdoc/>

@@ -27,8 +27,6 @@ namespace Axrone.Render.OpenGL.Shading;
 public sealed class GLProgramPool : IDisposable
 {
     private const int DefaultCapacity = 64;
-    private const uint FnvOffsetBasis = 2166136261u;
-    private const uint FnvPrime = 16777619u;
 
     private readonly Dictionary<ulong, CacheEntry> _entries;
     private readonly LinkedList<ulong> _lru;
@@ -152,20 +150,9 @@ public sealed class GLProgramPool : IDisposable
 
     private static ulong ComputeKey(string vertexSource, string fragmentSource)
     {
-        uint vertexHash = ComputeFnv1a(vertexSource);
-        uint fragmentHash = ComputeFnv1a(fragmentSource);
+        uint vertexHash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(vertexSource.AsSpan())).Value;
+        uint fragmentHash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(fragmentSource.AsSpan())).Value;
         return ((ulong)vertexHash << 32) | fragmentHash;
-    }
-
-    private static uint ComputeFnv1a(string source)
-    {
-        uint hash = FnvOffsetBasis;
-        foreach (char c in source)
-        {
-            hash = (hash ^ c) * FnvPrime;
-        }
-
-        return hash;
     }
 
     private sealed class CacheEntry

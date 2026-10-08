@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Numeric</RootNamespace>
+    <AssemblyName>Axrone.Numeric</AssemblyName>
+    <Description>Scalar game-math value types (vec2/vec3/quat/mat4) for the Axrone engine: layout-stable, interop-friendly and allocation-free. Batch kernels live in Axrone.Simd; this package owns single-value game math only.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1051: Do not declare visible instance fields — X/Y/Z are the interop contract.
+         Callers hand the fields to native APIs and SIMD loads directly; hiding them behind
+         properties would cost a bounds/constness check per component in every hot path. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA2225: Operator overloads need named alternatives — the whole vec3 surface is a
+         value type whose operators are the documented API. Named twins would double the
+         surface area for members callers never spell (Create, AsSpan and the casts cover
+         the shapes that actually need an expression form). -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1815: Override Equals on value types — the normalization strategies are stateless
+         type tokens used only for static-abstract dispatch. They carry no data, are never
+         compared, and an equality surface on them would be an API nobody should call. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1000: Static members on generic types — Vec3Builder.Create is the typestate entry point. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Numeric.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Simd/Axrone.Simd.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

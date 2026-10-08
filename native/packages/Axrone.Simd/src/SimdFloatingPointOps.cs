@@ -207,6 +207,27 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         ThrowHelper.ValidateTernarySpans(a, b, c, destination);
         nuint length = (nuint)a.Length;
         if (length == 0) return;
+        if (SimdRuntime.UseFmaPath)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                VectorFmaFusedFloat(
+                    MemoryMarshal.Cast<T, float>(a),
+                    MemoryMarshal.Cast<T, float>(b),
+                    MemoryMarshal.Cast<T, float>(c),
+                    MemoryMarshal.Cast<T, float>(destination));
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                VectorFmaFusedDouble(
+                    MemoryMarshal.Cast<T, double>(a),
+                    MemoryMarshal.Cast<T, double>(b),
+                    MemoryMarshal.Cast<T, double>(c),
+                    MemoryMarshal.Cast<T, double>(destination));
+                return;
+            }
+        }
         ref T aRef = ref MemoryMarshal.GetReference(a);
         ref T bRef = ref MemoryMarshal.GetReference(b);
         ref T cRef = ref MemoryMarshal.GetReference(c);
@@ -226,6 +247,86 @@ internal static class SimdFloatingPointOps<T> where T : unmanaged, IFloatingPoin
         }
         for (; i < length; ++i)
             Unsafe.Add(ref dRef, (nint)i) = Unsafe.Add(ref aRef, (nint)i) * Unsafe.Add(ref bRef, (nint)i) + Unsafe.Add(ref cRef, (nint)i);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void VectorFmaFusedFloat(ReadOnlySpan<float> a, ReadOnlySpan<float> b, ReadOnlySpan<float> c, Span<float> destination)
+    {
+        nuint length = (nuint)a.Length;
+        ref float aRef = ref MemoryMarshal.GetReference(a);
+        ref float bRef = ref MemoryMarshal.GetReference(b);
+        ref float cRef = ref MemoryMarshal.GetReference(c);
+        ref float dRef = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (SimdRuntime.UseVector256Path && length >= 16)
+        {
+            nuint limit = length - 16 + 1;
+            for (; i < limit; i += 16)
+            {
+                Vector256.FusedMultiplyAdd(
+                    Vector256.LoadUnsafe(ref aRef, i), Vector256.LoadUnsafe(ref bRef, i),
+                    Vector256.LoadUnsafe(ref cRef, i)).StoreUnsafe(ref dRef, i);
+                Vector256.FusedMultiplyAdd(
+                    Vector256.LoadUnsafe(ref aRef, i + 8), Vector256.LoadUnsafe(ref bRef, i + 8),
+                    Vector256.LoadUnsafe(ref cRef, i + 8)).StoreUnsafe(ref dRef, i + 8);
+            }
+        }
+        if (length - i >= 8)
+        {
+            nuint limit = length - 8 + 1;
+            for (; i < limit; i += 8)
+            {
+                Vector128.FusedMultiplyAdd(
+                    Vector128.LoadUnsafe(ref aRef, i), Vector128.LoadUnsafe(ref bRef, i),
+                    Vector128.LoadUnsafe(ref cRef, i)).StoreUnsafe(ref dRef, i);
+                Vector128.FusedMultiplyAdd(
+                    Vector128.LoadUnsafe(ref aRef, i + 4), Vector128.LoadUnsafe(ref bRef, i + 4),
+                    Vector128.LoadUnsafe(ref cRef, i + 4)).StoreUnsafe(ref dRef, i + 4);
+            }
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dRef, (nint)i) = MathF.FusedMultiplyAdd(
+                Unsafe.Add(ref aRef, (nint)i), Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref cRef, (nint)i));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void VectorFmaFusedDouble(ReadOnlySpan<double> a, ReadOnlySpan<double> b, ReadOnlySpan<double> c, Span<double> destination)
+    {
+        nuint length = (nuint)a.Length;
+        ref double aRef = ref MemoryMarshal.GetReference(a);
+        ref double bRef = ref MemoryMarshal.GetReference(b);
+        ref double cRef = ref MemoryMarshal.GetReference(c);
+        ref double dRef = ref MemoryMarshal.GetReference(destination);
+        nuint i = 0;
+        if (SimdRuntime.UseVector256Path && length >= 8)
+        {
+            nuint limit = length - 8 + 1;
+            for (; i < limit; i += 8)
+            {
+                Vector256.FusedMultiplyAdd(
+                    Vector256.LoadUnsafe(ref aRef, i), Vector256.LoadUnsafe(ref bRef, i),
+                    Vector256.LoadUnsafe(ref cRef, i)).StoreUnsafe(ref dRef, i);
+                Vector256.FusedMultiplyAdd(
+                    Vector256.LoadUnsafe(ref aRef, i + 4), Vector256.LoadUnsafe(ref bRef, i + 4),
+                    Vector256.LoadUnsafe(ref cRef, i + 4)).StoreUnsafe(ref dRef, i + 4);
+            }
+        }
+        if (length - i >= 4)
+        {
+            nuint limit = length - 4 + 1;
+            for (; i < limit; i += 4)
+            {
+                Vector128.FusedMultiplyAdd(
+                    Vector128.LoadUnsafe(ref aRef, i), Vector128.LoadUnsafe(ref bRef, i),
+                    Vector128.LoadUnsafe(ref cRef, i)).StoreUnsafe(ref dRef, i);
+                Vector128.FusedMultiplyAdd(
+                    Vector128.LoadUnsafe(ref aRef, i + 2), Vector128.LoadUnsafe(ref bRef, i + 2),
+                    Vector128.LoadUnsafe(ref cRef, i + 2)).StoreUnsafe(ref dRef, i + 2);
+            }
+        }
+        for (; i < length; ++i)
+            Unsafe.Add(ref dRef, (nint)i) = Math.FusedMultiplyAdd(
+                Unsafe.Add(ref aRef, (nint)i), Unsafe.Add(ref bRef, (nint)i), Unsafe.Add(ref cRef, (nint)i));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

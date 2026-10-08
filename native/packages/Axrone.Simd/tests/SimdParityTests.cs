@@ -1,5 +1,7 @@
 namespace Axrone.Simd.Tests;
 
+using System.Runtime.Intrinsics;
+
 [Collection("SimdRuntime")]
 public class SimdParityTests
 {
@@ -38,6 +40,19 @@ public class SimdParityTests
         new(new SimdCapabilities(
             FeatureBitmask256.Empty, SimdArchitecture.Unknown, SimdIsaLevel.Generic, SimdRegisterWidth.None, SimdAlignment.None));
 
+    private static ConfigurableSimdRuntime VectorRuntime(bool withFma)
+    {
+        FeatureBitmask256 mask = FeatureBitmask256.Create(SimdFeature.VectorHardwareAccelerated)
+            .Set(SimdFeature.Vector128HardwareAccelerated)
+            .Set(SimdFeature.Vector256HardwareAccelerated);
+        if (withFma)
+        {
+            mask = mask.Set(SimdFeature.Fma);
+        }
+        return new(new SimdCapabilities(
+            mask, SimdArchitecture.X64, SimdIsaLevel.Generic, SimdRegisterWidth.None, SimdAlignment.None));
+    }
+
     [Fact]
     public void CustomRuntime_ForcesScalarTierWithParity()
     {
@@ -60,6 +75,90 @@ public class SimdParityTests
         }
 
         SimdRuntime.SetCustomRuntime(null).Should().BeNull();
+    }
+
+    [Fact]
+    public void VectorFma_FmaTierMatchesMulAddTier()
+    {
+        const int size = 100;
+        float[] a = new float[size];
+        float[] b = new float[size];
+        float[] c = new float[size];
+        for (int i = 0; i < size; i++)
+        {
+            a[i] = i * 0.37f - 11f;
+            b[i] = 7f - i * 0.11f;
+            c[i] = i * 1.7f;
+        }
+
+        float[] fused = new float[size];
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: true)))
+        {
+            SimdFloat32.VectorFma(a, b, c, fused);
+        }
+
+        float[] plain = new float[size];
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: false)))
+        {
+            SimdFloat32.VectorFma(a, b, c, plain);
+        }
+
+        for (int i = 0; i < size; i++)
+            fused[i].Should().BeApproximately(plain[i], 1e-4f);
+    }
+
+    [Fact]
+    public void VectorFma_FusedTierActuallyExecutes()
+    {
+        const int size = 64;
+        float[] a = new float[size];
+        float[] b = new float[size];
+        float[] c = new float[size];
+        for (int i = 0; i < size; i++)
+        {
+            float e = (i + 1) * 1e-6f;
+            a[i] = 1f + e;
+            b[i] = 1f + e;
+            c[i] = -(1f + (2f * e));
+        }
+
+        float[] fused = new float[size];
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: true)))
+        {
+            SimdFloat32.VectorFma(a, b, c, fused);
+        }
+
+        float[] plain = new float[size];
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: false)))
+        {
+            SimdFloat32.VectorFma(a, b, c, plain);
+        }
+
+        fused.Should().NotEqual(plain);
+    }
+
+    [Fact]
+    public void SimdRow32_FusedTierMatchesScalarTier()
+    {
+        var b0 = Vector128.Create(1f, 2f, 3f, 4f);
+        var b1 = Vector128.Create(5f, 6f, 7f, 8f);
+        var b2 = Vector128.Create(9f, 10f, 11f, 12f);
+        var b3 = Vector128.Create(13f, 14f, 15f, 16f);
+
+        Vector128<float> fused;
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: true)))
+        {
+            fused = SimdRow32.MultiplyAddRowFused(0.5f, -1.25f, 2f, 0.1f, b0, b1, b2, b3);
+        }
+
+        Vector128<float> plain;
+        using (SimdRuntime.UseCustomRuntime(VectorRuntime(withFma: false)))
+        {
+            plain = SimdRow32.MultiplyAddRowPlain(0.5f, -1.25f, 2f, 0.1f, b0, b1, b2, b3);
+        }
+
+        for (int i = 0; i < 4; i++)
+            fused.GetElement(i).Should().BeApproximately(plain.GetElement(i), 1e-5f);
     }
 
     [Fact]

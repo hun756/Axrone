@@ -44,6 +44,11 @@ public sealed class GLMesh : IGLResource, IDisposable
     public int IndexCount { get; }
 
     /// <summary>
+    /// Gets the index element type (UnsignedInt when not indexed).
+    /// </summary>
+    public uint IndexType { get; } = GLConst.UnsignedInt;
+
+    /// <summary>
     /// Gets a value indicating whether this mesh uses an index buffer.
     /// </summary>
     public bool IsIndexed
@@ -55,7 +60,7 @@ public sealed class GLMesh : IGLResource, IDisposable
     /// <summary>
     /// Gets the axis-aligned bounding box of this mesh.
     /// </summary>
-    public Bounds3D Bounds { get; }
+    public Aabb3D Bounds { get; }
 
     /// <summary>
     /// Gets the debug label.
@@ -88,14 +93,16 @@ public sealed class GLMesh : IGLResource, IDisposable
     /// <param name="bounds">The axis-aligned bounding box.</param>
     /// <param name="topology">The primitive topology (default: <see cref="GLConst.Triangles"/>).</param>
     /// <param name="label">The debug label.</param>
+    /// <param name="indexType">The index element type (default: <see cref="GLConst.UnsignedInt"/>).</param>
     public GLMesh(
         GLContext context,
         VertexLayout layout,
         ReadOnlySpan<byte> vertexData,
         ReadOnlySpan<byte> indexData,
-        Bounds3D bounds,
+        Aabb3D bounds,
         uint topology = GLConst.Triangles,
-        string label = "mesh")
+        string label = "mesh",
+        uint indexType = GLConst.UnsignedInt)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(layout);
@@ -124,7 +131,8 @@ public sealed class GLMesh : IGLResource, IDisposable
         // Create index buffer if index data provided
         if (!indexData.IsEmpty)
         {
-            IndexCount = indexData.Length / sizeof(uint);
+            IndexType = indexType;
+            IndexCount = indexData.Length / IndexElementSize(indexType);
             _indexDataSnapshot = indexData.ToArray();
             IndexBuffer = new GLBuffer(context, GLConst.ElementArrayBuffer, GLConst.StaticDraw, indexData.Length, $"{label}_ibo");
             IndexBuffer.Update(indexData);
@@ -132,7 +140,7 @@ public sealed class GLMesh : IGLResource, IDisposable
 
         // Create VAO and configure layout
         VertexArray = IndexBuffer != null
-            ? layout.BuildVertexArray(context, VertexBuffer, IndexBuffer, VertexCount, IndexCount)
+            ? layout.BuildVertexArray(context, VertexBuffer, IndexBuffer, VertexCount, IndexCount, IndexType)
             : layout.BuildVertexArray(context, VertexBuffer, VertexCount);
 
         // Register this mesh with the resource registry
@@ -203,7 +211,7 @@ public sealed class GLMesh : IGLResource, IDisposable
         // Reconfigure the VAO layout
         if (IndexBuffer != null)
         {
-            VertexArray.ConfigureLayout(VertexBuffer, IndexBuffer, Layout.Attributes, VertexCount, IndexCount);
+            VertexArray.ConfigureLayout(VertexBuffer, IndexBuffer, Layout.Attributes, VertexCount, IndexCount, IndexType);
         }
         else
         {
@@ -221,6 +229,25 @@ public sealed class GLMesh : IGLResource, IDisposable
             IndexBuffer?.Dispose();
 
             _context.Registry.Unregister(this);
+        }
+    }
+
+    /// <summary>
+    /// Returns the byte size of an index element type (UNSIGNED_BYTE/SHORT/INT).
+    /// </summary>
+    private static int IndexElementSize(uint indexType)
+    {
+        switch (indexType)
+        {
+            case GLConst.UnsignedByte:
+                return 1;
+            case GLConst.UnsignedShort:
+                return 2;
+            case GLConst.UnsignedInt:
+                return 4;
+            default:
+                ThrowHelper.ThrowInvalidArgument($"Unsupported index element type 0x{indexType:X4}");
+                return 4; // Unreachable, satisfies compiler
         }
     }
 

@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Geometry</RootNamespace>
+    <AssemblyName>Axrone.Geometry</AssemblyName>
+    <Description>Geometry value types (aabb, ray, sphere, frustum, spatial tree) for the Axrone engine: layout-stable, interop-friendly and allocation-free. Shapes are expressed in the scalar primitives owned by Axrone.Numeric; this package adds bounds/visibility/acceleration-structure queries only.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Operator overloads need named alternatives — the identity/capacity/
+         distance surface is a set of value types whose casts are the documented API.
+         The Value property and the public constructors already cover the shapes that
+         need an expression form, so twin factory methods would only double the surface. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Frustum3 is a bulk plane payload handed to the visibility pass, where the
+         six planes are read positionally and never compared as a value. A frustum is
+         classified against geometry rather than compared for equality, so Equals/GetHashCode
+         plus the ==/!= pair would be surface the frustum contract does not use. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1716: ISpatialLifecycle.Complete reports the fault that ended the bulk-drain
+         stream, and "error" is the name callers pass it under. The parameter is
+         positionally optional, so the reserved-word clash only bites callers that name it
+         in another language; the clarity of the drain-failure contract wins. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA2007: the bulk-drain lifecycle awaits its own spin/yield loop, which is built on
+          Task.Yield and carries no captured-context dependency; the awaits stay bare so the
+          drain behaves identically on the worker thread and on a pooled caller. -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- CA1000: Static members on generic types — DynamicAabbTreeBuilder.Create is the
+         typestate entry point. The stage parameter only exists on the generic builder,
+         so the factory cannot live on a non-generic type without losing the stage. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Geometry.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

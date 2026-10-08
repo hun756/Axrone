@@ -188,7 +188,13 @@ public sealed class GLStateCache
     public GLStateCache(IGLApi gl)
     {
         _gl = gl ?? throw new ArgumentNullException(nameof(gl));
-        Invalidate();
+
+        // Seed the shadow state to GL defaults with deduplication ACTIVE. A freshly created
+        // context is already in the GL default state, so the sentinels Invalidate() installs
+        // mirror it and the first real setter still issues its GL call (sentinel mismatch).
+        // Leaving _isInvalidated set (a bare Invalidate) would force every setter to issue an
+        // unconditional GL call forever, defeating the cache's entire purpose.
+        Reset();
     }
 
     /// <summary>

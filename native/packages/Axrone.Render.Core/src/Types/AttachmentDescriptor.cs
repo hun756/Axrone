@@ -2,34 +2,34 @@ namespace Axrone.Render.Core;
 
 /// <summary>One render-target attachment binding of a render pass.</summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct AttachmentDescriptor : IEquatable<AttachmentDescriptor>
+public readonly record struct AttachmentDescriptor : IDescriptor<AttachmentDescriptor>
 {
     /// <summary>Maximum slot index the inline descriptor storage supports.</summary>
     public const int MaxSlot = 7;
 
     /// <summary>Logical attachment slot (0-7 for color targets).</summary>
-    public readonly byte Slot;
+    public byte Slot { get; init; }
 
     /// <summary>How previous attachment contents are made available.</summary>
-    public readonly AttachmentLoadAction LoadAction;
+    public AttachmentLoadAction LoadAction { get; init; }
 
     /// <summary>What happens to attachment contents after the pass.</summary>
-    public readonly AttachmentStoreAction StoreAction;
+    public AttachmentStoreAction StoreAction { get; init; }
 
     /// <summary>Color clear value applied on Clear load.</summary>
-    public readonly ClearColorValue ClearColor;
+    public ClearColorValue ClearColor { get; init; }
 
     /// <summary>Depth clear value applied on Clear load.</summary>
-    public readonly float ClearDepth;
+    public float ClearDepth { get; init; }
 
     /// <summary>Stencil clear value applied on Clear load.</summary>
-    public readonly int ClearStencil;
+    public int ClearStencil { get; init; }
 
     /// <summary>Whether depth/stencil clear values are authoritative.</summary>
-    public readonly bool IsDepthStencil;
+    public bool IsDepthStencil { get; init; }
 
     /// <summary>Optional resolve target framebuffer for multisample resolve actions.</summary>
-    public readonly uint ResolveFramebuffer;
+    public uint ResolveFramebuffer { get; init; }
 
     /// <summary>Initializes a new attachment descriptor.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -78,31 +78,16 @@ public readonly struct AttachmentDescriptor : IEquatable<AttachmentDescriptor>
         uint resolveFramebuffer = 0) =>
         new(0, loadAction, storeAction, default, clearDepth, clearStencil, isDepthStencil: true, resolveFramebuffer);
 
-    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(AttachmentDescriptor other) =>
-        Slot == other.Slot &&
-        LoadAction == other.LoadAction &&
-        StoreAction == other.StoreAction &&
-        ClearColor == other.ClearColor &&
-        ClearDepth == other.ClearDepth &&
-        ClearStencil == other.ClearStencil &&
-        IsDepthStencil == other.IsDepthStencil &&
-        ResolveFramebuffer == other.ResolveFramebuffer;
+    public static void Validate(in AttachmentDescriptor descriptor)
+    {
+        if (descriptor.Slot > MaxSlot)
+        {
+            ThrowHelper.ThrowInvalidArgument($"Attachment slot must be in [0, {MaxSlot}]");
+        }
+    }
 
-    /// <inheritdoc/>
-    public override bool Equals([NotNullWhen(true)] object? obj) =>
-        obj is AttachmentDescriptor other && Equals(other);
-
-    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override int GetHashCode() => HashCode.Combine(
-        Slot, (byte)LoadAction, (byte)StoreAction, ClearDepth, ClearStencil, IsDepthStencil, ClearColor, ResolveFramebuffer);
-
-    /// <summary>Equality operator.</summary>
-    public static bool operator ==(AttachmentDescriptor left, AttachmentDescriptor right) => left.Equals(right);
-
-    /// <summary>Inequality operator.</summary>
-    public static bool operator !=(AttachmentDescriptor left, AttachmentDescriptor right) => !left.Equals(right);
+    public static string Describe(in AttachmentDescriptor descriptor) => descriptor.ToString();
 }
 

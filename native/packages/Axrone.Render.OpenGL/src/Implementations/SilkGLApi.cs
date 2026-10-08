@@ -517,6 +517,10 @@ public sealed unsafe class SilkGLApi : IGLApi
     public void GetQueryParameter(uint query, uint pname, out int parameters) =>
         _gl.GetQueryObject(query, (QueryObjectParameterName)pname, out parameters);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void GetQueryParameter(uint query, uint pname, out ulong parameters) =>
+        _gl.GetQueryObject(query, (QueryObjectParameterName)pname, out parameters);
+
     // ========================================================================
     // Sync Operations
     // ========================================================================
@@ -562,18 +566,12 @@ public sealed unsafe class SilkGLApi : IGLApi
     public void BindTransformFeedback(uint target, uint transformFeedback) =>
         _gl.BindTransformFeedback((GLEnum)target, transformFeedback);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void TransformFeedbackVaryings(uint program, string[] varyings, uint bufferMode)
     {
         ArgumentNullException.ThrowIfNull(varyings);
-        // Simplified: TransformFeedbackVaryings is rarely used in modern renderers
-        // For a complete implementation, would need to marshal string[] to byte**
-        // This is a placeholder that satisfies the interface
-        if (varyings.Length > 0)
-        {
-            // Note: This would need proper marshalling in production code
-            // For now, we'll skip this as it's not critical for the core renderer
-        }
+
+        // Silk.NET marshals the string[] to the GLchar* const* array the entry point expects.
+        _gl.TransformFeedbackVaryings(program, (uint)varyings.Length, varyings, (TransformFeedbackBufferMode)bufferMode);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -599,6 +597,19 @@ public sealed unsafe class SilkGLApi : IGLApi
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void GetInteger(uint pname, out int data) => _gl.GetInteger((GetPName)pname, out data);
+
+    public void GetInteger(uint pname, Span<int> data)
+    {
+        if (data.IsEmpty)
+        {
+            return;
+        }
+
+        fixed (int* p = data)
+        {
+            _gl.GetInteger((GetPName)pname, p);
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? GetString(uint name)

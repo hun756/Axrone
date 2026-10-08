@@ -37,7 +37,9 @@
     <PackageReference Include="Silk.NET.Core" />
     <ProjectReference Include="../Axrone.Render.Core/Axrone.Render.Core.csproj" />
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
     <ProjectReference Include="../Axrone.Execution/Axrone.Execution.csproj" />
+    <ProjectReference Include="../Axrone.Hash/Axrone.Hash.csproj" />
   </ItemGroup>
 
   <ItemGroup>

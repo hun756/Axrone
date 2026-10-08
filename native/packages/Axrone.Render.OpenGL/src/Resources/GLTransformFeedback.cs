@@ -10,6 +10,9 @@ public sealed class GLTransformFeedback : IGLResource, IDisposable
     private readonly IGLApi _gl;
     private int _disposed;
 
+    // Indexed buffer bindings captured by BindBuffer so a context restore can re-apply them.
+    private readonly Dictionary<uint, GLBuffer> _bufferBindings = new();
+
     /// <summary>Gets the transform feedback handle.</summary>
     public uint Id { get; private set; }
 
@@ -137,6 +140,7 @@ public sealed class GLTransformFeedback : IGLResource, IDisposable
         _context.AssertRenderThread();
         EnsureAlive();
         ArgumentNullException.ThrowIfNull(buffer);
+        _bufferBindings[index] = buffer;
         _gl.BindBufferBase(GLConst.TransformFeedbackBuffer, index, buffer.Id);
         return this;
     }
@@ -164,6 +168,17 @@ public sealed class GLTransformFeedback : IGLResource, IDisposable
         if (_context.DebugLabelsEnabled && !string.IsNullOrEmpty(Label))
         {
             _gl.ObjectLabel(GLConst.TransformFeedback, Id, Label);
+        }
+
+        // Re-apply the indexed buffer bindings captured by BindBuffer; a fresh TF object has none.
+        // Buffers (priority 10) are rebuilt before transform-feedback objects (priority 45).
+        if (_bufferBindings.Count > 0)
+        {
+            _gl.BindTransformFeedback(GLConst.TransformFeedback, Id);
+            foreach ((uint index, GLBuffer buffer) in _bufferBindings)
+            {
+                _gl.BindBufferBase(GLConst.TransformFeedbackBuffer, index, buffer.Id);
+            }
         }
     }
 

@@ -47,6 +47,27 @@ public sealed unsafe class MockGLApi : IGLApi
     public int MaxSamples { get; set; } = 8;
 
     /// <summary>
+    /// Gets or sets the width returned by GL_MAX_VIEWPORT_DIMS (0x0D3A).
+    /// </summary>
+    public int MaxViewportWidth { get; set; } = 32768;
+
+    /// <summary>
+    /// Gets or sets the height returned by GL_MAX_VIEWPORT_DIMS (0x0D3A).
+    /// </summary>
+    public int MaxViewportHeight { get; set; } = 16384;
+
+    /// <summary>
+    /// Gets or sets the 64-bit value returned by <see cref="GetQueryParameter(uint, uint, out ulong)"/>.
+    /// </summary>
+    public ulong QueryResult64 { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the value returned by GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT (0x84FF);
+    /// 0 simulates EXT_texture_filter_anisotropic being unavailable.
+    /// </summary>
+    public int MaxTextureMaxAnisotropy { get; set; } = 16;
+
+    /// <summary>
     /// Gets or sets the framebuffer status for CheckFramebufferStatus.
     /// </summary>
     public uint FramebufferStatus { get; set; } = 0x8CD5; // GL_FRAMEBUFFER_COMPLETE
@@ -127,8 +148,37 @@ public sealed unsafe class MockGLApi : IGLApi
         }
     }
 
-    public void BufferSubData(uint target, nint offset, nuint size, void* data) =>
+    public void BufferSubData(uint target, nint offset, nuint size, void* data)
+    {
         Log($"BufferSubData({target}, {offset}, {size})");
+
+        // Mirror real GL: the write lands in the buffer bound to `target`, not in an
+        // arbitrary binding. If nothing is bound to that target, no storage is touched
+        // (real GL raises GL_INVALID_OPERATION here).
+        if (data is null || size == 0)
+        {
+            return;
+        }
+
+        if (!_boundBuffers.TryGetValue(target, out uint bufferId) || bufferId == 0)
+        {
+            return;
+        }
+
+        int end = checked((int)(offset + (long)size));
+        byte[] store = new byte[end];
+        if (_bufferStorage.TryGetValue(bufferId, out byte[]? prior))
+        {
+            prior.AsSpan(0, Math.Min(prior.Length, end)).CopyTo(store);
+        }
+
+        fixed (byte* dst = store)
+        {
+            Buffer.MemoryCopy(data, dst + offset, end - offset, (long)size);
+        }
+
+        _bufferStorage[bufferId] = store;
+    }
 
     public void CopyBufferSubData(uint readTarget, uint writeTarget, nint readOffset, nint writeOffset, nuint size) =>
         Log($"CopyBufferSubData({readTarget}, {writeTarget}, {readOffset}, {writeOffset}, {size})");
@@ -557,6 +607,12 @@ public sealed unsafe class MockGLApi : IGLApi
         parameters = 1;
     }
 
+    public void GetQueryParameter(uint query, uint pname, out ulong parameters)
+    {
+        Log($"GetQueryParameter64({query}, {pname})");
+        parameters = QueryResult64;
+    }
+
     // ========================================================================
     // Sync Operations
     // ========================================================================
@@ -618,9 +674,31 @@ public sealed unsafe class MockGLApi : IGLApi
             0x8869 => MaxVertexAttribs, // GL_MAX_VERTEX_ATTRIBS
             0x8B4D => MaxCombinedTextureUnits, // GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
             0x8D57 => MaxSamples, // GL_MAX_SAMPLES
+            0x84FF => MaxTextureMaxAnisotropy, // GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
             _ => 4096
         };
         Log($"GetInteger({pname}) -> {data}");
+    }
+
+    public void GetInteger(uint pname, Span<int> data)
+    {
+        if (data.IsEmpty)
+        {
+            Log($"GetInteger({pname}, [])");
+            return;
+        }
+
+        if (pname == 0x0D3A && data.Length >= 2) // GL_MAX_VIEWPORT_DIMS returns width, height
+        {
+            data[0] = MaxViewportWidth;
+            data[1] = MaxViewportHeight;
+        }
+        else
+        {
+            data.Fill(4096);
+        }
+
+        Log($"GetInteger({pname}, span[{data.Length}])");
     }
 
     public string? GetString(uint name)

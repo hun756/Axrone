@@ -8,5 +8,5 @@ namespace Axrone.Animation;
 /// </summary>
 public readonly record struct MotionBindingContext(
     ParameterStore? Parameters,
-    IReadOnlyDictionary<CurveId, int>? CurveLayout,
+    Axrone.Animation.CurveLayout? CurveLayout,
     Rig? Rig);

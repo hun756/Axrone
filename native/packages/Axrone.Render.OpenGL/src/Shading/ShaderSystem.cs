@@ -445,14 +445,38 @@ public sealed class ShaderInstance
 
         EnsureCacheFresh();
 
-        // FNV-1a over the bit patterns of both components.
-        uint hash = 2166136261u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(x)) * 16777619u;
-        hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(y)) * 16777619u;
+        Span<float> lanes = stackalloc float[2] { x, y };
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(lanes)).Value;
 
         if (_cache.CheckAndSet(Program.Id, location, hash))
         {
             _context.GL.Uniform2(location, x, y);
+        }
+    }
+
+    /// <summary>
+    /// Sets a vec4 uniform. All four components share one cache entry, so a re-upload is
+    /// skipped only when the quad is bit-identical to the last upload.
+    /// </summary>
+    /// <param name="location">The uniform location.</param>
+    /// <param name="v0">The first component.</param>
+    /// <param name="v1">The second component.</param>
+    /// <param name="v2">The third component.</param>
+    /// <param name="v3">The fourth component.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetVec4(int location, float v0, float v1, float v2, float v3)
+    {
+        if (location < 0)
+            return;
+
+        EnsureCacheFresh();
+
+        Span<float> lanes = stackalloc float[4] { v0, v1, v2, v3 };
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(lanes)).Value;
+
+        if (_cache.CheckAndSet(Program.Id, location, hash))
+        {
+            _context.GL.Uniform4(location, v0, v1, v2, v3);
         }
     }
 
@@ -471,13 +495,7 @@ public sealed class ShaderInstance
         fixed (System.Numerics.Matrix4x4* ptr = &matrix)
         {
             float* f = (float*)ptr;
-
-            // Compute FNV-1a hash
-            uint hash = 2166136261u;
-            for (int i = 0; i < 16; i++)
-            {
-                hash = (hash ^ (uint)BitConverter.SingleToInt32Bits(f[i])) * 16777619u;
-            }
+            uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(new ReadOnlySpan<float>(f, 16))).Value;
 
             if (_cache.CheckAndSet(Program.Id, location, hash))
             {

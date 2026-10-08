@@ -178,6 +178,10 @@ public static class GLConst
     public const uint TextureMaxLod = 0x813B;
     public const uint CompareRefToTexture = 0x884E;
 
+    // Anisotropic filtering (EXT_texture_filter_anisotropic)
+    public const uint TextureMaxAnisotropyExt = 0x84FE;
+    public const uint MaxTextureMaxAnisotropyExt = 0x84FF;
+
     // Query
     public const uint Query = 0x82E3;
     public const uint QueryResult = 0x8866;

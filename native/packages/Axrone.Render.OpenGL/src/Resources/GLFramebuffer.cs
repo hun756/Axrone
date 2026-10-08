@@ -417,6 +417,17 @@ public sealed class GLFramebuffer : IGLResource, IDisposable
                 0);
         }
 
+        if (_depthRenderbuffer != null)
+        {
+            _context.State.BindFramebuffer(GLConst.Framebuffer, Id);
+            _context.State.BindRenderbuffer(_depthRenderbuffer.Id);
+            _gl.FramebufferRenderbuffer(
+                GLConst.Framebuffer,
+                GLConst.DepthAttachment,
+                GLConst.Renderbuffer,
+                _depthRenderbuffer.Id);
+        }
+
         UpdateDrawBuffers();
 
         if (_context.DebugLabelsEnabled && !string.IsNullOrEmpty(Label))

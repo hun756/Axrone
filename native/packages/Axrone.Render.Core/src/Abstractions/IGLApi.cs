@@ -406,6 +406,12 @@ public unsafe interface IGLApi
     /// <summary>Gets a query parameter.</summary>
     void GetQueryParameter(uint query, uint pname, out int parameters);
 
+    /// <summary>
+    /// Gets a 64-bit query parameter. Required for timer queries (GL_TIME_ELAPSED,
+    /// GL_TIMESTAMP) whose results are 64-bit and would truncate through the 32-bit overload.
+    /// </summary>
+    void GetQueryParameter(uint query, uint pname, out ulong parameters);
+
     // ========================================================================
     // Sync Operations
     // ========================================================================
@@ -462,6 +468,13 @@ public unsafe interface IGLApi
 
     /// <summary>Gets an integer parameter.</summary>
     void GetInteger(uint pname, out int data);
+
+    /// <summary>
+    /// Gets an integer parameter that returns multiple values (e.g. GL_MAX_VIEWPORT_DIMS,
+    /// which yields width and height from a single pname). The number of values written
+    /// equals <paramref name="data"/>.Length.
+    /// </summary>
+    void GetInteger(uint pname, Span<int> data);
 
     /// <summary>Gets a string parameter.</summary>
     string? GetString(uint name);

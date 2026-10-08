@@ -95,7 +95,7 @@ public sealed class GLBuffer : IGLResource, IDisposable
         if (byteOffset + data.Length > ByteLength)
             ThrowHelper.ThrowBufferBoundsExceeded();
 
-        _context.State.BindArrayBuffer(Id);
+        _context.State.BindBuffer(Target, Id);
 
         fixed (byte* ptr = data)
         {
@@ -137,7 +137,7 @@ public sealed class GLBuffer : IGLResource, IDisposable
         if (dstByteOffset + length > ByteLength)
             ThrowHelper.ThrowDestRangeExceeded();
 
-        _context.State.BindArrayBuffer(Id);
+        _context.State.BindBuffer(Target, Id);
 
         fixed (byte* ptr = &data[srcByteOffset])
         {
@@ -163,7 +163,7 @@ public sealed class GLBuffer : IGLResource, IDisposable
         ByteLength = newSize;
         _snapshot = null;
 
-        _context.State.BindArrayBuffer(Id);
+        _context.State.BindBuffer(Target, Id);
         _context.GL.BufferData(Target, (nuint)newSize, null, Usage);
     }
 
@@ -232,8 +232,8 @@ public sealed class GLBuffer : IGLResource, IDisposable
         if (length == 0)
             return;
 
-        // Bind to PIXEL_PACK_BUFFER for readback
-        _context.State.BindArrayBuffer(Id); // Note: Should use PIXEL_PACK_BUFFER but simplified here
+        // Bind to the buffer's own target so GetBufferSubData reads from THIS buffer.
+        _context.State.BindBuffer(Target, Id);
 
         fixed (byte* ptr = output)
         {
@@ -257,7 +257,7 @@ public sealed class GLBuffer : IGLResource, IDisposable
             return;
 
         Id = _context.GL.GenBuffer();
-        _context.State.BindArrayBuffer(Id);
+        _context.State.BindBuffer(Target, Id);
 
         if (_snapshot != null)
         {
