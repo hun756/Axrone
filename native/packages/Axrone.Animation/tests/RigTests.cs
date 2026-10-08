@@ -5,8 +5,8 @@ public class RigTests
     private static BoneInfo[] Chain() =>
     [
         new() { Name = "root", ParentIndex = -1 },
-        new() { Name = "mid", ParentIndex = 0, RestTranslation = new Vector3(0.0f, 1.0f, 0.0f) },
-        new() { Name = "tip", ParentIndex = 1, RestTranslation = new Vector3(0.0f, 1.0f, 0.0f) },
+        new() { Name = "mid", ParentIndex = 0, RestTranslation = new Vec3(0.0f, 1.0f, 0.0f) },
+        new() { Name = "tip", ParentIndex = 1, RestTranslation = new Vec3(0.0f, 1.0f, 0.0f) },
     ];
 
     [Fact]
@@ -56,10 +56,10 @@ public class RigTests
         var rig = new Rig(new RigId("chain"), Chain());
         var locals = new LocalTransform[3];
         locals[0] = LocalTransform.Identity;
-        locals[1] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
-        locals[2] = new LocalTransform(new Vector3(0.0f, 1.0f, 0.0f), Quaternion.Identity, Vector3.One);
+        locals[1] = new LocalTransform(new Vec3(0.0f, 1.0f, 0.0f), Quat.Identity, Vec3.One);
+        locals[2] = new LocalTransform(new Vec3(0.0f, 1.0f, 0.0f), Quat.Identity, Vec3.One);
 
-        var palette = new Matrix4x4[3];
+        var palette = new Mat4[3];
         rig.EvaluatePose(locals, palette);
 
         // Column-major lane: translation rides M14/M24/M34.
@@ -75,39 +75,39 @@ public class RigTests
     [Fact]
     public void LocalTransform_SanitizesInConstructor()
     {
-        var degenerate = new LocalTransform(Vector3.Zero, new Quaternion(0, 0, 0, 0), Vector3.Zero);
-        degenerate.Rotation.Should().Be(Quaternion.Identity);
-        degenerate.Scale.Should().Be(Vector3.One);
+        var degenerate = new LocalTransform(Vec3.Zero, new Quat(0, 0, 0, 0), Vec3.Zero);
+        degenerate.Rotation.Should().Be(Quat.Identity);
+        degenerate.Scale.Should().Be(Vec3.One);
     }
 
     private struct TranslationBoundsVisitor : IRigPaletteVisitor<BoundsAccumulator>
     {
-        public void Visit(ref BoundsAccumulator context, ReadOnlySpan<Matrix4x4> worldMatrices)
+        public void Visit(ref BoundsAccumulator context, ReadOnlySpan<Mat4> worldMatrices)
         {
             for (int i = 0; i < worldMatrices.Length; i++)
             {
-                Vector3 t = new(worldMatrices[i].M14, worldMatrices[i].M24, worldMatrices[i].M34);
-                context.Min = Vector3.Min(context.Min, t);
-                context.Max = Vector3.Max(context.Max, t);
+                Vec3 t = new(worldMatrices[i].M14, worldMatrices[i].M24, worldMatrices[i].M34);
+                context.Min = Vec3.Min(context.Min, t);
+                context.Max = Vec3.Max(context.Max, t);
             }
         }
     }
 
     private struct BoundsAccumulator
     {
-        public Vector3 Min;
-        public Vector3 Max;
+        public Vec3 Min;
+        public Vec3 Max;
     }
 
     [Fact]
     public void AcceptPalette_RunsZeroAllocVisitor()
     {
         var rig = new Rig(new RigId("chain"), Chain());
-        var bounds = new BoundsAccumulator { Min = new Vector3(float.MaxValue), Max = new Vector3(float.MinValue) };
+        var bounds = new BoundsAccumulator { Min = new Vec3(float.MaxValue), Max = new Vec3(float.MinValue) };
         rig.AcceptPalette<TranslationBoundsVisitor, BoundsAccumulator>(ref bounds);
 
-        bounds.Min.Should().Be(new Vector3(0.0f, 0.0f, 0.0f));
-        bounds.Max.Should().Be(new Vector3(0.0f, 2.0f, 0.0f));
+        bounds.Min.Should().Be(new Vec3(0.0f, 0.0f, 0.0f));
+        bounds.Max.Should().Be(new Vec3(0.0f, 2.0f, 0.0f));
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class RigTests
     {
         BoneInfo[] bones =
         [
-            new() { Name = "a", ParentIndex = -1, RestRotation = default, RestScale = Vector3.Zero },
+            new() { Name = "a", ParentIndex = -1, RestRotation = default, RestScale = Vec3.Zero },
         ];
         var rig = new Rig(new RigId("sanitize"), bones);
         rig.RestPose[3].Should().Be(0.0f);

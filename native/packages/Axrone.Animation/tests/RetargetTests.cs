@@ -4,12 +4,12 @@ public class RetargetTests
 {
     private static Rig SourceRig() => new(new RigId("src"), [
         new BoneInfo { Name = "root", ParentIndex = -1 },
-        new BoneInfo { Name = "arm", ParentIndex = 0, RestTranslation = new Vector3(1.0f, 0.0f, 0.0f) },
+        new BoneInfo { Name = "arm", ParentIndex = 0, RestTranslation = new Vec3(1.0f, 0.0f, 0.0f) },
     ]);
 
     private static Rig ScaledTargetRig() => new(new RigId("dst"), [
         new BoneInfo { Name = "root", ParentIndex = -1 },
-        new BoneInfo { Name = "arm", ParentIndex = 0, RestTranslation = new Vector3(2.0f, 0.0f, 0.0f) },
+        new BoneInfo { Name = "arm", ParentIndex = 0, RestTranslation = new Vec3(2.0f, 0.0f, 0.0f) },
     ]);
 
     private static Dictionary<CurveId, int> NoCurves() => new();
@@ -80,18 +80,18 @@ public class RetargetTests
     {
         var profile = new RetargetProfile(SourceRig(), ScaledTargetRig());
 
-        Span<Vector3> srcT = stackalloc Vector3[2];
-        Span<Quaternion> srcR = stackalloc Quaternion[2];
-        Span<Vector3> srcS = stackalloc Vector3[2];
-        srcR[0] = Quaternion.Identity;
-        srcR[1] = Quaternion.Identity;
-        srcS[0] = Vector3.One;
-        srcS[1] = Vector3.One;
-        srcT[1] = new Vector3(3.0f, 0.0f, 0.0f);
+        Span<Vec3> srcT = stackalloc Vec3[2];
+        Span<Quat> srcR = stackalloc Quat[2];
+        Span<Vec3> srcS = stackalloc Vec3[2];
+        srcR[0] = Quat.Identity;
+        srcR[1] = Quat.Identity;
+        srcS[0] = Vec3.One;
+        srcS[1] = Vec3.One;
+        srcT[1] = new Vec3(3.0f, 0.0f, 0.0f);
 
-        Span<Vector3> dstT = stackalloc Vector3[2];
-        Span<Quaternion> dstR = stackalloc Quaternion[2];
-        Span<Vector3> dstS = stackalloc Vector3[2];
+        Span<Vec3> dstT = stackalloc Vec3[2];
+        Span<Quat> dstR = stackalloc Quat[2];
+        Span<Vec3> dstS = stackalloc Vec3[2];
 
         var source = new AnimationFrameView(srcT, srcR, srcS);
         var target = new AnimationFrameView(dstT, dstR, dstS);
@@ -105,7 +105,7 @@ public class RetargetTests
     {
         var source = new Rig(new RigId("src"), [
             new BoneInfo { Name = "root", ParentIndex = -1 },
-            new BoneInfo { Name = "arm", ParentIndex = 0, RestRotation = new Quaternion(0, 0, 0, 2.0f) },
+            new BoneInfo { Name = "arm", ParentIndex = 0, RestRotation = new Quat(0, 0, 0, 2.0f) },
         ]);
         var profile = new RetargetProfile(source, ScaledTargetRig());
 
@@ -114,9 +114,9 @@ public class RetargetTests
         profile.RetargetFrame(sourceFrame, targetFrame);
 
         // Zero source rotation must sanitize to identity, never NaN.
-        Quaternion output = targetFrame.ReadRotations()[1];
-        output.Should().Be(Quaternion.Identity);
-        FastMath.InvertSafe(new Quaternion(0, 0, 0, 0)).Should().Be(Quaternion.Identity);
+        Quat output = targetFrame.ReadRotations()[1];
+        output.Should().Be(Quat.Identity);
+        FastMath.InvertSafe(new Quat(0, 0, 0, 0)).Should().Be(Quat.Identity);
     }
 
     [Fact]
@@ -170,8 +170,8 @@ public class RetargetTests
         var profile = new RetargetProfile(source, target) { TranslationMode = RetargetTranslationMode.Scaled };
 
         var sourceFrame = new AnimationFrame(2, NoCurves());
-        sourceFrame.GetTranslations()[1] = new Vector3(3.0f, 0.0f, 0.0f);
-        sourceFrame.GetRotations()[1] = Quaternion.Identity;
+        sourceFrame.GetTranslations()[1] = new Vec3(3.0f, 0.0f, 0.0f);
+        sourceFrame.GetRotations()[1] = Quat.Identity;
         var targetFrame = new AnimationFrame(2, NoCurves());
 
         profile.RetargetFrame(sourceFrame, targetFrame);
@@ -186,12 +186,12 @@ public class RetargetTests
         var profile = new RetargetProfile(source, target) { RotationMode = RetargetRotationMode.Copy };
 
         var sourceFrame = new AnimationFrame(2, NoCurves());
-        var twisted = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 1.0f);
+        var twisted = Quat.CreateFromAxisAngle(Vec3.UnitY, 1.0f);
         sourceFrame.GetRotations()[1] = twisted;
         var targetFrame = new AnimationFrame(2, NoCurves());
 
         profile.RetargetFrame(sourceFrame, targetFrame);
-        Quaternion result = targetFrame.ReadRotations()[1];
+        Quat result = targetFrame.ReadRotations()[1];
         result.X.Should().BeApproximately(twisted.X, 1e-6f);
         result.W.Should().BeApproximately(twisted.W, 1e-6f);
     }

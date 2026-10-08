@@ -7,11 +7,11 @@ public class AdvancedTests
     {
         MotionMatchCandidate[] candidates =
         [
-            new(0, 0.0f, new Vector3(10.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
-            new(1, 0.5f, new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
-            new(2, 0.0f, new Vector3(1.0f, 0.0f, 0.0f), new Vector3(-1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
+            new(0, 0.0f, new Vec3(10.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
+            new(1, 0.5f, new Vec3(1.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
+            new(2, 0.0f, new Vec3(1.0f, 0.0f, 0.0f), new Vec3(-1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
         ];
-        var query = new MotionMatchQuery(new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f));
+        var query = new MotionMatchQuery(new Vec3(1.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f));
 
         int best = MotionMatching.Search(query, candidates, out float score);
         best.Should().Be(1);
@@ -23,17 +23,17 @@ public class AdvancedTests
     {
         MotionMatchCandidate[] candidates =
         [
-            new(0, 0.0f, new Vector3(0.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f), new HashSet<string> { "jump" }),
-            new(1, 0.0f, new Vector3(100.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
+            new(0, 0.0f, new Vec3(0.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f), new HashSet<string> { "jump" }),
+            new(1, 0.0f, new Vec3(100.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f), new HashSet<string> { "run" }),
         ];
         var required = new MotionMatchQuery(
-            new Vector3(0.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f),
+            new Vec3(0.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f),
             RequiredTags: new HashSet<string> { "run" });
 
         MotionMatching.Search(required, candidates, out _).Should().Be(1);
 
         var excluded = new MotionMatchQuery(
-            new Vector3(0.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f),
+            new Vec3(0.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f),
             ExcludedTags: new HashSet<string> { "jump", "run" });
 
         MotionMatching.Search(excluded, candidates, out float score).Should().Be(-1);

@@ -11,19 +11,19 @@ namespace Axrone.Animation;
 public readonly ref struct AnimationFrameView
 {
     /// <summary>Translation lane.</summary>
-    public Span<Vector3> Translations { get; }
+    public Span<Vec3> Translations { get; }
 
     /// <summary>Rotation lane.</summary>
-    public Span<Quaternion> Rotations { get; }
+    public Span<Quat> Rotations { get; }
 
     /// <summary>Scale lane.</summary>
-    public Span<Vector3> Scales { get; }
+    public Span<Vec3> Scales { get; }
 
     /// <summary>Curve lane.</summary>
     public Span<float> Curves { get; }
 
     /// <summary>Creates a view; lanes must agree in length.</summary>
-    public AnimationFrameView(Span<Vector3> translations, Span<Quaternion> rotations, Span<Vector3> scales, Span<float> curves = default)
+    public AnimationFrameView(Span<Vec3> translations, Span<Quat> rotations, Span<Vec3> scales, Span<float> curves = default)
     {
         if (rotations.Length != translations.Length || scales.Length != translations.Length)
         {

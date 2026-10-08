@@ -101,7 +101,7 @@ public sealed class AnimationController : IDisposable
     /// Advances all weighted layers, composes the frame, and reports root motion.
     /// The event list is caller-owned and cleared first.
     /// </summary>
-    public void Update(float deltaTime, ICollection<ClipEvent> outEvents, out Vector3 rootMotionDeltaPos, out Quaternion rootMotionDeltaRot)
+    public void Update(float deltaTime, ICollection<ClipEvent> outEvents, out Vec3 rootMotionDeltaPos, out Quat rootMotionDeltaRot)
     {
         ArgumentNullException.ThrowIfNull(outEvents);
         long startTimestamp = Stopwatch.GetTimestamp();
@@ -127,8 +127,8 @@ public sealed class AnimationController : IDisposable
         else
         {
             CurrentFrame.ResetToRest(Rig);
-            rootMotionDeltaPos = Vector3.Zero;
-            rootMotionDeltaRot = Quaternion.Identity;
+            rootMotionDeltaPos = Vec3.Zero;
+            rootMotionDeltaRot = Quat.Identity;
         }
 
         for (int i = 1; i < _layers.Count; i++)

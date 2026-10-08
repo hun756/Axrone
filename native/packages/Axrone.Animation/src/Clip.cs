@@ -570,13 +570,13 @@ public sealed class AnimationClip
         AnimationTelemetry.RecordClipSampled();
         float t = WrapClipTime(time, isLooping);
         // Component width, not stride: every sampling path (edges included)
-        // writes at most one rotation quaternion (4 floats); spline tangents
+        // writes at most one rotation Quat (4 floats); spline tangents
         // never reach the output.
         Span<float> component = stackalloc float[4];
 
-        Span<Vector3> translations = outFrame.GetTranslations();
-        Span<Quaternion> rotations = outFrame.GetRotations();
-        Span<Vector3> scales = outFrame.GetScales();
+        Span<Vec3> translations = outFrame.GetTranslations();
+        Span<Quat> rotations = outFrame.GetRotations();
+        Span<Vec3> scales = outFrame.GetScales();
 
         AnimationChannel[] channels = _channels;
         int[] hints = _segmentHints;
@@ -589,13 +589,13 @@ public sealed class AnimationClip
             switch (channel.Target)
             {
                 case ChannelTarget.Translation:
-                    translations[channel.BoneIndex] = new Vector3(component[0], component[1], component[2]);
+                    translations[channel.BoneIndex] = new Vec3(component[0], component[1], component[2]);
                     break;
                 case ChannelTarget.Rotation:
-                    rotations[channel.BoneIndex] = new Quaternion(component[0], component[1], component[2], component[3]);
+                    rotations[channel.BoneIndex] = new Quat(component[0], component[1], component[2], component[3]);
                     break;
                 case ChannelTarget.Scale:
-                    scales[channel.BoneIndex] = new Vector3(component[0], component[1], component[2]);
+                    scales[channel.BoneIndex] = new Vec3(component[0], component[1], component[2]);
                     break;
                 case ChannelTarget.Curve:
                     if (channel.TargetCurveId.HasValue)

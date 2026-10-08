@@ -2,8 +2,8 @@ namespace Axrone.Animation;
 
 /// <summary>Motion-matching query: desired trajectory and facing with tag filters.</summary>
 public readonly record struct MotionMatchQuery(
-    Vector3 TrajectoryPos,
-    Vector3 FacingDirection,
+    Vec3 TrajectoryPos,
+    Vec3 FacingDirection,
     HashSet<string>? RequiredTags = null,
     HashSet<string>? ExcludedTags = null,
     float ContinuityBias = 0.0f);
@@ -12,8 +12,8 @@ public readonly record struct MotionMatchQuery(
 public readonly record struct MotionMatchCandidate(
     int ClipIndex,
     float Time,
-    Vector3 TrajectoryPos,
-    Vector3 FacingDirection,
+    Vec3 TrajectoryPos,
+    Vec3 FacingDirection,
     HashSet<string>? Tags,
     float CostBias = 0.0f);
 
@@ -49,7 +49,7 @@ public static class MotionMatching
                 }
             }
 
-            float trajectoryDistSq = Vector3.DistanceSquared(query.TrajectoryPos, candidate.TrajectoryPos);
+            float trajectoryDistSq = Vec3.DistanceSquared(query.TrajectoryPos, candidate.TrajectoryPos);
 
             float facingScore;
             float queryLen = query.FacingDirection.Length();
@@ -60,7 +60,7 @@ public static class MotionMatching
             }
             else
             {
-                float dot = Vector3.Dot(query.FacingDirection / queryLen, candidate.FacingDirection / candidateLen);
+                float dot = Vec3.Dot(query.FacingDirection / queryLen, candidate.FacingDirection / candidateLen);
                 facingScore = 1.0f - dot;
             }
 

@@ -195,35 +195,35 @@ public sealed class AnimationFrame
         Curves = new CurveStore(curveLayout);
     }
 
-    /// <summary>Translations as Vector3 lanes over the buffer.</summary>
+    /// <summary>Translations as Vec3 lanes over the buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Span<Vector3> GetTranslations() =>
-        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(0, BoneCount * 3));
+    public Span<Vec3> GetTranslations() =>
+        MemoryMarshal.Cast<float, Vec3>(_poseBuffer.AsSpan(0, BoneCount * 3));
 
-    /// <summary>Rotations as Quaternion lanes over the buffer.</summary>
+    /// <summary>Rotations as Quat lanes over the buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Span<Quaternion> GetRotations() =>
-        MemoryMarshal.Cast<float, Quaternion>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
+    public Span<Quat> GetRotations() =>
+        MemoryMarshal.Cast<float, Quat>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
 
-    /// <summary>Scales as Vector3 lanes over the buffer.</summary>
+    /// <summary>Scales as Vec3 lanes over the buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Span<Vector3> GetScales() =>
-        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
+    public Span<Vec3> GetScales() =>
+        MemoryMarshal.Cast<float, Vec3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
 
     /// <summary>Translations, read-only.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<Vector3> ReadTranslations() =>
-        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(0, BoneCount * 3));
+    public ReadOnlySpan<Vec3> ReadTranslations() =>
+        MemoryMarshal.Cast<float, Vec3>(_poseBuffer.AsSpan(0, BoneCount * 3));
 
     /// <summary>Rotations, read-only.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<Quaternion> ReadRotations() =>
-        MemoryMarshal.Cast<float, Quaternion>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
+    public ReadOnlySpan<Quat> ReadRotations() =>
+        MemoryMarshal.Cast<float, Quat>(_poseBuffer.AsSpan(BoneCount * 3, BoneCount * 4));
 
     /// <summary>Scales, read-only.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<Vector3> ReadScales() =>
-        MemoryMarshal.Cast<float, Vector3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
+    public ReadOnlySpan<Vec3> ReadScales() =>
+        MemoryMarshal.Cast<float, Vec3>(_poseBuffer.AsSpan(BoneCount * 7, BoneCount * 3));
 
     /// <summary>Deep-copies pose and curves.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

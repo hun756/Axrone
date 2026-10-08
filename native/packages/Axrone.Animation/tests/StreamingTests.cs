@@ -197,12 +197,12 @@ public class StreamingTests
         var rig = new Rig(new RigId("r"), [
             new BoneInfo { Name = "root", ParentIndex = -1 },
         ]);
-        Span<Vector3> worldT = stackalloc Vector3[1];
-        Span<Quaternion> worldR = stackalloc Quaternion[1];
-        Span<Vector3> worldS = stackalloc Vector3[1];
-        worldT[0] = new Vector3(1.0f, 2.0f, 3.0f);
-        worldR[0] = Quaternion.Identity;
-        worldS[0] = Vector3.One;
+        Span<Vec3> worldT = stackalloc Vec3[1];
+        Span<Quat> worldR = stackalloc Quat[1];
+        Span<Vec3> worldS = stackalloc Vec3[1];
+        worldT[0] = new Vec3(1.0f, 2.0f, 3.0f);
+        worldR[0] = Quat.Identity;
+        worldS[0] = Vec3.One;
 
         Span<float> palette = stackalloc float[16];
         SkinningPalette.ComputeFromWorldPose(rig, worldT, worldR, worldS, palette);

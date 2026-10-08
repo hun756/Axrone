@@ -55,8 +55,8 @@ public static class MotionDispatcher
         float prevNormTime,
         float curNormTime,
         Rig rig,
-        out Vector3 deltaPos,
-        out Quaternion deltaRot)
+        out Vec3 deltaPos,
+        out Quat deltaRot)
     {
         ArgumentNullException.ThrowIfNull(node);
         switch (node.Kind)
@@ -78,8 +78,8 @@ public static class MotionDispatcher
                 break;
             default:
                 AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
-                deltaPos = Vector3.Zero;
-                deltaRot = Quaternion.Identity;
+                deltaPos = Vec3.Zero;
+                deltaRot = Quat.Identity;
                 break;
         }
     }

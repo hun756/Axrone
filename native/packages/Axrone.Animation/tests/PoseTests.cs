@@ -50,16 +50,16 @@ public class PoseTests
             new BoneInfo { Name = "child", ParentIndex = 0 },
         ]);
         var frame = new AnimationFrame(2, Layout());
-        frame.GetTranslations()[1] = new Vector3(1.0f, 2.0f, 3.0f);
-        frame.GetRotations()[0] = new Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
+        frame.GetTranslations()[1] = new Vec3(1.0f, 2.0f, 3.0f);
+        frame.GetRotations()[0] = new Quat(0.0f, 0.0f, 0.0f, 1.0f);
 
         var copy = new AnimationFrame(2, Layout());
         copy.CopyFrom(frame);
-        copy.ReadTranslations()[1].Should().Be(new Vector3(1.0f, 2.0f, 3.0f));
+        copy.ReadTranslations()[1].Should().Be(new Vec3(1.0f, 2.0f, 3.0f));
 
         copy.ResetToRest(rig);
-        copy.ReadTranslations()[1].Should().Be(Vector3.Zero);
-        copy.ReadScales()[1].Should().Be(Vector3.One);
+        copy.ReadTranslations()[1].Should().Be(Vec3.Zero);
+        copy.ReadScales()[1].Should().Be(Vec3.One);
     }
 
     [Fact]

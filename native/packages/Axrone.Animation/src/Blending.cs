@@ -5,14 +5,14 @@ public static class BlendingKernels
 {
     /// <summary>Local-to-world hierarchy compose in evaluation order.</summary>
     [SkipLocalsInit]
-    public static void ForwardKinematics(Rig rig, AnimationFrame localFrame, Span<Vector3> worldT, Span<Quaternion> worldR, Span<Vector3> worldS)
+    public static void ForwardKinematics(Rig rig, AnimationFrame localFrame, Span<Vec3> worldT, Span<Quat> worldR, Span<Vec3> worldS)
     {
         ArgumentNullException.ThrowIfNull(rig);
         ArgumentNullException.ThrowIfNull(localFrame);
 
-        ReadOnlySpan<Vector3> locT = localFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> locR = localFrame.ReadRotations();
-        ReadOnlySpan<Vector3> locS = localFrame.ReadScales();
+        ReadOnlySpan<Vec3> locT = localFrame.ReadTranslations();
+        ReadOnlySpan<Quat> locR = localFrame.ReadRotations();
+        ReadOnlySpan<Vec3> locS = localFrame.ReadScales();
         ReadOnlySpan<int> order = rig.EvaluationOrder;
         ReadOnlySpan<int> parents = rig.Parents;
 
@@ -67,17 +67,17 @@ public static class BlendingKernels
         float t = FastMath.Clamp01(alpha);
         int boneCount = baseFrame.BoneCount;
 
-        ReadOnlySpan<Vector3> baseT = baseFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> baseR = baseFrame.ReadRotations();
-        ReadOnlySpan<Vector3> baseS = baseFrame.ReadScales();
+        ReadOnlySpan<Vec3> baseT = baseFrame.ReadTranslations();
+        ReadOnlySpan<Quat> baseR = baseFrame.ReadRotations();
+        ReadOnlySpan<Vec3> baseS = baseFrame.ReadScales();
 
-        ReadOnlySpan<Vector3> overT = overlayFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> overR = overlayFrame.ReadRotations();
-        ReadOnlySpan<Vector3> overS = overlayFrame.ReadScales();
+        ReadOnlySpan<Vec3> overT = overlayFrame.ReadTranslations();
+        ReadOnlySpan<Quat> overR = overlayFrame.ReadRotations();
+        ReadOnlySpan<Vec3> overS = overlayFrame.ReadScales();
 
-        Span<Vector3> dstT = target.GetTranslations();
-        Span<Quaternion> dstR = target.GetRotations();
-        Span<Vector3> dstS = target.GetScales();
+        Span<Vec3> dstT = target.GetTranslations();
+        Span<Quat> dstR = target.GetRotations();
+        Span<Vec3> dstS = target.GetScales();
 
         for (int i = 0; i < boneCount; i++)
         {
@@ -89,9 +89,9 @@ public static class BlendingKernels
                 continue;
             }
 
-            dstT[i] = Vector3.Lerp(baseT[i], overT[i], t);
+            dstT[i] = Vec3.Lerp(baseT[i], overT[i], t);
             dstR[i] = FastMath.Slerp(baseR[i], overR[i], t);
-            dstS[i] = Vector3.Lerp(baseS[i], overS[i], t);
+            dstS[i] = Vec3.Lerp(baseS[i], overS[i], t);
         }
 
         BlendCurves(target, baseFrame, overlayFrame, t);
@@ -112,7 +112,7 @@ public static class BlendingKernels
 
     /// <summary>
     /// Normalized weighted average over N frames with hemisphere-consistent
-    /// quaternion accumulation. Zero total weight falls back to rest.
+    /// Quat accumulation. Zero total weight falls back to rest.
     /// </summary>
     [SkipLocalsInit]
     public static void BlendWeightedFrames(AnimationFrame target, ReadOnlySpan<AnimationFrame> frames, ReadOnlySpan<float> weights, Rig rig)
@@ -138,19 +138,19 @@ public static class BlendingKernels
         }
 
         int boneCount = target.BoneCount;
-        Span<Vector3> dstT = target.GetTranslations();
-        Span<Quaternion> dstR = target.GetRotations();
-        Span<Vector3> dstS = target.GetScales();
+        Span<Vec3> dstT = target.GetTranslations();
+        Span<Quat> dstR = target.GetRotations();
+        Span<Vec3> dstS = target.GetScales();
 
         dstT.Clear();
         dstS.Clear();
 
         for (int b = 0; b < boneCount; b++)
         {
-            Vector3 accT = Vector3.Zero;
-            Vector3 accS = Vector3.Zero;
-            Vector4 accQ = Vector4.Zero;
-            Quaternion reference = Quaternion.Identity;
+            Vec3 accT = Vec3.Zero;
+            Vec3 accS = Vec3.Zero;
+            Vec4 accQ = Vec4.Zero;
+            Quat reference = Quat.Identity;
             bool first = true;
 
             for (int i = 0; i < frames.Length; i++)
@@ -165,7 +165,7 @@ public static class BlendingKernels
                 accT += frame.ReadTranslations()[b] * w;
                 accS += frame.ReadScales()[b] * w;
 
-                Quaternion q = frame.ReadRotations()[b];
+                Quat q = frame.ReadRotations()[b];
                 if (first)
                 {
                     reference = q;
@@ -173,14 +173,14 @@ public static class BlendingKernels
                 }
 
                 float dot = (q.X * reference.X) + (q.Y * reference.Y) + (q.Z * reference.Z) + (q.W * reference.W);
-                Vector4 lane = new(q.X, q.Y, q.Z, q.W);
+                Vec4 lane = new(q.X, q.Y, q.Z, q.W);
                 accQ += dot < 0.0f ? -lane * w : lane * w;
             }
 
             float invWeight = 1.0f / totalWeight;
             dstT[b] = accT * invWeight;
             dstS[b] = accS * invWeight;
-            dstR[b] = Quaternion.Normalize(new Quaternion(accQ.X, accQ.Y, accQ.Z, accQ.W));
+            dstR[b] = Quat.Normalize(new Quat(accQ.X, accQ.Y, accQ.Z, accQ.W));
         }
 
         Span<float> dstC = target.Curves.AsSpan();
@@ -224,21 +224,21 @@ public static class BlendingKernels
         float a = FastMath.Clamp01(alpha);
         int boneCount = target.BoneCount;
 
-        ReadOnlySpan<Vector3> baseT = baseFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> baseR = baseFrame.ReadRotations();
-        ReadOnlySpan<Vector3> baseS = baseFrame.ReadScales();
+        ReadOnlySpan<Vec3> baseT = baseFrame.ReadTranslations();
+        ReadOnlySpan<Quat> baseR = baseFrame.ReadRotations();
+        ReadOnlySpan<Vec3> baseS = baseFrame.ReadScales();
 
-        ReadOnlySpan<Vector3> addT = additiveFrame.ReadTranslations();
-        ReadOnlySpan<Quaternion> addR = additiveFrame.ReadRotations();
-        ReadOnlySpan<Vector3> addS = additiveFrame.ReadScales();
+        ReadOnlySpan<Vec3> addT = additiveFrame.ReadTranslations();
+        ReadOnlySpan<Quat> addR = additiveFrame.ReadRotations();
+        ReadOnlySpan<Vec3> addS = additiveFrame.ReadScales();
 
         ReadOnlySpan<float> rest = rig.RestPoseBuffer;
         int rotBase = boneCount * 3;
         int scaleBase = boneCount * 7;
 
-        Span<Vector3> dstT = target.GetTranslations();
-        Span<Quaternion> dstR = target.GetRotations();
-        Span<Vector3> dstS = target.GetScales();
+        Span<Vec3> dstT = target.GetTranslations();
+        Span<Quat> dstR = target.GetRotations();
+        Span<Vec3> dstS = target.GetScales();
 
         for (int i = 0; i < boneCount; i++)
         {
@@ -246,17 +246,17 @@ public static class BlendingKernels
             int rOff = rotBase + (i * 4);
             int sOff = scaleBase + (i * 3);
 
-            Vector3 restT = new(rest[tOff], rest[tOff + 1], rest[tOff + 2]);
-            Quaternion restR = new(rest[rOff], rest[rOff + 1], rest[rOff + 2], rest[rOff + 3]);
-            Vector3 restS = new(rest[sOff], rest[sOff + 1], rest[sOff + 2]);
+            Vec3 restT = new(rest[tOff], rest[tOff + 1], rest[tOff + 2]);
+            Quat restR = new(rest[rOff], rest[rOff + 1], rest[rOff + 2], rest[rOff + 3]);
+            Vec3 restS = new(rest[sOff], rest[sOff + 1], rest[sOff + 2]);
 
             dstT[i] = baseT[i] + ((addT[i] - restT) * a);
             dstS[i] = baseS[i] + ((addS[i] - restS) * a);
 
-            Quaternion invRest = Quaternion.Inverse(restR);
-            Quaternion delta = Quaternion.Concatenate(invRest, addR[i]);
-            Quaternion scaledDelta = FastMath.Slerp(Quaternion.Identity, delta, a);
-            dstR[i] = Quaternion.Normalize(baseR[i] * scaledDelta);
+            Quat invRest = Quat.Inverse(restR);
+            Quat delta = Quat.Concatenate(invRest, addR[i]);
+            Quat scaledDelta = FastMath.Slerp(Quat.Identity, delta, a);
+            dstR[i] = Quat.Normalize(baseR[i] * scaledDelta);
         }
 
         Span<float> dstC = target.Curves.AsSpan();

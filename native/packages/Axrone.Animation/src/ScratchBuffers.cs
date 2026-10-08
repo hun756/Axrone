@@ -7,25 +7,25 @@ namespace Axrone.Animation;
 /// folklore at every call site.
 /// Usage:
 /// <code>using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(n)
-///     ? ScratchWorldBuffers.FromStack(stackalloc Vector3[n], stackalloc Quaternion[n], stackalloc Vector3[n])
+///     ? ScratchWorldBuffers.FromStack(stackalloc Vec3[n], stackalloc Quat[n], stackalloc Vec3[n])
 ///     : ScratchWorldBuffers.RentPooled(n);</code>
 /// </summary>
 public ref struct ScratchWorldBuffers
 {
     /// <summary>World translations.</summary>
-    public Span<Vector3> Translations { get; }
+    public Span<Vec3> Translations { get; }
 
     /// <summary>World rotations.</summary>
-    public Span<Quaternion> Rotations { get; }
+    public Span<Quat> Rotations { get; }
 
     /// <summary>World scales.</summary>
-    public Span<Vector3> Scales { get; }
+    public Span<Vec3> Scales { get; }
 
-    private Vector3[]? _rentedT;
-    private Quaternion[]? _rentedR;
-    private Vector3[]? _rentedS;
+    private Vec3[]? _rentedT;
+    private Quat[]? _rentedR;
+    private Vec3[]? _rentedS;
 
-    private ScratchWorldBuffers(Span<Vector3> t, Span<Quaternion> r, Span<Vector3> s)
+    private ScratchWorldBuffers(Span<Vec3> t, Span<Quat> r, Span<Vec3> s)
     {
         Translations = t;
         Rotations = r;
@@ -41,16 +41,16 @@ public ref struct ScratchWorldBuffers
 
     /// <summary>Wraps caller-stackallocated spans (no pooling).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ScratchWorldBuffers FromStack(Span<Vector3> t, Span<Quaternion> r, Span<Vector3> s) =>
+    public static ScratchWorldBuffers FromStack(Span<Vec3> t, Span<Quat> r, Span<Vec3> s) =>
         new(t, r, s);
 
     /// <summary>Rents the triple from the shared pool (cold path).</summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static ScratchWorldBuffers RentPooled(int boneCount)
     {
-        Vector3[] t = ArrayPool<Vector3>.Shared.Rent(boneCount);
-        Quaternion[] r = ArrayPool<Quaternion>.Shared.Rent(boneCount);
-        Vector3[] s = ArrayPool<Vector3>.Shared.Rent(boneCount);
+        Vec3[] t = ArrayPool<Vec3>.Shared.Rent(boneCount);
+        Quat[] r = ArrayPool<Quat>.Shared.Rent(boneCount);
+        Vec3[] s = ArrayPool<Vec3>.Shared.Rent(boneCount);
         var buffers = new ScratchWorldBuffers(
             t.AsSpan(0, boneCount),
             r.AsSpan(0, boneCount),
@@ -64,25 +64,25 @@ public ref struct ScratchWorldBuffers
     /// <summary>Returns rentals; no-op for stack backing.</summary>
     public void Dispose()
     {
-        Vector3[]? t = _rentedT;
-        Quaternion[]? r = _rentedR;
-        Vector3[]? s = _rentedS;
+        Vec3[]? t = _rentedT;
+        Quat[]? r = _rentedR;
+        Vec3[]? s = _rentedS;
         _rentedT = null;
         _rentedR = null;
         _rentedS = null;
         if (t is not null)
         {
-            ArrayPool<Vector3>.Shared.Return(t);
+            ArrayPool<Vec3>.Shared.Return(t);
         }
 
         if (r is not null)
         {
-            ArrayPool<Quaternion>.Shared.Return(r);
+            ArrayPool<Quat>.Shared.Return(r);
         }
 
         if (s is not null)
         {
-            ArrayPool<Vector3>.Shared.Return(s);
+            ArrayPool<Vec3>.Shared.Return(s);
         }
     }
 }

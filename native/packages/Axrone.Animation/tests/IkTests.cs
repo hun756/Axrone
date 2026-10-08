@@ -4,8 +4,8 @@ public class IkTests
 {
     private static Rig Arm() => new(new RigId("arm"), [
         new BoneInfo { Name = "shoulder", ParentIndex = -1 },
-        new BoneInfo { Name = "elbow", ParentIndex = 0, RestTranslation = new Vector3(1.0f, 0.0f, 0.0f) },
-        new BoneInfo { Name = "wrist", ParentIndex = 1, RestTranslation = new Vector3(1.0f, 0.0f, 0.0f) },
+        new BoneInfo { Name = "elbow", ParentIndex = 0, RestTranslation = new Vec3(1.0f, 0.0f, 0.0f) },
+        new BoneInfo { Name = "wrist", ParentIndex = 1, RestTranslation = new Vec3(1.0f, 0.0f, 0.0f) },
     ]);
 
     private static Dictionary<CurveId, int> NoCurves() => new();
@@ -17,11 +17,11 @@ public class IkTests
         return frame;
     }
 
-    private static Vector3 TipWorld(Rig rig, AnimationFrame frame, int tip)
+    private static Vec3 TipWorld(Rig rig, AnimationFrame frame, int tip)
     {
-        Span<Vector3> worldT = stackalloc Vector3[rig.BoneCount];
-        Span<Quaternion> worldR = stackalloc Quaternion[rig.BoneCount];
-        Span<Vector3> worldS = stackalloc Vector3[rig.BoneCount];
+        Span<Vec3> worldT = stackalloc Vec3[rig.BoneCount];
+        Span<Quat> worldR = stackalloc Quat[rig.BoneCount];
+        Span<Vec3> worldS = stackalloc Vec3[rig.BoneCount];
         BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
         return worldT[tip];
     }
@@ -31,12 +31,12 @@ public class IkTests
     {
         Rig rig = Arm();
         AnimationFrame frame = RestFrame(rig);
-        Span<Vector3> scratch = stackalloc Vector3[3];
+        Span<Vec3> scratch = stackalloc Vec3[3];
         int[] chain = [0, 1, 2];
 
-        IkSolvers.SolveFabrik(rig, frame, chain, new Vector3(1.0f, 1.0f, 0.0f), scratch, maxIterations: 50);
-        Vector3 tip = TipWorld(rig, frame, 2);
-        Vector3.Distance(tip, new Vector3(1.0f, 1.0f, 0.0f)).Should().BeLessThan(0.05f);
+        IkSolvers.SolveFabrik(rig, frame, chain, new Vec3(1.0f, 1.0f, 0.0f), scratch, maxIterations: 50);
+        Vec3 tip = TipWorld(rig, frame, 2);
+        Vec3.Distance(tip, new Vec3(1.0f, 1.0f, 0.0f)).Should().BeLessThan(0.05f);
     }
 
     [Fact]
@@ -44,11 +44,11 @@ public class IkTests
     {
         Rig rig = Arm();
         AnimationFrame frame = RestFrame(rig);
-        Span<Vector3> scratch = stackalloc Vector3[3];
+        Span<Vec3> scratch = stackalloc Vec3[3];
         int[] chain = [0, 1, 2];
 
-        IkSolvers.SolveFabrik(rig, frame, chain, new Vector3(10.0f, 0.0f, 0.0f), scratch, maxIterations: 10);
-        Vector3 tip = TipWorld(rig, frame, 2);
+        IkSolvers.SolveFabrik(rig, frame, chain, new Vec3(10.0f, 0.0f, 0.0f), scratch, maxIterations: 10);
+        Vec3 tip = TipWorld(rig, frame, 2);
         tip.X.Should().BeGreaterThan(1.5f);
         tip.Y.Should().BeApproximately(0.0f, 1e-4f);
     }
@@ -60,9 +60,9 @@ public class IkTests
         AnimationFrame frame = RestFrame(rig);
         int[] chain = [0, 1, 2];
 
-        IkSolvers.SolveCcd(rig, frame, chain, new Vector3(1.0f, 1.0f, 0.0f), weight: 1.0f, maxIterations: 100);
-        Vector3 tip = TipWorld(rig, frame, 2);
-        Vector3.Distance(tip, new Vector3(1.0f, 1.0f, 0.0f)).Should().BeLessThan(0.05f);
+        IkSolvers.SolveCcd(rig, frame, chain, new Vec3(1.0f, 1.0f, 0.0f), weight: 1.0f, maxIterations: 100);
+        Vec3 tip = TipWorld(rig, frame, 2);
+        Vec3.Distance(tip, new Vec3(1.0f, 1.0f, 0.0f)).Should().BeLessThan(0.05f);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class IkTests
         AnimationFrame frame = RestFrame(rig);
         int[] chain = [0, 1, 2];
 
-        IkSolvers.SolveCcd(rig, frame, chain, new Vector3(1.0f, 1.0f, 0.0f), weight: 0.0f);
-        TipWorld(rig, frame, 2).Should().Be(new Vector3(2.0f, 0.0f, 0.0f));
+        IkSolvers.SolveCcd(rig, frame, chain, new Vec3(1.0f, 1.0f, 0.0f), weight: 0.0f);
+        TipWorld(rig, frame, 2).Should().Be(new Vec3(2.0f, 0.0f, 0.0f));
     }
 }
