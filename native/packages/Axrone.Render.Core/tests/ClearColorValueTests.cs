@@ -3,6 +3,7 @@ namespace Axrone.Render.Core.Tests;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Axrone.Numeric;
 
 public class ClearColorValueTests
 {
@@ -44,7 +45,7 @@ public class ClearColorValueTests
     [Fact]
     public void VectorCtor_SanitizesLikeTheFloatCtor()
     {
-        var vector = new Vector4(float.PositiveInfinity, float.NaN, -float.PositiveInfinity, 0.5f);
+        var vector = new Vec4(float.PositiveInfinity, float.NaN, -float.PositiveInfinity, 0.5f);
 
         ClearColorValue value = new(vector);
 
