@@ -1,5 +1,6 @@
 using System.Numerics;
 using Axrone.Batching;
+using Axrone.Geometry;
 using BenchmarkDotNet.Attributes;
 
 namespace Axrone.Batching.Benchmarks;
@@ -17,8 +18,8 @@ public class BoundsSpatialBenchmarks
     [Params(64, 1024, 16384)]
     public int Count { get; set; }
 
-    private Aabb[] _boxes = [];
-    private Aabb[] _scratchBoxes = [];
+    private Aabb3D[] _boxes = [];
+    private Aabb3D[] _scratchBoxes = [];
     private Vector4[] _spheres = [];
     private Vector4[] _scratchSpheres = [];
     private uint[] _x = [];
@@ -33,8 +34,8 @@ public class BoundsSpatialBenchmarks
     public void Setup()
     {
         var random = new Random(20260921);
-        _boxes = new Aabb[Count];
-        _scratchBoxes = new Aabb[Count];
+        _boxes = new Aabb3D[Count];
+        _scratchBoxes = new Aabb3D[Count];
         _spheres = new Vector4[Count];
         _scratchSpheres = new Vector4[Count];
         _x = new uint[Count];
@@ -50,7 +51,7 @@ public class BoundsSpatialBenchmarks
             var minX = Next();
             var minY = Next();
             var minZ = Next();
-            _boxes[i] = new Aabb(minX, minY, minZ,
+            _boxes[i] = new Aabb3D(minX, minY, minZ,
                 minX + random.Next(0, 41) / 4f, minY + random.Next(0, 41) / 4f, minZ + random.Next(0, 41) / 4f);
             _spheres[i] = new Vector4(Next(), Next(), Next(), random.Next(0, 41) / 4f);
             _x[i] = (uint)random.Next();
@@ -71,13 +72,7 @@ public class BoundsSpatialBenchmarks
     {
         for (var i = 0; i < Count; i++)
         {
-            var center = Vector3.Transform(_boxes[i].Center, _matrix);
-            var extent = _boxes[i].Extent;
-            var transformed = new Vector3(
-                (MathF.Abs(_matrix.M11) * extent.X) + (MathF.Abs(_matrix.M21) * extent.Y) + (MathF.Abs(_matrix.M31) * extent.Z),
-                (MathF.Abs(_matrix.M12) * extent.X) + (MathF.Abs(_matrix.M22) * extent.Y) + (MathF.Abs(_matrix.M32) * extent.Z),
-                (MathF.Abs(_matrix.M13) * extent.X) + (MathF.Abs(_matrix.M23) * extent.Y) + (MathF.Abs(_matrix.M33) * extent.Z));
-            _scratchBoxes[i] = Aabb.FromCenterExtent(center, transformed);
+            _scratchBoxes[i] = _boxes[i].Transform(in _matrix);
         }
     }
 

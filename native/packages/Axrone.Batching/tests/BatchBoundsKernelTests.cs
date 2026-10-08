@@ -1,5 +1,7 @@
 namespace Axrone.Batching.Tests;
 
+#pragma warning disable CS0618 // Legacy Aabb kernel under test until the type is removed.
+
 /// <summary>
 /// Parity coverage for the bound kernels against the scalar center/extent identity.
 /// </summary>
