@@ -22,6 +22,11 @@
     <NoWarn>$(NoWarn);CA2225</NoWarn>
     <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Frustum3 is a bulk plane payload handed to the visibility pass, where the
+         six planes are read positionally and never compared as a value. A frustum is
+         classified against geometry rather than compared for equality, so Equals/GetHashCode
+         plus the ==/!= pair would be surface the frustum contract does not use. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
