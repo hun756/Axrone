@@ -257,13 +257,13 @@ public struct Quat :
     IInnerProductSpace<Quat, float>,
     IInterpolatableSpace<Quat, float>
 {
-    public readonly float X;
+    public float X;
 
-    public readonly float Y;
+    public float Y;
 
-    public readonly float Z;
+    public float Z;
 
-    public readonly float W;
+    public float W;
 
     public const float MachineEpsilon = 1.1920929E-07F;
 
