@@ -30,4 +30,15 @@ internal static class ThrowHelper
     {
         throw new ArgumentOutOfRangeException("axis", "Invalid coordinate axis for 2D/3D projection.");
     }
+
+    /// <summary>
+    /// Rejects a ray direction that cannot be normalized, which is one that is zero or
+    /// so short that normalizing it would amplify rounding into an arbitrary axis.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidRayDirection()
+    {
+        throw new ArgumentException("Ray direction vector must be non-zero and finite.");
+    }
 }
