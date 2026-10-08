@@ -10,7 +10,7 @@ using System.Diagnostics.CodeAnalysis;
 /// detail as part of the contract.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 16)]
-public readonly struct Aabb3D : IEquatable<Aabb3D>
+public readonly partial struct Aabb3D : IEquatable<Aabb3D>
 {
     private readonly Vec3 _min;
     private readonly Vec3 _max;

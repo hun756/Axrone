@@ -41,4 +41,24 @@ internal static class ThrowHelper
     {
         throw new ArgumentException("Ray direction vector must be non-zero and finite.");
     }
+
+    /// <summary>
+    /// Rejects a destination span that cannot hold the full corner set a query must write.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDestinationTooSmall()
+    {
+        throw new ArgumentException("Destination span must contain at least 8 elements.", "destination");
+    }
+
+    /// <summary>
+    /// Rejects text that does not spell a valid shape under the parser grammar.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidFormatException()
+    {
+        throw new FormatException("The string was not recognized as a valid Aabb3D.");
+    }
 }
