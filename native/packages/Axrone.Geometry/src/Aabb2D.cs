@@ -145,6 +145,24 @@ public readonly struct Aabb2D : IEquatable<Aabb2D>, ISpanFormattable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float DistanceSquared(Vec2 point) => Vec2.DistanceSquared(point, ClosestPoint(point));
 
+    /// <summary>
+    /// Sweeps the box along an axis into 3D, keeping the planar corners on the two remaining
+    /// axes and placing the depth interval on the extrusion axis.
+    /// </summary>
+    /// <param name="minDepth">The lower depth along <paramref name="extrusionAxis"/>.</param>
+    /// <param name="maxDepth">The upper depth along <paramref name="extrusionAxis"/>.</param>
+    /// <param name="extrusionAxis">The axis the depth interval is mapped onto.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The axis is not one of the three coordinate axes.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Aabb3D Extrude(float minDepth, float maxDepth, Axis extrusionAxis) =>
+        extrusionAxis switch
+        {
+            Axis.X => new Aabb3D(new Vec3(minDepth, Min.X, Min.Y), new Vec3(maxDepth, Max.X, Max.Y)),
+            Axis.Y => new Aabb3D(new Vec3(Min.X, minDepth, Min.Y), new Vec3(Max.X, maxDepth, Max.Y)),
+            Axis.Z => new Aabb3D(new Vec3(Min.X, Min.Y, minDepth), new Vec3(Max.X, Max.Y, maxDepth)),
+            _ => ThrowHelper.ThrowInvalidAxis<Aabb3D>(),
+        };
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(Aabb2D other) => Min == other.Min && Max == other.Max;

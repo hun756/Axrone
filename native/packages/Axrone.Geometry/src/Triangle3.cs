@@ -42,6 +42,10 @@ public readonly struct Triangle3 : IEquatable<Triangle3>
         get => Vec3.Normalize(Vec3.Cross(B - A, C - A));
     }
 
+    /// <summary>Creates the tightest box that contains all three corners.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Aabb3D GetBounds() => new(Vec3.Min(A, Vec3.Min(B, C)), Vec3.Max(A, Vec3.Max(B, C)));
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(Triangle3 other) => A == other.A && B == other.B && C == other.C;
