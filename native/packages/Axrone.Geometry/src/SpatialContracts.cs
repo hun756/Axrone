@@ -106,7 +106,7 @@ public interface ISpatialWriter<TUserData>
     /// <param name="itemId">The item to move.</param>
     /// <param name="box">New world bounds.</param>
     /// <param name="displacement">Motion since the last update; it feeds the fattening budget.</param>
-    /// <returns><see langword="true"/> when the item stayed in place; <see langword="false"/> when it was re-inserted.</returns>
+    /// <returns><see langword="true"/> when the item left its fat box and was re-inserted.</returns>
     bool Move(SpatialItemId itemId, in Aabb3D box, in Vec3 displacement);
 
     /// <summary>Replaces the bounds of an item without a motion budget.</summary>
