@@ -71,7 +71,7 @@ public class Aabb3DQueryTests
     {
         Aabb3D straddling = new(0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 1.0F);
         Aabb3D fullyAbove = new(0.0F, 2.0F, 0.0F, 1.0F, 3.0F, 1.0F);
-        Plane plane = new(0.0F, 1.0F, 0.0F, -1.0F);
+        Axrone.Numeric.Plane plane = new(0.0F, 1.0F, 0.0F, -1.0F);
 
         straddling.Intersects(in plane).Should().BeTrue();
         fullyAbove.Intersects(in plane).Should().BeFalse();

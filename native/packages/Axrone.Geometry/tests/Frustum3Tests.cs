@@ -3,6 +3,7 @@ namespace Axrone.Geometry.Tests;
 using Xunit;
 using FluentAssertions;
 using System.Numerics;
+using Axrone.Numeric;
 
 public class Frustum3Tests
 {
@@ -14,12 +15,12 @@ public class Frustum3Tests
     /// hand-built and matrix-built frusta agree on which plane is which.
     /// </summary>
     private static Frustum3 CubeFrustum() => new(
-        new Plane(new Vector3(0.0F, 0.0F, 1.0F), 1.0F),
-        new Plane(new Vector3(0.0F, 0.0F, -1.0F), 1.0F),
-        new Plane(new Vector3(1.0F, 0.0F, 0.0F), 1.0F),
-        new Plane(new Vector3(-1.0F, 0.0F, 0.0F), 1.0F),
-        new Plane(new Vector3(0.0F, -1.0F, 0.0F), 1.0F),
-        new Plane(new Vector3(0.0F, 1.0F, 0.0F), 1.0F));
+        new Axrone.Numeric.Plane(new Vec3(0.0F, 0.0F, 1.0F), 1.0F),
+        new Axrone.Numeric.Plane(new Vec3(0.0F, 0.0F, -1.0F), 1.0F),
+        new Axrone.Numeric.Plane(new Vec3(1.0F, 0.0F, 0.0F), 1.0F),
+        new Axrone.Numeric.Plane(new Vec3(-1.0F, 0.0F, 0.0F), 1.0F),
+        new Axrone.Numeric.Plane(new Vec3(0.0F, -1.0F, 0.0F), 1.0F),
+        new Axrone.Numeric.Plane(new Vec3(0.0F, 1.0F, 0.0F), 1.0F));
 
     [Fact]
     public void HandBuiltCube_ContainsInnerBox()

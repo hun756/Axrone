@@ -55,7 +55,7 @@ public readonly struct Frustum3
     /// <param name="m">The combined view-projection matrix; row-vector convention.</param>
     /// <returns>The frustum described by <paramref name="m"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Frustum3 CreateFromMatrix(in Matrix4x4 m)
+    public static Frustum3 CreateFromMatrix(in System.Numerics.Matrix4x4 m)
     {
         Plane left = Plane.Normalize(new Plane(m.M14 + m.M11, m.M24 + m.M21, m.M34 + m.M31, m.M44 + m.M41));
         Plane right = Plane.Normalize(new Plane(m.M14 - m.M11, m.M24 - m.M21, m.M34 - m.M31, m.M44 - m.M41));
@@ -86,16 +86,16 @@ public readonly struct Frustum3
         for (int i = 0; i < planes.Length; i++)
         {
             Plane p = planes[i];
-            Vec3 n = new(p.Normal.X, p.Normal.Y, p.Normal.Z);
+            Vec3 normal = p.Normal;
 
-            Vec3 pVertex = new(p.Normal.X >= 0 ? max.X : min.X, p.Normal.Y >= 0 ? max.Y : min.Y, p.Normal.Z >= 0 ? max.Z : min.Z);
-            if (Vec3.Dot(n, pVertex) + p.D < 0)
+            Vec3 pVertex = new(normal.X >= 0 ? max.X : min.X, normal.Y >= 0 ? max.Y : min.Y, normal.Z >= 0 ? max.Z : min.Z);
+            if (Vec3.Dot(normal, pVertex) + p.D < 0)
             {
                 return ContainmentType.Disjoint;
             }
 
-            Vec3 nVertex = new(p.Normal.X >= 0 ? min.X : max.X, p.Normal.Y >= 0 ? min.Y : max.Y, p.Normal.Z >= 0 ? min.Z : max.Z);
-            if (Vec3.Dot(n, nVertex) + p.D < 0)
+            Vec3 nVertex = new(normal.X >= 0 ? min.X : max.X, normal.Y >= 0 ? min.Y : max.Y, normal.Z >= 0 ? min.Z : max.Z);
+            if (Vec3.Dot(normal, nVertex) + p.D < 0)
             {
                 intersects = true;
             }
