@@ -36,6 +36,10 @@
           Task.Yield and carries no captured-context dependency; the awaits stay bare so the
           drain behaves identically on the worker thread and on a pooled caller. -->
     <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- CA1000: Static members on generic types — DynamicAabbTreeBuilder.Create is the
+         typestate entry point. The stage parameter only exists on the generic builder,
+         so the factory cannot live on a non-generic type without losing the stage. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
