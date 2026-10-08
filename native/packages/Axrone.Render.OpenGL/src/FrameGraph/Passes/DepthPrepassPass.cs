@@ -17,7 +17,7 @@ public record struct DepthPrepassPassData
     public string ViewProjectionUniform { get; set; }
 
     /// <summary>View-projection matrix uploaded on each execution. Update per frame.</summary>
-    public Matrix4x4 ViewProjection { get; set; }
+    public Mat4 ViewProjection { get; set; }
 
     /// <summary>Depth target framebuffer resource name.</summary>
     public string DepthTargetName { get; set; }
@@ -93,7 +93,7 @@ public record struct DepthPrepassPassData
         {
             unsafe
             {
-                Matrix4x4 matrix = data.ViewProjection;
+                Mat4 matrix = data.ViewProjection;
                 gl.UniformMatrix4(location, 1, false, &matrix.M11);
             }
         }
@@ -152,7 +152,7 @@ public static class DepthPrepassPass
             {
                 DepthProgram = depthProgram,
                 ViewProjectionUniform = viewProjectionUniform,
-                ViewProjection = Matrix4x4.Identity,
+                ViewProjection = Mat4.Identity,
                 DepthTargetName = depthTargetName,
                 Meshes = snapshot
             });

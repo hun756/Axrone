@@ -9,7 +9,7 @@ namespace Axrone.Render.OpenGL.FrameGraph.Passes;
 /// </summary>
 /// <param name="Mesh">The mesh.</param>
 /// <param name="WorldPosition">The world position used for sorting.</param>
-public readonly record struct TransparentMeshEntry(GLMesh Mesh, Vector3 WorldPosition);
+public readonly record struct TransparentMeshEntry(GLMesh Mesh, Vec3 WorldPosition);
 
 /// <summary>
 /// Payload for the transparent geometry pass, owning the pass's setup, validate and
@@ -28,7 +28,7 @@ public record struct TransparentPassData
     public List<TransparentMeshEntry> Entries { get; set; }
 
     /// <summary>Camera world position used as the origin for back-to-front sorting.</summary>
-    public Vector3 CameraPosition { get; set; }
+    public Vec3 CameraPosition { get; set; }
 
     /// <inheritdoc/>
     public static void Declare(IRenderPassBuilder builder, ref TransparentPassData data)
@@ -84,7 +84,7 @@ public record struct TransparentPassData
         // Sort back-to-front relative to the CAMERA, not the world origin: alpha blending is only
         // correct when fragments are drawn farthest-from-viewer first. Update CameraPosition each
         // frame before execution so the order tracks the viewer.
-        Vector3 camera = data.CameraPosition;
+        Vec3 camera = data.CameraPosition;
         var entries = CollectionsMarshal.AsSpan(data.Entries);
         entries.Sort((a, b) =>
         {
@@ -110,7 +110,7 @@ public static class TransparentPass
         string name,
         GLProgram program,
         string? targetFramebufferName = null,
-        Vector3 cameraPosition = default)
+        Vec3 cameraPosition = default)
     {
         ArgumentNullException.ThrowIfNull(program);
         return new RenderPass<TransparentPassData>(

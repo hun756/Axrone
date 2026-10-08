@@ -4,7 +4,7 @@ namespace Axrone.Render.OpenGL.Batch;
 /// Instance data for batched rendering.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 16)]
-public record struct InstanceData(Matrix4x4 World, Vector4 Color, Vector4 Custom);
+public record struct InstanceData(Mat4 World, Vec4 Color, Vec4 Custom);
 
 /// <summary>
 /// High-performance batch renderer using GPU instancing.
@@ -94,7 +94,7 @@ public sealed class BatchRenderer : IDisposable
     /// <param name="color">The color.</param>
     /// <param name="custom">Custom data.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddInstance(in Matrix4x4 world, in Vector4 color, in Vector4 custom)
+    public void AddInstance(in Mat4 world, in Vec4 color, in Vec4 custom)
     {
         if (IsDisposed)
             ThrowHelper.ThrowInvalidOperation("BatchRenderer disposed");
@@ -119,7 +119,7 @@ public sealed class BatchRenderer : IDisposable
         if (IsDisposed)
             ThrowHelper.ThrowInvalidOperation("BatchRenderer disposed");
 
-        // Sort by M43 (translation Z in row-major Matrix4x4)
+        // Sort by M43 (translation Z in row-major Mat4)
         MemoryExtensions.Sort(_instances.AsSpan(0, _instanceCount), (a, b) => b.World.M43.CompareTo(a.World.M43));
         _needsUpdate = true;
     }

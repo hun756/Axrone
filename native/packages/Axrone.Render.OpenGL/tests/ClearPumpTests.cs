@@ -56,7 +56,7 @@ public class ClearPumpTests
         // or reordered between the packet and the processor shows up as a log diff.
         var pass = ClearPass.Create(
             "clear", "x",
-            new Vector4(0.1f, 0.2f, 0.3f, 1.0f),
+            new Vec4(0.1f, 0.2f, 0.3f, 1.0f),
             clearDepth: 0.5f,
             clearStencil: 3,
             clearStencilEnabled: true);
@@ -88,7 +88,7 @@ public class ClearPumpTests
 
         // Integral clear values keep the log assertions independent of the
         // ambient culture's decimal separator.
-        var pass = ClearPass.Create("clear", "x", new Vector4(1f, 1f, 1f, 1f));
+        var pass = ClearPass.Create("clear", "x", new Vec4(1f, 1f, 1f, 1f));
         mock.ClearCallLog();
 
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
@@ -155,7 +155,7 @@ public class ClearPumpTests
     {
         var (context, mock, ctx, target) = CreateFrame();
 
-        var pass = ClearPass.Create("clear", "x", new Vector4(1f, 1f, 1f, 1f));
+        var pass = ClearPass.Create("clear", "x", new Vec4(1f, 1f, 1f, 1f));
         using var pump = new RenderPump(new ExecutorOptions { Capacity = 8 });
         pass.EnqueueCommands(pump, ctx).IsEnqueued.Should().BeTrue();
 

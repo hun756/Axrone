@@ -23,7 +23,7 @@ public record struct ClearPassData
     public string? TargetFramebufferName { get; set; }
 
     /// <summary>Clear color.</summary>
-    public Vector4 ClearColor { get; set; }
+    public Vec4 ClearColor { get; set; }
 
     /// <summary>Clear depth value.</summary>
     public float ClearDepth { get; set; }
@@ -134,7 +134,7 @@ public static class ClearPass
     public static PumpRenderPass<ClearPassData> Create(
         string name,
         string? targetFramebufferName = null,
-        Vector4 clearColor = default,
+        Vec4 clearColor = default,
         float clearDepth = 1.0f,
         int clearStencil = 0,
         bool clearColorEnabled = true,
