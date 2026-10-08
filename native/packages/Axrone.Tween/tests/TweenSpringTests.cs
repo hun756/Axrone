@@ -1,6 +1,6 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
+using Axrone.Numeric;
 
 public class TweenSpringTests
 {
@@ -131,15 +131,15 @@ public class TweenSpringTests
     }
 
     [Fact]
-    public void Vector3_ConvergesPerLane()
+    public void Vec3_ConvergesPerLane()
     {
         var spring = Underdamped(3);
-        spring.Reset(Vector3.Zero, new Vector3(1.0f, 2.0f, 3.0f));
-        Vector3 last = default;
+        spring.Reset(Vec3.Zero, new Vec3(1.0f, 2.0f, 3.0f));
+        Vec3 last = default;
         spring.OnUpdateVector3 = v => last = v;
 
         Drain(spring, DurationNs.FromMilliseconds(16.666f));
-        last.Should().Be(new Vector3(1.0f, 2.0f, 3.0f));
+        last.Should().Be(new Vec3(1.0f, 2.0f, 3.0f));
     }
 
     [Fact]

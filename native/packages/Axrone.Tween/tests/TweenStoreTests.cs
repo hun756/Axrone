@@ -1,6 +1,5 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
 using System.Runtime.Intrinsics;
 
 public class TweenStoreTests

@@ -1,7 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
-
 /// <summary>
 /// Ready-made impact presets — punch and shake — expressed as single core tweens.
 /// </summary>
@@ -45,15 +43,15 @@ public static class TweenPresets
     }
 
     /// <summary>Directional punch along a two-lane amplitude.</summary>
-    public static TweenSpec Punch(float durationSeconds, Vector2 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
+    public static TweenSpec Punch(float durationSeconds, Vec2 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
         PunchDirectional(durationSeconds, amplitude.X, amplitude.Y, 0.0f, 0.0f, 2, vibrato, elasticity);
 
     /// <summary>Directional punch along a three-lane amplitude.</summary>
-    public static TweenSpec Punch(float durationSeconds, Vector3 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
+    public static TweenSpec Punch(float durationSeconds, Vec3 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
         PunchDirectional(durationSeconds, amplitude.X, amplitude.Y, amplitude.Z, 0.0f, 3, vibrato, elasticity);
 
     /// <summary>Directional punch along a four-lane amplitude.</summary>
-    public static TweenSpec Punch(float durationSeconds, Vector4 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
+    public static TweenSpec Punch(float durationSeconds, Vec4 amplitude, int vibrato = 10, float elasticity = 1.0f) =>
         PunchDirectional(durationSeconds, amplitude.X, amplitude.Y, amplitude.Z, amplitude.W, 4, vibrato, elasticity);
 
     /// <summary>
@@ -79,15 +77,15 @@ public static class TweenPresets
     }
 
     /// <summary>Directional shake along a two-lane amplitude.</summary>
-    public static TweenSpec Shake(float durationSeconds, Vector2 amplitude, int vibrato = 10, uint seed = 1) =>
+    public static TweenSpec Shake(float durationSeconds, Vec2 amplitude, int vibrato = 10, uint seed = 1) =>
         ShakeDirectional(durationSeconds, amplitude.X, amplitude.Y, 0.0f, 0.0f, 2, vibrato, seed);
 
     /// <summary>Directional shake along a three-lane amplitude.</summary>
-    public static TweenSpec Shake(float durationSeconds, Vector3 amplitude, int vibrato = 10, uint seed = 1) =>
+    public static TweenSpec Shake(float durationSeconds, Vec3 amplitude, int vibrato = 10, uint seed = 1) =>
         ShakeDirectional(durationSeconds, amplitude.X, amplitude.Y, amplitude.Z, 0.0f, 3, vibrato, seed);
 
     /// <summary>Directional shake along a four-lane amplitude.</summary>
-    public static TweenSpec Shake(float durationSeconds, Vector4 amplitude, int vibrato = 10, uint seed = 1) =>
+    public static TweenSpec Shake(float durationSeconds, Vec4 amplitude, int vibrato = 10, uint seed = 1) =>
         ShakeDirectional(durationSeconds, amplitude.X, amplitude.Y, amplitude.Z, amplitude.W, 4, vibrato, seed);
 
     private static TweenSpec PunchDirectional(
@@ -102,9 +100,9 @@ public static class TweenPresets
         var builder = new TweenBuilder().DurationSeconds(durationSeconds).Ease(t => PunchCurve(t, vibrato, elasticity));
         return lanes switch
         {
-            2 => builder.From(Vector2.Zero).To(new Vector2(x, y)).Build(),
-            3 => builder.From(Vector3.Zero).To(new Vector3(x, y, z)).Build(),
-            _ => builder.From(Vector4.Zero).To(new Vector4(x, y, z, w)).Build(),
+            2 => builder.From(Vec2.Zero).To(new Vec2(x, y)).Build(),
+            3 => builder.From(Vec3.Zero).To(new Vec3(x, y, z)).Build(),
+            _ => builder.From(Vec4.Zero).To(new Vec4(x, y, z, w)).Build(),
         };
     }
 
@@ -116,9 +114,9 @@ public static class TweenPresets
         var builder = new TweenBuilder().DurationSeconds(durationSeconds).Ease(t => ShakeCurve(t, vibrato, p1, p2, p3));
         return lanes switch
         {
-            2 => builder.From(Vector2.Zero).To(new Vector2(x, y)).Build(),
-            3 => builder.From(Vector3.Zero).To(new Vector3(x, y, z)).Build(),
-            _ => builder.From(Vector4.Zero).To(new Vector4(x, y, z, w)).Build(),
+            2 => builder.From(Vec2.Zero).To(new Vec2(x, y)).Build(),
+            3 => builder.From(Vec3.Zero).To(new Vec3(x, y, z)).Build(),
+            _ => builder.From(Vec4.Zero).To(new Vec4(x, y, z, w)).Build(),
         };
     }
 

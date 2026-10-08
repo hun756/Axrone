@@ -1,6 +1,6 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
+using Axrone.Numeric;
 
 public class TweenPresetTests
 {
@@ -105,11 +105,11 @@ public class TweenPresetTests
     [Fact]
     public void Directional_CoversVectorArities()
     {
-        TweenPresets.Punch(1.0f, new Vector2(1.0f, 2.0f)).ChannelCount.Should().Be(2);
-        TweenPresets.Punch(1.0f, new Vector3(1.0f, 2.0f, 3.0f)).ChannelCount.Should().Be(3);
-        TweenPresets.Punch(1.0f, new Vector4(1.0f, 2.0f, 3.0f, 4.0f)).ChannelCount.Should().Be(4);
-        TweenPresets.Shake(1.0f, new Vector2(1.0f, 2.0f)).ChannelCount.Should().Be(2);
-        TweenPresets.Shake(1.0f, new Vector3(1.0f, 2.0f, 3.0f)).ChannelCount.Should().Be(3);
-        TweenPresets.Shake(1.0f, new Vector4(1.0f, 2.0f, 3.0f, 4.0f)).ChannelCount.Should().Be(4);
+        TweenPresets.Punch(1.0f, new Vec2(1.0f, 2.0f)).ChannelCount.Should().Be(2);
+        TweenPresets.Punch(1.0f, new Vec3(1.0f, 2.0f, 3.0f)).ChannelCount.Should().Be(3);
+        TweenPresets.Punch(1.0f, new Vec4(1.0f, 2.0f, 3.0f, 4.0f)).ChannelCount.Should().Be(4);
+        TweenPresets.Shake(1.0f, new Vec2(1.0f, 2.0f)).ChannelCount.Should().Be(2);
+        TweenPresets.Shake(1.0f, new Vec3(1.0f, 2.0f, 3.0f)).ChannelCount.Should().Be(3);
+        TweenPresets.Shake(1.0f, new Vec4(1.0f, 2.0f, 3.0f, 4.0f)).ChannelCount.Should().Be(4);
     }
 }

@@ -1,6 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
 using System.Runtime.Intrinsics;
 
 /// <summary>
@@ -35,9 +34,9 @@ public sealed class TweenStore : IDisposable
     private readonly int[] _remainingLoops;
     private readonly byte[] _channels;
     private readonly Action<float>?[] _updateFloats;
-    private readonly Action<Vector2>?[] _updateVector2s;
-    private readonly Action<Vector3>?[] _updateVector3s;
-    private readonly Action<Vector4>?[] _updateVector4s;
+    private readonly Action<Vec2>?[] _updateVector2s;
+    private readonly Action<Vec3>?[] _updateVector3s;
+    private readonly Action<Vec4>?[] _updateVector4s;
     private readonly Action?[] _onStarts;
     private readonly Action?[] _onCompletes;
     private readonly Action?[] _onSteps;
@@ -81,9 +80,9 @@ public sealed class TweenStore : IDisposable
         _remainingLoops = new int[capacity];
         _channels = new byte[capacity];
         _updateFloats = new Action<float>?[capacity];
-        _updateVector2s = new Action<Vector2>?[capacity];
-        _updateVector3s = new Action<Vector3>?[capacity];
-        _updateVector4s = new Action<Vector4>?[capacity];
+        _updateVector2s = new Action<Vec2>?[capacity];
+        _updateVector3s = new Action<Vec3>?[capacity];
+        _updateVector4s = new Action<Vec4>?[capacity];
         _onStarts = new Action?[capacity];
         _onCompletes = new Action?[capacity];
         _onSteps = new Action?[capacity];
@@ -147,9 +146,9 @@ public sealed class TweenStore : IDisposable
         float timeScale,
         byte channels,
         Action<float>? onUpdateFloat,
-        Action<Vector2>? onUpdateVector2,
-        Action<Vector3>? onUpdateVector3,
-        Action<Vector4>? onUpdateVector4,
+        Action<Vec2>? onUpdateVector2,
+        Action<Vec3>? onUpdateVector3,
+        Action<Vec4>? onUpdateVector4,
         Action? onStart,
         Action? onComplete,
         Action? onStepComplete,
@@ -311,13 +310,13 @@ public sealed class TweenStore : IDisposable
                 OnUpdateFloatOf(slot)?.Invoke(current.GetElement(0));
                 break;
             case 2:
-                OnUpdateVector2Of(slot)?.Invoke(new Vector2(current.GetElement(0), current.GetElement(1)));
+                OnUpdateVector2Of(slot)?.Invoke(new Vec2(current.GetElement(0), current.GetElement(1)));
                 break;
             case 3:
-                OnUpdateVector3Of(slot)?.Invoke(new Vector3(current.GetElement(0), current.GetElement(1), current.GetElement(2)));
+                OnUpdateVector3Of(slot)?.Invoke(new Vec3(current.GetElement(0), current.GetElement(1), current.GetElement(2)));
                 break;
             default:
-                OnUpdateVector4Of(slot)?.Invoke(current.AsVector4());
+                OnUpdateVector4Of(slot)?.Invoke((Vec4)current);
                 break;
         }
 
@@ -495,9 +494,9 @@ public sealed class TweenStore : IDisposable
     internal byte ChannelsOf(int index) => _channels[index];
     internal uint GenerationOf(uint index) => Volatile.Read(ref _generations[index]);
     internal Action<float>? OnUpdateFloatOf(int index) => _updateFloats[index];
-    internal Action<Vector2>? OnUpdateVector2Of(int index) => _updateVector2s[index];
-    internal Action<Vector3>? OnUpdateVector3Of(int index) => _updateVector3s[index];
-    internal Action<Vector4>? OnUpdateVector4Of(int index) => _updateVector4s[index];
+    internal Action<Vec2>? OnUpdateVector2Of(int index) => _updateVector2s[index];
+    internal Action<Vec3>? OnUpdateVector3Of(int index) => _updateVector3s[index];
+    internal Action<Vec4>? OnUpdateVector4Of(int index) => _updateVector4s[index];
     internal Action? OnCompleteOf(int index) => _onCompletes[index];
     internal Action? OnStepCompleteOf(int index) => _onSteps[index];
     internal Action? OnKillOf(int index) => _onKills[index];

@@ -1,6 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
 using Axrone.Utility.Builders;
 
 /// <summary>
@@ -30,9 +29,9 @@ public struct TweenSpecState : IAggregateDefinition<TweenSpecState, TweenSpec>, 
     public int LoopCount { get; set; }
     public float TimeScale { get; set; }
     public Action<float>? OnUpdateFloat { get; set; }
-    public Action<Vector2>? OnUpdateVector2 { get; set; }
-    public Action<Vector3>? OnUpdateVector3 { get; set; }
-    public Action<Vector4>? OnUpdateVector4 { get; set; }
+    public Action<Vec2>? OnUpdateVector2 { get; set; }
+    public Action<Vec3>? OnUpdateVector3 { get; set; }
+    public Action<Vec4>? OnUpdateVector4 { get; set; }
     public Action? OnStart { get; set; }
     public Action? OnComplete { get; set; }
     public Action? OnStepComplete { get; set; }

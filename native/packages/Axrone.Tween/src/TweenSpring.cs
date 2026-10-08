@@ -1,7 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
-
 /// <summary>
 /// Spring configuration: semi-implicit Euler integration over mass, stiffness, and damping.
 /// </summary>
@@ -44,13 +42,13 @@ public sealed class TweenSpring
     public Action<float>? OnUpdateFloat { get; set; }
 
     /// <summary>Per-tick callback for two-lane springs.</summary>
-    public Action<Vector2>? OnUpdateVector2 { get; set; }
+    public Action<Vec2>? OnUpdateVector2 { get; set; }
 
     /// <summary>Per-tick callback for three-lane springs.</summary>
-    public Action<Vector3>? OnUpdateVector3 { get; set; }
+    public Action<Vec3>? OnUpdateVector3 { get; set; }
 
     /// <summary>Per-tick callback for four-lane springs.</summary>
-    public Action<Vector4>? OnUpdateVector4 { get; set; }
+    public Action<Vec4>? OnUpdateVector4 { get; set; }
 
     /// <summary>Fires once when the spring settles on target.</summary>
     public Action? OnComplete { get; set; }
@@ -108,7 +106,7 @@ public sealed class TweenSpring
     }
 
     /// <summary>Launches from a start toward a target with zero velocity.</summary>
-    public void Reset(Vector2 current, Vector2 target)
+    public void Reset(Vec2 current, Vec2 target)
     {
         _position = Vector128.Create(current.X, current.Y, 0.0f, 0.0f);
         _velocity = Vector128<float>.Zero;
@@ -118,7 +116,7 @@ public sealed class TweenSpring
     }
 
     /// <summary>Launches from a start toward a target with zero velocity.</summary>
-    public void Reset(Vector3 current, Vector3 target)
+    public void Reset(Vec3 current, Vec3 target)
     {
         _position = Vector128.Create(current.X, current.Y, current.Z, 0.0f);
         _velocity = Vector128<float>.Zero;
@@ -128,7 +126,7 @@ public sealed class TweenSpring
     }
 
     /// <summary>Launches from a start toward a target with zero velocity.</summary>
-    public void Reset(Vector4 current, Vector4 target)
+    public void Reset(Vec4 current, Vec4 target)
     {
         _position = current.AsVector128();
         _velocity = Vector128<float>.Zero;
@@ -145,21 +143,21 @@ public sealed class TweenSpring
     }
 
     /// <summary>Moves the goal; a settled spring re-arms automatically.</summary>
-    public void Retarget(Vector2 target)
+    public void Retarget(Vec2 target)
     {
         _target = Vector128.Create(target.X, target.Y, _target.GetElement(2), _target.GetElement(3));
         _running = true;
     }
 
     /// <summary>Moves the goal; a settled spring re-arms automatically.</summary>
-    public void Retarget(Vector3 target)
+    public void Retarget(Vec3 target)
     {
         _target = Vector128.Create(target.X, target.Y, target.Z, _target.GetElement(3));
         _running = true;
     }
 
     /// <summary>Moves the goal; a settled spring re-arms automatically.</summary>
-    public void Retarget(Vector4 target)
+    public void Retarget(Vec4 target)
     {
         _target = target.AsVector128();
         _running = true;
@@ -261,13 +259,13 @@ public sealed class TweenSpring
                 OnUpdateFloat?.Invoke(_position.GetElement(0));
                 break;
             case 2:
-                OnUpdateVector2?.Invoke(new Vector2(_position.GetElement(0), _position.GetElement(1)));
+                OnUpdateVector2?.Invoke(new Vec2(_position.GetElement(0), _position.GetElement(1)));
                 break;
             case 3:
-                OnUpdateVector3?.Invoke(new Vector3(_position.GetElement(0), _position.GetElement(1), _position.GetElement(2)));
+                OnUpdateVector3?.Invoke(new Vec3(_position.GetElement(0), _position.GetElement(1), _position.GetElement(2)));
                 break;
             default:
-                OnUpdateVector4?.Invoke(_position.AsVector4());
+                OnUpdateVector4?.Invoke((Vec4)_position);
                 break;
         }
     }
