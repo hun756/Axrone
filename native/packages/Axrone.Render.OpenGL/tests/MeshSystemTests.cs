@@ -101,7 +101,7 @@ public sealed class MeshSystemTests : IDisposable
     // ========================================================================
 
     [Fact]
-    public void Bounds3D_Empty_IsInvalid()
+    public void Aabb3D_Empty_IsInvalid()
     {
         var empty = Aabb3D.Empty;
 
@@ -112,7 +112,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_FromPoints_ComputesCorrectBounds()
+    public void Aabb3D_FromPoints_ComputesCorrectBounds()
     {
         Vec3[] points =
         [
@@ -128,7 +128,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_FromPoints_EmptySpan_ReturnsEmpty()
+    public void Aabb3D_FromPoints_EmptySpan_ReturnsEmpty()
     {
         var bounds = Aabb3D.CreateFromPoints(ReadOnlySpan<Vec3>.Empty);
 
@@ -136,7 +136,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Contains_PointInside_ReturnsTrue()
+    public void Aabb3D_Contains_PointInside_ReturnsTrue()
     {
         var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
@@ -144,7 +144,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Contains_PointOutside_ReturnsFalse()
+    public void Aabb3D_Contains_PointOutside_ReturnsFalse()
     {
         var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
@@ -152,7 +152,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Contains_PointOnBoundary_ReturnsTrue()
+    public void Aabb3D_Contains_PointOnBoundary_ReturnsTrue()
     {
         var bounds = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
 
@@ -160,7 +160,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Intersects_Overlapping_ReturnsTrue()
+    public void Aabb3D_Intersects_Overlapping_ReturnsTrue()
     {
         var a = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(1, 1, 1));
         var b = new Aabb3D(new Vec3(0, 0, 0), new Vec3(2, 2, 2));
@@ -169,7 +169,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Intersects_NonOverlapping_ReturnsFalse()
+    public void Aabb3D_Intersects_NonOverlapping_ReturnsFalse()
     {
         var a = new Aabb3D(new Vec3(-1, -1, -1), new Vec3(0, 0, 0));
         var b = new Aabb3D(new Vec3(1, 1, 1), new Vec3(2, 2, 2));
@@ -178,7 +178,7 @@ public sealed class MeshSystemTests : IDisposable
     }
 
     [Fact]
-    public void Bounds3D_Intersects_Touching_ReturnsTrue()
+    public void Aabb3D_Intersects_Touching_ReturnsTrue()
     {
         var a = new Aabb3D(new Vec3(0, 0, 0), new Vec3(1, 1, 1));
         var b = new Aabb3D(new Vec3(1, 1, 1), new Vec3(2, 2, 2));
