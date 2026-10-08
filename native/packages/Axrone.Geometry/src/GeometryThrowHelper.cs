@@ -75,6 +75,18 @@ internal static class ThrowHelper
     }
 
     /// <summary>
+    /// Rejects an identity that names no live item: evicted, never issued, or
+    /// past the end of the slot table.
+    /// </summary>
+    /// <param name="id">The identity to report.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowItemNotFound(SpatialItemId id)
+    {
+        throw new InvalidOperationException($"Spatial entity with ID {id.Value} is unallocated or has been removed.");
+    }
+
+    /// <summary>
     /// Rejects text that does not spell a valid shape under the parser grammar.
     /// </summary>
     [DoesNotReturn]

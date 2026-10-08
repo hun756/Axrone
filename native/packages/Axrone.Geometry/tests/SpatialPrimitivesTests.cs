@@ -69,8 +69,8 @@ public class SpatialItemIdTests
     [Fact]
     public void ToString_UsesNamedForm()
     {
-        new SpatialItemId(42U).ToString().Should().Be("SpatialItemId(42)");
-        SpatialItemId.Invalid.ToString().Should().Be("SpatialItemId(0)");
+        new SpatialItemId(42U).ToString().Should().Be("Item(42)");
+        SpatialItemId.Invalid.ToString().Should().Be("Item(Invalid)");
     }
 }
 
@@ -141,8 +141,8 @@ public class NodeIndexTests
     [Fact]
     public void ToString_UsesNamedForm()
     {
-        new NodeIndex(17).ToString().Should().Be("NodeIndex(17)");
-        NodeIndex.Null.ToString().Should().Be("NodeIndex(-1)");
+        new NodeIndex(17).ToString().Should().Be("Node(17)");
+        NodeIndex.Null.ToString().Should().Be("Node(Null)");
     }
 }
 

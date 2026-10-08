@@ -253,28 +253,22 @@ public readonly partial struct Aabb3D : IEquatable<Aabb3D>
     /// Total surface area, clamped at zero per axis so an inverted or degenerate box reports
     /// zero instead of a negative or nonsensical size.
     /// </summary>
-    public float SurfaceArea
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public float SurfaceArea()
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        get
-        {
-            Vec3 d = Size;
-            float dx = MathF.Max(0.0F, d.X);
-            float dy = MathF.Max(0.0F, d.Y);
-            float dz = MathF.Max(0.0F, d.Z);
-            return 2.0F * ((dx * dy) + (dy * dz) + (dz * dx));
-        }
+        Vec3 d = Size;
+        float dx = MathF.Max(0.0F, d.X);
+        float dy = MathF.Max(0.0F, d.Y);
+        float dz = MathF.Max(0.0F, d.Z);
+        return 2.0F * ((dx * dy) + (dy * dz) + (dz * dx));
     }
 
     /// <summary>Enclosed volume, clamped at zero per axis so an inverted or degenerate box reports zero.</summary>
-    public float Volume
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public float Volume()
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        get
-        {
-            Vec3 d = Size;
-            return MathF.Max(0.0F, d.X) * MathF.Max(0.0F, d.Y) * MathF.Max(0.0F, d.Z);
-        }
+        Vec3 d = Size;
+        return MathF.Max(0.0F, d.X) * MathF.Max(0.0F, d.Y) * MathF.Max(0.0F, d.Z);
     }
 
     /// <inheritdoc/>

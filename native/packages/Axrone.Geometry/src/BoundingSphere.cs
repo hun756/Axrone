@@ -71,9 +71,9 @@ public readonly struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanForma
     /// <param name="format">The component format, or <see langword="null"/> for the default.</param>
     /// <param name="formatProvider">The culture that formats the components.</param>
     public string ToString(string? format, IFormatProvider? formatProvider) =>
-        $"BoundingSphere3(Center={Center.ToString(format, formatProvider)}, Radius={Radius.ToString(format, formatProvider)})";
+        $"Sphere3(Center={Center.ToString(format, formatProvider)}, Radius={Radius:F4})";
 
     /// <inheritdoc/>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
-        destination.TryWrite(provider, $"BoundingSphere3(Center={Center}, Radius={Radius})", out charsWritten);
+        destination.TryWrite(provider, $"Sphere3(Center={Center}, Radius={Radius:F4})", out charsWritten);
 }

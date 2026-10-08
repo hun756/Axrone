@@ -21,8 +21,8 @@ public class SurfaceAreaHeuristicStrategyTests
         Aabb3D right = new(10F, 10F, 10F, 11F, 11F, 11F);
         Aabb3D newBox = new(1F, 0F, 0F, 2F, 1F, 1F);
 
-        Aabb3D.CreateMerged(in left, in newBox).SurfaceArea.Should().Be(10F);
-        Aabb3D.CreateMerged(in right, in newBox).SurfaceArea.Should().Be(682F);
+        Aabb3D.CreateMerged(in left, in newBox).SurfaceArea().Should().Be(10F);
+        Aabb3D.CreateMerged(in right, in newBox).SurfaceArea().Should().Be(682F);
 
         SurfaceAreaHeuristicStrategy.ChooseSubtree(in left, in right, in newBox).Should().Be(0);
     }
@@ -34,8 +34,8 @@ public class SurfaceAreaHeuristicStrategyTests
         Aabb3D right = new(10F, 10F, 10F, 11F, 11F, 11F);
         Aabb3D newBox = new(9F, 10F, 10F, 10F, 11F, 11F);
 
-        Aabb3D.CreateMerged(in left, in newBox).SurfaceArea.Should().Be(682F);
-        Aabb3D.CreateMerged(in right, in newBox).SurfaceArea.Should().Be(10F);
+        Aabb3D.CreateMerged(in left, in newBox).SurfaceArea().Should().Be(682F);
+        Aabb3D.CreateMerged(in right, in newBox).SurfaceArea().Should().Be(10F);
 
         SurfaceAreaHeuristicStrategy.ChooseSubtree(in left, in right, in newBox).Should().Be(1);
     }

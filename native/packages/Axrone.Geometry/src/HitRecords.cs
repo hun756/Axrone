@@ -103,7 +103,7 @@ public readonly record struct TriangleHit3(float Distance, float U, float V, Vec
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"TriangleHit3(Distance={Distance:F4}, U={U:F4}, V={V:F4}, Normal={Normal}, Point={Point})");
+        string.Create(CultureInfo.InvariantCulture, $"TriangleHit(Dist={Distance:F4}, UV=<{U:F3},{V:F3}>, Pt={Point})");
 }
 
 /// <summary>
@@ -116,7 +116,7 @@ public readonly record struct SweepHit3(float Time, Vec3 Normal, Vec3 Point)
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"SweepHit3(Time={Time:F4}, Normal={Normal}, Point={Point})");
+        string.Create(CultureInfo.InvariantCulture, $"SweepHit(Time={Time:F4}, Normal={Normal}, Pt={Point})");
 }
 
 /// <summary>
@@ -164,10 +164,10 @@ public readonly struct KnnResult<TUserData> : IComparable<KnnResult<TUserData>>
 {
     private readonly SpatialItemId _itemId;
     private readonly TUserData _userData;
-    private readonly float _distanceSq;
+    private readonly DistanceSquared _distanceSq;
 
     /// <summary>Creates a result for <paramref name="itemId"/> carrying <paramref name="userData"/>.</summary>
-    public KnnResult(SpatialItemId itemId, TUserData userData, float distanceSq)
+    public KnnResult(SpatialItemId itemId, TUserData userData, DistanceSquared distanceSq)
     {
         _itemId = itemId;
         _userData = userData;
@@ -189,7 +189,7 @@ public readonly struct KnnResult<TUserData> : IComparable<KnnResult<TUserData>>
     }
 
     /// <summary>Squared distance from the query point to the neighbour.</summary>
-    public float DistanceSq
+    public DistanceSquared DistanceSq
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _distanceSq;
@@ -202,5 +202,5 @@ public readonly struct KnnResult<TUserData> : IComparable<KnnResult<TUserData>>
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"KnnResult(Id={_itemId.Value}, Data={_userData}, DistanceSq={_distanceSq:F4})");
+        string.Create(CultureInfo.InvariantCulture, $"Knn(Id={_itemId.Value}, DistSq={_distanceSq.Value:F4})");
 }

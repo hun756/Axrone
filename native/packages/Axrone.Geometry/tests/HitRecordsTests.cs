@@ -119,10 +119,7 @@ public class TriangleHit3Tests
 
         string text = hit.ToString();
 
-        text.Should().NotBeNullOrEmpty();
-        text.Should().Contain("U=");
-        text.Should().Contain("V=");
-        text.Should().Contain("Point=");
+        text.Should().Be("TriangleHit(Dist=4.5000, UV=<0.250,0.750>, Pt=1,2,3)");
     }
 
     [Fact]
@@ -158,9 +155,7 @@ public class SweepHit3Tests
 
         string text = hit.ToString();
 
-        text.Should().NotBeNullOrEmpty();
-        text.Should().Contain("Normal=");
-        text.Should().Contain("Point=");
+        text.Should().Be("SweepHit(Time=0.7500, Normal=0,0,-1, Pt=-1,0.5,2)");
     }
 
     [Fact]
@@ -218,18 +213,18 @@ public class KnnResultTests
     [Fact]
     public void Fields_RoundTrip()
     {
-        var result = new KnnResult<string>(new SpatialItemId(4U), "alpha", 16F);
+        var result = new KnnResult<string>(new SpatialItemId(4U), "alpha", new DistanceSquared(16F));
 
         result.ItemId.Should().Be(new SpatialItemId(4U));
         result.UserData.Should().Be("alpha");
-        result.DistanceSq.Should().Be(16F);
+        result.DistanceSq.Should().Be(new DistanceSquared(16F));
     }
 
     [Fact]
     public void CompareTo_OrdersByDistanceSq()
     {
-        var near = new KnnResult<string>(new SpatialItemId(1U), "near", 1F);
-        var far = new KnnResult<string>(new SpatialItemId(2U), "far", 25F);
+        var near = new KnnResult<string>(new SpatialItemId(1U), "near", new DistanceSquared(1F));
+        var far = new KnnResult<string>(new SpatialItemId(2U), "far", new DistanceSquared(25F));
 
         near.CompareTo(far).Should().BeNegative();
         far.CompareTo(near).Should().BePositive();
@@ -241,25 +236,24 @@ public class KnnResultTests
     {
         KnnResult<string>[] results =
         [
-            new(new SpatialItemId(1U), "third", 9F),
-            new(new SpatialItemId(2U), "first", 1F),
-            new(new SpatialItemId(3U), "second", 4F),
+            new(new SpatialItemId(1U), "third", new DistanceSquared(9F)),
+            new(new SpatialItemId(2U), "first", new DistanceSquared(1F)),
+            new(new SpatialItemId(3U), "second", new DistanceSquared(4F)),
         ];
 
         Array.Sort(results);
 
-        results.Select(result => result.DistanceSq).Should().Equal(1F, 4F, 9F);
+        results.Select(result => result.DistanceSq).Should().Equal(new DistanceSquared(1F), new DistanceSquared(4F), new DistanceSquared(9F));
         results.Select(result => result.UserData).Should().Equal("first", "second", "third");
     }
 
     [Fact]
     public void ToString_IsNonEmpty_AndMentionsIdAndData()
     {
-        string text = new KnnResult<string>(new SpatialItemId(4U), "alpha", 16F).ToString();
+        string text = new KnnResult<string>(new SpatialItemId(4U), "alpha", new DistanceSquared(16F)).ToString();
 
         text.Should().NotBeNullOrEmpty();
         text.Should().Contain("Id=4");
-        text.Should().Contain("alpha");
-        text.Should().Contain("DistanceSq=");
+        text.Should().Be("Knn(Id=4, DistSq=16.0000)");
     }
 }

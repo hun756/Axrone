@@ -443,7 +443,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
                 }
                 else
                 {
-                    if (nodeA.Box.SurfaceArea > nodeB.Box.SurfaceArea)
+                    if (nodeA.Box.SurfaceArea() > nodeB.Box.SurfaceArea())
                     {
                         stack[stackCount++] = new NodePair(nodeA.LeftChild, pair.B);
                         stack[stackCount++] = new NodePair(nodeA.RightChild, pair.B);
@@ -507,21 +507,21 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
                 if (node.IsLeaf())
                 {
                     TUserData data = _userData[(uint)node.ItemId.Value]!;
-                    KnnResult<TUserData> item = new(node.ItemId, data, nodeDistSq);
+                    KnnResult<TUserData> item = new(node.ItemId, data, new DistanceSquared(nodeDistSq));
 
                     if (heapCount < results.Length)
                     {
                         PushMaxHeap(results, ref heapCount, in item);
                         if (heapCount == results.Length)
                         {
-                            maxDistSq = results[0].DistanceSq;
+                            maxDistSq = results[0].DistanceSq.Value;
                         }
                     }
-                    else if (nodeDistSq < results[0].DistanceSq)
+                    else if (nodeDistSq < results[0].DistanceSq.Value)
                     {
                         results[0] = item;
                         HeapifyDown(results, heapCount, 0);
-                        maxDistSq = results[0].DistanceSq;
+                        maxDistSq = results[0].DistanceSq.Value;
                     }
                 }
                 else

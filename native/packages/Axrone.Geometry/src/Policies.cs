@@ -33,17 +33,17 @@ public readonly struct SurfaceAreaHeuristicStrategy : ISpatialPartitionStrategy
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static float ComputeCost(in Aabb3D left, in Aabb3D right) =>
-        left.SurfaceArea + right.SurfaceArea;
+        left.SurfaceArea() + right.SurfaceArea();
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static int ChooseSubtree(in Aabb3D leftBox, in Aabb3D rightBox, in Aabb3D newBox)
     {
-        float leftArea = leftBox.SurfaceArea;
-        float rightArea = rightBox.SurfaceArea;
+        float leftArea = leftBox.SurfaceArea();
+        float rightArea = rightBox.SurfaceArea();
 
-        float leftMerged = Aabb3D.CreateMerged(in leftBox, in newBox).SurfaceArea;
-        float rightMerged = Aabb3D.CreateMerged(in rightBox, in newBox).SurfaceArea;
+        float leftMerged = Aabb3D.CreateMerged(in leftBox, in newBox).SurfaceArea();
+        float rightMerged = Aabb3D.CreateMerged(in rightBox, in newBox).SurfaceArea();
 
         float leftGrowth = leftMerged - leftArea;
         float rightGrowth = rightMerged - rightArea;

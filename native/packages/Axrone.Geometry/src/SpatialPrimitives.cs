@@ -71,8 +71,7 @@ public readonly record struct SpatialItemId(uint Value) : IComparable<SpatialIte
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"SpatialItemId({Value})");
+    public override string ToString() => IsValid ? string.Create(CultureInfo.InvariantCulture, $"Item({Value})") : "Item(Invalid)";
 
     /// <summary>Unwraps the underlying identifier.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -129,8 +128,7 @@ public readonly record struct NodeIndex(int Value) : IComparable<NodeIndex>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"NodeIndex({Value})");
+    public override string ToString() => IsValid ? string.Create(CultureInfo.InvariantCulture, $"Node({Value})") : "Node(Null)";
 
     /// <summary>Unwraps the underlying slot index.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

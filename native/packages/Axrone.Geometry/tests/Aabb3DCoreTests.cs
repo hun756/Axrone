@@ -199,10 +199,10 @@ public class Aabb3DCoreTests
     [Fact]
     public void SurfaceArea_UnitCube_Six()
     {
-        Aabb3D.UnitCube.SurfaceArea.Should().Be(6F);
+        Aabb3D.UnitCube.SurfaceArea().Should().Be(6F);
 
         var box = new Aabb3D(0F, 0F, 0F, 2F, 3F, 4F);
-        box.SurfaceArea.Should().Be(2F * ((6F) + (12F) + (8F)));
+        box.SurfaceArea().Should().Be(2F * ((6F) + (12F) + (8F)));
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public class Aabb3DCoreTests
     {
         var box = new Aabb3D(0F, 0F, 0F, 2F, 3F, 4F);
 
-        box.Volume.Should().Be(24F);
+        box.Volume().Should().Be(24F);
     }
 
     [Fact]

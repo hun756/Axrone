@@ -28,7 +28,7 @@ using System.Threading.Tasks;
 /// <typeparam name="TMetrics">
 /// Traversal instrumentation sink; a struct for the same reason.
 /// </typeparam>
-public sealed class DynamicAabbTree<TUserData, TStrategy, TMetrics>
+public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
     : ISpatialReader<TUserData>, ISpatialWriter<TUserData>, ISpatialLifecycle, IDisposable, IAsyncDisposable
     where TStrategy : struct, ISpatialPartitionStrategy
     where TMetrics : struct, ISpatialMetricsSink
@@ -341,81 +341,6 @@ public sealed class DynamicAabbTree<TUserData, TStrategy, TMetrics>
         return GetNodeRef((NodeIndex)_itemToNode[(int)itemId.Value - 1]).Box;
     }
 
-    /// <summary>Collects every item whose fat bounds overlap <paramref name="box"/>.</summary>
-    /// <param name="box">The query bounds.</param>
-    /// <param name="results">Destination span for the identities; too short a span yields a truncated answer.</param>
-    /// <returns>Number of identities written to <paramref name="results"/>.</returns>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public int QueryOverlaps(in Aabb3D box, Span<SpatialItemId> results) =>
-        throw new NotImplementedException();
-
-    /// <summary>Reports every item whose fat bounds overlap <paramref name="box"/> to a visitor.</summary>
-    /// <param name="box">The query bounds.</param>
-    /// <param name="visitor">The visitor that receives each overlap.</param>
-    /// <param name="context">Traversal state handed to the visitor.</param>
-    /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
-    /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <returns>Number of overlaps reported.</returns>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public int QueryOverlaps<TVisitor, TContext>(in Aabb3D box, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISpatialVisitor<TUserData, TContext>
-        where TContext : allows ref struct =>
-        throw new NotImplementedException();
-
-    /// <summary>Collects the hits a ray reaches, ordered by distance.</summary>
-    /// <param name="ray">The query ray; its direction is assumed unit length.</param>
-    /// <param name="results">Destination span for the hits; too short a span yields a truncated answer.</param>
-    /// <param name="maxDistance">Distance along the ray past which hits are ignored.</param>
-    /// <returns>Number of hits written to <paramref name="results"/>.</returns>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public int RayCast(in Ray3D ray, Span<RayHit> results, float maxDistance = float.PositiveInfinity) =>
-        throw new NotImplementedException();
-
-    /// <summary>Reports the hits a ray reaches to a visitor, which may tighten the search limit as it runs.</summary>
-    /// <param name="ray">The query ray; its direction is assumed unit length.</param>
-    /// <param name="maxDistance">Distance along the ray past which hits are ignored; the visitor may shrink it.</param>
-    /// <param name="visitor">The visitor that receives each hit.</param>
-    /// <param name="context">Traversal state handed to the visitor.</param>
-    /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
-    /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public void RayCast<TVisitor, TContext>(in Ray3D ray, float maxDistance, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, IRayHitVisitor<TUserData, TContext>
-        where TContext : allows ref struct =>
-        throw new NotImplementedException();
-
-    /// <summary>Reports every item inside the view volume to a visitor.</summary>
-    /// <param name="frustum">The view volume to cull against.</param>
-    /// <param name="visitor">The visitor that receives each visible item.</param>
-    /// <param name="context">Traversal state handed to the visitor.</param>
-    /// <typeparam name="TVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
-    /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public void FrustumCull<TVisitor, TContext>(in Frustum3 frustum, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, IFrustumVisitor<TUserData, TContext>
-        where TContext : allows ref struct =>
-        throw new NotImplementedException();
-
-    /// <summary>Reports each pair of overlapping items once, in stable identity order.</summary>
-    /// <param name="visitor">The visitor that receives each pair.</param>
-    /// <param name="context">Traversal state handed to the visitor.</param>
-    /// <typeparam name="TPairVisitor">The visitor type; a struct so the traversal closes over the type.</typeparam>
-    /// <typeparam name="TContext">Traversal state type; a <see langword="ref"/> struct may be used.</typeparam>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public void FindPairs<TPairVisitor, TContext>(ref TPairVisitor visitor, ref TContext context)
-        where TPairVisitor : struct, IPairVisitor<TUserData, TContext>
-        where TContext : allows ref struct =>
-        throw new NotImplementedException();
-
-    /// <summary>Fills the nearest items to <paramref name="point"/>, ordered by ascending squared distance.</summary>
-    /// <param name="point">The query point.</param>
-    /// <param name="results">Destination span for the neighbours; too short a span yields the nearest subset.</param>
-    /// <param name="maxDistance">Squared distance beyond which neighbours are ignored.</param>
-    /// <returns>Number of neighbours written to <paramref name="results"/>.</returns>
-    /// <remarks>The query paths land with the traversal commit.</remarks>
-    public int QueryKNearest(Vec3 point, Span<KnnResult<TUserData>> results, float maxDistance = float.PositiveInfinity) =>
-        throw new NotImplementedException();
-
     /// <summary>
     /// Closes the tree to further work, optionally recording the failure that
     /// ended it. When operations are still in flight the tree moves to
@@ -522,7 +447,7 @@ public sealed class DynamicAabbTree<TUserData, TStrategy, TMetrics>
     /// or closed rejects the operation without taking the lock in the common
     /// case.
     /// </summary>
-    private void EnterOperation()
+    internal void EnterOperation()
     {
         int state = Volatile.Read(ref _state._lifecycleState);
         if (state != LifecycleOpen)
@@ -545,7 +470,7 @@ public sealed class DynamicAabbTree<TUserData, TStrategy, TMetrics>
     /// Releases an in-flight operation. The last one out of a completing tree
     /// settles it on complete, which is what <see cref="DrainAsync"/> waits for.
     /// </summary>
-    private void ExitOperation()
+    internal void ExitOperation()
     {
         _gate.Enter();
         try
@@ -596,7 +521,7 @@ public sealed class DynamicAabbTree<TUserData, TStrategy, TMetrics>
         int itemSlot = (int)itemId.Value - 1;
         if (itemSlot >= _itemToNode.Length || _itemToNode[itemSlot] < 0)
         {
-            throw new InvalidOperationException("The item is not tracked by this tree.");
+            ThrowHelper.ThrowItemNotFound(itemId);
         }
     }
 

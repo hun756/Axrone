@@ -171,9 +171,9 @@ public readonly struct Ray3D : IEquatable<Ray3D>, ISpanFormattable
     /// <param name="format">The component format, or <see langword="null"/> for the default.</param>
     /// <param name="formatProvider">The culture that formats the components.</param>
     public string ToString(string? format, IFormatProvider? formatProvider) =>
-        $"Ray3D(Origin={Origin.ToString(format, formatProvider)}, Direction={Direction.ToString(format, formatProvider)}, InvDirection={InvDirection.ToString(format, formatProvider)})";
+        $"Ray3D(Origin={Origin.ToString(format, formatProvider)}, Direction={Direction.ToString(format, formatProvider)})";
 
     /// <inheritdoc/>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
-        destination.TryWrite(provider, $"Ray3D(Origin={Origin}, Direction={Direction}, InvDirection={InvDirection})", out charsWritten);
+        destination.TryWrite(provider, $"Ray3D(Origin={Origin}, Direction={Direction})", out charsWritten);
 }
