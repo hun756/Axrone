@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Geometry</RootNamespace>
+    <AssemblyName>Axrone.Geometry</AssemblyName>
+    <Description>Geometry value types (aabb, ray, sphere, frustum, spatial tree) for the Axrone engine: layout-stable, interop-friendly and allocation-free. Shapes are expressed in the scalar primitives owned by Axrone.Numeric; this package adds bounds/visibility/acceleration-structure queries only.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Geometry.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

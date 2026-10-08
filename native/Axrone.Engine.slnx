@@ -4,6 +4,8 @@
     <Project Path="packages/Axrone.Batching/tests/Axrone.Batching.Tests.csproj" />
     <Project Path="packages/Axrone.Collections/Axrone.Collections.csproj" />
     <Project Path="packages/Axrone.Collections/tests/Axrone.Collections.Tests.csproj" />
+    <Project Path="packages/Axrone.Geometry/Axrone.Geometry.csproj" />
+    <Project Path="packages/Axrone.Geometry/tests/Axrone.Geometry.Tests.csproj" />
     <Project Path="packages/Axrone.Hash/Axrone.Hash.csproj" />
     <Project Path="packages/Axrone.Hash/tests/Axrone.Hash.Tests.csproj" />
     <Project Path="packages/Axrone.Memory/Axrone.Memory.csproj" />
