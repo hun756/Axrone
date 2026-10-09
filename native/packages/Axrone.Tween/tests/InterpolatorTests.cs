@@ -1,6 +1,6 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
+using Axrone.Numeric;
 
 public class InterpolatorTests
 {
@@ -13,18 +13,18 @@ public class InterpolatorTests
     }
 
     [Fact]
-    public void Vector2_Midpoint()
+    public void Vec2_Midpoint()
     {
-        var result = Vector2Interpolator.Interpolate(new Vector2(0f, 0f), new Vector2(4f, 8f), 0.5f);
+        var result = Vec2Interpolator.Interpolate(new Vec2(0f, 0f), new Vec2(4f, 8f), 0.5f);
 
         result.X.Should().BeApproximately(2f, 1e-6f);
         result.Y.Should().BeApproximately(4f, 1e-6f);
     }
 
     [Fact]
-    public void Vector3_Midpoint()
+    public void Vec3_Midpoint()
     {
-        var result = Vector3Interpolator.Interpolate(new Vector3(0f, 0f, 0f), new Vector3(2f, 4f, 6f), 0.5f);
+        var result = Vec3Interpolator.Interpolate(new Vec3(0f, 0f, 0f), new Vec3(2f, 4f, 6f), 0.5f);
 
         result.X.Should().BeApproximately(1f, 1e-6f);
         result.Y.Should().BeApproximately(2f, 1e-6f);
@@ -32,9 +32,9 @@ public class InterpolatorTests
     }
 
     [Fact]
-    public void Vector4_Midpoint()
+    public void Vec4_Midpoint()
     {
-        var result = Vector4Interpolator.Interpolate(new Vector4(0f, 0f, 0f, 0f), new Vector4(2f, 4f, 6f, 8f), 0.5f);
+        var result = Vec4Interpolator.Interpolate(new Vec4(0f, 0f, 0f, 0f), new Vec4(2f, 4f, 6f, 8f), 0.5f);
 
         result.W.Should().BeApproximately(4f, 1e-6f);
     }

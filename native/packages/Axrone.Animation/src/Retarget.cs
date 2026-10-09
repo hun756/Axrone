@@ -28,7 +28,7 @@ public enum RetargetRotationMode
 /// correction. The profile stores only mapped bones contiguously, so application
 /// iterates bindings with no per-bone skip branches.
 /// </summary>
-public readonly record struct RetargetBinding(int SourceIndex, int TargetIndex, float LengthRatio, Quaternion RotationOffset);
+public readonly record struct RetargetBinding(int SourceIndex, int TargetIndex, float LengthRatio, Quat RotationOffset);
 
 /// <summary>Explicit source-to-target bone name pair.</summary>
 public readonly record struct ExplicitBoneMapping(string Source, string Target);
@@ -40,7 +40,7 @@ public readonly record struct ExplicitBoneMapping(string Source, string Target);
 public sealed class RetargetProfile
 {
     private readonly int[] _sourceToTargetMap;
-    private readonly Quaternion[] _rotationOffsets;
+    private readonly Quat[] _rotationOffsets;
     private readonly float[] _lengthRatios;
     private readonly RetargetBinding[] _bindings;
 
@@ -99,7 +99,7 @@ public sealed class RetargetProfile
 
         _sourceToTargetMap = new int[sourceRig.BoneCount];
         Array.Fill(_sourceToTargetMap, -1);
-        _rotationOffsets = new Quaternion[sourceRig.BoneCount];
+        _rotationOffsets = new Quat[sourceRig.BoneCount];
         _lengthRatios = new float[sourceRig.BoneCount];
 
         if (!explicitMappings.IsEmpty)
@@ -138,12 +138,12 @@ public sealed class RetargetProfile
 
             int sRot = (sourceRig.BoneCount * 3) + (s * 4);
             int tRot = (targetRig.BoneCount * 3) + (t * 4);
-            Quaternion sourceRestR = new(sourceRest[sRot], sourceRest[sRot + 1], sourceRest[sRot + 2], sourceRest[sRot + 3]);
-            Quaternion targetRestR = new(targetRest[tRot], targetRest[tRot + 1], targetRest[tRot + 2], targetRest[tRot + 3]);
-            _rotationOffsets[s] = Quaternion.Normalize(targetRestR * FastMath.InvertSafe(sourceRestR));
+            Quat sourceRestR = new(sourceRest[sRot], sourceRest[sRot + 1], sourceRest[sRot + 2], sourceRest[sRot + 3]);
+            Quat targetRestR = new(targetRest[tRot], targetRest[tRot + 1], targetRest[tRot + 2], targetRest[tRot + 3]);
+            _rotationOffsets[s] = Quat.Normalize(targetRestR * FastMath.InvertSafe(sourceRestR));
 
-            float sourceLen = new Vector3(sourceRest[s * 3], sourceRest[(s * 3) + 1], sourceRest[(s * 3) + 2]).Length();
-            float targetLen = new Vector3(targetRest[t * 3], targetRest[(t * 3) + 1], targetRest[(t * 3) + 2]).Length();
+            float sourceLen = new Vec3(sourceRest[s * 3], sourceRest[(s * 3) + 1], sourceRest[(s * 3) + 2]).Length();
+            float targetLen = new Vec3(targetRest[t * 3], targetRest[(t * 3) + 1], targetRest[(t * 3) + 2]).Length();
             _lengthRatios[s] = sourceLen > AnimationConstants.SoaEpsilon ? targetLen / sourceLen : 1.0f;
         }
 
@@ -242,13 +242,13 @@ public sealed class RetargetProfile
         ReadOnlySpan<RetargetBinding> bindings,
         RetargetTranslationMode translationMode,
         RetargetRotationMode rotationMode,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
         ReadOnlySpan<float> sourceCurves,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS,
         Span<float> targetCurves)
     {
         switch (translationMode, rotationMode)
@@ -283,12 +283,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteScaledOffset(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {
@@ -304,12 +304,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteAbsoluteOffset(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {
@@ -325,12 +325,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteNoneOffset(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {
@@ -345,12 +345,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteScaledCopy(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {
@@ -366,12 +366,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteAbsoluteCopy(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {
@@ -387,12 +387,12 @@ public sealed class RetargetProfile
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void ExecuteNoneCopy(
         ReadOnlySpan<RetargetBinding> bindings,
-        ReadOnlySpan<Vector3> sourceT,
-        ReadOnlySpan<Quaternion> sourceR,
-        ReadOnlySpan<Vector3> sourceS,
-        Span<Vector3> targetT,
-        Span<Quaternion> targetR,
-        Span<Vector3> targetS)
+        ReadOnlySpan<Vec3> sourceT,
+        ReadOnlySpan<Quat> sourceR,
+        ReadOnlySpan<Vec3> sourceS,
+        Span<Vec3> targetT,
+        Span<Quat> targetR,
+        Span<Vec3> targetS)
     {
         for (int i = 0; i < bindings.Length; i++)
         {

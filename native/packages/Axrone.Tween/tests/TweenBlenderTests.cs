@@ -1,6 +1,6 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
+using Axrone.Numeric;
 
 public class TweenBlenderTests
 {
@@ -106,9 +106,9 @@ public class TweenBlenderTests
         var (engine, clock, blender) = Create();
         using (engine)
         {
-            Vector2 target = new(1.0f, 1.0f);
+            Vec2 target = new(1.0f, 1.0f);
             TweenSpec spec = new TweenBuilder()
-                .From(Vector2.Zero).To(new Vector2(3.0f, 5.0f)).DurationSeconds(1.0f).Build();
+                .From(Vec2.Zero).To(new Vec2(3.0f, 5.0f)).DurationSeconds(1.0f).Build();
             blender.PlayBlendable(spec, d => target += d);
 
             clock.Advance(DurationNs.FromSeconds(1.0f));
@@ -125,7 +125,7 @@ public class TweenBlenderTests
         var (engine, _, blender) = Create();
         using (engine)
         {
-            Action mismatch = () => blender.PlayBlendable(Linear(1.0f), (Vector2 _) => { });
+            Action mismatch = () => blender.PlayBlendable(Linear(1.0f), (Vec2 _) => { });
             mismatch.Should().Throw<ArgumentOutOfRangeException>();
             blender.Restart(default).Should().BeFalse();
         }

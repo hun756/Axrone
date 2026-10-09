@@ -84,7 +84,7 @@ public class ClipTests
         var frame = new AnimationFrame(2, new Dictionary<CurveId, int>());
         clip.Sample(0.5f, frame);
         frame.ReadTranslations()[1].Y.Should().BeApproximately(1.0f, 1e-6f);
-        frame.ReadTranslations()[0].Should().Be(Vector3.Zero);
+        frame.ReadTranslations()[0].Should().Be(Vec3.Zero);
     }
 
     [Fact]
@@ -132,16 +132,16 @@ public class ClipTests
         var frame = new AnimationFrame(1, new Dictionary<CurveId, int>());
 
         clip.Sample(-1.0f, frame);
-        frame.ReadRotations()[0].Should().Be(new Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+        frame.ReadRotations()[0].Should().Be(new Quat(0.0f, 0.0f, 0.0f, 1.0f));
 
         clip.Sample(0.5f, frame);
-        Quaternion mid = frame.ReadRotations()[0];
+        Quat mid = frame.ReadRotations()[0];
         float length = MathF.Sqrt((mid.X * mid.X) + (mid.Y * mid.Y) + (mid.Z * mid.Z) + (mid.W * mid.W));
         length.Should().BeApproximately(1.0f, 1e-5f);
         mid.Y.Should().BeApproximately(0.7071f, 1e-4f);
 
         clip.Sample(5.0f, frame, isLooping: false);
-        frame.ReadRotations()[0].Should().Be(new Quaternion(0.0f, 1.0f, 0.0f, 0.0f));
+        frame.ReadRotations()[0].Should().Be(new Quat(0.0f, 1.0f, 0.0f, 0.0f));
     }
 
     [Fact]

@@ -13,8 +13,8 @@ public static class IkSolvers
         Rig rig,
         AnimationFrame frame,
         ReadOnlySpan<int> chainBoneIndices,
-        Vector3 targetPos,
-        Span<Vector3> scratchPositions,
+        Vec3 targetPos,
+        Span<Vec3> scratchPositions,
         int maxIterations = AnimationConstants.IkDefaultMaxIterations,
         float precision = AnimationConstants.IkDefaultPrecision)
     {
@@ -32,11 +32,11 @@ public static class IkSolvers
 
         int scratchBones = rig.BoneCount;
         using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
-            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            ? ScratchWorldBuffers.FromStack(stackalloc Vec3[scratchBones], stackalloc Quat[scratchBones], stackalloc Vec3[scratchBones])
             : ScratchWorldBuffers.RentPooled(scratchBones);
-        Span<Vector3> worldT = buffers.Translations;
-        Span<Quaternion> worldR = buffers.Rotations;
-        Span<Vector3> worldS = buffers.Scales;
+        Span<Vec3> worldT = buffers.Translations;
+        Span<Quat> worldR = buffers.Rotations;
+        Span<Vec3> worldS = buffers.Scales;
         BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
 
         int count = chainBoneIndices.Length;
@@ -48,26 +48,26 @@ public static class IkSolvers
         float totalLength = 0.0f;
         for (int i = 0; i < count - 1; i++)
         {
-            totalLength += Vector3.Distance(worldT[chainBoneIndices[i]], worldT[chainBoneIndices[i + 1]]);
+            totalLength += Vec3.Distance(worldT[chainBoneIndices[i]], worldT[chainBoneIndices[i + 1]]);
         }
 
-        Vector3 rootPos = scratchPositions[0];
-        if (Vector3.Distance(rootPos, targetPos) >= totalLength)
+        Vec3 rootPos = scratchPositions[0];
+        if (Vec3.Distance(rootPos, targetPos) >= totalLength)
         {
-            Vector3 direction = targetPos - rootPos;
+            Vec3 direction = targetPos - rootPos;
             if (direction.LengthSquared() > AnimationConstants.SoaEpsilon)
             {
-                direction = Vector3.Normalize(direction);
+                direction = Vec3.Normalize(direction);
             }
             else
             {
-                direction = Vector3.UnitX;
+                direction = Vec3.UnitX;
             }
 
             float walked = 0.0f;
             for (int i = 1; i < count; i++)
             {
-                walked += Vector3.Distance(worldT[chainBoneIndices[i - 1]], worldT[chainBoneIndices[i]]);
+                walked += Vec3.Distance(worldT[chainBoneIndices[i - 1]], worldT[chainBoneIndices[i]]);
                 scratchPositions[i] = rootPos + (direction * walked);
             }
         }
@@ -77,7 +77,7 @@ public static class IkSolvers
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 iterations++;
-                if (Vector3.DistanceSquared(scratchPositions[count - 1], targetPos) <= precision * precision)
+                if (Vec3.DistanceSquared(scratchPositions[count - 1], targetPos) <= precision * precision)
                 {
                     break;
                 }
@@ -102,17 +102,17 @@ public static class IkSolvers
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float BoneLength(ReadOnlySpan<Vector3> worldT, ReadOnlySpan<int> chain, int link) =>
-        MathF.Max(Vector3.Distance(worldT[chain[link]], worldT[chain[link + 1]]), AnimationConstants.SoaEpsilon);
+    private static float BoneLength(ReadOnlySpan<Vec3> worldT, ReadOnlySpan<int> chain, int link) =>
+        MathF.Max(Vec3.Distance(worldT[chain[link]], worldT[chain[link + 1]]), AnimationConstants.SoaEpsilon);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vector3 ReachToward(Vector3 anchor, Vector3 point, float length)
+    private static Vec3 ReachToward(Vec3 anchor, Vec3 point, float length)
     {
-        Vector3 diff = point - anchor;
+        Vec3 diff = point - anchor;
         float distance = diff.Length();
         if (distance <= AnimationConstants.SoaEpsilon)
         {
-            return anchor + (Vector3.UnitX * length);
+            return anchor + (Vec3.UnitX * length);
         }
 
         return anchor + ((diff / distance) * length);
@@ -121,28 +121,28 @@ public static class IkSolvers
     private static void WriteBackRotations(
         Rig rig,
         AnimationFrame frame,
-        ReadOnlySpan<Vector3> worldT,
-        ReadOnlySpan<Quaternion> worldR,
+        ReadOnlySpan<Vec3> worldT,
+        ReadOnlySpan<Quat> worldR,
         ReadOnlySpan<int> chain,
-        ReadOnlySpan<Vector3> solved)
+        ReadOnlySpan<Vec3> solved)
     {
-        Span<Quaternion> localR = frame.GetRotations();
+        Span<Quat> localR = frame.GetRotations();
 
         for (int i = 0; i < chain.Length - 1; i++)
         {
             int bone = chain[i];
-            Vector3 currentDir = worldT[chain[i + 1]] - worldT[bone];
-            Vector3 targetDir = solved[i + 1] - solved[i];
+            Vec3 currentDir = worldT[chain[i + 1]] - worldT[bone];
+            Vec3 targetDir = solved[i + 1] - solved[i];
             if (currentDir.LengthSquared() < AnimationConstants.SoaEpsilon
                 || targetDir.LengthSquared() < AnimationConstants.SoaEpsilon)
             {
                 continue;
             }
 
-            Quaternion correction = FastMath.QuaternionFromTo(currentDir, targetDir);
+            Quat correction = FastMath.QuatFromTo(currentDir, targetDir);
             int parent = rig.Parents[bone];
-            Quaternion parentWorld = parent != -1 ? worldR[parent] : Quaternion.Identity;
-            Quaternion newLocal = FastMath.Normalize(
+            Quat parentWorld = parent != -1 ? worldR[parent] : Quat.Identity;
+            Quat newLocal = FastMath.Normalize(
                 FastMath.Multiply(FastMath.Multiply(FastMath.Invert(parentWorld), correction), FastMath.Multiply(parentWorld, localR[bone])));
             localR[bone] = newLocal;
         }
@@ -157,7 +157,7 @@ public static class IkSolvers
         Rig rig,
         AnimationFrame frame,
         ReadOnlySpan<int> chainBoneIndices,
-        Vector3 targetPos,
+        Vec3 targetPos,
         float weight = 1.0f,
         int maxIterations = AnimationConstants.IkDefaultMaxIterations,
         float precision = AnimationConstants.IkDefaultPrecision)
@@ -177,15 +177,15 @@ public static class IkSolvers
         float w = FastMath.Clamp01(weight);
         int scratchBones = rig.BoneCount;
         using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
-            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            ? ScratchWorldBuffers.FromStack(stackalloc Vec3[scratchBones], stackalloc Quat[scratchBones], stackalloc Vec3[scratchBones])
             : ScratchWorldBuffers.RentPooled(scratchBones);
-        Span<Vector3> worldT = buffers.Translations;
-        Span<Quaternion> worldR = buffers.Rotations;
-        Span<Vector3> worldS = buffers.Scales;
+        Span<Vec3> worldT = buffers.Translations;
+        Span<Quat> worldR = buffers.Rotations;
+        Span<Vec3> worldS = buffers.Scales;
 
-        Span<Quaternion> localR = frame.GetRotations();
-        ReadOnlySpan<Vector3> locT = frame.ReadTranslations();
-        ReadOnlySpan<Vector3> locS = frame.ReadScales();
+        Span<Quat> localR = frame.GetRotations();
+        ReadOnlySpan<Vec3> locT = frame.ReadTranslations();
+        ReadOnlySpan<Vec3> locS = frame.ReadScales();
         int tipBone = chainBoneIndices[chainBoneIndices.Length - 1];
         float precisionSq = MathF.Max(precision, AnimationConstants.IkPrecisionFloor);
         precisionSq *= precisionSq;
@@ -199,7 +199,7 @@ public static class IkSolvers
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 iterations++;
-                if (Vector3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
+                if (Vec3.DistanceSquared(worldT[tipBone], targetPos) <= precisionSq)
                 {
                     break;
                 }
@@ -208,20 +208,20 @@ public static class IkSolvers
                 {
                     int bone = chainBoneIndices[i];
 
-                    Vector3 toTip = worldT[tipBone] - worldT[bone];
-                    Vector3 toTarget = targetPos - worldT[bone];
+                    Vec3 toTip = worldT[tipBone] - worldT[bone];
+                    Vec3 toTarget = targetPos - worldT[bone];
                     if (toTip.LengthSquared() < AnimationConstants.SoaEpsilon
                         || toTarget.LengthSquared() < AnimationConstants.SoaEpsilon)
                     {
                         continue;
                     }
 
-                    Quaternion deltaWorld = FastMath.QuaternionFromTo(toTip, toTarget);
+                    Quat deltaWorld = FastMath.QuatFromTo(toTip, toTarget);
                     int parent = rig.Parents[bone];
-                    Quaternion parentWorld = parent != -1 ? worldR[parent] : Quaternion.Identity;
+                    Quat parentWorld = parent != -1 ? worldR[parent] : Quat.Identity;
 
-                    Quaternion localDelta = FastMath.Multiply(FastMath.Multiply(parentWorld, deltaWorld), FastMath.Invert(parentWorld));
-                    Quaternion targetLocal = FastMath.Normalize(FastMath.Multiply(localDelta, localR[bone]));
+                    Quat localDelta = FastMath.Multiply(FastMath.Multiply(parentWorld, deltaWorld), FastMath.Invert(parentWorld));
+                    Quat targetLocal = FastMath.Normalize(FastMath.Multiply(localDelta, localR[bone]));
                     localR[bone] = FastMath.Slerp(localR[bone], targetLocal, w);
 
                     // Only the rotated joint's subtree changed: refresh it instead of
@@ -247,12 +247,12 @@ public static class IkSolvers
     private static void RefreshSubtree(
         Rig rig,
         int subtreeRoot,
-        ReadOnlySpan<Vector3> locT,
-        ReadOnlySpan<Quaternion> locR,
-        ReadOnlySpan<Vector3> locS,
-        Span<Vector3> worldT,
-        Span<Quaternion> worldR,
-        Span<Vector3> worldS,
+        ReadOnlySpan<Vec3> locT,
+        ReadOnlySpan<Quat> locR,
+        ReadOnlySpan<Vec3> locS,
+        Span<Vec3> worldT,
+        Span<Quat> worldR,
+        Span<Vec3> worldS,
         Span<int> stack)
     {
         ReadOnlySpan<int> parents = rig.Parents;

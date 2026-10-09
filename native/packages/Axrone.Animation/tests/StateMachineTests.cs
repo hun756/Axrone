@@ -56,7 +56,7 @@ public class StateMachineTests
         machine.HasActiveTransition.Should().BeTrue();
         machine.Update(0.5f, parameters, new List<ClipEvent>(), 1.0f);
 
-        machine.ExtractRootDelta(rig, out Vector3 delta, out _);
+        machine.ExtractRootDelta(rig, out Vec3 delta, out _);
         delta.X.Should().BeApproximately(0.5f, 1e-4f);
         delta.Y.Should().BeApproximately(0.0f, 1e-6f);
     }

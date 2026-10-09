@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using Xunit;
 using FluentAssertions;
 using Axrone.Geometry;
@@ -66,12 +65,12 @@ public class DynamicTreeQueryTests
         new(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ));
 
     private static Frustum3 UnitCubeFrustum() => new(
-        new Plane(new Vector3(1, 0, 0), 1),
-        new Plane(new Vector3(-1, 0, 0), 1),
-        new Plane(new Vector3(0, 1, 0), 1),
-        new Plane(new Vector3(0, -1, 0), 1),
-        new Plane(new Vector3(0, 0, 1), 1),
-        new Plane(new Vector3(0, 0, -1), 1));
+        new Plane(new Vec3(1, 0, 0), 1),
+        new Plane(new Vec3(-1, 0, 0), 1),
+        new Plane(new Vec3(0, 1, 0), 1),
+        new Plane(new Vec3(0, -1, 0), 1),
+        new Plane(new Vec3(0, 0, 1), 1),
+        new Plane(new Vec3(0, 0, -1), 1));
 
     [Fact]
     public void OverlapsSpan_ReturnsMatchingIds()

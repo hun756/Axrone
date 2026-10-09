@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
     <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
   </ItemGroup>
 
   <ItemGroup>

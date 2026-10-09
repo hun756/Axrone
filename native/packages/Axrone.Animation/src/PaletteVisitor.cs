@@ -13,5 +13,5 @@ public interface IRigPaletteVisitor<TContext>
     where TContext : allows ref struct
 {
     /// <summary>Consumes the world matrices into the context.</summary>
-    void Visit(ref TContext context, ReadOnlySpan<Matrix4x4> worldMatrices);
+    void Visit(ref TContext context, ReadOnlySpan<Mat4> worldMatrices);
 }

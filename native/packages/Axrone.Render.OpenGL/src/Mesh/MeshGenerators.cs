@@ -133,7 +133,7 @@ public static class MeshGenerators
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
         byte[] indexBytes = MemoryMarshal.AsBytes(indices.AsSpan()).ToArray();
-        Aabb3D bounds = new((Vec3)new Vector3(-h, -h, -h), (Vec3)new Vector3(h, h, h));
+        Aabb3D bounds = new(new Vec3(-h, -h, -h), new Vec3(h, h, h));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, indexBytes, bounds, GLConst.Triangles, label);
     }
@@ -227,8 +227,8 @@ public static class MeshGenerators
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
         byte[] indexBytes = MemoryMarshal.AsBytes(indices.AsSpan()).ToArray();
         Aabb3D bounds = new(
-            (Vec3)new Vector3(-radius, -radius, -radius),
-            (Vec3)new Vector3(radius, radius, radius));
+            new Vec3(-radius, -radius, -radius),
+            new Vec3(radius, radius, radius));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, indexBytes, bounds, GLConst.Triangles, label);
     }
@@ -255,7 +255,7 @@ public static class MeshGenerators
         ];
 
         byte[] vertexBytes = MemoryMarshal.AsBytes(vertices.AsSpan()).ToArray();
-        Aabb3D bounds = new((Vec3)new Vector3(-1, -1, 0), (Vec3)new Vector3(3, 3, 0));
+        Aabb3D bounds = new(new Vec3(-1, -1, 0), new Vec3(3, 3, 0));
 
         return new GLMesh(context, DefaultLayout, vertexBytes, default, bounds, GLConst.Triangles, label);
     }

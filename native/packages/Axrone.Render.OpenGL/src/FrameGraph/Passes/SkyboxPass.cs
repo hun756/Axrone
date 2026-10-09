@@ -22,7 +22,7 @@ public record struct SkyboxPassData
     public string CubemapUniform { get; set; }
 
     /// <summary>View-projection matrix uploaded on each execution. Update per frame.</summary>
-    public Matrix4x4 ViewProjection { get; set; }
+    public Mat4 ViewProjection { get; set; }
 
     /// <summary>Output framebuffer name, or null to keep the current binding.</summary>
     public string? OutputFramebufferName { get; set; }
@@ -104,7 +104,7 @@ public record struct SkyboxPassData
         {
             unsafe
             {
-                Matrix4x4 matrix = data.ViewProjection;
+                Mat4 matrix = data.ViewProjection;
                 gl.UniformMatrix4(viewProjectionLocation, 1, false, &matrix.M11);
             }
         }
@@ -152,7 +152,7 @@ public static class SkyboxPass
                 Cubemap = cubemap,
                 ViewProjectionUniform = viewProjectionUniform,
                 CubemapUniform = cubemapUniform,
-                ViewProjection = Matrix4x4.Identity,
+                ViewProjection = Mat4.Identity,
                 OutputFramebufferName = outputFramebufferName
             });
     }

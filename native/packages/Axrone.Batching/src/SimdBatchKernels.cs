@@ -1,7 +1,7 @@
 namespace Axrone.Batching;
 
 /// <summary>
-/// Batch geometry kernels over <see cref="System.Numerics"/> types.
+/// Batch geometry kernels over the <see cref="Axrone.Numeric"/> primitives.
 /// </summary>
 /// <remarks>
 /// <c>Axrone.Simd</c> covers flat numeric spans; this layer adds the engine-typed shapes on
@@ -21,16 +21,16 @@ public static unsafe partial class SimdBatchKernels
     /// <remarks>
     /// Deliberately scalar: the 8-wide AoS-gather version measured slower than this loop at every
     /// batch size (see <c>GeometryKernelBenchmarks</c>).
-    /// <see cref="Vector3.Transform(Vector3, Matrix4x4)"/> itself is JIT-intrinsic accelerated,
-    /// so the loop already issues vector instructions.
+    /// <see cref="Vec3.Transform(Vec3, Mat4)"/> fuses the row multiply-add chain, so the loop
+    /// already issues vector instructions.
     /// </remarks>
-    public static void TransformPositions3D(ReadOnlySpan<Vector3> source, Span<Vector3> destination, in Matrix4x4 matrix)
+    public static void TransformPositions3D(ReadOnlySpan<Vec3> source, Span<Vec3> destination, in Mat4 matrix)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
         for (var i = 0; i < source.Length; i++)
         {
-            destination[i] = Vector3.Transform(source[i], matrix);
+            destination[i] = Vec3.Transform(source[i], matrix);
         }
     }
 
@@ -45,13 +45,13 @@ public static unsafe partial class SimdBatchKernels
     /// Deliberately scalar: the 2-wide vector version measured at best tied with this loop
     /// (see <c>GeometryKernelBenchmarks</c>), and the simpler code wins ties.
     /// </remarks>
-    public static void TransformAffine(ReadOnlySpan<Vector4> source, Span<Vector4> destination, in Matrix4x4 matrix)
+    public static void TransformAffine(ReadOnlySpan<Vec4> source, Span<Vec4> destination, in Mat4 matrix)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
         for (var i = 0; i < source.Length; i++)
         {
-            destination[i] = Vector4.Transform(source[i], matrix);
+            destination[i] = matrix * source[i];
         }
     }
 
@@ -66,7 +66,7 @@ public static unsafe partial class SimdBatchKernels
     /// Both spans are contiguous in component order, so this needs no AoS-to-SoA transpose and runs
     /// as a flat vector pass over <c>count * 3</c> floats, cascading 256 → 128 → scalar.
     /// </remarks>
-    public static void IntegrateVelocity(Span<Vector3> positions, ReadOnlySpan<Vector3> velocities, float deltaTime)
+    public static void IntegrateVelocity(Span<Vec3> positions, ReadOnlySpan<Vec3> velocities, float deltaTime)
     {
         if (velocities.Length < positions.Length)
         {
@@ -79,8 +79,8 @@ public static unsafe partial class SimdBatchKernels
             return;
         }
 
-        ref float positionBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector3, float>(positions));
-        ref float velocityBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector3, float>(velocities));
+        ref float positionBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec3, float>(positions));
+        ref float velocityBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec3, float>(velocities));
         nuint index = 0;
 
         // No 512-bit tier by measurement: contiguous 512-bit passes clocked ~2x slower than 256-bit

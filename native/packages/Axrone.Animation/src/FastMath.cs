@@ -2,7 +2,7 @@ namespace Axrone.Animation;
 
 using Axrone.Simd;
 
-/// <summary>Branch-lean quaternion and time math for the animation hot path.</summary>
+/// <summary>Branch-lean Quat and time math for the animation hot path.</summary>
 public static class FastMath
 {
     /// <summary>
@@ -28,30 +28,30 @@ public static class FastMath
         return value;
     }
 
-    /// <summary>Zero-safe normalization; degenerate quaternions become identity.</summary>
+    /// <summary>Zero-safe normalization; degenerate Quats become identity.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Quaternion Normalize(in Quaternion q)
+    public static Quat Normalize(in Quat q)
     {
         float lenSq = (q.X * q.X) + (q.Y * q.Y) + (q.Z * q.Z) + (q.W * q.W);
         if (lenSq < AnimationConstants.QuaternionDegenerateLengthSq)
         {
-            return Quaternion.Identity;
+            return Quat.Identity;
         }
 
         float invLen = 1.0f / MathF.Sqrt(lenSq);
-        return new Quaternion(q.X * invLen, q.Y * invLen, q.Z * invLen, q.W * invLen);
+        return new Quat(q.X * invLen, q.Y * invLen, q.Z * invLen, q.W * invLen);
     }
 
     /// <summary>
     /// Zero-safe vector normalization; degenerate vectors become
-    /// <see cref="Vector3.Zero"/>, mirroring the quaternion overload's contract.
+    /// <see cref="Vec3.Zero"/>, mirroring the Quat overload's contract.
     /// The vector path goes through the SIMD runtime so forced-scalar test
     /// overrides apply here too, and both tiers accumulate the squared length in
     /// the same order (<c>(x² + y²) + z²</c>) with the same reciprocal scale, so
     /// switching tiers cannot move a single bit of the result.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vector3 Normalize(in Vector3 v)
+    public static Vec3 Normalize(in Vec3 v)
     {
         if (SimdRuntime.IsSupported(SimdFeature.Vector128HardwareAccelerated))
         {
@@ -60,41 +60,41 @@ public static class FastMath
             float lenSq = (squares[0] + squares[1]) + squares[2];
             if (lenSq < DegenerateVectorLengthSq)
             {
-                return Vector3.Zero;
+                return Vec3.Zero;
             }
 
             float invLen = 1.0f / MathF.Sqrt(lenSq);
             Vector128<float> scaled = value * Vector128.Create(invLen);
-            return new Vector3(scaled[0], scaled[1], scaled[2]);
+            return new Vec3(scaled[0], scaled[1], scaled[2]);
         }
 
         float scalarLenSq = (v.X * v.X) + (v.Y * v.Y) + (v.Z * v.Z);
         if (scalarLenSq < DegenerateVectorLengthSq)
         {
-            return Vector3.Zero;
+            return Vec3.Zero;
         }
 
         float scalarInvLen = 1.0f / MathF.Sqrt(scalarLenSq);
-        return new Vector3(v.X * scalarInvLen, v.Y * scalarInvLen, v.Z * scalarInvLen);
+        return new Vec3(v.X * scalarInvLen, v.Y * scalarInvLen, v.Z * scalarInvLen);
     }
 
     /// <summary>Spherical interpolation with antipodal fix and linear fallback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Quaternion Slerp(in Quaternion q1, in Quaternion q2, float t)
+    public static Quat Slerp(in Quat q1, in Quat q2, float t)
     {
         t = Math.Clamp(t, 0.0f, 1.0f);
         float cosTheta = (q1.X * q2.X) + (q1.Y * q2.Y) + (q1.Z * q2.Z) + (q1.W * q2.W);
-        Quaternion target = q2;
+        Quat target = q2;
 
         if (cosTheta < 0.0f)
         {
             cosTheta = -cosTheta;
-            target = new Quaternion(-target.X, -target.Y, -target.Z, -target.W);
+            target = new Quat(-target.X, -target.Y, -target.Z, -target.W);
         }
 
         if (cosTheta > AnimationConstants.SlerpLinearThreshold)
         {
-            return Normalize(new Quaternion(
+            return Normalize(new Quat(
                 q1.X + (t * (target.X - q1.X)),
                 q1.Y + (t * (target.Y - q1.Y)),
                 q1.Z + (t * (target.Z - q1.Z)),
@@ -108,7 +108,7 @@ public static class FastMath
         float w1 = MathF.Sin((1.0f - t) * angle) * invSinAngle;
         float w2 = MathF.Sin(t * angle) * invSinAngle;
 
-        return new Quaternion(
+        return new Quat(
             (w1 * q1.X) + (w2 * target.X),
             (w1 * q1.Y) + (w2 * target.Y),
             (w1 * q1.Z) + (w2 * target.Z),
@@ -117,32 +117,32 @@ public static class FastMath
 
     /// <summary>Shortest-arc rotation from one direction to another.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Quaternion QuaternionFromTo(in Vector3 from, in Vector3 to)
+    public static Quat QuatFromTo(in Vec3 from, in Vec3 to)
     {
-        Vector3 v0 = Vector3.Normalize(from);
-        Vector3 v1 = Vector3.Normalize(to);
-        float d = Vector3.Dot(v0, v1);
+        Vec3 v0 = Vec3.Normalize(from);
+        Vec3 v1 = Vec3.Normalize(to);
+        float d = Vec3.Dot(v0, v1);
 
         if (d >= 1.0f - AnimationConstants.SoaEpsilon)
         {
-            return Quaternion.Identity;
+            return Quat.Identity;
         }
 
         if (d <= -1.0f + AnimationConstants.SoaEpsilon)
         {
-            Vector3 axis = Vector3.Cross(Vector3.UnitX, v0);
+            Vec3 axis = Vec3.Cross(Vec3.UnitX, v0);
             if (axis.LengthSquared() < AnimationConstants.SoaEpsilon)
             {
-                axis = Vector3.Cross(Vector3.UnitY, v0);
+                axis = Vec3.Cross(Vec3.UnitY, v0);
             }
 
-            axis = Vector3.Normalize(axis);
-            return Quaternion.CreateFromAxisAngle(axis, MathF.PI);
+            axis = Vec3.Normalize(axis);
+            return Quat.CreateFromAxisAngle(axis, MathF.PI);
         }
 
-        Vector3 a = Vector3.Cross(v0, v1);
-        Quaternion q = new(a.X, a.Y, a.Z, 1.0f + d);
-        return Quaternion.Normalize(q);
+        Vec3 a = Vec3.Cross(v0, v1);
+        Quat q = new(a.X, a.Y, a.Z, 1.0f + d);
+        return Quat.Normalize(q);
     }
 
     /// <summary>Wraps time into [0, duration).</summary>
@@ -251,29 +251,29 @@ public static class FastMath
 
     /// <summary>Rotates a vector without building a matrix.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vector3 RotateVector(in Quaternion q, in Vector3 v)
+    public static Vec3 RotateVector(in Quat q, in Vec3 v)
     {
-        Vector3 qv = new(q.X, q.Y, q.Z);
-        Vector3 t = 2.0f * Vector3.Cross(qv, v);
-        return v + (q.W * t) + Vector3.Cross(qv, t);
+        Vec3 qv = new(q.X, q.Y, q.Z);
+        Vec3 t = 2.0f * Vec3.Cross(qv, v);
+        return v + (q.W * t) + Vec3.Cross(qv, t);
     }
 
     /// <summary>Hamilton product.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Quaternion Multiply(in Quaternion a, in Quaternion b)
+    public static Quat Multiply(in Quat a, in Quat b)
     {
-        return new Quaternion(
+        return new Quat(
             (a.W * b.X) + (a.X * b.W) + (a.Y * b.Z) - (a.Z * b.Y),
             (a.W * b.Y) - (a.X * b.Z) + (a.Y * b.W) + (a.Z * b.X),
             (a.W * b.Z) + (a.X * b.Y) - (a.Y * b.X) + (a.Z * b.W),
             (a.W * b.W) - (a.X * b.X) - (a.Y * b.Y) - (a.Z * b.Z));
     }
 
-    /// <summary>Conjugate (unit-quaternion inverse).</summary>
+    /// <summary>Conjugate (unit-Quat inverse).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Quaternion Invert(in Quaternion q)
+    public static Quat Invert(in Quat q)
     {
-        return new Quaternion(-q.X, -q.Y, -q.Z, q.W);
+        return new Quat(-q.X, -q.Y, -q.Z, q.W);
     }
 
     /// <summary>
@@ -282,16 +282,16 @@ public static class FastMath
     /// instead of NaN. For authoring data that may not be normalized.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Quaternion InvertSafe(in Quaternion q)
+    public static Quat InvertSafe(in Quat q)
     {
         float lenSq = (q.X * q.X) + (q.Y * q.Y) + (q.Z * q.Z) + (q.W * q.W);
         if (lenSq < AnimationConstants.QuaternionDegenerateLengthSq)
         {
-            return Quaternion.Identity;
+            return Quat.Identity;
         }
 
         float inv = 1.0f / lenSq;
-        return new Quaternion(-q.X * inv, -q.Y * inv, -q.Z * inv, q.W * inv);
+        return new Quat(-q.X * inv, -q.Y * inv, -q.Z * inv, q.W * inv);
     }
 
     /// <summary>
@@ -301,24 +301,24 @@ public static class FastMath
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void ConcatenateLocal(
-        in Vector3 parentTranslation,
-        in Quaternion parentRotation,
-        in Vector3 parentScale,
-        in Vector3 localTranslation,
-        in Quaternion localRotation,
-        in Vector3 localScale,
-        out Vector3 outTranslation,
-        out Quaternion outRotation,
-        out Vector3 outScale)
+        in Vec3 parentTranslation,
+        in Quat parentRotation,
+        in Vec3 parentScale,
+        in Vec3 localTranslation,
+        in Quat localRotation,
+        in Vec3 localScale,
+        out Vec3 outTranslation,
+        out Quat outRotation,
+        out Vec3 outScale)
     {
         outScale = parentScale * localScale;
         outRotation = Normalize(parentRotation * localRotation);
-        outTranslation = parentTranslation + Vector3.Transform(localTranslation * parentScale, parentRotation);
+        outTranslation = parentTranslation + Vec3.Transform(localTranslation * parentScale, parentRotation);
     }
 
     /// <summary>Composes a column-major TRS matrix.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void ComposeTransformMatrix(in Vector3 translation, in Quaternion rotation, in Vector3 scale, Span<float> output)
+    public static void ComposeTransformMatrix(in Vec3 translation, in Quat rotation, in Vec3 scale, Span<float> output)
     {
         float xx = rotation.X * rotation.X;
         float yy = rotation.Y * rotation.Y;

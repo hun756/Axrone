@@ -1,6 +1,5 @@
 namespace Axrone.Geometry.Tests;
 
-using System.Numerics;
 using Axrone.Numeric;
 using FluentAssertions;
 using Xunit;
@@ -71,7 +70,7 @@ public class Aabb3DQueryTests
     {
         Aabb3D straddling = new(0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 1.0F);
         Aabb3D fullyAbove = new(0.0F, 2.0F, 0.0F, 1.0F, 3.0F, 1.0F);
-        Plane plane = new(0.0F, 1.0F, 0.0F, -1.0F);
+        Axrone.Numeric.Plane plane = new(0.0F, 1.0F, 0.0F, -1.0F);
 
         straddling.Intersects(in plane).Should().BeTrue();
         fullyAbove.Intersects(in plane).Should().BeFalse();
@@ -183,7 +182,7 @@ public class Aabb3DQueryTests
     {
         Aabb3D box = new(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F);
 
-        Aabb3D transformed = box.Transform(Matrix4x4.Identity);
+        Aabb3D transformed = box.Transform(Mat4.Identity);
 
         transformed.Min.X.Should().BeApproximately(1.0F, 1e-5F);
         transformed.Min.Y.Should().BeApproximately(2.0F, 1e-5F);
@@ -197,7 +196,7 @@ public class Aabb3DQueryTests
     public void Transform_Translation_Shifts()
     {
         Aabb3D box = new(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F);
-        Matrix4x4 translation = Matrix4x4.CreateTranslation(10.0F, 0.0F, 0.0F);
+        Mat4 translation = Mat4.CreateTranslation(10.0F, 0.0F, 0.0F);
 
         Aabb3D transformed = box.Transform(in translation);
 

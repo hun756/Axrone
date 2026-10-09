@@ -35,7 +35,7 @@ public sealed class PassExecutorTests : IDisposable
     [Fact]
     public void ClearPass_Create_SetsCorrectNameAndKind()
     {
-        var pass = ClearPass.Create("clear", clearColor: new Vector4(0, 0, 0, 1));
+        var pass = ClearPass.Create("clear", clearColor: new Vec4(0, 0, 0, 1));
 
         pass.Name.Should().Be("clear");
         pass.Kind.Should().Be(FramePassKind.Clear);
@@ -44,9 +44,9 @@ public sealed class PassExecutorTests : IDisposable
     [Fact]
     public void ClearPass_ClearColor_IsCapturedInPayload()
     {
-        var pass = ClearPass.Create("clear", clearColor: new Vector4(0.25f, 0.5f, 0.75f, 1f));
+        var pass = ClearPass.Create("clear", clearColor: new Vec4(0.25f, 0.5f, 0.75f, 1f));
 
-        pass.Data.ClearColor.Should().Be(new Vector4(0.25f, 0.5f, 0.75f, 1f));
+        pass.Data.ClearColor.Should().Be(new Vec4(0.25f, 0.5f, 0.75f, 1f));
         pass.Data.ClearDepth.Should().Be(1f);
         pass.Data.ClearStencil.Should().Be(0);
         pass.Data.ClearColorEnabled.Should().BeTrue();
@@ -636,12 +636,12 @@ public sealed class PassExecutorTests : IDisposable
             program,
             "shadow_map",
             "shadow_fbo",
-            Matrix4x4.Identity);
+            Mat4.Identity);
 
         pass.Name.Should().Be("shadow");
         pass.Kind.Should().Be(FramePassKind.Shadow);
         pass.Data.DepthProgram.Should().BeSameAs(program);
-        pass.Data.LightViewProjection.Should().Be(Matrix4x4.Identity);
+        pass.Data.LightViewProjection.Should().Be(Mat4.Identity);
         pass.Data.ShadowMapWidth.Should().Be(2048);
         pass.Data.ShadowMapHeight.Should().Be(2048);
 
@@ -657,9 +657,9 @@ public sealed class PassExecutorTests : IDisposable
             program,
             "shadow_map",
             "shadow_fbo",
-            Matrix4x4.Identity);
+            Mat4.Identity);
 
-        Matrix4x4 updated = Matrix4x4.CreateTranslation(1f, 2f, 3f);
+        Mat4 updated = Mat4.CreateTranslation(1f, 2f, 3f);
         pass.Data.LightViewProjection = updated;
 
         pass.Data.LightViewProjection.Should().Be(updated);
@@ -676,7 +676,7 @@ public sealed class PassExecutorTests : IDisposable
             program,
             "shadow_map",
             "shadow_fbo",
-            Matrix4x4.Identity);
+            Mat4.Identity);
         program.Dispose();
 
         var action = () => pass.Validate();
@@ -694,7 +694,7 @@ public sealed class PassExecutorTests : IDisposable
             program,
             "shadow_map",
             "shadow_fbo",
-            Matrix4x4.Identity);
+            Mat4.Identity);
 
         var action = () => pass.Validate();
 
@@ -712,7 +712,7 @@ public sealed class PassExecutorTests : IDisposable
             program,
             "shadow_map",
             "shadow_fbo",
-            Matrix4x4.Identity);
+            Mat4.Identity);
 
         pass.GetWrittenResources().ToArray().Should().Contain("shadow_map");
         pass.GetWrittenResources().ToArray().Should().Contain("shadow_fbo");

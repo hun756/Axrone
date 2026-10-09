@@ -48,11 +48,11 @@ public class TaxonomyTests
         frame.ResetToRest(rig);
         int[] chain = [0];
 
-        Action fabrik = () => IkSolvers.SolveFabrik(rig, frame, chain, Vector3.Zero, Span<Vector3>.Empty);
+        Action fabrik = () => IkSolvers.SolveFabrik(rig, frame, chain, Vec3.Zero, Span<Vec3>.Empty);
         fabrik.Should().Throw<IkException>()
             .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
 
-        Action ccd = () => IkSolvers.SolveCcd(rig, frame, chain, Vector3.Zero);
+        Action ccd = () => IkSolvers.SolveCcd(rig, frame, chain, Vec3.Zero);
         ccd.Should().Throw<IkException>()
             .Where(ex => ex.Code == AnimationErrorCode.ValidationInvalidArgument);
     }

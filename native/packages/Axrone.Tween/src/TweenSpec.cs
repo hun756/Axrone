@@ -1,7 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
-
 /// <summary>
 /// Immutable tween description: packed start/end lanes plus playback configuration.
 /// </summary>
@@ -36,9 +34,9 @@ public readonly record struct TweenSpec(
     int LoopCount,
     float TimeScale,
     Action<float>? OnUpdateFloat,
-    Action<Vector2>? OnUpdateVector2,
-    Action<Vector3>? OnUpdateVector3,
-    Action<Vector4>? OnUpdateVector4,
+    Action<Vec2>? OnUpdateVector2,
+    Action<Vec3>? OnUpdateVector3,
+    Action<Vec4>? OnUpdateVector4,
     Action? OnStart,
     Action? OnComplete,
     Action? OnStepComplete,

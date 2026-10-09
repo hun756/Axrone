@@ -20,7 +20,7 @@ public record struct ShadowPassData
     public string ShadowFramebufferName { get; set; }
 
     /// <summary>Light view-projection matrix. Update per frame before execution.</summary>
-    public Matrix4x4 LightViewProjection { get; set; }
+    public Mat4 LightViewProjection { get; set; }
 
     /// <summary>Shadow map width.</summary>
     public int ShadowMapWidth { get; set; }
@@ -85,7 +85,7 @@ public record struct ShadowPassData
         {
             unsafe
             {
-                Matrix4x4 matrix = data.LightViewProjection;
+                Mat4 matrix = data.LightViewProjection;
                 gl.UniformMatrix4(lightMatrixLocation, 1, false, &matrix.M11);
             }
         }
@@ -112,7 +112,7 @@ public static class ShadowPass
         GLProgram depthProgram,
         string shadowMapTextureName,
         string shadowFramebufferName,
-        Matrix4x4 lightViewProjection,
+        Mat4 lightViewProjection,
         int shadowMapWidth = 2048,
         int shadowMapHeight = 2048)
     {

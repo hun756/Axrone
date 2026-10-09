@@ -37,7 +37,7 @@ public class DispatcherTests
         {
             new ClipMotionNode(CreateClip()),
             new Blend1DMotionNode("w", new (float, MotionNode)[] { (0.0f, new ClipMotionNode(CreateClip())) }),
-            new Blend2DMotionNode("w", "w", new (Vector2, MotionNode)[] { (Vector2.Zero, new ClipMotionNode(CreateClip())) }),
+            new Blend2DMotionNode("w", "w", new (Vec2, MotionNode)[] { (Vec2.Zero, new ClipMotionNode(CreateClip())) }),
             new DirectMotionNode(new (string, MotionNode)[] { ("w", new ClipMotionNode(CreateClip())) }),
             new AdditiveMotionNode(new ClipMotionNode(CreateClip()), new ClipMotionNode(CreateClip()), "w"),
         };

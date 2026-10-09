@@ -37,7 +37,7 @@ public static class SkinningPalette
 
     /// <summary>Composes the palette directly from a world pose.</summary>
     [SkipLocalsInit]
-    public static void ComputeFromWorldPose(Rig rig, ReadOnlySpan<Vector3> worldT, ReadOnlySpan<Quaternion> worldR, ReadOnlySpan<Vector3> worldS, Span<float> outPalette)
+    public static void ComputeFromWorldPose(Rig rig, ReadOnlySpan<Vec3> worldT, ReadOnlySpan<Quat> worldR, ReadOnlySpan<Vec3> worldS, Span<float> outPalette)
     {
         ArgumentNullException.ThrowIfNull(rig);
         if (worldT.Length < rig.BoneCount || worldR.Length < rig.BoneCount || worldS.Length < rig.BoneCount

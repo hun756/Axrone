@@ -356,17 +356,17 @@ public sealed class RendererAuditRegressionTests
         // Camera far along +X. A sits at the world origin (100 units from the camera);
         // B sits at x=90 (10 units from the camera). World-origin sorting would draw B first;
         // correct camera-relative back-to-front draws the farther A first.
-        var pass = TransparentPass.Create("transparent", program, null, new Vector3(100, 0, 0));
+        var pass = TransparentPass.Create("transparent", program, null, new Vec3(100, 0, 0));
         var meshA = MeshGenerators.CreatePlane(context, 1, 1, "A");
         var meshB = MeshGenerators.CreatePlane(context, 1, 1, "B");
-        pass.Data.Entries.Add(new TransparentMeshEntry(meshA, new Vector3(0, 0, 0)));
-        pass.Data.Entries.Add(new TransparentMeshEntry(meshB, new Vector3(90, 0, 0)));
+        pass.Data.Entries.Add(new TransparentMeshEntry(meshA, new Vec3(0, 0, 0)));
+        pass.Data.Entries.Add(new TransparentMeshEntry(meshB, new Vec3(90, 0, 0)));
 
         var passContext = new PassExecutionContext(context);
         var renderContext = new GLRenderContext(context, passContext);
         ((IRenderPass)pass).Execute(renderContext);
 
-        pass.Data.Entries[0].WorldPosition.Should().Be(new Vector3(0, 0, 0));
-        pass.Data.Entries[1].WorldPosition.Should().Be(new Vector3(90, 0, 0));
+        pass.Data.Entries[0].WorldPosition.Should().Be(new Vec3(0, 0, 0));
+        pass.Data.Entries[1].WorldPosition.Should().Be(new Vec3(90, 0, 0));
     }
 }

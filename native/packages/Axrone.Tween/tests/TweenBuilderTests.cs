@@ -1,7 +1,7 @@
 namespace Axrone.Tween.Tests;
 
-using System.Numerics;
 using System.Runtime.Intrinsics;
+using Axrone.Numeric;
 using Axrone.Utility.Builders;
 
 public class TweenBuilderTests
@@ -27,11 +27,11 @@ public class TweenBuilderTests
     }
 
     [Fact]
-    public void Vector3_SetsThreeLanes()
+    public void Vec3_SetsThreeLanes()
     {
         var spec = new TweenBuilder()
-            .From(new Vector3(1f, 2f, 3f))
-            .By(new Vector3(1f, 1f, 1f))
+            .From(new Vec3(1f, 2f, 3f))
+            .By(new Vec3(1f, 1f, 1f))
             .Build();
 
         spec.ChannelCount.Should().Be(3);
@@ -44,7 +44,7 @@ public class TweenBuilderTests
     {
         var builder = new TweenBuilder()
             .From(0f)
-            .To(new Vector2(1f, 2f));
+            .To(new Vec2(1f, 2f));
 
         builder.TryBuild(out _, out BuilderDiagnostic diagnostic).Should().BeFalse();
         diagnostic.Code.Should().Be(BuilderStatusCode.ValidationFailed);

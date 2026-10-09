@@ -57,7 +57,7 @@ public static class AnimationConstants
     /// <summary>Threshold mapping a float condition value onto a bool.</summary>
     public const float BoolConditionThreshold = 0.5f;
 
-    /// <summary>Degenerate-quaternion length-squared floor for normalization.</summary>
+    /// <summary>Degenerate-Quat length-squared floor for normalization.</summary>
     public const float QuaternionDegenerateLengthSq = 1e-15f;
 
     /// <summary>Foot-contact edge ramp gain inside the contact window.</summary>

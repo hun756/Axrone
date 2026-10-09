@@ -486,13 +486,13 @@ public sealed class ShaderInstance
     /// <param name="location">The uniform location.</param>
     /// <param name="matrix">The matrix.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe void SetMatrix4x4(int location, in System.Numerics.Matrix4x4 matrix)
+    public unsafe void SetMatrix4(int location, in Mat4 matrix)
     {
         if (location < 0)
             return;
 
         EnsureCacheFresh();
-        fixed (System.Numerics.Matrix4x4* ptr = &matrix)
+        fixed (Mat4* ptr = &matrix)
         {
             float* f = (float*)ptr;
             uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(new ReadOnlySpan<float>(f, 16))).Value;

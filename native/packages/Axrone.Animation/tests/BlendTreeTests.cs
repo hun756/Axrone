@@ -48,7 +48,7 @@ public class BlendTreeTests
                 new AnimationChannel(0, ChannelTarget.Rotation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f]),
             ]);
         var node = new ClipMotionNode(clip);
-        node.ComputeRootDelta(0.75f, 0.25f, rig, out Vector3 delta, out _);
+        node.ComputeRootDelta(0.75f, 0.25f, rig, out Vec3 delta, out _);
         delta.X.Should().BeApproximately(2.0f, 1e-4f);
     }
 
@@ -88,8 +88,8 @@ public class BlendTreeTests
     {
         Rig rig = TwoBone();
         var node = new Blend2DMotionNode("aimX", "aimY", [
-            (new Vector2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(1.0f, 1.0f))),
-            (new Vector2(1.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(2.0f, 2.0f))),
+            (new Vec2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(1.0f, 1.0f))),
+            (new Vec2(1.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(2.0f, 2.0f))),
         ]);
 
         var frame = new AnimationFrame(2, NoCurves());
@@ -120,7 +120,7 @@ public class BlendTreeTests
         store.SetFloat("fire", 0.0f);
         store.SetFloat("idle", 0.0f);
         node.Evaluate(1.0f, frame, arena, rig, store, 0);
-        frame.ReadTranslations()[1].Should().Be(Vector3.Zero);
+        frame.ReadTranslations()[1].Should().Be(Vec3.Zero);
     }
 
     [Fact]

@@ -280,9 +280,9 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
     /// centre is transformed exactly and the half-sizes are scaled by the absolute column
     /// lengths, which is the tight bound for any linear map.
     /// </summary>
-    /// <param name="matrix">The transform to apply, in the row-vector convention of <see cref="Matrix4x4"/>.</param>
+    /// <param name="matrix">The transform to apply, in the row-vector convention of <see cref="Mat4"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Aabb3D Transform(in Matrix4x4 matrix)
+    public Aabb3D Transform(in Mat4 matrix)
     {
         Vec3 center = Center;
         Vec3 extents = Extents;

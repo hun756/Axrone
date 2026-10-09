@@ -1,5 +1,5 @@
-using System.Numerics;
 using Axrone.Batching;
+using Axrone.Numeric;
 using BenchmarkDotNet.Attributes;
 
 namespace Axrone.Batching.Benchmarks;
@@ -17,32 +17,32 @@ public class GeometryKernelBenchmarks
     [Params(64, 1024, 16384)]
     public int Count { get; set; }
 
-    private Vector3[] _positions3 = [];
-    private Vector3[] _velocities3 = [];
-    private Vector3[] _scratch3 = [];
-    private Vector4[] _vectors4 = [];
-    private Vector4[] _scratch4 = [];
-    private Matrix4x4 _matrix;
+    private Vec3[] _positions3 = [];
+    private Vec3[] _velocities3 = [];
+    private Vec3[] _scratch3 = [];
+    private Vec4[] _vectors4 = [];
+    private Vec4[] _scratch4 = [];
+    private Mat4 _matrix;
 
     [GlobalSetup]
     public void Setup()
     {
         var random = new Random(20260919);
-        _positions3 = new Vector3[Count];
-        _velocities3 = new Vector3[Count];
-        _scratch3 = new Vector3[Count];
-        _vectors4 = new Vector4[Count];
-        _scratch4 = new Vector4[Count];
+        _positions3 = new Vec3[Count];
+        _velocities3 = new Vec3[Count];
+        _scratch3 = new Vec3[Count];
+        _vectors4 = new Vec4[Count];
+        _scratch4 = new Vec4[Count];
 
         for (var i = 0; i < Count; i++)
         {
-            _positions3[i] = new Vector3(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
-            _velocities3[i] = new Vector3(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
-            _vectors4[i] = new Vector4(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f,
-                                       random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
+            _positions3[i] = new Vec3(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
+            _velocities3[i] = new Vec3(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
+            _vectors4[i] = new Vec4(random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f,
+                                    random.Next(-40, 41) / 4f, random.Next(-40, 41) / 4f);
         }
 
-        _matrix = new Matrix4x4(
+        _matrix = new Mat4(
             1.4f, 0.3f, -0.2f, 0f,
             0.1f, 0.7f, 0.4f, 0f,
             0.5f, -0.1f, 2.1f, 0f,
@@ -54,7 +54,7 @@ public class GeometryKernelBenchmarks
     {
         for (var i = 0; i < Count; i++)
         {
-            _scratch3[i] = Vector3.Transform(_positions3[i], _matrix);
+            _scratch3[i] = Vec3.Transform(_positions3[i], _matrix);
         }
     }
 
@@ -67,7 +67,7 @@ public class GeometryKernelBenchmarks
     {
         for (var i = 0; i < Count; i++)
         {
-            _scratch4[i] = Vector4.Transform(_vectors4[i], _matrix);
+            _scratch4[i] = _matrix * _vectors4[i];
         }
     }
 

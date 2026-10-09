@@ -1,4 +1,5 @@
 using Axrone.Animation;
+using Axrone.Numeric;
 using BenchmarkDotNet.Attributes;
 
 namespace Axrone.Animation.Benchmarks;
@@ -43,7 +44,7 @@ public class AnimationBenchmarks
         _frame = new AnimationFrame(64, layout);
         _base = new AnimationFrame(64, layout);
         _overlay = new AnimationFrame(64, layout);
-        _overlay.GetTranslations()[32] = new System.Numerics.Vector3(1.0f, 0.0f, 0.0f);
+        _overlay.GetTranslations()[32] = new Vec3(1.0f, 0.0f, 0.0f);
         _time = 0.0f;
     }
 

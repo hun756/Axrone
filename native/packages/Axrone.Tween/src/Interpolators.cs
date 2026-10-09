@@ -9,25 +9,25 @@ public readonly struct FloatInterpolator : IInterpolator<float>
 }
 
 /// <inheritdoc cref="FloatInterpolator"/>
-public readonly struct Vector2Interpolator : IInterpolator<Vector2>
+public readonly struct Vec2Interpolator : IInterpolator<Vec2>
 {
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vector2 Interpolate(in Vector2 start, in Vector2 finish, float factor) => start + ((finish - start) * factor);
+    public static Vec2 Interpolate(in Vec2 start, in Vec2 finish, float factor) => start + ((finish - start) * factor);
 }
 
 /// <inheritdoc cref="FloatInterpolator"/>
-public readonly struct Vector3Interpolator : IInterpolator<Vector3>
+public readonly struct Vec3Interpolator : IInterpolator<Vec3>
 {
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vector3 Interpolate(in Vector3 start, in Vector3 finish, float factor) => start + ((finish - start) * factor);
+    public static Vec3 Interpolate(in Vec3 start, in Vec3 finish, float factor) => start + ((finish - start) * factor);
 }
 
 /// <inheritdoc cref="FloatInterpolator"/>
-public readonly struct Vector4Interpolator : IInterpolator<Vector4>
+public readonly struct Vec4Interpolator : IInterpolator<Vec4>
 {
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vector4 Interpolate(in Vector4 start, in Vector4 finish, float factor) => start + ((finish - start) * factor);
+    public static Vec4 Interpolate(in Vec4 start, in Vec4 finish, float factor) => start + ((finish - start) * factor);
 }

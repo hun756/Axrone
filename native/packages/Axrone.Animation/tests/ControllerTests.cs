@@ -35,9 +35,9 @@ public class ControllerTests
         using var controller = BaseController(rig, parameters);
         var events = new List<ClipEvent>();
 
-        controller.Update(0.5f, events, out Vector3 rootPos, out _);
+        controller.Update(0.5f, events, out Vec3 rootPos, out _);
         controller.CurrentFrame.ReadTranslations()[1].X.Should().Be(0.0f);
-        rootPos.Should().Be(Vector3.Zero);
+        rootPos.Should().Be(Vec3.Zero);
     }
 
     [Fact]
@@ -80,10 +80,10 @@ public class ControllerTests
         using var controller = new AnimationController(rig, parameters, NoCurves());
         var events = new List<ClipEvent>();
 
-        controller.Update(1.0f, events, out Vector3 rootPos, out Quaternion rootRot);
-        controller.CurrentFrame.ReadTranslations()[1].Should().Be(Vector3.Zero);
-        rootPos.Should().Be(Vector3.Zero);
-        rootRot.Should().Be(Quaternion.Identity);
+        controller.Update(1.0f, events, out Vec3 rootPos, out Quat rootRot);
+        controller.CurrentFrame.ReadTranslations()[1].Should().Be(Vec3.Zero);
+        rootPos.Should().Be(Vec3.Zero);
+        rootRot.Should().Be(Quat.Identity);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class ControllerTests
         controller.AddLayer(new AnimationLayer(new LayerId("base"), machine));
 
         var events = new List<ClipEvent>();
-        controller.Update(0.5f, events, out Vector3 rootPos, out _);
+        controller.Update(0.5f, events, out Vec3 rootPos, out _);
         rootPos.X.Should().BeApproximately(1.5f, 1e-4f);
     }
 }

@@ -220,7 +220,7 @@ public readonly struct ClearColorValue : IEquatable<ClearColorValue>
     /// <param name="value">RGBA lanes, in that order.</param>
     /// <remarks>Lanes are sanitized exactly as in the four-float constructor.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public ClearColorValue(Vector4 value)
+    public ClearColorValue(Vec4 value)
         : this(value.X, value.Y, value.Z, value.W)
     {
     }

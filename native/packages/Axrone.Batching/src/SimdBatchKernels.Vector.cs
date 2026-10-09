@@ -8,7 +8,7 @@ namespace Axrone.Batching;
 /// one float per lane with no scatter-back, and measures ~2.3x faster than scalar. The quaternion,
 /// cross and normalize gathers measured slower than their scalar loops at every size
 /// (see <c>VectorKernelBenchmarks</c>) and stay scalar. Normalization is guarded: a zero-length
-/// input writes <see cref="Vector4.Zero"/> instead of NaN.
+/// input writes <see cref="Vec4.Zero"/> instead of NaN.
 /// </remarks>
 public static unsafe partial class SimdBatchKernels
 {
@@ -27,13 +27,13 @@ public static unsafe partial class SimdBatchKernels
     /// (see <c>VectorKernelBenchmarks</c>). The gather plus the per-lane scatter-back cost more
     /// than the Hamilton product saves.
     /// </remarks>
-    public static void QuaternionMultiply(ReadOnlySpan<Quaternion> left, ReadOnlySpan<Quaternion> right, Span<Quaternion> destination)
+    public static void QuaternionMultiply(ReadOnlySpan<Quat> left, ReadOnlySpan<Quat> right, Span<Quat> destination)
     {
         ThrowHelper.ValidateBinarySpans(left, right, destination);
 
         for (var i = 0; i < left.Length; i++)
         {
-            destination[i] = Quaternion.Multiply(left[i], right[i]);
+            destination[i] = Quat.Multiply(left[i], right[i]);
         }
     }
 
@@ -44,7 +44,7 @@ public static unsafe partial class SimdBatchKernels
     /// <param name="right">Second vectors.</param>
     /// <param name="destination">Receives the dots; must be at least <paramref name="left"/>.Length.</param>
     /// <exception cref="ArgumentException">A span is shorter than <paramref name="left"/>.</exception>
-    public static void BatchDot3(ReadOnlySpan<Vector3> left, ReadOnlySpan<Vector3> right, Span<float> destination)
+    public static void BatchDot3(ReadOnlySpan<Vec3> left, ReadOnlySpan<Vec3> right, Span<float> destination)
     {
         ThrowHelper.ValidateBinarySpans(left, right, destination);
 
@@ -54,8 +54,8 @@ public static unsafe partial class SimdBatchKernels
             return;
         }
 
-        ref float leftBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector3, float>(left));
-        ref float rightBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vector3, float>(right));
+        ref float leftBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec3, float>(left));
+        ref float rightBase = ref MemoryMarshal.GetReference(MemoryMarshal.Cast<Vec3, float>(right));
         ref float targetBase = ref MemoryMarshal.GetReference(destination);
         nuint index = 0;
 
@@ -141,7 +141,7 @@ public static unsafe partial class SimdBatchKernels
 
         for (; index < count; index++)
         {
-            Unsafe.Add(ref targetBase, index) = Vector3.Dot(left[(int)index], right[(int)index]);
+            Unsafe.Add(ref targetBase, index) = Vec3.Dot(left[(int)index], right[(int)index]);
         }
     }
 
@@ -157,18 +157,18 @@ public static unsafe partial class SimdBatchKernels
     /// (see <c>VectorKernelBenchmarks</c>). Nine gathered lanes in, nine scattered lanes out —
     /// the transpose is the whole cost.
     /// </remarks>
-    public static void BatchCross3(ReadOnlySpan<Vector3> left, ReadOnlySpan<Vector3> right, Span<Vector3> destination)
+    public static void BatchCross3(ReadOnlySpan<Vec3> left, ReadOnlySpan<Vec3> right, Span<Vec3> destination)
     {
         ThrowHelper.ValidateBinarySpans(left, right, destination);
 
         for (var i = 0; i < left.Length; i++)
         {
-            destination[i] = Vector3.Cross(left[i], right[i]);
+            destination[i] = Vec3.Cross(left[i], right[i]);
         }
     }
 
     /// <summary>
-    /// Normalizes vectors; zero-length inputs write <see cref="Vector4.Zero"/>.
+    /// Normalizes vectors; zero-length inputs write <see cref="Vec4.Zero"/>.
     /// </summary>
     /// <param name="source">Vectors to normalize.</param>
     /// <param name="destination">Receives the results; must be at least <paramref name="source"/>.Length.</param>
@@ -178,7 +178,7 @@ public static unsafe partial class SimdBatchKernels
     /// ~1.2x faster at 16384 (see <c>VectorKernelBenchmarks</c>) — too narrow a win for the
     /// transpose cost it pays everywhere else.
     /// </remarks>
-    public static void Normalize4(ReadOnlySpan<Vector4> source, Span<Vector4> destination)
+    public static void Normalize4(ReadOnlySpan<Vec4> source, Span<Vec4> destination)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
@@ -186,18 +186,18 @@ public static unsafe partial class SimdBatchKernels
         {
             var v = source[i];
             destination[i] = v.LengthSquared() > NormalizeEpsilon
-                ? Vector4.Normalize(v)
-                : Vector4.Zero;
+                ? Vec4.Normalize(v)
+                : Vec4.Zero;
         }
     }
 
     /// <summary>
-    /// Normalizes 3D vectors; zero-length inputs write <see cref="Vector3.Zero"/>.
+    /// Normalizes 3D vectors; zero-length inputs write <see cref="Vec3.Zero"/>.
     /// </summary>
     /// <param name="source">Vectors to normalize.</param>
     /// <param name="destination">Receives the results; must be at least <paramref name="source"/>.Length.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <paramref name="source"/>.</exception>
-    public static void Normalize3(ReadOnlySpan<Vector3> source, Span<Vector3> destination)
+    public static void Normalize3(ReadOnlySpan<Vec3> source, Span<Vec3> destination)
     {
         ThrowHelper.ValidateDestinationSpan(source, destination);
 
@@ -206,8 +206,8 @@ public static unsafe partial class SimdBatchKernels
             var v = source[i];
             var lengthSquared = v.LengthSquared();
             destination[i] = lengthSquared > NormalizeEpsilon
-                ? Vector3.Normalize(v)
-                : Vector3.Zero;
+                ? Vec3.Normalize(v)
+                : Vec3.Zero;
         }
     }
 }

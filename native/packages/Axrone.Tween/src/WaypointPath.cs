@@ -1,7 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
-
 /// <summary>How a waypoint path blends between its control points.</summary>
 public enum WaypointMode : byte
 {
@@ -33,10 +31,10 @@ public enum WaypointMode : byte
 /// </remarks>
 public sealed class WaypointPath
 {
-    private readonly Vector4[] _points;
+    private readonly Vec4[] _points;
 
     /// <summary>Creates a path; at least two points are required.</summary>
-    public WaypointPath(WaypointMode mode, params Vector4[] points)
+    public WaypointPath(WaypointMode mode, params Vec4[] points)
     {
         ArgumentNullException.ThrowIfNull(points);
 
@@ -46,18 +44,18 @@ public sealed class WaypointPath
         }
 
         Mode = mode;
-        _points = (Vector4[])points.Clone();
+        _points = (Vec4[])points.Clone();
     }
 
     /// <summary>Creates a path from two-lane points.</summary>
-    public WaypointPath(WaypointMode mode, params Vector2[] points)
-        : this(mode, Lift(Guard(points), static v => new Vector4(v, 0.0f, 0.0f)))
+    public WaypointPath(WaypointMode mode, params Vec2[] points)
+        : this(mode, Lift(Guard(points), static v => new Vec4(v, 0.0f, 0.0f)))
     {
     }
 
     /// <summary>Creates a path from three-lane points.</summary>
-    public WaypointPath(WaypointMode mode, params Vector3[] points)
-        : this(mode, Lift(Guard(points), static v => new Vector4(v, 0.0f)))
+    public WaypointPath(WaypointMode mode, params Vec3[] points)
+        : this(mode, Lift(Guard(points), static v => new Vec4(v, 0.0f)))
     {
     }
 
@@ -68,7 +66,7 @@ public sealed class WaypointPath
     public int PointCount => _points.Length;
 
     /// <summary>Samples the path at normalized time, clamped to the unit interval.</summary>
-    public Vector4 Sample(float t)
+    public Vec4 Sample(float t)
     {
         t = Math.Clamp(t, 0.0f, 1.0f);
         return Mode switch
@@ -87,9 +85,9 @@ public sealed class WaypointPath
         return source;
     }
 
-    private static Vector4[] Lift<T>(T[] source, Func<T, Vector4> lift)
+    private static Vec4[] Lift<T>(T[] source, Func<T, Vec4> lift)
     {
-        var lifted = new Vector4[source.Length];
+        var lifted = new Vec4[source.Length];
         for (int i = 0; i < lifted.Length; i++)
         {
             lifted[i] = lift(source[i]);
@@ -98,13 +96,13 @@ public sealed class WaypointPath
         return lifted;
     }
 
-    private Vector4 SampleStep(float t)
+    private Vec4 SampleStep(float t)
     {
         int index = Math.Min((int)(t * _points.Length), _points.Length - 1);
         return _points[index];
     }
 
-    private Vector4 SampleSegment(float t, Func<float, float> shape)
+    private Vec4 SampleSegment(float t, Func<float, float> shape)
     {
         float scaled = t * (_points.Length - 1);
         int index = Math.Min((int)scaled, _points.Length - 2);
@@ -112,10 +110,10 @@ public sealed class WaypointPath
         return _points[index] + ((_points[index + 1] - _points[index]) * u);
     }
 
-    private Vector4 SampleBezier(float t)
+    private Vec4 SampleBezier(float t)
     {
         int n = _points.Length;
-        Span<Vector4> level = stackalloc Vector4[n];
+        Span<Vec4> level = stackalloc Vec4[n];
         _points.CopyTo(level);
         for (int depth = n - 1; depth > 0; depth--)
         {
@@ -128,17 +126,17 @@ public sealed class WaypointPath
         return level[0];
     }
 
-    private Vector4 SampleCatmullRom(float t)
+    private Vec4 SampleCatmullRom(float t)
     {
         int n = _points.Length;
         float scaled = t * (n - 1);
         int index = Math.Min((int)scaled, n - 2);
         float u = scaled - index;
 
-        Vector4 p0 = Neighbor(index - 1);
-        Vector4 p1 = _points[index];
-        Vector4 p2 = _points[index + 1];
-        Vector4 p3 = Neighbor(index + 2);
+        Vec4 p0 = Neighbor(index - 1);
+        Vec4 p1 = _points[index];
+        Vec4 p2 = _points[index + 1];
+        Vec4 p3 = Neighbor(index + 2);
 
         return 0.5f * ((p1 * 2.0f)
             + ((p2 - p0) * u)
@@ -146,7 +144,7 @@ public sealed class WaypointPath
             + ((p3 - p0 + (p1 * 3.0f) - (p2 * 3.0f)) * u * u * u));
     }
 
-    private Vector4 Neighbor(int index)
+    private Vec4 Neighbor(int index)
     {
         int n = _points.Length;
         if (_points[0].Equals(_points[n - 1]))

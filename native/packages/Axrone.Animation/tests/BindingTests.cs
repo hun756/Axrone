@@ -54,13 +54,13 @@ public class BindingTests
         ParameterStore unboundParameters = CreateParameters();
         unboundParameters.SetFloat("speed", 0.7f);
         AnimationController unbound = CreateController(rig, unboundParameters);
-        unbound.Update(0.016f, new List<ClipEvent>(), out Vector3 posUnbound, out Quaternion rotUnbound);
+        unbound.Update(0.016f, new List<ClipEvent>(), out Vec3 posUnbound, out Quat rotUnbound);
 
         ParameterStore boundParameters = CreateParameters();
         boundParameters.SetFloat("speed", 0.7f);
         AnimationController bound = CreateController(rig, boundParameters);
         bound.BindAll();
-        bound.Update(0.016f, new List<ClipEvent>(), out Vector3 posBound, out Quaternion rotBound);
+        bound.Update(0.016f, new List<ClipEvent>(), out Vec3 posBound, out Quat rotBound);
 
         posBound.Should().Be(posUnbound);
         rotBound.Should().Be(rotUnbound);

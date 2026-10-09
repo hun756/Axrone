@@ -31,7 +31,7 @@ namespace Axrone.Animation;
 /// </para>
 /// <para>
 /// All members take the packed <c>float</c> key values rather than a typed
-/// value: channels are SoA-packed and may be rotation quaternions, triples with
+/// value: channels are SoA-packed and may be rotation Quats, triples with
 /// glTF cubic tangents, or single-lane curves, so there is one value type to keep
 /// the span pipeline and the benchmark layout intact.
 /// </para>
@@ -94,7 +94,7 @@ public readonly struct StepSamplePolicy : ISamplePolicy
 /// Straight blend between keys: <see cref="InterpolationMode.Linear"/> sampling.
 /// Rotation channels with a four-lane stride blend spherically, everything else
 /// lerps component-wise; the stride guard keeps a four-lane non-rotation channel
-/// (which can only be a cubic quaternion triple, never sampled here) on the
+/// (which can only be a cubic Quat triple, never sampled here) on the
 /// component path.
 /// </summary>
 public readonly struct LinearSamplePolicy : ISamplePolicy
@@ -118,9 +118,9 @@ public readonly struct LinearSamplePolicy : ISamplePolicy
 
         if (target == ChannelTarget.Rotation && stride == 4)
         {
-            Quaternion q0 = new(values[off0], values[off0 + 1], values[off0 + 2], values[off0 + 3]);
-            Quaternion q1 = new(values[off1], values[off1 + 1], values[off1 + 2], values[off1 + 3]);
-            Quaternion result = FastMath.Slerp(q0, q1, factor);
+            Quat q0 = new(values[off0], values[off0 + 1], values[off0 + 2], values[off0 + 3]);
+            Quat q1 = new(values[off1], values[off1 + 1], values[off1 + 2], values[off1 + 3]);
+            Quat result = FastMath.Slerp(q0, q1, factor);
             output[0] = result.X;
             output[1] = result.Y;
             output[2] = result.Z;
@@ -139,7 +139,7 @@ public readonly struct LinearSamplePolicy : ISamplePolicy
 /// Hermite blend over glTF-layout triples: <see cref="InterpolationMode.CubicSpline"/>
 /// sampling. Every key stores an in-tangent, a value, and an out-tangent, so the
 /// component count is a third of the stride and tangents scale by the segment
-/// length. Four-component results renormalize, since the blended quaternion is
+/// length. Four-component results renormalize, since the blended Quat is
 /// no longer unit length.
 /// </summary>
 /// <remarks>
@@ -193,7 +193,7 @@ public readonly struct CubicSamplePolicy : ISamplePolicy
 
         if (target == ChannelTarget.Rotation && compCount == 4)
         {
-            Quaternion q = FastMath.Normalize(new Quaternion(output[0], output[1], output[2], output[3]));
+            Quat q = FastMath.Normalize(new Quat(output[0], output[1], output[2], output[3]));
             output[0] = q.X;
             output[1] = q.Y;
             output[2] = q.Z;

@@ -1009,6 +1009,40 @@ public struct Vec3 :
     public static float Distance(Vec3 value1, Vec3 value2) =>
         MathF.Sqrt(DistanceSquared(value1, value2));
 
+    /// <summary>
+    /// Transforms a position by a matrix. The vector is treated as a row vector
+    /// with w = 1 (the System.Numerics convention): the translation row applies,
+    /// and no perspective divide is performed.
+    /// </summary>
+    /// <param name="position">The position to transform.</param>
+    /// <param name="matrix">The row-major transform.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 Transform(Vec3 position, Mat4 matrix) =>
+        new(
+            MathF.FusedMultiplyAdd(position.X, matrix.M11, MathF.FusedMultiplyAdd(position.Y, matrix.M21, MathF.FusedMultiplyAdd(position.Z, matrix.M31, matrix.M41))),
+            MathF.FusedMultiplyAdd(position.X, matrix.M12, MathF.FusedMultiplyAdd(position.Y, matrix.M22, MathF.FusedMultiplyAdd(position.Z, matrix.M32, matrix.M42))),
+            MathF.FusedMultiplyAdd(position.X, matrix.M13, MathF.FusedMultiplyAdd(position.Y, matrix.M23, MathF.FusedMultiplyAdd(position.Z, matrix.M33, matrix.M43)))
+        );
+
+    /// <summary>
+    /// Transforms a normal by the upper 3x3 of a matrix and normalizes the result.
+    /// Translation is ignored, as befits a direction.
+    /// </summary>
+    /// <param name="normal">The normal to transform.</param>
+    /// <param name="matrix">The row-major transform.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 TransformNormal(Vec3 normal, Mat4 matrix) =>
+        Normalize(new Vec3(
+            (normal.X * matrix.M11) + (normal.Y * matrix.M21) + (normal.Z * matrix.M31),
+            (normal.X * matrix.M12) + (normal.Y * matrix.M22) + (normal.Z * matrix.M32),
+            (normal.X * matrix.M13) + (normal.Y * matrix.M23) + (normal.Z * matrix.M33)));
+
+    /// <summary>Rotates a vector by a unit quaternion.</summary>
+    /// <param name="value">The vector to rotate.</param>
+    /// <param name="rotation">The rotation to apply.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Transform(Vec3 value, Quat rotation) => rotation * value;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vec3 Normalize(Vec3 value)
     {

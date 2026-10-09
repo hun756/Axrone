@@ -10,31 +10,31 @@ namespace Axrone.Animation;
 public readonly struct LocalTransform : IEquatable<LocalTransform>
 {
     /// <summary>Local translation.</summary>
-    public readonly Vector3 Translation;
+    public readonly Vec3 Translation;
 
     private readonly float _pad0;
 
     /// <summary>Local rotation (unit).</summary>
-    public readonly Quaternion Rotation;
+    public readonly Quat Rotation;
 
     /// <summary>Local scale (no zero lanes).</summary>
-    public readonly Vector3 Scale;
+    public readonly Vec3 Scale;
 
     private readonly float _pad1;
 
     /// <summary>Identity transform.</summary>
-    public static LocalTransform Identity => new(Vector3.Zero, Quaternion.Identity, Vector3.One);
+    public static LocalTransform Identity => new(Vec3.Zero, Quat.Identity, Vec3.One);
 
     /// <summary>Creates a sanitized transform.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public LocalTransform(Vector3 translation, Quaternion rotation, Vector3 scale)
+    public LocalTransform(Vec3 translation, Quat rotation, Vec3 scale)
     {
         Translation = translation;
         _pad0 = 0.0f;
         Rotation = rotation.X == 0.0f && rotation.Y == 0.0f && rotation.Z == 0.0f && rotation.W == 0.0f
-            ? Quaternion.Identity
-            : Quaternion.Normalize(rotation);
-        Scale = new Vector3(
+            ? Quat.Identity
+            : Quat.Normalize(rotation);
+        Scale = new Vec3(
             scale.X == 0.0f ? 1.0f : scale.X,
             scale.Y == 0.0f ? 1.0f : scale.Y,
             scale.Z == 0.0f ? 1.0f : scale.Z);

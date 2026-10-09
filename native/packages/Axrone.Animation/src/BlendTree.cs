@@ -44,7 +44,7 @@ public abstract class MotionNode
     public abstract void Bind(in MotionBindingContext context);
 
     /// <summary>Root-joint delta between two normalized times.</summary>
-    public abstract void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot);
+    public abstract void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot);
 
     /// <summary>Collects clip events into a zero-allocation sink.</summary>
     public abstract void CollectEvents<TSink>(float prevNormTime, float curNormTime, float layerWeight, ref TSink sink)
@@ -95,13 +95,13 @@ public sealed class ClipMotionNode : MotionNode
 
     /// <inheritdoc/>
     [SkipLocalsInit]
-    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         float duration = Clip.Duration;
         if (duration <= AnimationConstants.SoaEpsilon || Clip.Channels.Length == 0)
         {
-            deltaPos = Vector3.Zero;
-            deltaRot = Quaternion.Identity;
+            deltaPos = Vec3.Zero;
+            deltaRot = Quat.Identity;
             return;
         }
 
@@ -113,10 +113,10 @@ public sealed class ClipMotionNode : MotionNode
         Span<float> bufEnd = stackalloc float[4];
         Span<float> bufStart = stackalloc float[4];
 
-        Vector3 p0 = Vector3.Zero;
-        Vector3 p1 = Vector3.Zero;
-        Quaternion r0 = Quaternion.Identity;
-        Quaternion r1 = Quaternion.Identity;
+        Vec3 p0 = Vec3.Zero;
+        Vec3 p1 = Vec3.Zero;
+        Quat r0 = Quat.Identity;
+        Quat r1 = Quat.Identity;
 
         foreach (AnimationChannel channel in Clip.Channels)
         {
@@ -128,21 +128,21 @@ public sealed class ClipMotionNode : MotionNode
             if (channel.Target == ChannelTarget.Translation)
             {
                 channel.Sample(t0, buf0);
-                p0 = new Vector3(buf0[0], buf0[1], buf0[2]);
+                p0 = new Vec3(buf0[0], buf0[1], buf0[2]);
                 channel.Sample(t1, buf1);
-                p1 = new Vector3(buf1[0], buf1[1], buf1[2]);
+                p1 = new Vec3(buf1[0], buf1[1], buf1[2]);
             }
             else if (channel.Target == ChannelTarget.Rotation)
             {
                 channel.Sample(t0, buf0);
-                r0 = new Quaternion(buf0[0], buf0[1], buf0[2], buf0[3]);
+                r0 = new Quat(buf0[0], buf0[1], buf0[2], buf0[3]);
                 channel.Sample(t1, buf1);
-                r1 = new Quaternion(buf1[0], buf1[1], buf1[2], buf1[3]);
+                r1 = new Quat(buf1[0], buf1[1], buf1[2], buf1[3]);
             }
         }
 
         deltaPos = p1 - p0;
-        deltaRot = Quaternion.Normalize(r1 * Quaternion.Inverse(r0));
+        deltaRot = Quat.Normalize(r1 * Quat.Inverse(r0));
         if (t1 >= t0)
         {
             return;
@@ -159,17 +159,17 @@ public sealed class ClipMotionNode : MotionNode
             {
                 channel.Sample(duration, bufEnd);
                 channel.Sample(0.0f, bufStart);
-                Vector3 pEnd = new(bufEnd[0], bufEnd[1], bufEnd[2]);
-                Vector3 pStart = new(bufStart[0], bufStart[1], bufStart[2]);
+                Vec3 pEnd = new(bufEnd[0], bufEnd[1], bufEnd[2]);
+                Vec3 pStart = new(bufStart[0], bufStart[1], bufStart[2]);
                 deltaPos = (pEnd - p0) + (p1 - pStart);
             }
             else if (channel.Target == ChannelTarget.Rotation)
             {
                 channel.Sample(duration, bufEnd);
                 channel.Sample(0.0f, bufStart);
-                Quaternion rEnd = new(bufEnd[0], bufEnd[1], bufEnd[2], bufEnd[3]);
-                Quaternion rStart = new(bufStart[0], bufStart[1], bufStart[2], bufStart[3]);
-                deltaRot = Quaternion.Normalize((rEnd * Quaternion.Inverse(r0)) * (r1 * Quaternion.Inverse(rStart)));
+                Quat rEnd = new(bufEnd[0], bufEnd[1], bufEnd[2], bufEnd[3]);
+                Quat rStart = new(bufStart[0], bufStart[1], bufStart[2], bufStart[3]);
+                deltaRot = Quat.Normalize((rEnd * Quat.Inverse(r0)) * (r1 * Quat.Inverse(rStart)));
             }
         }
     }
@@ -363,12 +363,12 @@ public sealed class Blend1DMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         if (Children.Length == 0)
         {
-            deltaPos = Vector3.Zero;
-            deltaRot = Quaternion.Identity;
+            deltaPos = Vec3.Zero;
+            deltaRot = Quat.Identity;
             return;
         }
 
@@ -401,7 +401,7 @@ public sealed class Blend1DMotionNode : MotionNode
 /// <summary>Two-parameter inverse-distance blend over positioned children.</summary>
 public sealed class Blend2DMotionNode : MotionNode
 {
-    private readonly Vector2[] _positions;
+    private readonly Vec2[] _positions;
     private readonly MotionNode[] _children;
     private ParameterHandle _parameterXHandle;
     private ParameterHandle _parameterYHandle;
@@ -417,13 +417,13 @@ public sealed class Blend2DMotionNode : MotionNode
     public string ParameterY { get; }
 
     /// <summary>Child positions in blend space.</summary>
-    public ReadOnlySpan<Vector2> Positions => _positions;
+    public ReadOnlySpan<Vec2> Positions => _positions;
 
     /// <summary>Children aligned with positions.</summary>
     public ReadOnlySpan<MotionNode> Children => _children;
 
     /// <summary>Creates a blend.</summary>
-    public Blend2DMotionNode(string parameterX, string parameterY, (Vector2 Position, MotionNode Child)[] entries)
+    public Blend2DMotionNode(string parameterX, string parameterY, (Vec2 Position, MotionNode Child)[] entries)
     {
         ArgumentNullException.ThrowIfNull(parameterX);
         ArgumentNullException.ThrowIfNull(parameterY);
@@ -435,7 +435,7 @@ public sealed class Blend2DMotionNode : MotionNode
 
         ParameterX = parameterX;
         ParameterY = parameterY;
-        _positions = new Vector2[entries.Length];
+        _positions = new Vec2[entries.Length];
         _children = new MotionNode[entries.Length];
         for (int i = 0; i < entries.Length; i++)
         {
@@ -491,9 +491,9 @@ public sealed class Blend2DMotionNode : MotionNode
             AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationDepthOverflow, "Maximum blend recursion depth exceeded.");
         }
 
-        Vector2 input = _parametersBound
-            ? new Vector2(parameters.GetFloat(in _parameterXHandle), parameters.GetFloat(in _parameterYHandle))
-            : new Vector2(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
+        Vec2 input = _parametersBound
+            ? new Vec2(parameters.GetFloat(in _parameterXHandle), parameters.GetFloat(in _parameterYHandle))
+            : new Vec2(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
         int childCount = _children.Length;
         // Holder must be a managed array (stackalloc forbids reference types);
         // weights are unmanaged and honor the stack budget.
@@ -507,7 +507,7 @@ public sealed class Blend2DMotionNode : MotionNode
         {
             for (int i = 0; i < _positions.Length; i++)
             {
-                float distanceSq = Vector2.DistanceSquared(input, _positions[i]);
+                float distanceSq = Vec2.DistanceSquared(input, _positions[i]);
                 if (distanceSq <= AnimationConstants.BlendDistanceEpsilonSq)
                 {
                     MotionDispatcher.Evaluate(_children[i], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
@@ -541,12 +541,12 @@ public sealed class Blend2DMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         if (_children.Length == 0)
         {
-            deltaPos = Vector3.Zero;
-            deltaRot = Quaternion.Identity;
+            deltaPos = Vec3.Zero;
+            deltaRot = Quat.Identity;
             return;
         }
 
@@ -722,12 +722,12 @@ public sealed class DirectMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         if (_children.Length == 0)
         {
-            deltaPos = Vector3.Zero;
-            deltaRot = Quaternion.Identity;
+            deltaPos = Vec3.Zero;
+            deltaRot = Quat.Identity;
             return;
         }
 
@@ -836,7 +836,7 @@ public sealed class AdditiveMotionNode : MotionNode
     }
 
     /// <inheritdoc/>
-    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public override void ComputeRootDelta(float prevNormTime, float curNormTime, Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         MotionDispatcher.ComputeRootDelta(BaseChild, prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
     }

@@ -10,16 +10,16 @@ public sealed class BoneInfo
     public required int ParentIndex { get; init; }
 
     /// <summary>Rest translation.</summary>
-    public Vector3 RestTranslation { get; init; } = Vector3.Zero;
+    public Vec3 RestTranslation { get; init; } = Vec3.Zero;
 
     /// <summary>Rest rotation.</summary>
-    public Quaternion RestRotation { get; init; } = Quaternion.Identity;
+    public Quat RestRotation { get; init; } = Quat.Identity;
 
     /// <summary>Rest scale.</summary>
-    public Vector3 RestScale { get; init; } = Vector3.One;
+    public Vec3 RestScale { get; init; } = Vec3.One;
 
     /// <summary>Optional custom inverse bind matrix.</summary>
-    public Matrix4x4? InverseBindMatrix { get; init; }
+    public Mat4? InverseBindMatrix { get; init; }
 }
 
 /// <summary>
@@ -190,7 +190,7 @@ public sealed class Rig
         where TContext : allows ref struct
     {
         TVisitor visitor = default;
-        ReadOnlySpan<Matrix4x4> matrices = MemoryMarshal.Cast<float, Matrix4x4>(_restWorldMatrices.AsSpan(0, BoneCount * 16));
+        ReadOnlySpan<Mat4> matrices = MemoryMarshal.Cast<float, Mat4>(_restWorldMatrices.AsSpan(0, BoneCount * 16));
         visitor.Visit(ref context, matrices);
     }
 
@@ -200,7 +200,7 @@ public sealed class Rig
     /// temporaries). The render-ready counterpart to frame-based sampling.
     /// </summary>
     [SkipLocalsInit]
-    public void EvaluatePose(ReadOnlySpan<LocalTransform> localTransforms, Span<Matrix4x4> outWorldPalette)
+    public void EvaluatePose(ReadOnlySpan<LocalTransform> localTransforms, Span<Mat4> outWorldPalette)
     {
         if (localTransforms.Length < BoneCount)
         {
@@ -214,11 +214,11 @@ public sealed class Rig
 
         int scratchBones = BoneCount;
         using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
-            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            ? ScratchWorldBuffers.FromStack(stackalloc Vec3[scratchBones], stackalloc Quat[scratchBones], stackalloc Vec3[scratchBones])
             : ScratchWorldBuffers.RentPooled(scratchBones);
-        Span<Vector3> worldT = buffers.Translations;
-        Span<Quaternion> worldR = buffers.Rotations;
-        Span<Vector3> worldS = buffers.Scales;
+        Span<Vec3> worldT = buffers.Translations;
+        Span<Quat> worldR = buffers.Rotations;
+        Span<Vec3> worldS = buffers.Scales;
 
         Span<float> matrixLane = stackalloc float[16];
         for (int i = 0; i < _evaluationOrder.Length; i++)
@@ -239,7 +239,7 @@ public sealed class Rig
             }
 
             FastMath.ComposeTransformMatrix(worldT[b], worldR[b], worldS[b], matrixLane);
-            outWorldPalette[b] = new Matrix4x4(
+            outWorldPalette[b] = new Mat4(
                 matrixLane[0], matrixLane[1], matrixLane[2], matrixLane[3],
                 matrixLane[4], matrixLane[5], matrixLane[6], matrixLane[7],
                 matrixLane[8], matrixLane[9], matrixLane[10], matrixLane[11],
@@ -257,11 +257,11 @@ public sealed class Rig
         var palette = new float[BoneCount * 16];
         int scratchBones = BoneCount;
         using ScratchWorldBuffers buffers = ScratchWorldBuffers.UseStack(scratchBones)
-            ? ScratchWorldBuffers.FromStack(stackalloc Vector3[scratchBones], stackalloc Quaternion[scratchBones], stackalloc Vector3[scratchBones])
+            ? ScratchWorldBuffers.FromStack(stackalloc Vec3[scratchBones], stackalloc Quat[scratchBones], stackalloc Vec3[scratchBones])
             : ScratchWorldBuffers.RentPooled(scratchBones);
-        Span<Vector3> worldT = buffers.Translations;
-        Span<Quaternion> worldR = buffers.Rotations;
-        Span<Vector3> worldS = buffers.Scales;
+        Span<Vec3> worldT = buffers.Translations;
+        Span<Quat> worldR = buffers.Rotations;
+        Span<Vec3> worldS = buffers.Scales;
 
         ReadOnlySpan<float> buf = RestPoseBuffer;
         int rBase = BoneCount * 3;
@@ -275,9 +275,9 @@ public sealed class Rig
             int rOff = rBase + (b * 4);
             int sOff = sBase + (b * 3);
 
-            Vector3 locT = new(buf[tOff], buf[tOff + 1], buf[tOff + 2]);
-            Quaternion locR = new(buf[rOff], buf[rOff + 1], buf[rOff + 2], buf[rOff + 3]);
-            Vector3 locS = new(buf[sOff], buf[sOff + 1], buf[sOff + 2]);
+            Vec3 locT = new(buf[tOff], buf[tOff + 1], buf[tOff + 2]);
+            Quat locR = new(buf[rOff], buf[rOff + 1], buf[rOff + 2], buf[rOff + 3]);
+            Vec3 locS = new(buf[sOff], buf[sOff + 1], buf[sOff + 2]);
 
             if (p == -1)
             {
@@ -316,7 +316,7 @@ public sealed class Rig
         var matrices = new float[bones.Length * 16];
         for (int i = 0; i < bones.Length; i++)
         {
-            Matrix4x4 m = bones[i].InverseBindMatrix ?? Matrix4x4.Identity;
+            Mat4 m = bones[i].InverseBindMatrix ?? Mat4.Identity;
             int off = i * 16;
             matrices[off] = m.M11; matrices[off + 1] = m.M21; matrices[off + 2] = m.M31; matrices[off + 3] = m.M41;
             matrices[off + 4] = m.M12; matrices[off + 5] = m.M22; matrices[off + 6] = m.M32; matrices[off + 7] = m.M42;
@@ -398,10 +398,10 @@ public sealed class Rig
         RestPoseBuffer[tOffset + 2] = bone.RestTranslation.Z;
 
         int rOffset = (BoneCount * 3) + (index * 4);
-        Quaternion rotation = bone.RestRotation;
+        Quat rotation = bone.RestRotation;
         if (rotation.X == 0.0f && rotation.Y == 0.0f && rotation.Z == 0.0f && rotation.W == 0.0f)
         {
-            rotation = Quaternion.Identity;
+            rotation = Quat.Identity;
         }
 
         RestPoseBuffer[rOffset] = rotation.X;

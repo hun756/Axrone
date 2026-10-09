@@ -1,6 +1,5 @@
 namespace Axrone.Tween;
 
-using System.Numerics;
 using Axrone.Utility.Builders;
 
 /// <summary>
@@ -60,7 +59,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the start value (two lanes).</summary>
-    public TweenBuilder From(Vector2 start)
+    public TweenBuilder From(Vec2 start)
     {
         State.Start = Vector128.Create(start.X, start.Y, 0f, 0f);
         State.FromArity = 2;
@@ -69,7 +68,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end value (two lanes).</summary>
-    public TweenBuilder To(Vector2 end)
+    public TweenBuilder To(Vec2 end)
     {
         State.End = Vector128.Create(end.X, end.Y, 0f, 0f);
         State.ToArity = 2;
@@ -79,7 +78,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end relative to the start (two lanes).</summary>
-    public TweenBuilder By(Vector2 delta)
+    public TweenBuilder By(Vec2 delta)
     {
         State.End = Vector128.Create(
             State.Start.GetElement(0) + delta.X,
@@ -93,7 +92,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the start value (three lanes).</summary>
-    public TweenBuilder From(Vector3 start)
+    public TweenBuilder From(Vec3 start)
     {
         State.Start = Vector128.Create(start.X, start.Y, start.Z, 0f);
         State.FromArity = 3;
@@ -102,7 +101,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end value (three lanes).</summary>
-    public TweenBuilder To(Vector3 end)
+    public TweenBuilder To(Vec3 end)
     {
         State.End = Vector128.Create(end.X, end.Y, end.Z, 0f);
         State.ToArity = 3;
@@ -112,7 +111,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end relative to the start (three lanes).</summary>
-    public TweenBuilder By(Vector3 delta)
+    public TweenBuilder By(Vec3 delta)
     {
         State.End = Vector128.Create(
             State.Start.GetElement(0) + delta.X,
@@ -126,7 +125,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the start value (four lanes).</summary>
-    public TweenBuilder From(Vector4 start)
+    public TweenBuilder From(Vec4 start)
     {
         State.Start = start.AsVector128();
         State.FromArity = 4;
@@ -135,7 +134,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end value (four lanes).</summary>
-    public TweenBuilder To(Vector4 end)
+    public TweenBuilder To(Vec4 end)
     {
         State.End = end.AsVector128();
         State.ToArity = 4;
@@ -145,7 +144,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Sets the end relative to the start (four lanes).</summary>
-    public TweenBuilder By(Vector4 delta)
+    public TweenBuilder By(Vec4 delta)
     {
         State.End = Vector128.Add(State.Start, delta.AsVector128());
         State.ToArity = 4;
@@ -188,7 +187,7 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     /// function of progress. A previously set single-lane update still fires with the raw
     /// progress value.
     /// </summary>
-    public TweenBuilder Waypoints(WaypointPath path, Action<Vector4> onPoint)
+    public TweenBuilder Waypoints(WaypointPath path, Action<Vec4> onPoint)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(onPoint);
@@ -261,21 +260,21 @@ public sealed class TweenBuilder : AggregateBuilder<TweenBuilder, TweenSpecState
     }
 
     /// <summary>Per-tick callback for two-lane tweens.</summary>
-    public TweenBuilder OnUpdate(Action<Vector2> callback)
+    public TweenBuilder OnUpdate(Action<Vec2> callback)
     {
         State.OnUpdateVector2 = callback;
         return this;
     }
 
     /// <summary>Per-tick callback for three-lane tweens.</summary>
-    public TweenBuilder OnUpdate(Action<Vector3> callback)
+    public TweenBuilder OnUpdate(Action<Vec3> callback)
     {
         State.OnUpdateVector3 = callback;
         return this;
     }
 
     /// <summary>Per-tick callback for four-lane tweens.</summary>
-    public TweenBuilder OnUpdate(Action<Vector4> callback)
+    public TweenBuilder OnUpdate(Action<Vec4> callback)
     {
         State.OnUpdateVector4 = callback;
         return this;

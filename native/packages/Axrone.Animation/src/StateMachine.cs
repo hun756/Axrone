@@ -478,7 +478,7 @@ public sealed class StateMachineInstance
     /// target deltas by transition progress — matching the rendered blend instead
     /// of snapping to one side.
     /// </summary>
-    public void ExtractRootDelta(Rig rig, out Vector3 deltaPos, out Quaternion deltaRot)
+    public void ExtractRootDelta(Rig rig, out Vec3 deltaPos, out Quat deltaRot)
     {
         ArgumentNullException.ThrowIfNull(rig);
 
@@ -489,11 +489,11 @@ public sealed class StateMachineInstance
             return;
         }
 
-        MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out Vector3 sourcePos, out Quaternion sourceRot);
-        MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, out Vector3 targetPos, out Quaternion targetRot);
+        MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out Vec3 sourcePos, out Quat sourceRot);
+        MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, out Vec3 targetPos, out Quat targetRot);
 
         float weight = FastMath.Clamp01(active.Progress);
-        deltaPos = Vector3.Lerp(sourcePos, targetPos, weight);
+        deltaPos = Vec3.Lerp(sourcePos, targetPos, weight);
         deltaRot = FastMath.Slerp(sourceRot, targetRot, weight);
     }
 }
