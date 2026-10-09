@@ -30,4 +30,12 @@ internal static class ThrowHelper
     {
         throw new ObjectDisposedException(objectName);
     }
+
+    /// <summary>Rejects a traversal that outgrows the inline stack.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowStackOverflowException()
+    {
+        throw new OverflowException("Static inline traversal stack depth exceeded.");
+    }
 }

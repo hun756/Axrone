@@ -32,6 +32,10 @@
     <!-- CA2201: IndexOutOfRangeException is reserved — a bad handle names no live
          slot, and IndexOutOfRangeException is exactly what callers catch for it. -->
     <NoWarn>$(NoWarn);CA2201</NoWarn>
+    <!-- CA1000: Static members on generic types — static dispatch over generic
+         policies and traversals IS the design (no instances, no virtual calls);
+         every static here closes over its type arguments. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
