@@ -22,6 +22,16 @@
     <!-- CA1036: Comparison operators on comparable types — Unit is zero-sized and
          all instances compare equal; relational operators would be noise. -->
     <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA1040: Empty marker interface — IArenaPhase is the compile-time phase token
+         that separates writable and sealed arenas; it carries no members by design. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1716: Get collides with a reserved word — Get(handle) is the slot-lookup
+         verb across the whole arena surface; renaming it would break the uniform
+         naming the traversal code relies on. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- CA2201: IndexOutOfRangeException is reserved — a bad handle names no live
+         slot, and IndexOutOfRangeException is exactly what callers catch for it. -->
+    <NoWarn>$(NoWarn);CA2201</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
