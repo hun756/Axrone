@@ -505,19 +505,6 @@ public sealed class ShaderInstance
     }
 
     /// <summary>
-    /// Sets a mat4 uniform from a System.Numerics matrix. Prefer
-    /// <see cref="SetMatrix4(int, in Mat4)"/> for new code.
-    /// </summary>
-    /// <param name="location">The uniform location.</param>
-    /// <param name="matrix">The matrix.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public unsafe void SetMatrix4x4(int location, in System.Numerics.Matrix4x4 matrix)
-    {
-        Mat4 converted = (Mat4)matrix;
-        SetMatrix4(location, in converted);
-    }
-
-    /// <summary>
     /// Binds the program.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
