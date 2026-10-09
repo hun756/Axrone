@@ -397,3 +397,19 @@ public static class IterativeTraversal<TNode, THierarchy>
         tail = count;
     }
 }
+
+/// <summary>Sealed-arena entry points for allocation-free enumeration.</summary>
+public static class SealedArenaExtensions
+{
+    /// <summary>Enumerates the sealed arena in pre-order from <paramref name="root"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PreOrderEnumerable<TNode, THierarchy> EnumeratePreOrder<TNode, THierarchy>(
+        this NativeNodeArena<TNode, SealedPhase> arena,
+        NodeHandle root)
+        where TNode : unmanaged
+        where THierarchy : INodeHierarchy<TNode>
+    {
+        ArgumentNullException.ThrowIfNull(arena);
+        return new PreOrderEnumerable<TNode, THierarchy>(arena, root);
+    }
+}
