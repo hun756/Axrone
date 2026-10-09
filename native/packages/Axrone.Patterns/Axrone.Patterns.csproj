@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Patterns</RootNamespace>
+    <AssemblyName>Axrone.Patterns</AssemblyName>
+    <Description>Zero-allocation visitor and traversal infrastructure for the Axrone engine: node identities, typestate arenas, static-dispatch policies and iterative traversals.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1815: Override Equals on value types — the inline buffers are traversal
+         scratch storage compared by identity of contents never; elementwise equality
+         over 128/256 lanes would be surface nobody should call. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1036: Comparison operators on comparable types — Unit is zero-sized and
+         all instances compare equal; relational operators would be noise. -->
+    <NoWarn>$(NoWarn);CA1036</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Patterns.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

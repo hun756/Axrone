@@ -12,6 +12,8 @@
     <Project Path="packages/Axrone.Memory/tests/Axrone.Memory.Tests.csproj" />
     <Project Path="packages/Axrone.Numeric/Axrone.Numeric.csproj" />
     <Project Path="packages/Axrone.Numeric/tests/Axrone.Numeric.Tests.csproj" />
+    <Project Path="packages/Axrone.Patterns/Axrone.Patterns.csproj" />
+    <Project Path="packages/Axrone.Patterns/tests/Axrone.Patterns.Tests.csproj" />
     <Project Path="packages/Axrone.Simd/Axrone.Simd.csproj" />
     <Project Path="packages/Axrone.Simd/tests/Axrone.Simd.Tests.csproj" />
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
