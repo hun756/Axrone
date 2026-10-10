@@ -42,6 +42,18 @@ public readonly struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanForma
         return Vec3.DistanceSquared(Center, other.Center) <= (r * r);
     }
 
+    /// <summary>
+    /// Computes the smallest sphere containing <paramref name="box"/>: the box
+    /// center plus the half-diagonal. This is how mesh bounds resolve to spheres.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BoundingSphere3 FromAabb(in Aabb3D box)
+    {
+        Vec3 center = box.Center;
+        Vec3 half = box.Extents;
+        return new BoundingSphere3(center, MathF.Sqrt(half.LengthSquared()));
+    }
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(BoundingSphere3 other) => Center == other.Center && Radius == other.Radius;
