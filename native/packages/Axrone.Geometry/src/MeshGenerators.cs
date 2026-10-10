@@ -43,7 +43,12 @@ public static partial class ProceduralPrimitives
 
                 Vec3 pos = new(x, y, z);
                 Normal3D norm = Normal3D.FromVec3(pos);
-                TexCoord uv = new(u, 1.0f - v);
+
+                // Pole rows collapse to a point; squeeze their U range toward
+                // the center texel so the seam does not smear across the cap.
+                bool isPoleRow = iy == 0 || iy == heightSegments;
+                float poleU = u * (isPoleRow ? 0.5f : 1.0f) + (isPoleRow ? 0.5f / widthSegments : 0.0f);
+                TexCoord uv = new(poleU, 1.0f - v);
 
                 sink.AppendVertex(TVertex.Create(new Position3D(x, y, z), norm, uv, Tangent4D.Default));
             }

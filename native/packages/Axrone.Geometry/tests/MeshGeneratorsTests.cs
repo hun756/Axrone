@@ -44,6 +44,19 @@ public class MeshGeneratorsTests
     }
 
     [Fact]
+    public void EmitSphere_PoleRows_SqueezeU()
+    {
+        var sink = new MeshListSink();
+        var config = new SphereConfig { WidthSegments = new SegmentResolution(4), HeightSegments = new SegmentResolution(2) };
+
+        ProceduralPrimitives.EmitSphere<MeshListSink, VertexP3N3T2, ushort>(ref sink, in config);
+
+        sink.Vertices[0].UV.U.Should().BeApproximately(0.125f, 1e-6f);
+        sink.Vertices[4].UV.U.Should().BeApproximately(0.625f, 1e-6f);
+        sink.Vertices[6].UV.U.Should().BeApproximately(0.25f, 1e-6f);
+    }
+
+    [Fact]
     public void EmitIcosphere_Subdivides()
     {
         var flatSink = new MeshListSink();
