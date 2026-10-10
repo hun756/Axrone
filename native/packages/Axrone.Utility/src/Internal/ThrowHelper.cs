@@ -132,6 +132,36 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCountOutOfRange()
+    {
+        throw new ArgumentOutOfRangeException("count", "Count cannot exceed Int32.MaxValue.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferTooSmall()
+    {
+        throw new InvalidOperationException("Buffer length is smaller than target type size.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNotActive(int state, ExceptionDispatchInfo? fault)
+    {
+        fault?.Throw();
+
+        throw state switch
+        {
+            1 => new InvalidOperationException("Arena is currently reclaiming memory."),
+            2 => new InvalidOperationException("Arena is in draining state."),
+            3 => new InvalidOperationException("Arena is in faulted state."),
+            4 => new ObjectDisposedException("Arena", "Arena has been disposed."),
+            _ => new InvalidOperationException($"Invalid arena state: {state}")
+        };
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowEmptySequence()
     {
         throw new InvalidOperationException("Cannot compute a reduction over an empty sequence.");

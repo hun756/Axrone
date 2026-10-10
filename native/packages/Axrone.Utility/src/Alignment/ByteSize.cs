@@ -3,6 +3,25 @@ namespace Axrone.Utility.Alignment;
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct ByteSize(nuint Value) : IComparable<ByteSize>, ISpanFormattable
 {
+    /// <summary>Zero bytes.</summary>
+    public static ByteSize Zero => new(0);
+
+    /// <summary>Creates a size from a byte count.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize From(nuint bytes) => new(bytes);
+
+    /// <summary>Creates a size from a byte count.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize FromBytes(nuint bytes) => new(bytes);
+
+    /// <summary>Creates a size from kibibytes; overflows throw.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize FromKilobytes(nuint kb) => new(checked(kb * 1024));
+
+    /// <summary>Creates a size from mebibytes; overflows throw.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize FromMegabytes(nuint mb) => new(checked(mb * 1024 * 1024));
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator nuint(ByteSize size) => size.Value;
 
