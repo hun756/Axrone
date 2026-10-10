@@ -110,7 +110,7 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
         TWinding.EmitTriangle(_indices.AsSpan(), offset, t0, t1, t2);
     }
 
-    /// <summary>Appends one quad as two triangles.</summary>
+    /// <summary>Appends one quad as the (a,b,d) and (b,c,d) triangles.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void AddQuad(uint a, uint b, uint c, uint d)
     {

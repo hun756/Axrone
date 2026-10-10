@@ -42,6 +42,22 @@ public class MeshGeneratorsExtraTests
     }
 
     [Fact]
+    public void EmitPill_SingleLatheGrid()
+    {
+        var sink = new MeshListSink();
+        var config = new CapsuleConfig { CapSegments = new SegmentResolution(4), RadialSegments = new SegmentResolution(3) };
+
+        ProceduralPrimitives.EmitPill<MeshListSink, VertexP3N3T2, ushort>(ref sink, in config);
+
+        sink.Vertices.Count.Should().Be(7 * 4);
+        sink.Indices.Count.Should().Be(6 * 3 * 6);
+        foreach (VertexP3N3T2 vertex in sink.Vertices)
+        {
+            vertex.Normal.ToVec3().LengthSquared().Should().BeApproximately(1.0f, 1e-4f);
+        }
+    }
+
+    [Fact]
     public void EmitPlane_FacesPositiveZ()
     {
         var sink = new MeshListSink();

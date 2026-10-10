@@ -140,6 +140,95 @@ public static partial class ProceduralPrimitives
         }
     }
 
+    /// <summary>Emits a pill: a lathed profile fusing caps and body in one vertex grid.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void EmitPill<TSink, TVertex, TIndex>(ref TSink sink, in CapsuleConfig config)
+        where TSink : IMeshSink<TVertex, TIndex>, allows ref struct
+        where TVertex : unmanaged, IVertex<TVertex>
+        where TIndex : unmanaged, System.Numerics.IBinaryInteger<TIndex>
+    {
+        float radius = config.Radius.Value;
+        float length = config.Length.Value;
+        uint radialSegments = Math.Max(3, config.RadialSegments.Value);
+        uint capClamped = Math.Max(2, config.CapSegments.Value);
+        float totalHeight = length + 2.0f * radius;
+        float cylinderHeight = length;
+        float halfCap = capClamped * 0.5f;
+        uint rings = capClamped + 2;
+
+        uint startVertex = sink.CurrentVertexCount;
+
+        for (uint ring = 0; ring <= rings; ring++)
+        {
+            float y;
+            float ringRadius;
+            float v = (float)ring / rings;
+
+            if ((float)ring <= halfCap)
+            {
+                float phi = ((float)ring / halfCap) * MathF.PI * 0.5f;
+                y = totalHeight * 0.5f - radius + radius * MathF.Cos(phi);
+                ringRadius = radius * MathF.Sin(phi);
+            }
+            else if ((float)ring <= (float)rings - halfCap)
+            {
+                float t = ((float)ring - halfCap) / ((float)rings - halfCap * 2.0f);
+                y = cylinderHeight * 0.5f - t * cylinderHeight;
+                ringRadius = radius;
+            }
+            else
+            {
+                float phi = (((float)ring - ((float)rings - halfCap)) / halfCap) * MathF.PI * 0.5f;
+                y = -totalHeight * 0.5f + radius - radius * MathF.Cos(phi);
+                ringRadius = radius * MathF.Sin(phi);
+            }
+
+            for (uint segment = 0; segment <= radialSegments; segment++)
+            {
+                float theta = (float)segment / radialSegments * MathF.PI * 2.0f;
+                float x = ringRadius * MathF.Cos(theta);
+                float z = ringRadius * MathF.Sin(theta);
+
+                Vec3 pos = new(x, y, z);
+                Normal3D norm;
+                if ((float)ring <= halfCap || (float)ring > (float)rings - halfCap)
+                {
+                    float centerY = (float)ring <= halfCap ? cylinderHeight * 0.5f : -cylinderHeight * 0.5f;
+                    norm = Normal3D.FromVec3(pos - new Vec3(0, centerY, 0));
+                }
+                else
+                {
+                    norm = Normal3D.FromVec3(new Vec3(x, 0, z));
+                }
+                TexCoord uv = new((float)segment / radialSegments, v);
+
+                sink.AppendVertex(TVertex.Create(new Position3D(pos.X, pos.Y, pos.Z), norm, uv, Tangent4D.Default));
+            }
+        }
+
+        for (uint ring = 0; ring < rings; ring++)
+        {
+            for (uint segment = 0; segment < radialSegments; segment++)
+            {
+                uint a = startVertex + ring * (radialSegments + 1) + segment;
+                uint b = startVertex + ring * (radialSegments + 1) + segment + 1;
+                uint c = startVertex + (ring + 1) * (radialSegments + 1) + segment + 1;
+                uint d = startVertex + (ring + 1) * (radialSegments + 1) + segment;
+
+                sink.AppendTriangle(
+                    TIndex.CreateChecked(a),
+                    TIndex.CreateChecked(b),
+                    TIndex.CreateChecked(d)
+                );
+                sink.AppendTriangle(
+                    TIndex.CreateChecked(b),
+                    TIndex.CreateChecked(c),
+                    TIndex.CreateChecked(d)
+                );
+            }
+        }
+    }
+
     /// <summary>Emits a torus.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void EmitTorus<TSink, TVertex, TIndex>(ref TSink sink, in TorusConfig config)
