@@ -10,6 +10,7 @@ global using System.Runtime.InteropServices;
 global using System.Threading;
 global using System.Threading.Tasks;
 global using Axrone.Collections;
+global using Axrone.Utility.Alignment;
 global using Axrone.Utility.Backoff;
 global using Axrone.Utility.Backoff.SpinPolicies;
 global using Axrone.Utility.Disposable;
