@@ -83,6 +83,88 @@ public static partial class ProceduralPrimitives
         }
     }
 
+    /// <summary>Emits a UV sphere with single-vertex poles and wrapped rings.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void EmitUvSphere<TSink, TVertex, TIndex>(ref TSink sink, in SphereConfig config)
+        where TSink : IMeshSink<TVertex, TIndex>, allows ref struct
+        where TVertex : unmanaged, IVertex<TVertex>
+        where TIndex : unmanaged, System.Numerics.IBinaryInteger<TIndex>
+    {
+        uint widthSegments = Math.Max(3, config.WidthSegments.Value);
+        uint heightSegments = Math.Max(2, config.HeightSegments.Value);
+        float radius = config.Radius.Value;
+
+        sink.AppendVertex(TVertex.Create(
+            new Position3D(0, radius, 0), Normal3D.UnitY, new TexCoord(0.5f, 0.0f), Tangent4D.Default));
+
+        for (uint lat = 1; lat < heightSegments; lat++)
+        {
+            float theta = (float)lat / heightSegments * MathF.PI;
+            float sinTheta = MathF.Sin(theta);
+            float cosTheta = MathF.Cos(theta);
+            float y = radius * cosTheta;
+            float ringRadius = radius * sinTheta;
+
+            for (uint lon = 0; lon < widthSegments; lon++)
+            {
+                float phi = (float)lon / widthSegments * MathF.PI * 2.0f;
+                float sinPhi = MathF.Sin(phi);
+                float cosPhi = MathF.Cos(phi);
+
+                Vec3 pos = new(ringRadius * cosPhi, y, ringRadius * sinPhi);
+                Normal3D norm = Normal3D.FromVec3(pos);
+                TexCoord uv = new((float)lon / widthSegments, (float)lat / heightSegments);
+
+                sink.AppendVertex(TVertex.Create(new Position3D(pos.X, pos.Y, pos.Z), norm, uv, Tangent4D.Default));
+            }
+        }
+
+        sink.AppendVertex(TVertex.Create(
+            new Position3D(0, -radius, 0), Normal3D.NegativeUnitY, new TexCoord(0.5f, 1.0f), Tangent4D.Default));
+
+        for (uint i = 0; i < widthSegments; i++)
+        {
+            uint next = (i + 1) % widthSegments;
+            sink.AppendTriangle(
+                TIndex.CreateChecked(0),
+                TIndex.CreateChecked(i + 1),
+                TIndex.CreateChecked(next + 1));
+        }
+
+        for (uint lat = 0; lat < heightSegments - 2; lat++)
+        {
+            for (uint lon = 0; lon < widthSegments; lon++)
+            {
+                uint current = lat * widthSegments + lon + 1;
+                uint next = lat * widthSegments + ((lon + 1) % widthSegments) + 1;
+                uint below = (lat + 1) * widthSegments + lon + 1;
+                uint belowNext = (lat + 1) * widthSegments + ((lon + 1) % widthSegments) + 1;
+
+                sink.AppendTriangle(
+                    TIndex.CreateChecked(current),
+                    TIndex.CreateChecked(next),
+                    TIndex.CreateChecked(below));
+                sink.AppendTriangle(
+                    TIndex.CreateChecked(next),
+                    TIndex.CreateChecked(belowNext),
+                    TIndex.CreateChecked(below));
+            }
+        }
+
+        uint bottomVertex = sink.CurrentVertexCount - 1;
+        uint lastRingStart = (heightSegments - 2) * widthSegments + 1;
+
+        for (uint i = 0; i < widthSegments; i++)
+        {
+            uint current = lastRingStart + i;
+            uint next = lastRingStart + ((i + 1) % widthSegments);
+            sink.AppendTriangle(
+                TIndex.CreateChecked(bottomVertex),
+                TIndex.CreateChecked(next),
+                TIndex.CreateChecked(current));
+        }
+    }
+
     /// <summary>Emits a subdivided icosphere. Subdivisions clamp at 6 (327680 triangles).</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void EmitIcosphere<TSink, TVertex, TIndex>(ref TSink sink, Metric radius, uint subdivisions)

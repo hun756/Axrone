@@ -57,6 +57,21 @@ public class MeshGeneratorsTests
     }
 
     [Fact]
+    public void EmitUvSphere_PolesAndWrappedRings()
+    {
+        var sink = new MeshListSink();
+        var config = new SphereConfig { WidthSegments = new SegmentResolution(4), HeightSegments = new SegmentResolution(3) };
+
+        ProceduralPrimitives.EmitUvSphere<MeshListSink, VertexP3N3T2, ushort>(ref sink, in config);
+
+        sink.Vertices.Count.Should().Be(10);
+        sink.Indices.Count.Should().Be(48);
+        sink.Vertices[0].Position.Should().Be(new Position3D(0, 0.5f, 0));
+        sink.Vertices[0].Normal.Should().Be(Normal3D.UnitY);
+        sink.Vertices[9].Normal.Should().Be(Normal3D.NegativeUnitY);
+    }
+
+    [Fact]
     public void EmitIcosphere_Subdivides()
     {
         var flatSink = new MeshListSink();
