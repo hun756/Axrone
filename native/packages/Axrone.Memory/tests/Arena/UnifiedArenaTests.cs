@@ -85,12 +85,14 @@ public class UnifiedArenaPolicyTests
     [Fact]
     public void Backoff_AdvancesCounter()
     {
-        int adaptive = 0;
-        AdaptiveSpinBackoff.Backoff(ref adaptive);
+        AdaptiveSpinBackoff.Initialize(out int adaptive);
+        AdaptiveSpinBackoff.Advance(ref adaptive);
         adaptive.Should().Be(1);
+        AdaptiveSpinBackoff.Reset(ref adaptive);
+        adaptive.Should().Be(0);
 
-        int yielding = 0;
-        YieldBackoff.Backoff(ref yielding);
+        YieldingBackoff.Initialize(out int yielding);
+        YieldingBackoff.Advance(ref yielding);
         yielding.Should().Be(1);
     }
 

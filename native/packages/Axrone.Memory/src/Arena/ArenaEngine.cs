@@ -13,7 +13,7 @@ namespace Axrone.Memory.Arena;
 /// <typeparam name="TMetrics">Chunk lifetime metrics sink.</typeparam>
 public class Arena<TGrowth, TBackoff, TMetrics> : IMemoryArena
     where TGrowth : struct, IArenaGrowthPolicy
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
     where TMetrics : struct, IArenaMetricsSink
 {
     private static class StateConstants
@@ -134,7 +134,7 @@ public class Arena<TGrowth, TBackoff, TMetrics> : IMemoryArena
             ChunkNode* chunk = (ChunkNode*)Volatile.Read(ref _state.ActiveChunk);
             if (chunk != null)
             {
-                int spinCount = 0;
+                TBackoff.Initialize(out int spinCount);
                 nuint reqBytes = byteCount.Value;
                 nuint alignMask = (nuint)alignment.Value - 1;
 
@@ -159,7 +159,7 @@ public class Arena<TGrowth, TBackoff, TMetrics> : IMemoryArena
                             return AllocationResult.Succeeded(new ArenaAllocationHandle((byte*)alignedAddr, byteCount));
                         }
 
-                        TBackoff.Backoff(ref spinCount);
+                        TBackoff.Advance(ref spinCount);
                         continue;
                     }
 
@@ -702,7 +702,7 @@ public sealed class Arena : Arena<GeometricGrowthPolicy, AdaptiveSpinBackoff, Nu
 /// <typeparam name="TMetrics">Chunk lifetime metrics sink.</typeparam>
 public readonly ref struct ArenaScope<TGrowth, TBackoff, TMetrics>
     where TGrowth : struct, IArenaGrowthPolicy
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
     where TMetrics : struct, IArenaMetricsSink
 {
     private readonly Arena<TGrowth, TBackoff, TMetrics> _arena;

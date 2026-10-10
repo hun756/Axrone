@@ -7,13 +7,6 @@ public interface IArenaGrowthPolicy
     static abstract ByteSize ComputeNextSize(ByteSize currentCapacity, ByteSize minimumRequired, ByteSize maxCapacity);
 }
 
-/// <summary>Waits between contended compare-exchange retries.</summary>
-public interface IBackoffPolicy
-{
-    /// <summary>Backs off once and advances <paramref name="spinCount"/>.</summary>
-    static abstract void Backoff(ref int spinCount);
-}
-
 /// <summary>Observability sink for chunk lifetime events.</summary>
 public interface IArenaMetricsSink
 {
@@ -92,38 +85,6 @@ public readonly struct FixedGrowthPolicy : IArenaGrowthPolicy
         nuint min = minimumRequired.Value;
         nuint curr = currentCapacity.Value;
         return new ByteSize(min > curr ? min : curr);
-    }
-}
-
-/// <summary>Exponential spin for the first ten rounds, then yields.</summary>
-public readonly struct AdaptiveSpinBackoff : IBackoffPolicy
-{
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Backoff(ref int spinCount)
-    {
-        int count = spinCount;
-        if ((uint)count < 10)
-        {
-            Thread.SpinWait(1 << count);
-        }
-        else
-        {
-            Thread.Yield();
-        }
-        spinCount = count + 1;
-    }
-}
-
-/// <summary>Always yields; for low-contention paths.</summary>
-public readonly struct YieldBackoff : IBackoffPolicy
-{
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Backoff(ref int spinCount)
-    {
-        Thread.Yield();
-        spinCount++;
     }
 }
 

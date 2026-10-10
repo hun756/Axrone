@@ -95,7 +95,7 @@ public static class ConfiguredArenaBuilderExtensions
     public static Arena<TGrowth, TBackoff, TMetrics> Build<TGrowth, TBackoff, TMetrics>(
         this ArenaBuilder<ConfiguredArenaState> builder)
         where TGrowth : struct, IArenaGrowthPolicy
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IArenaMetricsSink
     {
         ArenaOptions options = new()
