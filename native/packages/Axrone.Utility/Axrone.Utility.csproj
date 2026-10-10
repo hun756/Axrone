@@ -51,6 +51,10 @@
     <NoWarn>$(NoWarn);CA1062</NoWarn>
     <!-- IL2026: Exception.TargetSite in source-gen JSON context — diagnostics only -->
     <NoWarn>$(NoWarn);IL2026</NoWarn>
+    <!-- CA1043: Indexers take BufferIndex nominals — index vs count vs offset confusion is exactly what they prevent -->
+    <NoWarn>$(NoWarn);CA1043</NoWarn>
+    <!-- CA1720: Pointer members — DangerousGetPointer/Pointer are the documented escape-hatch vocabulary -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
