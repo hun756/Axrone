@@ -84,9 +84,36 @@ public sealed unsafe class RingBatchCoordinator<T, TBackoff> : IBatchReservable<
         }
     }
 
+    /// <summary>
+    /// Returns the committed-but-unconsumed runs without claiming anything.
+    /// Snapshot semantics: concurrent producers may extend past the view, but
+    /// the view itself never changes and a later read still finds the data.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public RingPeekView<T> PeekAvailable()
+    {
+        nuint mask = _core.Capacity.Mask;
+        long tail = _core.TailCommitted.Value;
+        long head = _core.HeadCommitted.Value;
+
+        if (head <= tail)
+        {
+            return default;
+        }
+
+        nuint startIndex = (nuint)tail & mask;
+        nuint available = (nuint)(head - tail);
+        nuint firstLen = Math.Min(available, _core.Capacity.Value - startIndex);
+        nuint secondLen = available - firstLen;
+
+        ReadOnlySpan<T> firstSpan = new(_core.Storage.BasePointer + startIndex, (int)firstLen);
+        ReadOnlySpan<T> secondSpan = secondLen > 0 ? new(_core.Storage.BasePointer, (int)secondLen) : ReadOnlySpan<T>.Empty;
+
+        return new RingPeekView<T>(firstSpan, secondSpan);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public bool TryConsumeWithVisitor<TVisitor, TContext>(int count, TVisitor visitor, ref TContext context)
-        where TVisitor : struct, IBatchVisitor<T, TContext>
+    public bool TryConsumeWithVisitor<TVisitor, TContext>(int count, TVisitor visitor, ref TContext context)        where TVisitor : struct, IBatchVisitor<T, TContext>
         where TContext : allows ref struct
     {
         if (!TryReserveRead(count, out var reservation))
