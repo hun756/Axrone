@@ -51,6 +51,9 @@
          through IComparable only; relational operator sets would only duplicate
          CompareTo over single-field values. -->
     <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA1040: Empty marker interface — IPipelineStage is the compile-time stage
+         token separating configuration, assembly and sealed states by design. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
     <!-- CA2201: IndexOutOfRangeException is reserved — a bad native index names no
          live slot, and IndexOutOfRangeException is exactly what callers catch. -->
     <NoWarn>$(NoWarn);CA2201</NoWarn>
