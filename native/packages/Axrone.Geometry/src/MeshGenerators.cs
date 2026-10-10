@@ -4,7 +4,7 @@ namespace Axrone.Geometry;
 /// Hardened procedural mesh generators: zero heap allocation in steady state,
 /// generic over the sink, vertex and index types.
 /// </summary>
-public static class ProceduralPrimitives
+public static partial class ProceduralPrimitives
 {
     /// <summary>Emits a UV sphere.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
