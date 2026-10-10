@@ -200,11 +200,23 @@ public static partial class ProceduralPrimitives
             4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1
         ];
 
-        NativeBuffer<Vec3> verts = new(1024);
-        using NativeBuffer<uint> inds = new(2048);
+        uint quads = 1u;
+        for (uint s = 0; s < levels; s++)
+        {
+            quads *= 4u;
+        }
+        uint vertTotal = 10u * quads + 2u;
+        uint indexTotal = 60u * quads;
 
-        for (int i = 0; i < baseVertices.Length; i++) verts.Append(baseVertices[i]);
-        for (int i = 0; i < baseIndices.Length; i++) inds.Append(baseIndices[i]);
+        using var verts = new NativeBuffer<Vec3, AlignedNativeAllocator>(
+            ElementCount.From(vertTotal), MemoryAlignment.CacheLine);
+        using var inds = new NativeBuffer<uint, AlignedNativeAllocator>(
+            ElementCount.From(indexTotal), MemoryAlignment.CacheLine);
+
+        for (int i = 0; i < baseVertices.Length; i++) verts[BufferIndex.From((uint)i)] = baseVertices[i];
+        for (int i = 0; i < baseIndices.Length; i++) inds[BufferIndex.From((uint)i)] = baseIndices[i];
+        uint vertCount = 12;
+        uint indexCount = 60;
 
         uint estimatedEdges = 30u * (1u << checked((int)(levels * 2 + 1)));
         UnmanagedEdgeTable edgeTable = new(estimatedEdges);
@@ -213,38 +225,45 @@ public static partial class ProceduralPrimitives
         {
             for (uint s = 0; s < levels; s++)
             {
-                nuint currentIndicesCount = inds.Length;
-                using NativeBuffer<uint> nextIndices = new(currentIndicesCount * 4);
+                uint nextCapacity = checked(indexCount * 4);
+                using var nextIndices = new NativeBuffer<uint, AlignedNativeAllocator>(
+                    ElementCount.From(nextCapacity), MemoryAlignment.CacheLine);
+                uint written = 0;
 
-                for (nuint i = 0; i < currentIndicesCount; i += 3)
+                for (uint i = 0; i < indexCount; i += 3)
                 {
-                    uint i0 = inds.AsRef(i);
-                    uint i1 = inds.AsRef(i + 1);
-                    uint i2 = inds.AsRef(i + 2);
+                    uint i0 = inds[BufferIndex.From(i)];
+                    uint i1 = inds[BufferIndex.From(i + 1)];
+                    uint i2 = inds[BufferIndex.From(i + 2)];
 
-                    uint im01 = GetOrCreateMidpoint(ref verts, ref edgeTable, i0, i1, r);
-                    uint im12 = GetOrCreateMidpoint(ref verts, ref edgeTable, i1, i2, r);
-                    uint im20 = GetOrCreateMidpoint(ref verts, ref edgeTable, i2, i0, r);
+                    uint im01 = GetOrCreateMidpoint(verts, ref vertCount, ref edgeTable, i0, i1, r);
+                    uint im12 = GetOrCreateMidpoint(verts, ref vertCount, ref edgeTable, i1, i2, r);
+                    uint im20 = GetOrCreateMidpoint(verts, ref vertCount, ref edgeTable, i2, i0, r);
 
-                    nextIndices.Append(i0); nextIndices.Append(im01); nextIndices.Append(im20);
-                    nextIndices.Append(i1); nextIndices.Append(im12); nextIndices.Append(im01);
-                    nextIndices.Append(i2); nextIndices.Append(im20); nextIndices.Append(im12);
-                    nextIndices.Append(im01); nextIndices.Append(im12); nextIndices.Append(im20);
+                    nextIndices[BufferIndex.From(written++)] = i0;
+                    nextIndices[BufferIndex.From(written++)] = im01;
+                    nextIndices[BufferIndex.From(written++)] = im20;
+                    nextIndices[BufferIndex.From(written++)] = i1;
+                    nextIndices[BufferIndex.From(written++)] = im12;
+                    nextIndices[BufferIndex.From(written++)] = im01;
+                    nextIndices[BufferIndex.From(written++)] = i2;
+                    nextIndices[BufferIndex.From(written++)] = im20;
+                    nextIndices[BufferIndex.From(written++)] = im12;
+                    nextIndices[BufferIndex.From(written++)] = im01;
+                    nextIndices[BufferIndex.From(written++)] = im12;
+                    nextIndices[BufferIndex.From(written++)] = im20;
                 }
 
-                inds.Clear();
-                Span<uint> nextSpan = nextIndices.AsSpan();
-                for (int k = 0; k < nextSpan.Length; k++)
-                {
-                    inds.Append(nextSpan[k]);
-                }
+                Span<uint> nextSpan = nextIndices.Span;
+                Span<uint> indsSpan = inds.Span;
+                nextSpan.Slice(0, (int)written).CopyTo(indsSpan);
+                indexCount = written;
             }
 
             uint startVertex = sink.CurrentVertexCount;
-            ReadOnlySpan<Vec3> finalVerts = verts.AsReadOnlySpan();
-            for (int i = 0; i < finalVerts.Length; i++)
+            for (uint i = 0; i < vertCount; i++)
             {
-                Vec3 pos = finalVerts[i];
+                Vec3 pos = verts[BufferIndex.From(i)];
                 Normal3D norm = Normal3D.FromVec3(pos);
                 float u = 0.5f + MathF.Atan2(norm.Z, norm.X) / (MathF.PI * 2.0f);
                 float v = 0.5f - MathF.Asin(Math.Clamp(norm.Y, -1.0f, 1.0f)) / MathF.PI;
@@ -252,41 +271,41 @@ public static partial class ProceduralPrimitives
                 sink.AppendVertex(TVertex.Create(new Position3D(pos.X, pos.Y, pos.Z), norm, new TexCoord(u, v), Tangent4D.Default));
             }
 
-            ReadOnlySpan<uint> finalInds = inds.AsReadOnlySpan();
-            for (int i = 0; i < finalInds.Length; i += 3)
+            for (uint i = 0; i < indexCount; i += 3)
             {
                 sink.AppendTriangle(
-                    TIndex.CreateChecked(startVertex + finalInds[i]),
-                    TIndex.CreateChecked(startVertex + finalInds[i + 1]),
-                    TIndex.CreateChecked(startVertex + finalInds[i + 2])
+                    TIndex.CreateChecked(startVertex + inds[BufferIndex.From(i)]),
+                    TIndex.CreateChecked(startVertex + inds[BufferIndex.From(i + 1)]),
+                    TIndex.CreateChecked(startVertex + inds[BufferIndex.From(i + 2)])
                 );
             }
         }
         finally
         {
-            verts.Dispose();
             edgeTable.Dispose();
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetOrCreateMidpoint(
-        ref NativeBuffer<Vec3> verts,
+        NativeBuffer<Vec3, AlignedNativeAllocator> verts,
+        ref uint vertCount,
         ref UnmanagedEdgeTable edgeTable,
         uint v0,
         uint v1,
         float radius)
     {
-        uint nextIdx = (uint)verts.Length;
+        uint nextIdx = vertCount;
         if (edgeTable.TryGetOrAdd(v0, v1, nextIdx, out uint existing))
         {
             return existing;
         }
 
-        Vec3 p0 = verts.AsRef(v0);
-        Vec3 p1 = verts.AsRef(v1);
+        Vec3 p0 = verts[BufferIndex.From(v0)];
+        Vec3 p1 = verts[BufferIndex.From(v1)];
         Vec3 mid = Vec3.Normalize((p0 + p1) * 0.5f) * radius;
-        verts.Append(mid);
+        verts[BufferIndex.From(nextIdx)] = mid;
+        vertCount++;
         return nextIdx;
     }
 

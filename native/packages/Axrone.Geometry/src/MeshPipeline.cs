@@ -14,50 +14,57 @@ public readonly struct SealedStage : IPipelineStage { }
 
 /// <summary>
 /// Typestate mesh assembly: configure, then assemble, then seal. Stage
-/// violations throw; sealing transfers buffer ownership into the mesh.
+/// violations throw; sealing hands buffer ownership to the mesh. Capacity is
+/// fixed at reservation time, so overruns fail fast instead of growing.
 /// </summary>
 /// <typeparam name="TVertex">The vertex type.</typeparam>
 /// <typeparam name="TIndex">The index element type.</typeparam>
 /// <typeparam name="TWinding">The triangle winding policy.</typeparam>
 /// <typeparam name="TStage">The compile-time stage marker.</typeparam>
-public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDisposable
+public sealed class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDisposable
     where TVertex : unmanaged, IVertex<TVertex>
     where TIndex : unmanaged, System.Numerics.IBinaryInteger<TIndex>
     where TWinding : struct, IWindingPolicy
     where TStage : struct, IPipelineStage
 {
-    private NativeBuffer<TVertex> _vertices;
-    private NativeBuffer<TIndex> _indices;
+    private readonly NativeBuffer<TVertex, AlignedNativeAllocator>? _vertices;
+    private readonly NativeBuffer<TIndex, AlignedNativeAllocator>? _indices;
+    private uint _vertexCount;
+    private uint _indexCount;
     private int _disposed;
 
-    private MeshPipeline(NativeBuffer<TVertex> vertices, NativeBuffer<TIndex> indices)
+    private MeshPipeline(
+        NativeBuffer<TVertex, AlignedNativeAllocator>? vertices,
+        NativeBuffer<TIndex, AlignedNativeAllocator>? indices)
     {
         _vertices = vertices;
         _indices = indices;
+        _vertexCount = 0;
+        _indexCount = 0;
         _disposed = 0;
     }
 
     /// <summary>Starts a configuration-stage pipeline.</summary>
     public static MeshPipeline<TVertex, TIndex, TWinding, ConfigurationStage> Create()
     {
-        return new MeshPipeline<TVertex, TIndex, TWinding, ConfigurationStage>(default, default);
+        return new MeshPipeline<TVertex, TIndex, TWinding, ConfigurationStage>(null, null);
     }
 
     /// <summary>Assembled vertices so far.</summary>
     public uint VertexCount
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => (uint)_vertices.Length;
+        get => _vertexCount;
     }
 
     /// <summary>Assembled indices so far.</summary>
     public uint IndexCount
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => (uint)_indices.Length;
+        get => _indexCount;
     }
 
-    /// <summary>Reserves capacity, moving to the assembly stage.</summary>
+    /// <summary>Reserves fixed capacity, moving to the assembly stage.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public MeshPipeline<TVertex, TIndex, TWinding, AssemblyStage> Allocate(CapacityAllocation allocation)
     {
@@ -67,8 +74,10 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             ThrowHelper.ThrowInvalidOperation("Allocation can only occur during Configuration stage.");
         }
 
-        NativeBuffer<TVertex> vBuf = new(allocation.VertexCapacity);
-        NativeBuffer<TIndex> iBuf = new(allocation.IndexCapacity);
+        var vBuf = new NativeBuffer<TVertex, AlignedNativeAllocator>(
+            ElementCount.From(allocation.VertexCapacity), MemoryAlignment.CacheLine);
+        var iBuf = new NativeBuffer<TIndex, AlignedNativeAllocator>(
+            ElementCount.From(allocation.IndexCapacity), MemoryAlignment.CacheLine);
         _disposed = 1;
         return new MeshPipeline<TVertex, TIndex, TWinding, AssemblyStage>(vBuf, iBuf);
     }
@@ -83,8 +92,9 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             ThrowHelper.ThrowInvalidOperation("Vertices can only be appended during Assembly stage.");
         }
 
-        uint idx = (uint)_vertices.Length;
-        _vertices.Append(TVertex.Create(pos, norm, uv, Tangent4D.Default));
+        uint idx = _vertexCount;
+        _vertices![BufferIndex.From(idx)] = TVertex.Create(pos, norm, uv, Tangent4D.Default);
+        _vertexCount++;
         return new VertexId(idx);
     }
 
@@ -98,16 +108,16 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             ThrowHelper.ThrowInvalidOperation("Triangles can only be added during Assembly stage.");
         }
 
-        nuint offset = _indices.Length;
-        _indices.Append(default);
-        _indices.Append(default);
-        _indices.Append(default);
-
+        uint offset = _indexCount;
         TIndex t0 = TIndex.CreateChecked(i0);
         TIndex t1 = TIndex.CreateChecked(i1);
         TIndex t2 = TIndex.CreateChecked(i2);
+        _indices![BufferIndex.From(offset)] = t0;
+        _indices![BufferIndex.From(offset + 1)] = t1;
+        _indices![BufferIndex.From(offset + 2)] = t2;
+        _indexCount += 3;
 
-        TWinding.EmitTriangle(_indices.AsSpan(), offset, t0, t1, t2);
+        TWinding.EmitTriangle(_indices.Span, offset, t0, t1, t2);
     }
 
     /// <summary>Appends one quad as the (a,b,d) and (b,c,d) triangles.</summary>
@@ -123,20 +133,20 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
     public void RecalculateNormals()
     {
         ThrowIfDisposed();
-        nuint vCount = _vertices.Length;
-        nuint iCount = _indices.Length;
+        uint vCount = _vertexCount;
+        uint iCount = _indexCount;
         if (vCount == 0 || iCount == 0) return;
 
-        using NativeBuffer<Vec3> normalAccum = new(vCount);
-        normalAccum.SetLength(vCount);
-        Span<Vec3> normSpan = normalAccum.AsSpan();
+        using var normalAccum = new NativeBuffer<Vec3, AlignedNativeAllocator>(
+            ElementCount.From(vCount), MemoryAlignment.CacheLine);
+        Span<Vec3> normSpan = normalAccum.Span;
         normSpan.Clear();
 
-        Span<TVertex> vertSpan = _vertices.AsSpan();
-        ReadOnlySpan<TIndex> idxSpan = _indices.AsReadOnlySpan();
-        nuint triCount = iCount / 3;
+        Span<TVertex> vertSpan = _vertices!.Span;
+        ReadOnlySpan<TIndex> idxSpan = _indices!.ReadOnlySpan;
+        uint triCount = iCount / 3;
 
-        for (nuint i = 0; i < triCount; i++)
+        for (uint i = 0; i < triCount; i++)
         {
             uint i0 = uint.CreateChecked(idxSpan[(int)(i * 3)]);
             uint i1 = uint.CreateChecked(idxSpan[(int)(i * 3 + 1)]);
@@ -152,7 +162,7 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             normSpan[(int)i2] += fn;
         }
 
-        for (nuint i = 0; i < vCount; i++)
+        for (uint i = 0; i < vCount; i++)
         {
             Vec3 accumulated = normSpan[(int)i];
             Normal3D normalized = Normal3D.FromVec3(accumulated);
@@ -165,25 +175,25 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
     public void RecalculateTangents()
     {
         ThrowIfDisposed();
-        nuint vCount = _vertices.Length;
-        nuint iCount = _indices.Length;
+        uint vCount = _vertexCount;
+        uint iCount = _indexCount;
         if (vCount == 0 || iCount == 0) return;
 
-        using NativeBuffer<Vec3> tan1 = new(vCount);
-        using NativeBuffer<Vec3> tan2 = new(vCount);
-        tan1.SetLength(vCount);
-        tan2.SetLength(vCount);
+        using var tan1 = new NativeBuffer<Vec3, AlignedNativeAllocator>(
+            ElementCount.From(vCount), MemoryAlignment.CacheLine);
+        using var tan2 = new NativeBuffer<Vec3, AlignedNativeAllocator>(
+            ElementCount.From(vCount), MemoryAlignment.CacheLine);
 
-        Span<Vec3> s1 = tan1.AsSpan();
-        Span<Vec3> s2 = tan2.AsSpan();
+        Span<Vec3> s1 = tan1.Span;
+        Span<Vec3> s2 = tan2.Span;
         s1.Clear();
         s2.Clear();
 
-        Span<TVertex> vertSpan = _vertices.AsSpan();
-        ReadOnlySpan<TIndex> idxSpan = _indices.AsReadOnlySpan();
-        nuint triCount = iCount / 3;
+        Span<TVertex> vertSpan = _vertices!.Span;
+        ReadOnlySpan<TIndex> idxSpan = _indices!.ReadOnlySpan;
+        uint triCount = iCount / 3;
 
-        for (nuint i = 0; i < triCount; i++)
+        for (uint i = 0; i < triCount; i++)
         {
             uint i0 = uint.CreateChecked(idxSpan[(int)(i * 3)]);
             uint i1 = uint.CreateChecked(idxSpan[(int)(i * 3 + 1)]);
@@ -229,7 +239,7 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             s2[(int)i2] += tdir;
         }
 
-        for (nuint i = 0; i < vCount; i++)
+        for (uint i = 0; i < vCount; i++)
         {
             Vec3 n = vertSpan[(int)i].Normal.ToVec3();
             Vec3 t = s1[(int)i];
@@ -256,7 +266,7 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
             ThrowHelper.ThrowInvalidOperation("Only an active Assembly pipeline can be sealed.");
         }
 
-        NativeMesh<TVertex, TIndex> mesh = new(ref _vertices, ref _indices);
+        NativeMesh<TVertex, TIndex> mesh = new(_vertices!, (int)_vertexCount, _indices!, (int)_indexCount);
         _disposed = 1;
         return mesh;
     }
@@ -282,8 +292,8 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            _vertices.Dispose();
-            _indices.Dispose();
+            _vertices?.Dispose();
+            _indices?.Dispose();
         }
     }
 
@@ -310,18 +320,22 @@ public sealed unsafe class MeshPipeline<TVertex, TIndex, TWinding, TStage> : IDi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendVertex(in TVertex vertex)
         {
-            _pipeline._vertices.Append(vertex);
+            uint idx = _pipeline._vertexCount;
+            _pipeline._vertices![BufferIndex.From(idx)] = vertex;
+            _pipeline._vertexCount++;
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendTriangle(TIndex i0, TIndex i1, TIndex i2)
         {
-            nuint offset = _pipeline._indices.Length;
-            _pipeline._indices.Append(default);
-            _pipeline._indices.Append(default);
-            _pipeline._indices.Append(default);
-            TWinding.EmitTriangle(_pipeline._indices.AsSpan(), offset, i0, i1, i2);
+            uint offset = _pipeline._indexCount;
+            _pipeline._indices![BufferIndex.From(offset)] = i0;
+            _pipeline._indices![BufferIndex.From(offset + 1)] = i1;
+            _pipeline._indices![BufferIndex.From(offset + 2)] = i2;
+            _pipeline._indexCount += 3;
+
+            TWinding.EmitTriangle(_pipeline._indices.Span, offset, i0, i1, i2);
         }
     }
 }

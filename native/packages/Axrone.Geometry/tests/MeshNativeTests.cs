@@ -25,21 +25,23 @@ public class MeshNativeTests
 {
     private static NativeMesh<VertexP3N3T2, ushort> BuildQuad()
     {
-        NativeBuffer<VertexP3N3T2> vertices = new(4);
-        vertices.Append(new VertexP3N3T2(new Position3D(0, 0, 0), Normal3D.UnitZ, new TexCoord(0, 0)));
-        vertices.Append(new VertexP3N3T2(new Position3D(1, 0, 0), Normal3D.UnitZ, new TexCoord(1, 0)));
-        vertices.Append(new VertexP3N3T2(new Position3D(1, 1, 0), Normal3D.UnitZ, new TexCoord(1, 1)));
-        vertices.Append(new VertexP3N3T2(new Position3D(0, 1, 0), Normal3D.UnitZ, new TexCoord(0, 1)));
+        var vertices = new NativeBuffer<VertexP3N3T2, AlignedNativeAllocator>(
+            ElementCount.From(4), MemoryAlignment.CacheLine);
+        vertices[BufferIndex.From(0)] = new VertexP3N3T2(new Position3D(0, 0, 0), Normal3D.UnitZ, new TexCoord(0, 0));
+        vertices[BufferIndex.From(1)] = new VertexP3N3T2(new Position3D(1, 0, 0), Normal3D.UnitZ, new TexCoord(1, 0));
+        vertices[BufferIndex.From(2)] = new VertexP3N3T2(new Position3D(1, 1, 0), Normal3D.UnitZ, new TexCoord(1, 1));
+        vertices[BufferIndex.From(3)] = new VertexP3N3T2(new Position3D(0, 1, 0), Normal3D.UnitZ, new TexCoord(0, 1));
 
-        NativeBuffer<ushort> indices = new(6);
-        indices.Append(0);
-        indices.Append(1);
-        indices.Append(2);
-        indices.Append(0);
-        indices.Append(2);
-        indices.Append(3);
+        var indices = new NativeBuffer<ushort, AlignedNativeAllocator>(
+            ElementCount.From(6), MemoryAlignment.CacheLine);
+        indices[BufferIndex.From(0)] = 0;
+        indices[BufferIndex.From(1)] = 1;
+        indices[BufferIndex.From(2)] = 2;
+        indices[BufferIndex.From(3)] = 0;
+        indices[BufferIndex.From(4)] = 2;
+        indices[BufferIndex.From(5)] = 3;
 
-        return new NativeMesh<VertexP3N3T2, ushort>(ref vertices, ref indices);
+        return new NativeMesh<VertexP3N3T2, ushort>(vertices, 4, indices, 6);
     }
 
     [Fact]

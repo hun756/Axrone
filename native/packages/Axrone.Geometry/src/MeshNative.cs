@@ -6,25 +6,27 @@ namespace Axrone.Geometry;
 /// </summary>
 /// <typeparam name="TVertex">The vertex type.</typeparam>
 /// <typeparam name="TIndex">The index element type.</typeparam>
-public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
+public sealed class NativeMesh<TVertex, TIndex> : IDisposable
     where TVertex : unmanaged, IVertex<TVertex>
     where TIndex : unmanaged, System.Numerics.IBinaryInteger<TIndex>
 {
     private static int s_idGen;
 
     private readonly int _layoutId;
-    private NativeBuffer<TVertex> _vertices;
-    private NativeBuffer<TIndex> _indices;
+    private readonly NativeBuffer<TVertex, AlignedNativeAllocator> _vertices;
+    private readonly NativeBuffer<TIndex, AlignedNativeAllocator> _indices;
+    private readonly int _vertexCount;
+    private readonly int _indexCount;
     private int _disposed;
 
     /// <summary>Process-wide layout discriminator.</summary>
     public int LayoutId => _layoutId;
 
     /// <summary>Live vertices.</summary>
-    public int VertexCount => checked((int)_vertices.Length);
+    public int VertexCount => _vertexCount;
 
     /// <summary>Live indices.</summary>
-    public int IndexCount => checked((int)_indices.Length);
+    public int IndexCount => _indexCount;
 
     /// <summary>Interleaved vertex stride in bytes.</summary>
     public int Stride => TVertex.ByteStride;
@@ -42,7 +44,7 @@ public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
         get
         {
             ThrowIfDisposed();
-            return _vertices.AsReadOnlySpan();
+            return _vertices.ReadOnlySpan.Slice(0, _vertexCount);
         }
     }
 
@@ -53,17 +55,21 @@ public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
         get
         {
             ThrowIfDisposed();
-            return _indices.AsReadOnlySpan();
+            return _indices.ReadOnlySpan.Slice(0, _indexCount);
         }
     }
 
-    internal NativeMesh(ref NativeBuffer<TVertex> vertices, ref NativeBuffer<TIndex> indices)
+    internal NativeMesh(
+        NativeBuffer<TVertex, AlignedNativeAllocator> vertices,
+        int vertexCount,
+        NativeBuffer<TIndex, AlignedNativeAllocator> indices,
+        int indexCount)
     {
         _layoutId = Interlocked.Increment(ref s_idGen);
         _vertices = vertices;
+        _vertexCount = vertexCount;
         _indices = indices;
-        vertices = default;
-        indices = default;
+        _indexCount = indexCount;
         _disposed = 0;
     }
 
@@ -72,7 +78,7 @@ public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
     public VertexEnumerator<TVertex> GetEnumerator()
     {
         ThrowIfDisposed();
-        return new VertexEnumerator<TVertex>(_vertices.AsReadOnlySpan());
+        return new VertexEnumerator<TVertex>(Vertices);
     }
 
     /// <summary>Pushes every vertex into <paramref name="consumer"/>.</summary>
@@ -81,7 +87,7 @@ public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
         where TConsumer : IVertexConsumer<TVertex>, allows ref struct
     {
         ThrowIfDisposed();
-        ReadOnlySpan<TVertex> span = _vertices.AsReadOnlySpan();
+        ReadOnlySpan<TVertex> span = Vertices;
         for (int i = 0; i < span.Length; i++)
         {
             consumer.Accept(in span[i]);
@@ -94,7 +100,7 @@ public sealed unsafe class NativeMesh<TVertex, TIndex> : IDisposable
         where TConsumer : ITriangleConsumer<TIndex>, allows ref struct
     {
         ThrowIfDisposed();
-        ReadOnlySpan<TIndex> span = _indices.AsReadOnlySpan();
+        ReadOnlySpan<TIndex> span = Indices;
         for (int i = 0; i < span.Length; i += 3)
         {
             consumer.Accept(span[i], span[i + 1], span[i + 2]);
