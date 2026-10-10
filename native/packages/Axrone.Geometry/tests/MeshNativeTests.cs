@@ -3,6 +3,7 @@ using Xunit;
 using FluentAssertions;
 using Axrone.Geometry;
 using Axrone.Numeric;
+using Axrone.Utility.NativeBuffer;
 
 namespace Axrone.Geometry.Tests;
 
