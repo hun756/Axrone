@@ -51,6 +51,9 @@
          through IComparable only; relational operator sets would only duplicate
          CompareTo over single-field values. -->
     <NoWarn>$(NoWarn);CA1036</NoWarn>
+    <!-- CA2201: IndexOutOfRangeException is reserved — a bad native index names no
+         live slot, and IndexOutOfRangeException is exactly what callers catch. -->
+    <NoWarn>$(NoWarn);CA2201</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

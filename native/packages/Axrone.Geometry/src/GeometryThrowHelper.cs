@@ -87,6 +87,36 @@ internal static class ThrowHelper
     }
 
     /// <summary>
+    /// Rejects an index past the end of a native buffer.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowIndexOutOfRange()
+    {
+        throw new IndexOutOfRangeException("Native memory index was out of allocated range.");
+    }
+
+    /// <summary>
+    /// Rejects use of a disposed mesh object.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposed(string objectName)
+    {
+        throw new ObjectDisposedException(objectName);
+    }
+
+    /// <summary>
+    /// Rejects a pipeline operation in the wrong stage.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidOperation(string message)
+    {
+        throw new InvalidOperationException(message);
+    }
+
+    /// <summary>
     /// Rejects text that does not spell a valid shape under the parser grammar.
     /// </summary>
     [DoesNotReturn]
