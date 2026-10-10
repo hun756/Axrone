@@ -86,3 +86,36 @@ public readonly struct ArenaBuilder<TPhase> where TPhase : struct
     public ArenaBuilder<ConfiguredArenaState> WithZeroOnReset(bool zeroOnReset) =>
         new(_initialChunkSize, _maxChunkSize, _defaultAlignment, zeroOnReset);
 }
+
+/// <summary>Build entry points enabled once the builder is configured.</summary>
+public static class ConfiguredArenaBuilderExtensions
+{
+    /// <summary>Builds an arena with explicit policies.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Arena<TGrowth, TBackoff, TMetrics> Build<TGrowth, TBackoff, TMetrics>(
+        this ArenaBuilder<ConfiguredArenaState> builder)
+        where TGrowth : struct, IArenaGrowthPolicy
+        where TBackoff : struct, IBackoffPolicy
+        where TMetrics : struct, IArenaMetricsSink
+    {
+        ArenaOptions options = new()
+        {
+            InitialChunkSize = builder._initialChunkSize,
+            MaxChunkSize = builder._maxChunkSize,
+            DefaultAlignment = builder._defaultAlignment,
+            ZeroOnReset = builder._zeroOnReset
+        };
+        return new Arena<TGrowth, TBackoff, TMetrics>(options);
+    }
+
+    /// <summary>Builds an arena with the default policies.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Arena Build(this ArenaBuilder<ConfiguredArenaState> builder) =>
+        new(new ArenaOptions
+        {
+            InitialChunkSize = builder._initialChunkSize,
+            MaxChunkSize = builder._maxChunkSize,
+            DefaultAlignment = builder._defaultAlignment,
+            ZeroOnReset = builder._zeroOnReset
+        });
+}
