@@ -22,6 +22,14 @@ public readonly record struct ByteSize(nuint Value) : IComparable<ByteSize>, ISp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ByteSize FromMegabytes(nuint mb) => new(checked(mb * 1024 * 1024));
 
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize operator +(ByteSize left, ByteSize right) => new(checked(left.Value + right.Value));
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ByteSize operator -(ByteSize left, ByteSize right) => new(checked(left.Value - right.Value));
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator nuint(ByteSize size) => size.Value;
 

@@ -29,6 +29,16 @@ public class ByteSizeFactoryTests
     }
 
     [Fact]
+    public void Arithmetic_Checked()
+    {
+        (ByteSize.FromBytes(100) + ByteSize.FromBytes(28)).Value.Should().Be((nuint)128);
+        (ByteSize.FromBytes(100) - ByteSize.FromBytes(28)).Value.Should().Be((nuint)72);
+        Action overflow = () => { _ = ByteSize.FromBytes(nuint.MaxValue) + ByteSize.FromBytes(1); };
+
+        overflow.Should().Throw<OverflowException>();
+    }
+
+    [Fact]
     public void PointerAlignment_MatchesPointerSize()
     {
         Alignment.PointerAlignment.Value.Should().Be((uint)UIntPtr.Size);
