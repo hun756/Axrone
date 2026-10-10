@@ -40,6 +40,17 @@
          typestate entry point. The stage parameter only exists on the generic builder,
          so the factory cannot live on a non-generic type without losing the stage. -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1008: Enums need a zero member — GLAttributeType mirrors GL type constants
+         where zero is not a valid type; a None member would be a lie the upload path
+         could accidentally select. -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA1720: Identifier contains type name — Float/Short/Int are the GL type names
+         themselves (cf. GLConst); renaming them would break the GL parity. -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1036: Comparison operators on comparable types — the mesh nominals order
+         through IComparable only; relational operator sets would only duplicate
+         CompareTo over single-field values. -->
+    <NoWarn>$(NoWarn);CA1036</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
