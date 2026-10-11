@@ -125,4 +125,36 @@ internal static class ThrowHelper
     {
         throw new FormatException("The string was not recognized as a valid Aabb3D.");
     }
+
+    /// <summary>
+    /// Rejects a fattening margin that is negative or NaN, which would shrink stored
+    /// bounds instead of padding them and let a moving item outrun its own box.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static float ThrowInvalidFatMargin()
+    {
+        throw new ArgumentOutOfRangeException("fatMargin", "Fat margin must not be negative.");
+    }
+
+    /// <summary>
+    /// Rejects a velocity multiplier below one or NaN, which would budget less slack
+    /// than the stationary margin for an item that actually moves.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static float ThrowInvalidVelocityMultiplier()
+    {
+        throw new ArgumentOutOfRangeException("velocityMultiplier", "Velocity multiplier must be at least 1.");
+    }
+
+    /// <summary>
+    /// Rejects a batch insert whose handle span cannot take one handle per entry.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowHandlesSpanTooShort()
+    {
+        throw new ArgumentException("Destination handles span is shorter than the entries span.", "handles");
+    }
 }

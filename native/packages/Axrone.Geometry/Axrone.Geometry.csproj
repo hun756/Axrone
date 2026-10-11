@@ -57,6 +57,9 @@
     <!-- CA2201: IndexOutOfRangeException is reserved — a bad native index names no
          live slot, and IndexOutOfRangeException is exactly what callers catch. -->
     <NoWarn>$(NoWarn);CA2201</NoWarn>
+    <!-- CA1711: UpdateEx is the spec-parity result-reporting twin of Update — the Ex
+         suffix is the ported contract name, not a versioned overload set. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
