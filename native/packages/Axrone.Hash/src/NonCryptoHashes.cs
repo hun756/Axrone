@@ -424,17 +424,9 @@ public struct Murmur3_128Accumulator : IHashAccumulator<Murmur3_128Accumulator, 
         ulong h1 = _h1 ^ _totalLength;
         ulong h2 = _h2 ^ _totalLength;
         h1 += h2; h2 += h1;
-        h1 = Fmix64(h1); h2 = Fmix64(h2);
+        h1 = HashMixing.Fmix64(h1); h2 = HashMixing.Fmix64(h2);
         h1 += h2; h2 += h1;
         res1 = h1; res2 = h2;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ulong Fmix64(ulong k)
-    {
-        k ^= k >> 33; k *= 0xff51afd7ed558ccdUL;
-        k ^= k >> 33; k *= 0xc4ceb9fe1a85ec53UL;
-        k ^= k >> 33; return k;
     }
 
     public void Dispose() => Reset();
