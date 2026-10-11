@@ -152,7 +152,12 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         NodeCapacity initialNodeCapacity = default,
         ItemCapacity initialItemCapacity = default)
     {
-        if (IsInvalidDomain(in rootBounds))
+        // The root needs strictly positive volume: unlike items (which may be
+        // degenerate), a flat root would misfile every octant decision.
+        Vec3 rootMin = rootBounds.Min;
+        Vec3 rootMax = rootBounds.Max;
+        if (IsInvalidDomain(in rootBounds) ||
+            rootMin.X >= rootMax.X || rootMin.Y >= rootMax.Y || rootMin.Z >= rootMax.Z)
         {
             ThrowHelper.ThrowInvalidBounds(in rootBounds);
         }
