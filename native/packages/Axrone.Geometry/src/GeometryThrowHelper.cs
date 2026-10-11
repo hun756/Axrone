@@ -215,4 +215,93 @@ internal static class ThrowHelper
     {
         throw new InvalidOperationException("The spatial component has settled/completed and rejects further mutations.");
     }
+
+    /// <summary>
+    /// Rejects use of a disposed spatial component, folding the throw into an expression.
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    /// <param name="objectName">The disposed object to report.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowObjectDisposed<TReturn>(string objectName)
+    {
+        throw new ObjectDisposedException(objectName);
+    }
+
+    /// <summary>
+    /// Rejects an octree capacity below its floor: eight node slots (one child
+    /// block) and sixteen item slots.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCapacity(string paramName)
+    {
+        throw new ArgumentOutOfRangeException(paramName, "Capacities must satisfy NodeCapacity >= 8 and ItemCapacity >= 16.");
+    }
+
+    /// <summary>
+    /// Rejects bounds that are NaN or not strictly ordered: an octree domain
+    /// must have positive volume, so touching corners are already invalid.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidBounds(in Aabb3D bounds)
+    {
+        throw new ArgumentException($"Invalid bounding dimensions: Min [{bounds.Min}] must be strictly less than Max [{bounds.Max}].");
+    }
+
+    /// <summary>
+    /// Rejects bounds that are NaN or not strictly ordered, folding the throw
+    /// into an expression.
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowInvalidBounds<TReturn>(in Aabb3D bounds)
+    {
+        throw new ArgumentException($"Invalid bounding dimensions: Min [{bounds.Min}] must be strictly less than Max [{bounds.Max}].");
+    }
+
+    /// <summary>
+    /// Rejects an insert whose bounds escape the root domain.
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowOutOfBounds<TReturn>(in Aabb3D itemBounds, in Aabb3D rootBounds)
+    {
+        throw new ArgumentOutOfRangeException(nameof(itemBounds), $"Bounds [{itemBounds.Min} -> {itemBounds.Max}] exceed domain [{rootBounds.Min} -> {rootBounds.Max}].");
+    }
+
+    /// <summary>
+    /// Rejects an unrecognized insert outcome, which means the match is missing a case.
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowInvalidOutcome<TReturn>(InsertOutcome outcome)
+    {
+        throw new InvalidOperationException($"Unrecognized operation outcome: {outcome}.");
+    }
+
+    /// <summary>
+    /// Rejects a traversal that outgrew its fixed 128-slot stack: the tree is
+    /// deeper than the stack, which means corruption or a degenerate build.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowStackDepthExceeded()
+    {
+        throw new InvalidOperationException("Octree traversal stack capacity of 128 exceeded.");
+    }
+
+    /// <summary>
+    /// Reports a broken intrusive link chain: the slot is gone but no list holds it.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCorruptionDetected()
+    {
+        throw new InvalidOperationException("Internal octree intrusive link-chain corruption detected.");
+    }
 }
