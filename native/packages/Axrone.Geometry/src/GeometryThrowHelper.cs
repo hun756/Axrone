@@ -1,6 +1,7 @@
 namespace Axrone.Geometry;
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 
 /// <summary>
 /// Cold-path argument validation and error reporting. Every member here is a leaf that
@@ -180,5 +181,38 @@ internal static class ThrowHelper
     public static TReturn ThrowInvalidOperation<TReturn>(string message)
     {
         throw new InvalidOperationException(message);
+    }
+
+    /// <summary>
+    /// Rejects a quad-tree root that is inverted: every insert would fall
+    /// outside it, so the tree would be born useless.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidQuadBounds()
+    {
+        throw new ArgumentException("Quad-tree root bounds must be valid (min corner must not exceed max corner).", "rootBounds");
+    }
+
+    /// <summary>
+    /// Rethrows the failure that faulted a spatial component, or reports the
+    /// terminal faulted state when no failure was captured.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowComponentFaulted(ExceptionDispatchInfo? info)
+    {
+        info?.Throw();
+        throw new InvalidOperationException("The spatial component is in a terminal faulted state.");
+    }
+
+    /// <summary>
+    /// Rejects a mutation against a component whose submission stream has settled.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowComponentCompleted()
+    {
+        throw new InvalidOperationException("The spatial component has settled/completed and rejects further mutations.");
     }
 }
