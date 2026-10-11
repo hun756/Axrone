@@ -1,5 +1,7 @@
 namespace Axrone.Geometry;
 
+using Axrone.Hash;
+
 /// <summary>
 /// Open-addressing midpoint cache for icosphere subdivision: maps an unordered
 /// edge to its midpoint vertex. Grows geometrically past 75% load so probes
@@ -47,13 +49,7 @@ internal unsafe struct UnmanagedEdgeTable : IDisposable
         uint max = v0 < v1 ? v1 : v0;
         ulong key = (((ulong)min) << 32) | max | 0x8000000000000000UL;
 
-        ulong x = key;
-        x ^= x >> 33;
-        x *= 0xff51afd7ed558ccdUL;
-        x ^= x >> 33;
-        x *= 0xc4ceb9fe1a85ec53UL;
-        x ^= x >> 33;
-        uint idx = (uint)x & _mask;
+        uint idx = (uint)HashMixing.Fmix64(key) & _mask;
 
         while (true)
         {
@@ -89,13 +85,7 @@ internal unsafe struct UnmanagedEdgeTable : IDisposable
             ref Slot slot = ref _slots[i];
             if (slot.Key == 0) continue;
 
-            ulong x = slot.Key;
-            x ^= x >> 33;
-            x *= 0xff51afd7ed558ccdUL;
-            x ^= x >> 33;
-            x *= 0xc4ceb9fe1a85ec53UL;
-            x ^= x >> 33;
-            uint idx = (uint)x & newMask;
+            uint idx = (uint)HashMixing.Fmix64(slot.Key) & newMask;
 
             while (newSlots[idx].Key != 0)
             {
