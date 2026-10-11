@@ -157,4 +157,28 @@ internal static class ThrowHelper
     {
         throw new ArgumentException("Destination handles span is shorter than the entries span.", "handles");
     }
+
+    /// <summary>
+    /// Rejects a value outside the permissible domain range of the named parameter.
+    /// </summary>
+    /// <param name="paramName">The parameter that received the bad value.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentOutOfRange(string paramName)
+    {
+        throw new ArgumentOutOfRangeException(paramName, "Value is outside the permissible domain range.");
+    }
+
+    /// <summary>
+    /// Rejects an operation with no valid outcome, folding the throw into an
+    /// expression (for example the default arm of a discriminated-union match).
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    /// <param name="message">The failure to report.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowInvalidOperation<TReturn>(string message)
+    {
+        throw new InvalidOperationException(message);
+    }
 }

@@ -135,6 +135,9 @@ public readonly record struct Distance(float Value) : IComparable<Distance>
     /// <summary>Coincident contact.</summary>
     public static Distance Zero => new(0.0f);
 
+    /// <summary>Default self-intersection guard: hits closer than this are ignored.</summary>
+    public static Distance DefaultEpsilon => new(1e-4f);
+
     /// <summary>No contact; the "no candidate" answer of a ray query.</summary>
     public static Distance PositiveInfinity => new(float.PositiveInfinity);
 
