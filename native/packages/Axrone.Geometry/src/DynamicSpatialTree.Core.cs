@@ -396,7 +396,12 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             _state.FreeList = new NodeIndex(0);
             _state.Count = 0;
 
-            InitializeFreeRange(_nodes, 0, _state.Capacity);
+            // Bump every slot's epoch instead of resetting it: per-slot
+            // generations only move forward (fresh rents stamp the current
+            // value, recycles bump it), so last+1 can never equal an
+            // outstanding stale handle. Resetting to Initial would re-issue
+            // generation 1 and resurrect pre-Clear handles.
+            InitializeFreeRange(_nodes, 0, _state.Capacity, bumpGenerations: true);
         }
     }
 
@@ -435,7 +440,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
     private static float HalfArea(Aabb3D box) => box.SurfaceArea() * 0.5f;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void InitializeFreeRange(DynamicTreeNode<T>[] nodes, int start, int length)
+    private static void InitializeFreeRange(DynamicTreeNode<T>[] nodes, int start, int length, bool bumpGenerations = false)
     {
         int end = start + length;
         for (int i = start; i < end - 1; i++)
@@ -444,14 +449,14 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             nodes[i].Left = NodeIndex.Null;
             nodes[i].Right = NodeIndex.Null;
             nodes[i].Height = -1;
-            nodes[i].Generation = NodeGeneration.Initial;
+            nodes[i].Generation = bumpGenerations ? nodes[i].Generation.Next() : NodeGeneration.Initial;
         }
 
         nodes[end - 1].Parent = NodeIndex.Null;
         nodes[end - 1].Left = NodeIndex.Null;
         nodes[end - 1].Right = NodeIndex.Null;
         nodes[end - 1].Height = -1;
-        nodes[end - 1].Generation = NodeGeneration.Initial;
+        nodes[end - 1].Generation = bumpGenerations ? nodes[end - 1].Generation.Next() : NodeGeneration.Initial;
     }
 
     private void InsertLeaf(NodeIndex leaf)

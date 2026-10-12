@@ -367,6 +367,25 @@ public class SpatialPartitioningTests
     }
 
     [Fact]
+    public void Clear_InvalidatesOldHandles()
+    {
+        using var tree = CreateTree();
+        SpatialHandle old = tree.Insert(Box(0, 0, 0, 1, 1, 1), "a");
+
+        tree.Clear();
+        tree.Count.Should().Be(0);
+
+        SpatialHandle next = tree.Insert(Box(5, 5, 5, 6, 6, 6), "b");
+        next.Should().NotBe(old);
+        tree.TryGetBounds(old, out _).Should().BeFalse();
+        tree.TryGetPayload(old, out _).Should().BeFalse();
+        tree.Remove(old).Should().BeFalse();
+        tree.UpdateEx(old, Box(0, 0, 0, 1, 1, 1)).Outcome.Should().Be(TreeUpdateOutcome.HandleNotFound);
+        tree.TryGetPayload(next, out string? payload).Should().BeTrue();
+        payload.Should().Be("b");
+    }
+
+    [Fact]
     public void Nominals_RoundTrip()
     {
         SpatialHandle handle = SpatialHandle.Create(new NodeIndex(7), new NodeGeneration(3));

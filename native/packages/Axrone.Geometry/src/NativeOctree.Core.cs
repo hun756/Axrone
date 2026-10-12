@@ -143,6 +143,14 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     private uint _itemWatermark;
     private SlotIndex _freeItemHead;
 
+    /// <summary>
+    /// Monotonic generation source: every rent stamps the next value, so a
+    /// generation is never reused while the counter lives (4B rents). Zero is
+    /// skipped because it means "unallocated". Survives <see cref="Clear"/>
+    /// untouched, which is what keeps pre-Clear handles dead.
+    /// </summary>
+    private uint _itemGenCounter;
+
     private RetiredBuffersTable _retiredBlocks;
     private int _retiredCount;
 
@@ -875,6 +883,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         {
             SlotIndex slot = _freeItemHead;
             _freeItemHead = _items[slot.Value].NextItemIndex;
+            _items[slot.Value].Generation = new Generation(NextItemGeneration());
             return slot;
         }
 
@@ -884,14 +893,26 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         }
 
         SlotIndex newSlot = new(_itemWatermark++);
-        _items[newSlot.Value].Generation = Generation.Initial;
+        _items[newSlot.Value].Generation = new Generation(NextItemGeneration());
         return newSlot;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private uint NextItemGeneration()
+    {
+        uint next = _itemGenCounter + 1;
+        _itemGenCounter = next == 0 ? 1 : next;
+        return _itemGenCounter;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private unsafe void ReturnItemSlot(SlotIndex slot)
     {
         ref OctreeItem<T> item = ref _items[slot.Value];
+        // Bump on return AND stamp on rent: the bump kills stale handles
+        // while the slot sits free (double-remove, use-after-remove), the
+        // rent stamp kills them across Clear (which memsets history away).
+        // Either alone leaves a resurrection window.
         item.Generation = item.Generation.Next();
         item.NextItemIndex = _freeItemHead;
         _freeItemHead = slot;
