@@ -31,6 +31,36 @@ public readonly struct WorldDef
 
     /// <summary>Tuning of the broadphase tree.</summary>
     public TreeOptions BroadphaseOptions { get; init; } = new TreeOptions();
+
+    /// <summary>Velocity sweeps per step; zero skips the velocity pass.</summary>
+    public int VelocityIterations
+    {
+        get => field;
+        init
+        {
+            if (value < 0)
+            {
+                ThrowHelper.ThrowInvalidOperation("Velocity iterations must not be negative.");
+            }
+
+            field = value;
+        }
+    } = 8;
+
+    /// <summary>Position sweeps per step; zero skips the position pass.</summary>
+    public int PositionIterations
+    {
+        get => field;
+        init
+        {
+            if (value < 0)
+            {
+                ThrowHelper.ThrowInvalidOperation("Position iterations must not be negative.");
+            }
+
+            field = value;
+        }
+    } = 3;
 }
 
 /// <summary>
@@ -112,6 +142,12 @@ public sealed class World : IDisposable
     /// <summary>Gravity of the world.</summary>
     public Vec2 Gravity { get; set; }
 
+    /// <summary>Velocity sweeps per step.</summary>
+    public int VelocityIterations { get; set; }
+
+    /// <summary>Position sweeps per step.</summary>
+    public int PositionIterations { get; set; }
+
     /// <summary>Creates a world with default tuning.</summary>
     public World()
         : this(new WorldDef())
@@ -128,6 +164,8 @@ public sealed class World : IDisposable
     public World(in WorldDef definition)
     {
         Gravity = definition.Gravity;
+        VelocityIterations = definition.VelocityIterations;
+        PositionIterations = definition.PositionIterations;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _tree = new DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink>(definition.BroadphaseOptions);
@@ -178,18 +216,68 @@ public sealed class World : IDisposable
     }
 
     /// <summary>
-    /// Advances the world by <paramref name="dt"/>: integrates awake bodies,
-    /// syncs their shapes into the broadphase, collects overlapping pairs,
-    /// and evaluates one manifold per unfiltered pair with the previous
-    /// step's cache carried over by shape-pair identity.
+    /// Advances the world by <paramref name="dt"/>: integrates velocities,
+    /// syncs the broadphase, collects pairs into manifolds with warm-start
+    /// carry, solves velocities, integrates positions, re-syncs, and solves
+    /// positions. New pairs wake sleeping dynamics.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Step(float dt)
     {
         ThrowIfDisposed();
 
-        _bodies.Integrate(dt, Gravity);
+        _bodies.IntegrateVelocities(dt, Gravity);
+        SyncAwakeBodies();
 
+        Contact[] built = _previous;
+        _previous = _contacts;
+        _previousCount = _contactCount;
+        _contacts = built;
+        _contactCount = 0;
+
+        var collector = new PairCollector(this);
+        World self = this;
+        _tree.FindPairs(ref collector, ref self);
+
+        for (int i = 0; i < _contactCount; i++)
+        {
+            ContactCache carried = default;
+            bool matched = false;
+            for (int j = 0; j < _previousCount; j++)
+            {
+                if (_previous[j].ShapeA == _contacts[i].ShapeA && _previous[j].ShapeB == _contacts[i].ShapeB)
+                {
+                    carried = _previous[j].Cache;
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched)
+            {
+                WakePair(_contacts[i].BodyA, _contacts[i].BodyB);
+            }
+
+            Contact updated = _contacts[i];
+            ContactManifold manifold = updated.Manifold;
+            carried.WarmStart(ref manifold);
+            updated.Manifold = manifold;
+            carried.Store(in manifold);
+            updated.Cache = carried;
+            _contacts[i] = updated;
+        }
+
+        ContactSolver.SolveVelocity(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), VelocityIterations);
+
+        _bodies.IntegratePositions(dt);
+        SyncAwakeBodies();
+
+        ContactSolver.SolvePositions(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), PositionIterations);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void SyncAwakeBodies()
+    {
         for (int slot = 0; slot < _bodies.SlotCapacity; slot++)
         {
             if (!_bodies.IsSlotLive(slot))
@@ -206,36 +294,22 @@ public sealed class World : IDisposable
 
             _shapes.SyncBody(_bodies, _tree, bodyId);
         }
+    }
 
-        Contact[] built = _previous;
-        _previous = _contacts;
-        _previousCount = _contactCount;
-        _contacts = built;
-        _contactCount = 0;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WakePair(BodyId bodyA, BodyId bodyB)
+    {
+        ref BodyState stateA = ref _bodies.Slot(bodyA);
+        ref BodyState stateB = ref _bodies.Slot(bodyB);
 
-        var collector = new PairCollector(this);
-        World self = this;
-        _tree.FindPairs(ref collector, ref self);
-
-        for (int i = 0; i < _contactCount; i++)
+        if (stateA.Type == BodyType.Dynamic && (stateA.Flags & BodyFlags.Awake) == 0)
         {
-            ContactCache carried = default;
-            for (int j = 0; j < _previousCount; j++)
-            {
-                if (_previous[j].ShapeA == _contacts[i].ShapeA && _previous[j].ShapeB == _contacts[i].ShapeB)
-                {
-                    carried = _previous[j].Cache;
-                    break;
-                }
-            }
+            _bodies.SetAwake(bodyA, true);
+        }
 
-            Contact updated = _contacts[i];
-            ContactManifold manifold = updated.Manifold;
-            carried.WarmStart(ref manifold);
-            updated.Manifold = manifold;
-            carried.Store(in manifold);
-            updated.Cache = carried;
-            _contacts[i] = updated;
+        if (stateB.Type == BodyType.Dynamic && (stateB.Flags & BodyFlags.Awake) == 0)
+        {
+            _bodies.SetAwake(bodyB, true);
         }
     }
 

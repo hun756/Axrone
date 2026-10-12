@@ -78,6 +78,9 @@ public struct ContactPoint : IEquatable<ContactPoint>
     /// <summary>Accumulated tangent impulse; solver-owned.</summary>
     public float TangentImpulse { get; set; }
 
+    /// <summary>Restitution bias for the current step; solver-owned, refreshed every step.</summary>
+    public float VelocityBias { get; set; }
+
     /// <summary>Creates a contact with zeroed impulses.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ContactPoint(Vec2 positionA, Vec2 positionB, float separation, ContactId id)
@@ -88,6 +91,7 @@ public struct ContactPoint : IEquatable<ContactPoint>
         Id = id;
         NormalImpulse = 0.0f;
         TangentImpulse = 0.0f;
+        VelocityBias = 0.0f;
     }
 
     /// <summary>Returns the same contact with the shape sides swapped.</summary>
@@ -97,6 +101,7 @@ public struct ContactPoint : IEquatable<ContactPoint>
         {
             NormalImpulse = NormalImpulse,
             TangentImpulse = TangentImpulse,
+            VelocityBias = VelocityBias,
         };
 
     /// <inheritdoc/>
@@ -199,6 +204,19 @@ public struct ContactManifold : IEquatable<ContactManifold>
 
         _point1.NormalImpulse = normalImpulse;
         _point1.TangentImpulse = tangentImpulse;
+    }
+
+    /// <summary>Writes the restitution bias of the contact at <paramref name="index"/> in place.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetVelocityBias(int index, float bias)
+    {
+        if (index == 0)
+        {
+            _point0.VelocityBias = bias;
+            return;
+        }
+
+        _point1.VelocityBias = bias;
     }
 
     /// <summary>Reads the contact at <paramref name="index"/> by value.</summary>

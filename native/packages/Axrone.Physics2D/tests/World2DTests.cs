@@ -47,7 +47,9 @@ public sealed class World2DTests : IDisposable
 
         _world.Step(1f / 60f);
 
-        _world.Bodies.GetTransform(box).Position.Y.Should().BeLessThan(0.25f);
+        float settledY = _world.Bodies.GetTransform(box).Position.Y;
+        settledY.Should().BeGreaterThan(0.2f);
+        settledY.Should().BeLessThan(0.6f);
         _world.ContactCount.Should().Be(1);
         _world.GetContact(0).Manifold.Normal.Y.Should().BeApproximately(1f, Tolerance);
     }

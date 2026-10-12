@@ -525,10 +525,14 @@ public sealed class ShapeStore
             inertia = 0.0f;
         }
 
+        // Static and kinematic bodies answer with infinite mass no matter
+        // what is attached: the raw totals stay readable, but the inverses
+        // that the solver multiplies by are pinned to zero.
+        bool infinite = body.Type != BodyType.Dynamic;
         body.Mass = totalMass;
-        body.InverseMass = 1.0f / totalMass;
+        body.InverseMass = !infinite ? 1.0f / totalMass : 0.0f;
         body.Inertia = inertia;
-        body.InverseInertia = (body.Flags & BodyFlags.FixedRotation) == 0 && inertia > 0.0f ? 1.0f / inertia : 0.0f;
+        body.InverseInertia = !infinite && (body.Flags & BodyFlags.FixedRotation) == 0 && inertia > 0.0f ? 1.0f / inertia : 0.0f;
         body.LocalCenter = center;
     }
 

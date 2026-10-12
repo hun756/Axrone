@@ -253,10 +253,11 @@ public sealed class BodyStore
         }
 
         ref BodyState body = ref Slot(id);
+        bool infinite = body.Type != BodyType.Dynamic;
         body.Mass = mass;
-        body.InverseMass = mass > 0.0f ? 1.0f / mass : 0.0f;
+        body.InverseMass = !infinite && mass > 0.0f ? 1.0f / mass : 0.0f;
         body.Inertia = inertia;
-        body.InverseInertia = inertia > 0.0f && (body.Flags & BodyFlags.FixedRotation) == 0 ? 1.0f / inertia : 0.0f;
+        body.InverseInertia = !infinite && inertia > 0.0f && (body.Flags & BodyFlags.FixedRotation) == 0 ? 1.0f / inertia : 0.0f;
     }
 
     /// <summary>Reads the mass of a body.</summary>
@@ -281,6 +282,60 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Integrate(float dt, Vec2 gravity)
     {
+        IntegrateVelocities(dt, gravity);
+        IntegratePositions(dt);
+    }
+
+    /// <summary>
+    /// Force half of the step: gravity and accumulated forces integrate into
+    /// velocities with damping applied, then forces clear. Positions untouched.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void IntegrateVelocities(float dt, Vec2 gravity)
+    {
+        if (!(dt > 0.0f))
+        {
+            ThrowHelper.ThrowInvalidOperation("Time step must be positive.");
+        }
+
+        Span<BodyState> bodies = _bodies.AsSpan(0, _capacity);
+        for (int i = 0; i < bodies.Length; i++)
+        {
+            ref BodyState body = ref bodies[i];
+            if ((body.Flags & BodyFlags.Awake) == 0)
+            {
+                continue;
+            }
+
+            if (body.Type != BodyType.Dynamic)
+            {
+                continue;
+            }
+
+            body.LinearVelocity += dt * ((gravity * body.GravityScale) + (body.Force * body.InverseMass));
+            body.AngularVelocity += dt * body.Torque * body.InverseInertia;
+
+            body.LinearVelocity *= 1.0f / (1.0f + (dt * body.LinearDamping));
+            body.AngularVelocity *= 1.0f / (1.0f + (dt * body.AngularDamping));
+
+            if ((body.Flags & BodyFlags.FixedRotation) != 0)
+            {
+                body.AngularVelocity = 0.0f;
+            }
+
+            body.Force = Vec2.Zero;
+            body.Torque = 0.0f;
+        }
+    }
+
+    /// <summary>
+    /// Position half of the step: velocities integrate into frames. Static and
+    /// sleeping bodies never move; kinematic bodies translate on velocity
+    /// alone.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void IntegratePositions(float dt)
+    {
         if (!(dt > 0.0f))
         {
             ThrowHelper.ThrowInvalidOperation("Time step must be positive.");
@@ -300,33 +355,10 @@ public sealed class BodyStore
                 continue;
             }
 
-            if (body.Type == BodyType.Kinematic)
-            {
-                body.Position += body.LinearVelocity * dt;
-                float angle = MathF.Atan2(body.Sin, body.Cos) + (body.AngularVelocity * dt);
-                body.Cos = MathF.Cos(angle);
-                body.Sin = MathF.Sin(angle);
-                continue;
-            }
-
-            body.LinearVelocity += dt * ((gravity * body.GravityScale) + (body.Force * body.InverseMass));
-            body.AngularVelocity += dt * body.Torque * body.InverseInertia;
-
-            body.LinearVelocity *= 1.0f / (1.0f + (dt * body.LinearDamping));
-            body.AngularVelocity *= 1.0f / (1.0f + (dt * body.AngularDamping));
-
-            if ((body.Flags & BodyFlags.FixedRotation) != 0)
-            {
-                body.AngularVelocity = 0.0f;
-            }
-
             body.Position += body.LinearVelocity * dt;
             float newAngle = MathF.Atan2(body.Sin, body.Cos) + (body.AngularVelocity * dt);
             body.Cos = MathF.Cos(newAngle);
             body.Sin = MathF.Sin(newAngle);
-
-            body.Force = Vec2.Zero;
-            body.Torque = 0.0f;
         }
     }
 
