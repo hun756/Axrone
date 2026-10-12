@@ -442,6 +442,443 @@ public static class Narrowphase2D
     public static bool EvaluateCapsuleCapsule(in Capsule2D a, in Capsule2D b, out ContactManifold manifold) =>
         EvaluateEpaFallback(in a, in b, out manifold);
 
+    /// <summary>Evaluates a disc against a segment: closest-point contact, double-sided.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateCircleEdge(in Circle2 circle, in Edge2D edge, out ContactManifold manifold)
+    {
+        Vec2 axis = edge.P1 - edge.P0;
+        float lengthSq = axis.LengthSquared();
+        float t = lengthSq < DegenerateLengthSquared
+            ? 0.0f
+            : Vec2.Dot(circle.Center - edge.P0, axis) / lengthSq;
+        t = Math.Clamp(t, 0.0f, 1.0f);
+        Vec2 closest = edge.P0 + (axis * t);
+
+        Vec2 toEdge = closest - circle.Center;
+        float distSq = toEdge.LengthSquared();
+        if (distSq > circle.Radius * circle.Radius)
+        {
+            manifold = ContactManifold.Empty;
+            return false;
+        }
+
+        Vec2 normal;
+        if (distSq < DegenerateLengthSquared)
+        {
+            Vec2 edgeNormal = new(-axis.Y, axis.X);
+            float normalLenSq = edgeNormal.LengthSquared();
+            normal = normalLenSq < DegenerateLengthSquared
+                ? new Vec2(1.0f, 0.0f)
+                : edgeNormal * (1.0f / MathF.Sqrt(normalLenSq));
+        }
+        else
+        {
+            float dist = MathF.Sqrt(distSq);
+            normal = toEdge * (1.0f / dist);
+        }
+
+        float depth = circle.Radius - MathF.Sqrt(distSq);
+        Vec2 pointA = circle.Center + (normal * circle.Radius);
+        manifold = new ContactManifold(
+            normal,
+            new ContactPoint(pointA, closest, -depth, ContactId.Create(0, 0, flipped: false)));
+        return true;
+    }
+
+    /// <summary>Evaluates a segment against a disc.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateEdgeCircle(in Edge2D edge, in Circle2 circle, out ContactManifold manifold)
+    {
+        bool hit = EvaluateCircleEdge(in circle, in edge, out ContactManifold inner);
+        manifold = hit ? inner.Flipped() : ContactManifold.Empty;
+        return hit;
+    }
+
+    /// <summary>Evaluates a stadium against a segment via segment-segment closest points.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateCapsuleEdge(in Capsule2D capsule, in Edge2D edge, out ContactManifold manifold)
+    {
+        SegmentClosest(capsule.P0, capsule.P1, edge.P0, edge.P1,
+            out Vec2 onCapsule, out Vec2 onEdge, out float distSq);
+
+        if (distSq > capsule.Radius * capsule.Radius)
+        {
+            manifold = ContactManifold.Empty;
+            return false;
+        }
+
+        Vec2 toEdge = onEdge - onCapsule;
+        float dist = MathF.Sqrt(distSq);
+        Vec2 normal;
+        if (distSq < DegenerateLengthSquared)
+        {
+            Vec2 axis = edge.P1 - edge.P0;
+            Vec2 edgeNormal = new(-axis.Y, axis.X);
+            float normalLenSq = edgeNormal.LengthSquared();
+            normal = normalLenSq < DegenerateLengthSquared
+                ? new Vec2(1.0f, 0.0f)
+                : edgeNormal * (1.0f / MathF.Sqrt(normalLenSq));
+        }
+        else
+        {
+            normal = toEdge * (1.0f / dist);
+        }
+
+        float depth = capsule.Radius - dist;
+        Vec2 pointA = onCapsule + (normal * capsule.Radius);
+        manifold = new ContactManifold(
+            normal,
+            new ContactPoint(pointA, onEdge, -depth, ContactId.Create(0, 0, flipped: false)));
+        return true;
+    }
+
+    /// <summary>Evaluates a segment against a stadium.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateEdgeCapsule(in Edge2D edge, in Capsule2D capsule, out ContactManifold manifold)
+    {
+        bool hit = EvaluateCapsuleEdge(in capsule, in edge, out ContactManifold inner);
+        manifold = hit ? inner.Flipped() : ContactManifold.Empty;
+        return hit;
+    }
+
+    /// <summary>Evaluates a convex polygon against a segment with SAT plus face clipping.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluatePolygonEdge(in Polygon2D polygon, in Edge2D edge, out ContactManifold manifold)
+    {
+        ReadOnlySpan<Vec2> vertices = polygon.Vertices;
+        ReadOnlySpan<Vec2> normals = polygon.Normals;
+
+        float faceSep = float.NegativeInfinity;
+        int bestFace = 0;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            float sep = MathF.Min(
+                Vec2.Dot(normals[i], edge.P0 - vertices[i]),
+                Vec2.Dot(normals[i], edge.P1 - vertices[i]));
+            if (sep > faceSep)
+            {
+                faceSep = sep;
+                bestFace = i;
+            }
+        }
+
+        Vec2 edgeAxis = edge.P1 - edge.P0;
+        float edgeLenSq = edgeAxis.LengthSquared();
+        float edgeSep = float.NegativeInfinity;
+        Vec2 edgeNormal = new Vec2(0.0f, 1.0f);
+        if (edgeLenSq >= DegenerateLengthSquared)
+        {
+            edgeNormal = new Vec2(-edgeAxis.Y, edgeAxis.X) * (1.0f / MathF.Sqrt(edgeLenSq));
+            for (int sign = -1; sign <= 1; sign += 2)
+            {
+                Vec2 n = edgeNormal * (float)sign;
+                float sep = float.PositiveInfinity;
+                for (int i = 0; i < vertices.Length; i++)
+                {
+                    float s = Vec2.Dot(n, vertices[i] - edge.P0);
+                    if (s < sep)
+                    {
+                        sep = s;
+                    }
+                }
+
+                if (sep > edgeSep)
+                {
+                    edgeSep = sep;
+                }
+            }
+        }
+
+        if (faceSep > SeparationTolerance && edgeSep > SeparationTolerance)
+        {
+            manifold = ContactManifold.Empty;
+            return false;
+        }
+
+        if (edgeSep <= faceSep)
+        {
+            if (ClipEdgeToFace(vertices, bestFace, edge.P0, edge.P1,
+                out Vec2 keptA, out float sepA, out Vec2 keptB, out float sepB, out int kept))
+            {
+                Vec2 faceNormal = normals[bestFace];
+                if (kept == 1)
+                {
+                    Vec2 onFace = keptA - (faceNormal * sepA);
+                    manifold = new ContactManifold(
+                        faceNormal,
+                        new ContactPoint(onFace, keptA, sepA, ContactId.Create(bestFace, 0, flipped: true)));
+                    return true;
+                }
+
+                Vec2 onFaceA = keptA - (faceNormal * sepA);
+                Vec2 onFaceB = keptB - (faceNormal * sepB);
+                manifold = new ContactManifold(
+                    faceNormal,
+                    new ContactPoint(onFaceA, keptA, sepA, ContactId.Create(bestFace, 0, flipped: true)),
+                    new ContactPoint(onFaceB, keptB, sepB, ContactId.Create(bestFace, 1, flipped: true)));
+                return true;
+            }
+        }
+
+        return PolygonEdgeEndpoint(in polygon, in edge, edgeNormal, out manifold);
+    }
+
+    /// <summary>Clips a segment to the slab of a polygon face; keeps endpoints at or behind the face.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool ClipEdgeToFace(ReadOnlySpan<Vec2> vertices, int face,
+        Vec2 p0, Vec2 p1,
+        out Vec2 keptA, out float sepA, out Vec2 keptB, out float sepB, out int kept)
+    {
+        int count = vertices.Length;
+        Vec2 v0 = vertices[face];
+        Vec2 v1 = vertices[(face + 1) % count];
+        Vec2 tangent = v1 - v0;
+        float tangentLenSq = tangent.LengthSquared();
+        float invLenSq = tangentLenSq >= DegenerateLengthSquared ? 1.0f / tangentLenSq : 0.0f;
+
+        float s0 = Vec2.Dot(p0 - v0, tangent) * invLenSq;
+        float s1 = Vec2.Dot(p1 - v0, tangent) * invLenSq;
+
+        Vec2 q0 = p0;
+        Vec2 q1 = p1;
+        if (s0 < 0.0f && s1 < 0.0f)
+        {
+            keptA = default;
+            sepA = 0.0f;
+            keptB = default;
+            sepB = 0.0f;
+            kept = 0;
+            return false;
+        }
+
+        if (s0 > 1.0f && s1 > 1.0f)
+        {
+            keptA = default;
+            sepA = 0.0f;
+            keptB = default;
+            sepB = 0.0f;
+            kept = 0;
+            return false;
+        }
+
+        if (s0 < 0.0f)
+        {
+            float span = s1 - s0;
+            float f = MathF.Abs(span) > 1e-9f ? -s0 / span : 0.0f;
+            q0 = p0 + ((p1 - p0) * f);
+        }
+        else if (s0 > 1.0f)
+        {
+            float span = s1 - s0;
+            float f = MathF.Abs(span) > 1e-9f ? (1.0f - s0) / span : 0.0f;
+            q0 = p0 + ((p1 - p0) * f);
+        }
+
+        if (s1 < 0.0f)
+        {
+            float span = s1 - s0;
+            float f = MathF.Abs(span) > 1e-9f ? -s0 / span : 0.0f;
+            q1 = p0 + ((p1 - p0) * f);
+        }
+        else if (s1 > 1.0f)
+        {
+            float span = s1 - s0;
+            float f = MathF.Abs(span) > 1e-9f ? (1.0f - s0) / span : 0.0f;
+            q1 = p0 + ((p1 - p0) * f);
+        }
+
+        kept = 0;
+        keptA = default;
+        sepA = 0.0f;
+        keptB = default;
+        sepB = 0.0f;
+
+        float d0 = PlaneSeparation(vertices, face, q0);
+        float d1 = PlaneSeparation(vertices, face, q1);
+        if (d0 <= SeparationTolerance)
+        {
+            keptA = q0;
+            sepA = d0;
+            kept = 1;
+        }
+
+        if (d1 <= SeparationTolerance)
+        {
+            if (kept == 0)
+            {
+                keptA = q1;
+                sepA = d1;
+                kept = 1;
+            }
+            else
+            {
+                keptB = q1;
+                sepB = d1;
+                kept = 2;
+            }
+        }
+
+        return kept > 0;
+    }
+
+    /// <summary>Signed distance from a point to a polygon face plane (outward positive).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static float PlaneSeparation(ReadOnlySpan<Vec2> vertices, int face, Vec2 point)
+    {
+        int count = vertices.Length;
+        Vec2 v0 = vertices[face];
+        Vec2 v1 = vertices[(face + 1) % count];
+        Vec2 e = v1 - v0;
+        float lenSq = e.LengthSquared();
+        if (lenSq < DegenerateLengthSquared)
+        {
+            return float.PositiveInfinity;
+        }
+
+        Vec2 n = new Vec2(e.Y, -e.X) * (1.0f / MathF.Sqrt(lenSq));
+        return Vec2.Dot(n, point - v0);
+    }
+
+    /// <summary>Vertex-vs-segment fallback: closest polygon vertex to the segment, clamped.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static bool PolygonEdgeEndpoint(in Polygon2D polygon, in Edge2D edge, Vec2 edgeNormal, out ContactManifold manifold)
+    {
+        ReadOnlySpan<Vec2> vertices = polygon.Vertices;
+
+        Vec2 axis = edge.P1 - edge.P0;
+        float lengthSq = axis.LengthSquared();
+        float bestDistSq = float.PositiveInfinity;
+        Vec2 bestVertex = vertices[0];
+        int bestIndex = 0;
+        Vec2 bestOnEdge = edge.P0;
+
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            float s = lengthSq < DegenerateLengthSquared
+                ? 0.0f
+                : Math.Clamp(Vec2.Dot(vertices[i] - edge.P0, axis) / lengthSq, 0.0f, 1.0f);
+            Vec2 onEdge = edge.P0 + (axis * s);
+            float distSq = (vertices[i] - onEdge).LengthSquared();
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                bestVertex = vertices[i];
+                bestIndex = i;
+                bestOnEdge = onEdge;
+            }
+        }
+
+        const float TouchDistance = 1e-6f;
+        if (bestDistSq > TouchDistance * TouchDistance)
+        {
+            manifold = ContactManifold.Empty;
+            return false;
+        }
+
+        Vec2 normal;
+        if (bestDistSq < DegenerateLengthSquared)
+        {
+            Vec2 fallback = edgeNormal.LengthSquared() > DegenerateLengthSquared ? edgeNormal : new Vec2(0.0f, 1.0f);
+            Vec2 centroid = polygon.Centroid;
+            normal = Vec2.Dot(fallback, centroid - edge.P0) > 0.0f ? fallback * -1.0f : fallback;
+        }
+        else
+        {
+            float dist = MathF.Sqrt(bestDistSq);
+            normal = (bestOnEdge - bestVertex) * (1.0f / dist);
+        }
+
+        manifold = new ContactManifold(
+            normal,
+            new ContactPoint(bestVertex, bestOnEdge, -MathF.Sqrt(bestDistSq), ContactId.Create(0, bestIndex, flipped: true)));
+        return true;
+    }
+
+    /// <summary>Evaluates a segment against a convex polygon.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateEdgePolygon(in Edge2D edge, in Polygon2D polygon, out ContactManifold manifold)
+    {
+        bool hit = EvaluatePolygonEdge(in polygon, in edge, out ContactManifold inner);
+        manifold = hit ? inner.Flipped() : ContactManifold.Empty;
+        return hit;
+    }
+
+    /// <summary>Evaluates two segments: contact while touching or crossing.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool EvaluateEdgeEdge(in Edge2D a, in Edge2D b, out ContactManifold manifold)
+    {
+        SegmentClosest(a.P0, a.P1, b.P0, b.P1, out Vec2 onA, out Vec2 onB, out float distSq);
+        if (distSq > SeparationTolerance * SeparationTolerance)
+        {
+            manifold = ContactManifold.Empty;
+            return false;
+        }
+
+        Vec2 axis = b.P1 - b.P0;
+        Vec2 normal = new(-axis.Y, axis.X);
+        float normalLenSq = normal.LengthSquared();
+        normal = normalLenSq < DegenerateLengthSquared
+            ? new Vec2(0.0f, 1.0f)
+            : normal * (1.0f / MathF.Sqrt(normalLenSq));
+        if (Vec2.Dot(normal, onB - onA) < 0.0f)
+        {
+            normal = normal * -1.0f;
+        }
+
+        manifold = new ContactManifold(
+            normal,
+            new ContactPoint(onA, onB, 0.0f, ContactId.Create(0, 0, flipped: false)));
+        return true;
+    }
+
+    /// <summary>Closest points between two finite segments (zero-length degrades to points).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void SegmentClosest(Vec2 p0, Vec2 p1, Vec2 q0, Vec2 q1,
+        out Vec2 onP, out Vec2 onQ, out float distSq)
+    {
+        Vec2 dP = p1 - p0;
+        Vec2 dQ = q1 - q0;
+        Vec2 r = p0 - q0;
+
+        float a = Vec2.Dot(dP, dP);
+        float e = Vec2.Dot(dQ, dQ);
+        float sP;
+        float sQ;
+
+        if (a < DegenerateLengthSquared && e < DegenerateLengthSquared)
+        {
+            onP = p0;
+            onQ = q0;
+            distSq = (onP - onQ).LengthSquared();
+            return;
+        }
+
+        if (a < DegenerateLengthSquared)
+        {
+            sP = 0.0f;
+            sQ = Math.Clamp(Vec2.Dot(dQ, r) / e, 0.0f, 1.0f);
+        }
+        else if (e < DegenerateLengthSquared)
+        {
+            sQ = 0.0f;
+            sP = Math.Clamp(Vec2.Dot(dP, r) / a, 0.0f, 1.0f);
+        }
+        else
+        {
+            float f = Vec2.Dot(dQ, r);
+            float c = Vec2.Dot(dP, r);
+            float b = Vec2.Dot(dP, dQ);
+            float denom = (a * e) - (b * b);
+            sP = denom > 1e-12f ? Math.Clamp(((b * f) - (c * e)) / denom, 0.0f, 1.0f) : 0.0f;
+            sQ = Math.Clamp(((b * sP) + f) / e, 0.0f, 1.0f);
+            sP = Math.Clamp(((b * sQ) - c) / a, 0.0f, 1.0f);
+        }
+
+        onP = p0 + (dP * sP);
+        onQ = q0 + (dQ * sQ);
+        distSq = (onP - onQ).LengthSquared();
+    }
+
     /// <summary>Single-point fallback for pairs without an analytic clip: EPA normal, depth and witnesses.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool EvaluateEpaFallback<TA, TB>(in TA shapeA, in TB shapeB, out ContactManifold manifold)

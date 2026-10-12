@@ -11,6 +11,9 @@ public enum ColliderKind : byte
 
     /// <summary>Convex polygon collider.</summary>
     Polygon = 2,
+
+    /// <summary>Thin static segment collider.</summary>
+    Edge = 3,
 }
 
 /// <summary>
@@ -57,11 +60,17 @@ internal struct ShapeRecord
     /// <summary>Local polygon; live when <see cref="Kind"/> is <see cref="ColliderKind.Polygon"/>.</summary>
     public Polygon2D LocalPolygon;
 
+    /// <summary>Local segment; live when <see cref="Kind"/> is <see cref="ColliderKind.Edge"/>.</summary>
+    public Edge2D LocalEdge;
+
     /// <summary>World disc; refreshed on sync.</summary>
     public Circle2 WorldCircle;
 
     /// <summary>World stadium; refreshed on sync.</summary>
     public Capsule2D WorldCapsule;
+
+    /// <summary>World segment; refreshed on sync.</summary>
+    public Edge2D WorldEdge;
 
     /// <summary>World polygon vertices; allocated once at attach.</summary>
     public Vec2[]? WorldVertices;
@@ -196,6 +205,66 @@ public sealed class ShapeStore
         _shapes[slot].WorldNormals = new Vec2[local.Count];
         FinishAttach(bodies, tree, slot);
         return new ShapeId((uint)slot + 1u);
+    }
+
+    /// <summary>Attaches a thin static segment to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachEdge<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree2D<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec2 p0,
+        Vec2 p1,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec2 localOffset = default,
+        float localAngle = 0.0f,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy2D
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Edge2D(p0, p1);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Edge, density, filter, material, localOffset, localAngle, isSensor);
+        _shapes[slot].LocalEdge = local;
+        FinishAttach(bodies, tree, slot);
+        return new ShapeId((uint)slot + 1u);
+    }
+
+    /// <summary>
+    /// Attaches a polyline of static segments to <paramref name="bodyId"/>: each
+    /// consecutive pair becomes one edge, plus a closing edge when
+    /// <paramref name="loop"/> is set. Returns the edge count.
+    /// </summary>
+    public int AttachChain<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree2D<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        ReadOnlySpan<Vec2> vertices,
+        bool loop,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec2 localOffset = default,
+        float localAngle = 0.0f,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy2D
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        if (vertices.Length < 2)
+        {
+            ThrowHelper.ThrowTooFewVertices();
+        }
+
+        int count = loop ? vertices.Length : vertices.Length - 1;
+        for (int i = 0; i < count; i++)
+        {
+            AttachEdge(bodies, tree, bodyId, vertices[i], vertices[(i + 1) % vertices.Length],
+                density, filter, material, localOffset, localAngle, isSensor);
+        }
+
+        return count;
     }
 
     /// <summary>Drops a shape, unlinks it from its body, pulls it from the tree and re-sums the body mass.</summary>
@@ -359,6 +428,19 @@ public sealed class ShapeStore
         return _shapes[slot].WorldPolygon;
     }
 
+    /// <summary>Reads the world segment of an edge shape.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Edge2D GetWorldEdge(ShapeId id)
+    {
+        int slot = Validate(id);
+        if (_shapes[slot].Kind != ColliderKind.Edge)
+        {
+            ThrowHelper.ThrowInvalidOperation("Shape is not an edge.");
+        }
+
+        return _shapes[slot].WorldEdge;
+    }
+
     /// <summary>Internal slot access for the world; validated.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref ShapeRecord Slot(ShapeId id) => ref _shapes[Validate(id)];
@@ -479,6 +561,16 @@ public sealed class ShapeStore
                     break;
                 }
 
+            case ColliderKind.Edge:
+                {
+                    Vec2 p0 = world.TransformPoint(shape.LocalEdge.P0);
+                    Vec2 p1 = world.TransformPoint(shape.LocalEdge.P1);
+                    shape.WorldEdge = new Edge2D(p0, p1);
+                    shape.WorldCentroid = (p0 + p1) * 0.5f;
+                    shape.WorldAabb = Edge2D.ComputeBounds(in shape.WorldEdge);
+                    break;
+                }
+
             default:
                 {
                     ReadOnlySpan<Vec2> localVerts = shape.LocalPolygon.Vertices;
@@ -529,6 +621,7 @@ public sealed class ShapeStore
             {
                 ColliderKind.Circle => LocalMassCircle(in shape),
                 ColliderKind.Capsule => LocalMassCapsule(in shape),
+                ColliderKind.Edge => MassData.Zero,
                 _ => LocalMassPolygon(in shape),
             };
 

@@ -215,6 +215,90 @@ public readonly struct Capsule2D : ISupportShape2D<Capsule2D>, IEquatable<Capsul
 }
 
 /// <summary>
+/// Thin static segment: two endpoints with no radius. Massless by design
+/// (ground and walls); attach to static bodies. Double-sided: contacts and
+/// rays report from either side.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct Edge2D : ISupportShape2D<Edge2D>, IEquatable<Edge2D>
+{
+    /// <summary>First endpoint.</summary>
+    public readonly Vec2 P0;
+
+    /// <summary>Second endpoint.</summary>
+    public readonly Vec2 P1;
+
+    /// <summary>Creates a segment, rejecting non-finite or coincident endpoints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Edge2D(Vec2 p0, Vec2 p1)
+    {
+        if (float.IsNaN(p0.X) || float.IsNaN(p0.Y) || float.IsNaN(p1.X) || float.IsNaN(p1.Y) ||
+            float.IsInfinity(p0.X) || float.IsInfinity(p0.Y) || float.IsInfinity(p1.X) || float.IsInfinity(p1.Y))
+        {
+            ThrowHelper.ThrowInvalidVertices();
+        }
+
+        if ((p1 - p0).LengthSquared() < 1e-12f)
+        {
+            ThrowHelper.ThrowInvalidVertices();
+        }
+
+        P0 = p0;
+        P1 = p1;
+    }
+
+    /// <summary>Unit direction from <see cref="P0"/> to <see cref="P1"/>.</summary>
+    public Vec2 Direction
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get => Vec2.Normalize(P1 - P0);
+    }
+
+    /// <summary>Unit normal of the segment (left of the direction).</summary>
+    public Vec2 Normal
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        get
+        {
+            Vec2 d = Direction;
+            return new Vec2(-d.Y, d.X);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec2 Support(in Edge2D shape, Vec2 direction) =>
+        Vec2.Dot(shape.P0, direction) >= Vec2.Dot(shape.P1, direction) ? shape.P0 : shape.P1;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 ComputeCentroid(in Edge2D shape) => (shape.P0 + shape.P1) * 0.5f;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb2D ComputeBounds(in Edge2D shape) =>
+        new(Vec2.Min(shape.P0, shape.P1), Vec2.Max(shape.P0, shape.P1));
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(Edge2D other) => P0 == other.P0 && P1 == other.P1;
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is Edge2D other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(P0, P1);
+
+    /// <summary>Determines whether two edges share endpoints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Edge2D left, Edge2D right) => left.Equals(right);
+
+    /// <summary>Determines whether two edges differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Edge2D left, Edge2D right) => !left.Equals(right);
+}
+
+/// <summary>
 /// Strictly convex counter-clockwise polygon: vertices plus precomputed outward
 /// edge normals, area centroid and tight bounds. Factories validate convexity
 /// (collinear runs rejected) and wind clockwise input into CCW automatically.

@@ -500,6 +500,17 @@ public sealed class World : IDisposable
 
                 break;
 
+            case ColliderKind.Edge:
+                if (ShapeRaycaster.RaycastEdge(
+                    in ray, record.WorldEdge.P0, record.WorldEdge.P1, maxDistance,
+                    out float edgeDistance, out Vec2 edgeNormal, out Vec2 edgePoint))
+                {
+                    hit = new RaycastHit2D(shapeId, record.Body, edgePoint, edgeNormal, edgeDistance);
+                    return true;
+                }
+
+                break;
+
             default:
                 if (ShapeRaycaster.RaycastPolygon(
                     in ray, record.WorldPolygon.Vertices, record.WorldPolygon.Normals, maxDistance,
@@ -1042,6 +1053,41 @@ public sealed class World : IDisposable
             bool hit = Narrowphase2D.EvaluateCapsulePolygon(in recordB.WorldCapsule, in recordA.WorldPolygon, out ContactManifold inner);
             manifold = hit ? inner.Flipped() : ContactManifold.Empty;
             return hit;
+        }
+
+        if (kindA == ColliderKind.Circle && kindB == ColliderKind.Edge)
+        {
+            return Narrowphase2D.EvaluateCircleEdge(in recordA.WorldCircle, in recordB.WorldEdge, out manifold);
+        }
+
+        if (kindA == ColliderKind.Edge && kindB == ColliderKind.Circle)
+        {
+            return Narrowphase2D.EvaluateEdgeCircle(in recordA.WorldEdge, in recordB.WorldCircle, out manifold);
+        }
+
+        if (kindA == ColliderKind.Capsule && kindB == ColliderKind.Edge)
+        {
+            return Narrowphase2D.EvaluateCapsuleEdge(in recordA.WorldCapsule, in recordB.WorldEdge, out manifold);
+        }
+
+        if (kindA == ColliderKind.Edge && kindB == ColliderKind.Capsule)
+        {
+            return Narrowphase2D.EvaluateEdgeCapsule(in recordA.WorldEdge, in recordB.WorldCapsule, out manifold);
+        }
+
+        if (kindA == ColliderKind.Polygon && kindB == ColliderKind.Edge)
+        {
+            return Narrowphase2D.EvaluatePolygonEdge(in recordA.WorldPolygon, in recordB.WorldEdge, out manifold);
+        }
+
+        if (kindA == ColliderKind.Edge && kindB == ColliderKind.Polygon)
+        {
+            return Narrowphase2D.EvaluateEdgePolygon(in recordA.WorldEdge, in recordB.WorldPolygon, out manifold);
+        }
+
+        if (kindA == ColliderKind.Edge && kindB == ColliderKind.Edge)
+        {
+            return Narrowphase2D.EvaluateEdgeEdge(in recordA.WorldEdge, in recordB.WorldEdge, out manifold);
         }
 
         return Narrowphase2D.EvaluateCapsuleCapsule(in recordA.WorldCapsule, in recordB.WorldCapsule, out manifold);

@@ -120,22 +120,23 @@ public static class ShapeRaycaster
         {
             float length = MathF.Sqrt(lengthSq);
             Vec2 side = new(-axis.Y / length, axis.X / length);
-            float denom = Vec2.Dot(ray.Direction, side);
-            if (MathF.Abs(denom) >= ParallelEpsilon)
+            Vec2 offset = side * radius;
+
+            // Solve the ray against each flat edge (offset ±radius) so distance is
+            // the surface contact, not the offset-axis line; the -side edge faces
+            // -side, the +side edge faces +side. The nearest edge joins the caps.
+            if (RaycastSegment(in ray, p0 - offset, p1 - offset, maxDistance, out float nearSide, out Vec2 nearPoint) && nearSide < best)
             {
-                float t = Vec2.Dot(p0 - ray.Origin, side) / denom;
-                if (t >= 0.0f && t <= maxDistance && t < best)
-                {
-                    Vec2 basePoint = ray.At(t);
-                    float span = Vec2.Dot(basePoint - p0, axis) / lengthSq;
-                    if (span >= 0.0f && span <= 1.0f)
-                    {
-                        Vec2 facing = denom > 0.0f ? side * -1.0f : side;
-                        best = t;
-                        bestNormal = facing;
-                        bestPoint = basePoint + (facing * radius);
-                    }
-                }
+                best = nearSide;
+                bestNormal = side * -1.0f;
+                bestPoint = nearPoint;
+            }
+
+            if (RaycastSegment(in ray, p0 + offset, p1 + offset, maxDistance, out float farSide, out Vec2 farPoint) && farSide < best)
+            {
+                best = farSide;
+                bestNormal = side;
+                bestPoint = farPoint;
             }
         }
 
@@ -150,6 +151,81 @@ public static class ShapeRaycaster
         distance = best;
         normal = bestNormal;
         point = bestPoint;
+        return true;
+    }
+
+    /// <summary>Tests a ray against a thin segment, double-sided.</summary>
+    /// <param name="ray">The query ray; its direction is unit length by construction.</param>
+    /// <param name="p0">First endpoint of the segment.</param>
+    /// <param name="p1">Second endpoint of the segment.</param>
+    /// <param name="maxDistance">Travel limit; contacts past it are ignored.</param>
+    /// <param name="distance">Distance from the ray origin to the contact.</param>
+    /// <param name="normal">Unit segment normal facing the ray.</param>
+    /// <param name="point">World contact point.</param>
+    /// <returns><see langword="true"/> with the nearest valid contact.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool RaycastEdge(
+        in Ray2D ray,
+        Vec2 p0,
+        Vec2 p1,
+        float maxDistance,
+        out float distance,
+        out Vec2 normal,
+        out Vec2 point)
+    {
+        if (!RaycastSegment(in ray, p0, p1, maxDistance, out distance, out point))
+        {
+            normal = default;
+            return false;
+        }
+
+        Vec2 axis = p1 - p0;
+        float lengthSq = axis.LengthSquared();
+        if (lengthSq < DegenerateLengthSquared)
+        {
+            normal = ray.Direction * -1.0f;
+            return true;
+        }
+
+        float length = MathF.Sqrt(lengthSq);
+        Vec2 face = new(-axis.Y / length, axis.X / length);
+        normal = Vec2.Dot(face, ray.Direction) <= 0.0f ? face : face * -1.0f;
+        return true;
+    }
+
+    /// <summary>Segment intersection shared by stadium flats and edge shapes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static bool RaycastSegment(
+        in Ray2D ray,
+        Vec2 a,
+        Vec2 b,
+        float maxDistance,
+        out float distance,
+        out Vec2 point)
+    {
+        Vec2 edge = b - a;
+        Vec2 toA = a - ray.Origin;
+
+        // cross(direction, edge) vanishes when the ray runs parallel to the edge.
+        float denom = Vec2.Cross(ray.Direction, edge);
+        if (MathF.Abs(denom) < ParallelEpsilon)
+        {
+            distance = 0.0f;
+            point = default;
+            return false;
+        }
+
+        float t = Vec2.Cross(toA, edge) / denom;
+        float s = Vec2.Cross(toA, ray.Direction) / denom;
+        if (t < 0.0f || t > maxDistance || s < 0.0f || s > 1.0f)
+        {
+            distance = 0.0f;
+            point = default;
+            return false;
+        }
+
+        distance = t;
+        point = ray.At(t);
         return true;
     }
 
