@@ -367,6 +367,38 @@ public readonly struct Polygon2D : ISupportShape2D<Polygon2D>, IEquatable<Polygo
         return new Polygon2D(owned, normals, centroid, new Aabb2D(min, max));
     }
 
+    /// <summary>
+    /// Wraps already-validated buffers without copying or revalidating: the
+    /// caller guarantees a convex counter-clockwise loop with matching unit
+    /// outward normals (true for any rigid transform of a validated polygon).
+    /// Centroid and bounds are recomputed because the frame moved.
+    /// </summary>
+    /// <param name="vertices">Counter-clockwise vertices; taken over, never copied.</param>
+    /// <param name="normals">Unit outward normals; taken over, never copied.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Polygon2D CreateTrusted(Vec2[] vertices, Vec2[] normals)
+    {
+        Vec2 centroid = Vec2.Zero;
+        float area = 0.0f;
+        Vec2 min = vertices[0];
+        Vec2 max = vertices[0];
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            Vec2 a = vertices[i];
+            Vec2 b = vertices[(i + 1) % vertices.Length];
+            float cross = (a.X * b.Y) - (b.X * a.Y);
+            area += cross;
+            centroid += (a + b) * cross;
+            min = Vec2.Min(min, a);
+            max = Vec2.Max(max, a);
+        }
+
+        area *= 0.5f;
+        centroid /= 6.0f * area;
+
+        return new Polygon2D(vertices, normals, centroid, new Aabb2D(min, max));
+    }
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static Vec2 Support(in Polygon2D shape, Vec2 direction)

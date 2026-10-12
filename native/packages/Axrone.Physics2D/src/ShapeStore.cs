@@ -66,6 +66,9 @@ internal struct ShapeRecord
     /// <summary>World polygon normals; allocated once at attach.</summary>
     public Vec2[]? WorldNormals;
 
+    /// <summary>World polygon view over the cached buffers; refreshed on sync.</summary>
+    public Polygon2D WorldPolygon;
+
     /// <summary>World centroid; refreshed on sync.</summary>
     public Vec2 WorldCentroid;
 
@@ -337,6 +340,19 @@ public sealed class ShapeStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Aabb2D GetWorldAabb(ShapeId id) => _shapes[Validate(id)].WorldAabb;
 
+    /// <summary>Reads the world polygon of a polygon shape.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Polygon2D GetWorldPolygon(ShapeId id)
+    {
+        int slot = Validate(id);
+        if (_shapes[slot].Kind != ColliderKind.Polygon)
+        {
+            ThrowHelper.ThrowInvalidOperation("Shape is not a polygon.");
+        }
+
+        return _shapes[slot].WorldPolygon;
+    }
+
     /// <summary>Internal slot access for the world; validated.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref ShapeRecord Slot(ShapeId id) => ref _shapes[Validate(id)];
@@ -356,6 +372,7 @@ public sealed class ShapeStore
         shape.NextShape = body.FirstShape;
         body.FirstShape = slot;
         body.ShapeCount++;
+        _count++;
 
         RecalculateMass(bodies, shape.Body);
     }
@@ -454,6 +471,7 @@ public sealed class ShapeStore
                     centroid *= 1.0f / localVerts.Length;
                     shape.WorldCentroid = centroid;
                     shape.WorldAabb = new Aabb2D(min, max);
+                    shape.WorldPolygon = Polygon2D.CreateTrusted(worldVerts, worldNormals);
                     break;
                 }
         }

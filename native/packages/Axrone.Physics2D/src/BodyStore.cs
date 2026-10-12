@@ -334,6 +334,17 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref BodyState Slot(BodyId id) => ref _bodies[Validate(id)];
 
+    /// <summary>Slot capacity for internal iteration.</summary>
+    internal int SlotCapacity
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _capacity;
+    }
+
+    /// <summary>Whether a raw slot holds a live body; for internal iteration.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool IsSlotLive(int slot) => slot >= 0 && slot < _capacity && _bodies[slot].Live;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int AllocateSlot()
     {
