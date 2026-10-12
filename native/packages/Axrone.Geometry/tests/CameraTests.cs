@@ -275,4 +275,29 @@ public class CameraTests
         Action dispose = () => culler.Dispose();
         dispose.Should().NotThrow();
     }
+
+    [Fact]
+    public void Culler_AfterDispose_Throws()
+    {
+        var culler = FrustumCullerFactory.CreateForAabbs<Aabb3D>(static (in Aabb3D item) => item);
+        CameraFrustum frustum = LookAtOrigin().Frustum;
+        culler.Dispose();
+
+        var items = new Aabb3D[] { new(new Vec3(-0.5f), new Vec3(0.5f)) };
+        Action cull = () => culler.Cull(items, in frustum);
+        cull.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task CullerAsync_AfterDispose_Throws()
+    {
+        var culler = FrustumCullerFactory.CreateForAabbs<Aabb3D>(static (in Aabb3D item) => item);
+        CameraFrustum frustum = LookAtOrigin().Frustum;
+        culler.Dispose();
+
+        var items = new Aabb3D[] { new(new Vec3(-0.5f), new Vec3(0.5f)) };
+        Func<Task> act = () => culler.CullAsync(new ReadOnlyMemory<Aabb3D>(items), frustum).AsTask();
+
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+    }
 }

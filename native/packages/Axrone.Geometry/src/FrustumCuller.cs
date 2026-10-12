@@ -70,6 +70,7 @@ public sealed class FrustumCuller<TItem, TBounds, TPolicy, TMetrics> : IDisposab
     private int _visibleCount;
     private CullerStats _stats;
     private readonly Lock _syncRoot = new();
+    private bool _disposed;
 
     /// <summary>Survivors of the last pass.</summary>
     public ReadOnlySpan<TItem> VisibleSpan
@@ -136,6 +137,7 @@ public sealed class FrustumCuller<TItem, TBounds, TPolicy, TMetrics> : IDisposab
     {
         lock (_syncRoot)
         {
+            ThrowIfDisposed();
             Reset();
             EnsureBufferCapacity(items.Length);
 
@@ -188,6 +190,7 @@ public sealed class FrustumCuller<TItem, TBounds, TPolicy, TMetrics> : IDisposab
 
         lock (_syncRoot)
         {
+            ThrowIfDisposed();
             Reset();
             EnsureBufferCapacity(items.Length);
         }
@@ -209,6 +212,7 @@ public sealed class FrustumCuller<TItem, TBounds, TPolicy, TMetrics> : IDisposab
             ref readonly TItem srcRef = ref MemoryMarshal.GetReference(spanSlice);
             lock (_syncRoot)
             {
+                ThrowIfDisposed();
                 ref TItem dstRef = ref MemoryMarshal.GetArrayDataReference(_visibleBuffer);
 
                 for (nuint i = 0; i < (nuint)spanSlice.Length; i++)
@@ -263,12 +267,22 @@ public sealed class FrustumCuller<TItem, TBounds, TPolicy, TMetrics> : IDisposab
     {
         lock (_syncRoot)
         {
+            _disposed = true;
             if (_visibleBuffer.Length > 0)
             {
                 Reset();
                 ArrayPool<TItem>.Shared.Return(_visibleBuffer, RuntimeHelpers.IsReferenceOrContainsReferences<TItem>());
                 _visibleBuffer = [];
             }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            ThrowHelper.ThrowObjectDisposed(nameof(FrustumCuller<TItem, TBounds, TPolicy, TMetrics>));
         }
     }
 }
