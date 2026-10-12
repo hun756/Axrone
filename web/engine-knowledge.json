@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-26T11:08:05.014Z",
+  "generatedAt": "2026-10-12T01:41:50.465Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -74,7 +74,6 @@
         "BlendMotionVisitor",
         "BlendScratchContext",
         "BlendWeight",
-        "Brand",
         "DiagnosticCode",
         "IK_CONVERGENCE_EPSILON",
         "MAX_BLEND_DEPTH",
@@ -86,9 +85,18 @@
         "applyAnimationClipStreamingChunkDefinition",
         "asBlendWeight",
         "asNormalizedTime",
+        "asTimeSeconds",
         "assertNever",
         "blendFrame",
         "blendWeightedFrames",
+        "brandClipId",
+        "brandCurveId",
+        "brandIkJobId",
+        "brandLayerId",
+        "brandParameterId",
+        "brandRetargetProfileId",
+        "brandRigId",
+        "brandStateId",
         "brandString",
         "buildAnimationControllerDefinition",
         "buildAnimationIkLayerDefinition",
@@ -131,13 +139,20 @@
         "decodeAnimationClipStreamingChunkPayload",
         "dispatchMotion",
         "encodeAnimationClipStreamingChunkPayload",
+        "err",
         "evaluateLayerRuntime",
         "evaluateMotion",
         "extractLayerRootDelta",
         "extractMotionRootDelta",
+        "failIk",
+        "failResolution",
+        "failRetargeting",
+        "failStateMachine",
+        "failValidation",
         "findBlend1DSegment",
         "foldMotion",
         "forceLayerState",
+        "ok",
         "optimizeAnimationClipDefinition",
         "optimizeAnimationClipDefinitions",
         "resolveAdditiveWeight",
@@ -273,10 +288,21 @@
         "BlendMotionOfKind",
         "BlendMotionVisitor",
         "BlendWeight",
+        "Brand",
         "DiagnosticCategory",
         "DiagnosticCode",
         "DiagnosticSeverity",
+        "IAnimationStreamSource",
+        "IFrameReader",
+        "IMetricsSink",
+        "IMotionEvaluator",
+        "IParameterSource",
         "NormalizedTime",
+        "Result",
+        "TailCallExtractNames",
+        "TailCallFindParameter",
+        "TailCallParameterValueMap",
+        "TimeSeconds",
         "ValidBlendDepth"
       ],
       "hasDefaultExport": false,
@@ -482,9 +508,18 @@
             "AnimationSamplingError",
             "AnimationStateMachineError",
             "AnimationValidationError",
-            "assertNever"
+            "assertNever",
+            "err",
+            "failIk",
+            "failResolution",
+            "failRetargeting",
+            "failStateMachine",
+            "failValidation",
+            "ok"
           ],
-          "typeExports": []
+          "typeExports": [
+            "Result"
+          ]
         },
         {
           "path": "@axrone/animation/ik",
@@ -670,7 +705,15 @@
             "AnimationTransitionDefinition",
             "AnimationTransitionOperator",
             "AnimationVector2Tuple",
-            "AnimationVector3Tuple"
+            "AnimationVector3Tuple",
+            "IAnimationStreamSource",
+            "IFrameReader",
+            "IMetricsSink",
+            "IMotionEvaluator",
+            "IParameterSource",
+            "TailCallExtractNames",
+            "TailCallFindParameter",
+            "TailCallParameterValueMap"
           ]
         }
       ]
@@ -11948,7 +11991,7 @@
     {
       "name": "asBlendWeight",
       "package": "@axrone/animation",
-      "kind": "unknown"
+      "kind": "const"
     },
     {
       "name": "asDigest128",
@@ -12013,7 +12056,7 @@
     {
       "name": "asNormalizedTime",
       "package": "@axrone/animation",
-      "kind": "unknown"
+      "kind": "const"
     },
     {
       "name": "asRender2DMaterialReference",
@@ -14021,6 +14064,11 @@
       "kind": "unknown"
     },
     {
+      "name": "asTimeSeconds",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
       "name": "AsyncAll",
       "package": "@axrone/memory",
       "kind": "type"
@@ -14843,7 +14891,7 @@
     {
       "name": "BlendWeight",
       "package": "@axrone/animation",
-      "kind": "unknown"
+      "kind": "type"
     },
     {
       "name": "blendWeightedFrames",
@@ -14988,7 +15036,7 @@
     {
       "name": "Brand",
       "package": "@axrone/animation",
-      "kind": "unknown"
+      "kind": "type"
     },
     {
       "name": "Brand",
@@ -14996,9 +15044,29 @@
       "kind": "type"
     },
     {
+      "name": "brandClipId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
+      "name": "brandCurveId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
       "name": "BrandedNumber",
       "package": "@axrone/numeric",
       "kind": "type"
+    },
+    {
+      "name": "brandIkJobId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
+      "name": "brandLayerId",
+      "package": "@axrone/animation",
+      "kind": "const"
     },
     {
       "name": "brandLightId",
@@ -15014,6 +15082,26 @@
       "name": "brandLightingVersion",
       "package": "@axrone/lighting",
       "kind": "unknown"
+    },
+    {
+      "name": "brandParameterId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
+      "name": "brandRetargetProfileId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
+      "name": "brandRigId",
+      "package": "@axrone/animation",
+      "kind": "const"
+    },
+    {
+      "name": "brandStateId",
+      "package": "@axrone/animation",
+      "kind": "const"
     },
     {
       "name": "brandString",
@@ -19672,6 +19760,11 @@
     },
     {
       "name": "err",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "err",
       "package": "@axrone/utility",
       "kind": "function"
     },
@@ -19979,6 +20072,31 @@
       "name": "FailedAnimationStreamingChunk",
       "package": "@axrone/scene-runtime",
       "kind": "interface"
+    },
+    {
+      "name": "failIk",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "failResolution",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "failRetargeting",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "failStateMachine",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "failValidation",
+      "package": "@axrone/animation",
+      "kind": "unknown"
     },
     {
       "name": "fastDeepFreeze",
@@ -22671,6 +22789,11 @@
       "kind": "interface"
     },
     {
+      "name": "IAnimationStreamSource",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
       "name": "IArchetype",
       "package": "@axrone/ecs-runtime",
       "kind": "unknown"
@@ -23276,6 +23399,11 @@
       "kind": "unknown"
     },
     {
+      "name": "IFrameReader",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
       "name": "IGearConstraint",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -23596,6 +23724,11 @@
       "kind": "unknown"
     },
     {
+      "name": "IMetricsSink",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
       "name": "ImmutableColor",
       "package": "@axrone/particle-system",
       "kind": "interface"
@@ -23619,6 +23752,11 @@
       "name": "IModule",
       "package": "@axrone/particle-system",
       "kind": "interface"
+    },
+    {
+      "name": "IMotionEvaluator",
+      "package": "@axrone/animation",
+      "kind": "unknown"
     },
     {
       "name": "IMotorConstraint2D",
@@ -24604,6 +24742,11 @@
       "name": "IObserverValidator",
       "package": "@axrone/observer",
       "kind": "interface"
+    },
+    {
+      "name": "IParameterSource",
+      "package": "@axrone/animation",
+      "kind": "unknown"
     },
     {
       "name": "IParticleBuffer",
@@ -28018,7 +28161,7 @@
     {
       "name": "NormalizedTime",
       "package": "@axrone/animation",
-      "kind": "unknown"
+      "kind": "type"
     },
     {
       "name": "normalizeEdges",
@@ -28264,6 +28407,11 @@
       "name": "OctreeBroadphase3D",
       "package": "@axrone/raycast",
       "kind": "class"
+    },
+    {
+      "name": "ok",
+      "package": "@axrone/animation",
+      "kind": "unknown"
     },
     {
       "name": "ok",
@@ -31739,6 +31887,11 @@
       "name": "Restitution",
       "package": "@axrone/physics-core",
       "kind": "type"
+    },
+    {
+      "name": "Result",
+      "package": "@axrone/animation",
+      "kind": "unknown"
     },
     {
       "name": "Result",
@@ -37381,6 +37534,21 @@
       "kind": "unknown"
     },
     {
+      "name": "TailCallExtractNames",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "TailCallFindParameter",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
+      "name": "TailCallParameterValueMap",
+      "package": "@axrone/animation",
+      "kind": "unknown"
+    },
+    {
       "name": "TaskId",
       "package": "@axrone/event",
       "kind": "type"
@@ -37839,6 +38007,11 @@
       "name": "TimePoint",
       "package": "@axrone/profiler",
       "kind": "unknown"
+    },
+    {
+      "name": "TimeSeconds",
+      "package": "@axrone/animation",
+      "kind": "type"
     },
     {
       "name": "TimeUnit",
@@ -40321,7 +40494,7 @@
     {
       "name": "AnimationScratchPool",
       "kind": "class",
-      "code": "declare class AnimationScratchPool { constructor(_rig: AnimationRig, _curveLayout: AnimationCurveLayout, _curveDefaults?: ArrayLike<number> | undefined); reset(): void; acquire(): AnimationFrame; acquireFrameArray(length: number): AnimationFrame[]; acquireWeightArray(length: number): number[]; … }",
+      "code": "declare class AnimationScratchPool { constructor(_rig: AnimationRig, _curveLayout: AnimationCurveLayout, _curveDefaults?: ArrayLike<number> | undefined); reset(): void; acquire(): AnimationFrame; acquireFrameArray(length: number): AnimationFrame[]; acquireWeightArray(length: number): number[]; disp…",
       "package": "@axrone/animation"
     },
     {
@@ -40663,7 +40836,7 @@
     {
       "name": "assertNever",
       "kind": "const",
-      "code": "declare const assertNever: (value: never, message: string) => never;",
+      "code": "declare const assertNever: (value: never, message?: string) => never;",
       "package": "@axrone/animation"
     },
     {
@@ -40821,6 +40994,12 @@
       "kind": "class",
       "code": "declare class AssetSnapshotError extends AssetError { constructor(message: string, options?: ErrorOptions); … }",
       "package": "@axrone/asset-core"
+    },
+    {
+      "name": "asTimeSeconds",
+      "kind": "const",
+      "code": "declare const asTimeSeconds: (value: number) => TimeSeconds;",
+      "package": "@axrone/animation"
     },
     {
       "name": "AsyncBuilder",
@@ -41201,6 +41380,30 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "brandClipId",
+      "kind": "const",
+      "code": "declare const brandClipId: (value: string) => AnimationClipId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandCurveId",
+      "kind": "const",
+      "code": "declare const brandCurveId: (value: string) => AnimationCurveId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandIkJobId",
+      "kind": "const",
+      "code": "declare const brandIkJobId: (value: string) => AnimationIkJobId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandLayerId",
+      "kind": "const",
+      "code": "declare const brandLayerId: (value: string) => AnimationLayerId;",
+      "package": "@axrone/animation"
+    },
+    {
       "name": "brandLightId",
       "kind": "const",
       "code": "declare const brandLightId: <K extends LightKind>(kind: K, value: string) => LightId<K>;",
@@ -41217,6 +41420,30 @@
       "kind": "const",
       "code": "declare const brandLightingVersion: (value: number) => LightingVersion;",
       "package": "@axrone/lighting"
+    },
+    {
+      "name": "brandParameterId",
+      "kind": "const",
+      "code": "declare const brandParameterId: (value: string) => AnimationParameterId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandRetargetProfileId",
+      "kind": "const",
+      "code": "declare const brandRetargetProfileId: (value: string) => AnimationRetargetProfileId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandRigId",
+      "kind": "const",
+      "code": "declare const brandRigId: (value: string) => AnimationRigId;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "brandStateId",
+      "kind": "const",
+      "code": "declare const brandStateId: (value: string) => AnimationStateId;",
+      "package": "@axrone/animation"
     },
     {
       "name": "brandString",
@@ -44400,6 +44627,12 @@
     },
     {
       "name": "err",
+      "kind": "const",
+      "code": "declare const err: <E>(error: E) => Result<never, E>;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "err",
       "kind": "function",
       "code": "declare function err<E>(error: E): Err<never, E>;",
       "package": "@axrone/utility"
@@ -44541,6 +44774,36 @@
       "kind": "const",
       "code": "declare const FACTORIES: ReadonlyMap<HashAlgorithmName, IHashFactory<any>>;",
       "package": "@axrone/hash"
+    },
+    {
+      "name": "failIk",
+      "kind": "function",
+      "code": "declare function failIk(message: string, cause?: unknown): never;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "failResolution",
+      "kind": "function",
+      "code": "declare function failResolution(message: string, clipId: string, cause?: unknown): never;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "failRetargeting",
+      "kind": "function",
+      "code": "declare function failRetargeting(message: string, cause?: unknown): never;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "failStateMachine",
+      "kind": "function",
+      "code": "declare function failStateMachine(message: string, cause?: unknown): never;",
+      "package": "@axrone/animation"
+    },
+    {
+      "name": "failValidation",
+      "kind": "function",
+      "code": "declare function failValidation(message: string, cause?: unknown): never;",
+      "package": "@axrone/animation"
     },
     {
       "name": "fastDeepFreeze",
@@ -47841,6 +48104,12 @@
       "kind": "class",
       "code": "declare class OctreeBroadphase3D<T extends IBroadphaseItem3D> implements IBroadphase3D<T> { constructor(center: Readonly<IVec3Like>, halfSize: number, maxDepth?: number, maxItemsPerNode?: number, minNodeSize?: number); insert(item: T, min: Readonly<IVec3Like>, max: Readonly<IVec3Like>): void; updat…",
       "package": "@axrone/raycast"
+    },
+    {
+      "name": "ok",
+      "kind": "const",
+      "code": "declare const ok: <T>(value: T) => Result<T, never>;",
+      "package": "@axrone/animation"
     },
     {
       "name": "ok",
