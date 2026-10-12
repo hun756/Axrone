@@ -10,7 +10,7 @@ using System.Globalization;
 /// APIs directly — so they are public fields rather than properties.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanFormattable
+public readonly partial struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanFormattable
 {
     /// <summary>Center of the sphere.</summary>
     public readonly Vec3 Center;
