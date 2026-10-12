@@ -62,6 +62,14 @@ public readonly struct Transform2D : IEquatable<Transform2D>
         return new Vec2((Cos * d.X) + (Sin * d.Y), (-Sin * d.X) + (Cos * d.Y));
     }
 
+    /// <summary>Composes two frames: applies <paramref name="inner"/> first, then <paramref name="outer"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Transform2D Concat(in Transform2D outer, in Transform2D inner) =>
+        FromRotation(
+            outer.TransformPoint(inner.Position),
+            (outer.Cos * inner.Cos) - (outer.Sin * inner.Sin),
+            (outer.Sin * inner.Cos) + (outer.Cos * inner.Sin));
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(Transform2D other) => Position == other.Position && Cos == other.Cos && Sin == other.Sin;
@@ -212,6 +220,12 @@ internal struct BodyState
 
     /// <summary>Attached shapes; the shape store owns the list.</summary>
     public int ShapeCount;
+
+    /// <summary>First shape slot of the intrusive list; -1 when shapeless.</summary>
+    public int FirstShape;
+
+    /// <summary>Center of mass in the body frame; origin when massless.</summary>
+    public Vec2 LocalCenter;
 
     /// <summary>Whether the slot holds a live body.</summary>
     public bool Live;

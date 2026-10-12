@@ -56,6 +56,7 @@ public sealed class BodyStore
 
         body = default;
         body.Live = true;
+        body.FirstShape = -1;
         body.Type = definition.Type;
         body.Flags = BodyFlags.None;
         if (definition.Awake)
