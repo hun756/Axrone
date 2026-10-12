@@ -98,13 +98,6 @@ internal struct TraversalStack128
     private NodeIndex _element0;
 }
 
-/// <summary>Retired pool blocks awaiting release at dispose.</summary>
-[InlineArray(32)]
-internal struct RetiredBuffersTable
-{
-    private nuint _element0;
-}
-
 /// <summary>
 /// Native octree over a fixed root domain: leaves hold intrusive item lists
 /// and split into eight children past the policy threshold, items carry
@@ -151,8 +144,13 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     /// </summary>
     private uint _itemGenCounter;
 
-    private RetiredBuffersTable _retiredBlocks;
-    private int _retiredCount;
+    /// <summary>
+    /// Retired pool blocks awaiting release at dispose. A growable list
+    /// rather than a fixed table: beyond any fixed bound the old block would
+    /// leak silently. The list itself never finalizes anything, so touching it
+    /// from the finalizer is safe.
+    /// </summary>
+    private readonly List<nuint> _retiredBlocks = new();
 
     /// <summary>Creates a tree over <paramref name="rootBounds"/> with the given capacities.</summary>
     public unsafe NativeOctree(
@@ -199,8 +197,6 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         _freeItemHead = SlotIndex.Invalid;
         _itemWatermark = 0;
         _activeItemCount = 0;
-        _retiredCount = 0;
-        _retiredBlocks = default;
 
         ref OctreeNode root = ref _nodes[0];
         root.Bounds = rootBounds;
@@ -862,9 +858,9 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         nuint oldBytes = checked((nuint)_nodeCapacity * (nuint)sizeof(OctreeNode));
         NativeMemory.Copy(_nodes, newMem, oldBytes);
 
-        if (_nodes != null && _retiredCount < 32)
+        if (_nodes != null)
         {
-            _retiredBlocks[_retiredCount++] = (nuint)_nodes;
+            _retiredBlocks.Add((nuint)_nodes);
         }
 
         // Plain publish: readers take plain reads and retired blocks stay mapped
@@ -931,9 +927,9 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         nuint oldBytes = checked((nuint)_itemCapacity * (nuint)sizeof(OctreeItem<T>));
         NativeMemory.Copy(_items, newMem, oldBytes);
 
-        if (_items != null && _retiredCount < 32)
+        if (_items != null)
         {
-            _retiredBlocks[_retiredCount++] = (nuint)_items;
+            _retiredBlocks.Add((nuint)_items);
         }
 
         // Plain publish: see GrowNodeMemory for why a stale view stays safe.
@@ -982,17 +978,16 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
 
     private unsafe void FreeNative()
     {
-        for (int i = 0; i < _retiredCount; i++)
+        for (int i = 0; i < _retiredBlocks.Count; i++)
         {
             void* block = (void*)_retiredBlocks[i];
             if (block != null)
             {
                 NativeMemory.AlignedFree(block);
-                _retiredBlocks[i] = 0;
             }
         }
 
-        _retiredCount = 0;
+        _retiredBlocks.Clear();
 
         if (_nodes != null)
         {
