@@ -93,6 +93,12 @@ internal sealed class IslandSolver
             {
                 Union(slotA, slotB);
             }
+
+            if (joint.Kind == JointKind.Gear)
+            {
+                UnionGearBodies(joints, joint.GearJointA);
+                UnionGearBodies(joints, joint.GearJointB);
+            }
         }
 
         for (int slot = 0; slot < capacity; slot++)
@@ -183,6 +189,24 @@ internal sealed class IslandSolver
         if (moving && (uint)otherSlot < (uint)_parent.Length && _parent[otherSlot] >= 0)
         {
             _blocked[Find(otherSlot)] = true;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void UnionGearBodies(JointStore joints, JointId gearedId)
+    {
+        if (!joints.IsValid(gearedId))
+        {
+            return;
+        }
+
+        ref readonly JointRecord geared = ref joints.Slot(gearedId);
+        int gearedA = BodyStore.SlotOf(geared.BodyA);
+        int gearedB = BodyStore.SlotOf(geared.BodyB);
+        if (gearedA >= 0 && gearedB >= 0 && gearedA < _parent.Length && gearedB < _parent.Length &&
+            _parent[gearedA] >= 0 && _parent[gearedB] >= 0)
+        {
+            Union(gearedA, gearedB);
         }
     }
 

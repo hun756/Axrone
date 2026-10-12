@@ -800,10 +800,10 @@ public sealed class World : IDisposable
                 continue;
             }
 
-            ref readonly JointRecord joint = ref _joints.SlotByIndex(slot);
-            if (joint.BodyA == bodyId || joint.BodyB == bodyId)
+            JointId jointId = new((uint)slot + 1u);
+            if (_joints.TouchesBody(jointId, bodyId))
             {
-                _joints.Destroy(new JointId((uint)slot + 1u));
+                _joints.Destroy(jointId);
             }
         }
 
