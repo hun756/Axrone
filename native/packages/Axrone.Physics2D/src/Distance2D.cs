@@ -5,7 +5,8 @@ namespace Axrone.Physics2D;
 /// shapes. The traversal is generic over the shape types, so the compiler
 /// monomorphizes one solver per pair with no virtual dispatch; witness points
 /// travel alongside every simplex vertex, so the answer carries both the
-/// distance and where it is attained.
+/// distance and where it is attained. Simplex reduction runs on the shared
+/// <see cref="Simplex2D"/> primitives.
 /// </summary>
 public static class Gjk2D
 {
@@ -14,21 +15,6 @@ public static class Gjk2D
     private const float OverlapDistanceSquared = 1e-12f;
     private const float ImprovementTolerance = 1e-9f;
     private const float DuplicateDistanceSquared = 1e-12f;
-
-    /// <summary>One Minkowski-difference vertex with its witness pair.</summary>
-    private readonly struct MPoint
-    {
-        public readonly Vec2 Difference;
-        public readonly Vec2 PointA;
-        public readonly Vec2 PointB;
-
-        public MPoint(Vec2 difference, Vec2 pointA, Vec2 pointB)
-        {
-            Difference = difference;
-            PointA = pointA;
-            PointB = pointB;
-        }
-    }
 
     /// <summary>
     /// Computes the distance between two shapes plus the attaining witness
@@ -57,12 +43,12 @@ public static class Gjk2D
             direction = new Vec2(1.0f, 0.0f);
         }
 
-        Span<MPoint> simplex = stackalloc MPoint[3];
+        Span<Simplex2D.Vertex> simplex = stackalloc Simplex2D.Vertex[3];
         int count = 0;
 
         Vec2 firstA = TA.Support(in shapeA, direction);
         Vec2 firstB = TB.Support(in shapeB, direction * -1.0f);
-        simplex[count++] = new MPoint(firstA - firstB, firstA, firstB);
+        simplex[count++] = new Simplex2D.Vertex(firstA - firstB, firstA, firstB);
 
         float bestDistSq = float.PositiveInfinity;
         Vec2 bestA = firstA;
@@ -87,7 +73,7 @@ public static class Gjk2D
             }
 
             bestDistSq = distSq;
-            MPoint first = simplex[0];
+            Simplex2D.Vertex first = simplex[0];
             if (count == 1)
             {
                 bestA = first.PointA;
@@ -95,14 +81,14 @@ public static class Gjk2D
             }
             else
             {
-                MPoint second = simplex[1];
+                Simplex2D.Vertex second = simplex[1];
                 bestA = (first.PointA * w1) + (second.PointA * w2);
                 bestB = (first.PointB * w1) + (second.PointB * w2);
             }
 
             Vec2 supportA = TA.Support(in shapeA, search);
             Vec2 supportB = TB.Support(in shapeB, search * -1.0f);
-            MPoint candidate = new(supportA - supportB, supportA, supportB);
+            Simplex2D.Vertex candidate = new(supportA - supportB, supportA, supportB);
 
             bool duplicate = false;
             for (int i = 0; i < count; i++)
@@ -130,7 +116,7 @@ public static class Gjk2D
 
     /// <summary>Reduces the simplex to its closest feature, reporting weights for witness blending.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void Solve(Span<MPoint> simplex, ref int count, out Vec2 closest, out Vec2 search, out float w1, out float w2)
+    private static void Solve(Span<Simplex2D.Vertex> simplex, ref int count, out Vec2 closest, out Vec2 search, out float w1, out float w2)
     {
         if (count == 1)
         {
@@ -162,50 +148,20 @@ public static class Gjk2D
         search = closest * -1.0f;
     }
 
-    /// <summary>Closest point on edge (u, v) to the origin with barycentric weights.</summary>
+    /// <summary>Closest point on edge (u, v) with reduction to the winning feature.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolveEdge(in MPoint u, in MPoint v, out Vec2 closest, out float w1, out float w2)
-    {
-        Vec2 edge = v.Difference - u.Difference;
-        float denom = Vec2.Dot(edge, edge);
-        if (denom < ZeroDirectionEpsilon)
-        {
-            closest = u.Difference;
-            w1 = 1.0f;
-            w2 = 0.0f;
-            return;
-        }
-
-        float t = Vec2.Dot(u.Difference * -1.0f, edge) / denom;
-        if (t <= 0.0f)
-        {
-            closest = u.Difference;
-            w1 = 1.0f;
-            w2 = 0.0f;
-        }
-        else if (t >= 1.0f)
-        {
-            closest = v.Difference;
-            w1 = 0.0f;
-            w2 = 1.0f;
-        }
-        else
-        {
-            closest = u.Difference + (edge * t);
-            w1 = 1.0f - t;
-            w2 = t;
-        }
-    }
+    private static void SolveEdge(in Simplex2D.Vertex u, in Simplex2D.Vertex v, out Vec2 closest, out float w1, out float w2) =>
+        Simplex2D.ClosestOnEdge(in u, in v, out closest, out w1, out w2);
 
     /// <summary>Reduces a triangle to its closest vertex or edge; origin inside means overlap.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolveTriangle(Span<MPoint> simplex, ref int count, out Vec2 closest, out float w1, out float w2)
+    private static void SolveTriangle(Span<Simplex2D.Vertex> simplex, ref int count, out Vec2 closest, out float w1, out float w2)
     {
-        MPoint a = simplex[0];
-        MPoint b = simplex[1];
-        MPoint c = simplex[2];
+        Simplex2D.Vertex a = simplex[0];
+        Simplex2D.Vertex b = simplex[1];
+        Simplex2D.Vertex c = simplex[2];
 
-        if (IsVertexClosest(a.Difference, b.Difference, c.Difference))
+        if (Simplex2D.IsVertexClosest(a.Difference, b.Difference, c.Difference))
         {
             simplex[0] = a;
             SolveEdge(a, a, out closest, out w1, out w2);
@@ -213,7 +169,7 @@ public static class Gjk2D
             return;
         }
 
-        if (IsVertexClosest(b.Difference, a.Difference, c.Difference))
+        if (Simplex2D.IsVertexClosest(b.Difference, a.Difference, c.Difference))
         {
             simplex[0] = b;
             SolveEdge(b, b, out closest, out w1, out w2);
@@ -221,7 +177,7 @@ public static class Gjk2D
             return;
         }
 
-        if (IsVertexClosest(c.Difference, a.Difference, b.Difference))
+        if (Simplex2D.IsVertexClosest(c.Difference, a.Difference, b.Difference))
         {
             simplex[0] = c;
             SolveEdge(c, c, out closest, out w1, out w2);
@@ -229,7 +185,7 @@ public static class Gjk2D
             return;
         }
 
-        if (OriginInTriangle(a.Difference, b.Difference, c.Difference))
+        if (Simplex2D.OriginInTriangle(a.Difference, b.Difference, c.Difference))
         {
             closest = Vec2.Zero;
             w1 = 1.0f;
@@ -240,8 +196,8 @@ public static class Gjk2D
         }
 
         float bestDistSq = float.PositiveInfinity;
-        MPoint bestU = a;
-        MPoint bestV = b;
+        Simplex2D.Vertex bestU = a;
+        Simplex2D.Vertex bestV = b;
         float bestW1 = 0.5f;
         float bestW2 = 0.5f;
 
@@ -257,29 +213,14 @@ public static class Gjk2D
         count = 2;
     }
 
-    /// <summary>Whether the origin's closest simplex point is the vertex itself.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsVertexClosest(Vec2 vertex, Vec2 neighborA, Vec2 neighborB) =>
-        Vec2.Dot(vertex, vertex - neighborA) <= 0.0f && Vec2.Dot(vertex, vertex - neighborB) <= 0.0f;
-
-    /// <summary>Whether the origin lies strictly inside the triangle.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool OriginInTriangle(Vec2 a, Vec2 b, Vec2 c)
-    {
-        float s1 = ((b.X - a.X) * -a.Y) - ((b.Y - a.Y) * -a.X);
-        float s2 = ((c.X - b.X) * -b.Y) - ((c.Y - b.Y) * -b.X);
-        float s3 = ((a.X - c.X) * -c.Y) - ((a.Y - c.Y) * -c.X);
-        return (s1 > 0.0f && s2 > 0.0f && s3 > 0.0f) || (s1 < 0.0f && s2 < 0.0f && s3 < 0.0f);
-    }
-
     /// <summary>Keeps the closest of the candidate edge and the running best.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void TryEdge(
-        in MPoint u,
-        in MPoint v,
+        in Simplex2D.Vertex u,
+        in Simplex2D.Vertex v,
         ref float bestDistSq,
-        ref MPoint bestU,
-        ref MPoint bestV,
+        ref Simplex2D.Vertex bestU,
+        ref Simplex2D.Vertex bestV,
         ref float bestW1,
         ref float bestW2)
     {
