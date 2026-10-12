@@ -117,6 +117,86 @@ public class Aabb3DQueryTests
     }
 
     [Fact]
+    public void Sweep_XFace_FromPositiveSide_PointsAlongTravel()
+    {
+        Aabb3D mover = new(3.5F, 0.0F, 0.0F, 4.5F, 1.0F, 1.0F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(-5.0F, 0.0F, 0.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Normal.Should().Be(new Vec3(-1.0F, 0.0F, 0.0F));
+    }
+
+    [Fact]
+    public void Sweep_YFace_FromBelow_PointsAlongTravel()
+    {
+        Aabb3D mover = new(0.5F, -2.5F, 0.5F, 1.5F, -1.5F, 1.5F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(0.0F, 5.0F, 0.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Time.Should().BeApproximately(0.3F, 1e-4F);
+        sweep.Normal.Should().Be(new Vec3(0.0F, 1.0F, 0.0F));
+    }
+
+    [Fact]
+    public void Sweep_YFace_FromAbove_PointsAlongTravel()
+    {
+        Aabb3D mover = new(0.5F, 3.5F, 0.5F, 1.5F, 4.5F, 1.5F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(0.0F, -5.0F, 0.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Normal.Should().Be(new Vec3(0.0F, -1.0F, 0.0F));
+    }
+
+    [Fact]
+    public void Sweep_ZFace_FromBelow_PointsAlongTravel()
+    {
+        Aabb3D mover = new(0.5F, 0.5F, -2.5F, 1.5F, 1.5F, -1.5F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(0.0F, 0.0F, 5.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Normal.Should().Be(new Vec3(0.0F, 0.0F, 1.0F));
+    }
+
+    [Fact]
+    public void Sweep_ZFace_FromAbove_PointsAlongTravel()
+    {
+        Aabb3D mover = new(0.5F, 0.5F, 3.5F, 1.5F, 1.5F, 4.5F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(0.0F, 0.0F, -5.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Normal.Should().Be(new Vec3(0.0F, 0.0F, -1.0F));
+    }
+
+    [Fact]
+    public void Sweep_OffAxisContact_SelectsTravelFace()
+    {
+        Aabb3D mover = new(0.75F, 0.75F, -2.25F, 1.25F, 1.25F, -1.75F);
+        Aabb3D target = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Vec3 velocity = new(0.0F, 0.0F, 3.0F);
+
+        bool hit = mover.Sweep(in target, in velocity, out SweepHit3 sweep);
+
+        hit.Should().BeTrue();
+        sweep.Time.Should().BeApproximately(1.75F / 3.0F, 1e-4F);
+        sweep.Normal.Should().Be(new Vec3(0.0F, 0.0F, 1.0F));
+    }
+
+    [Fact]
     public void Sweep_StationaryOverlap_True()
     {
         Aabb3D mover = new(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F);

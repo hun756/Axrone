@@ -233,18 +233,26 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
         Vec3 hitOffset = hitPoint - target.Center;
         Vec3 targetExtents = target.Extents;
 
-        Vec3 normal = Vec3.Zero;
-        if (MathF.Abs(hitOffset.X) <= targetExtents.X)
+        // Contact face = the axis the hit point overshoots the most: on that
+        // axis the offset clears the target half-size by the widest margin.
+        // The normal points along the travel direction on that axis, matching
+        // the pinned X-face behavior.
+        float overX = MathF.Abs(hitOffset.X) - targetExtents.X;
+        float overY = MathF.Abs(hitOffset.Y) - targetExtents.Y;
+        float overZ = MathF.Abs(hitOffset.Z) - targetExtents.Z;
+
+        Vec3 normal;
+        if (overX >= overY && overX >= overZ)
         {
-            normal = new Vec3(0.0F, hitOffset.Y > 0.0F ? -1.0F : 1.0F, 0.0F);
+            normal = new Vec3(-MathF.Sign(hitOffset.X), 0.0F, 0.0F);
         }
-        else if (MathF.Abs(hitOffset.Y) <= targetExtents.Y)
+        else if (overY >= overZ)
         {
-            normal = new Vec3(hitOffset.X > 0.0F ? -1.0F : 1.0F, 0.0F, 0.0F);
+            normal = new Vec3(0.0F, -MathF.Sign(hitOffset.Y), 0.0F);
         }
         else
         {
-            normal = new Vec3(0.0F, 0.0F, hitOffset.Z > 0.0F ? -1.0F : 1.0F);
+            normal = new Vec3(0.0F, 0.0F, -MathF.Sign(hitOffset.Z));
         }
 
         hit = new SweepHit3(normalizedTime, normal, hitPoint);
