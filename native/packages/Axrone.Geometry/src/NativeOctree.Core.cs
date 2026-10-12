@@ -756,34 +756,64 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
                 return;
             }
 
-            NodeIndex childBase = node.ChildBaseIndex;
-            ushort subtreeItemCount = 0;
-
-            for (int i = 0; i < 8; i++)
-            {
-                ref OctreeNode child = ref _nodes[childBase.Value + i];
-                if (child.ChildBaseIndex.IsValid || child.ItemCount > 0)
-                {
-                    subtreeItemCount += child.ItemCount;
-                    if (!TPartition.ShouldPrune(subtreeItemCount, node.Depth))
-                    {
-                        return;
-                    }
-                }
-            }
-
-            if (!TPartition.ShouldPrune(subtreeItemCount, node.Depth))
+            // True subtree total: direct counts miss items held by deeper
+            // levels, and collapsing on those would orphan live branches.
+            uint liveBelow = CountSubtreeItems(node.ChildBaseIndex);
+            if (liveBelow > ushort.MaxValue || !TPartition.ShouldPrune((ushort)liveBelow, node.Depth))
             {
                 return;
             }
 
-            ReturnNodeBlock(childBase);
+            CollapseSubtree(node.ChildBaseIndex);
             node.ChildBaseIndex = NodeIndex.Null;
             node.ChildMask = 0;
             TMetrics.OnNodeMerged(node.Depth);
 
             current = node.ParentIndex;
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private unsafe uint CountSubtreeItems(NodeIndex childBase)
+    {
+        uint total = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            ref OctreeNode child = ref _nodes[childBase.Value + i];
+            total += child.ItemCount;
+            if (total > ushort.MaxValue)
+            {
+                return total;
+            }
+
+            if (child.ChildBaseIndex.IsValid)
+            {
+                total += CountSubtreeItems(child.ChildBaseIndex);
+                if (total > ushort.MaxValue)
+                {
+                    return total;
+                }
+            }
+        }
+
+        return total;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private unsafe void CollapseSubtree(NodeIndex childBase)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            ref OctreeNode child = ref _nodes[childBase.Value + i];
+            if (child.ChildBaseIndex.IsValid)
+            {
+                CollapseSubtree(child.ChildBaseIndex);
+                child.ChildBaseIndex = NodeIndex.Null;
+                child.ChildMask = 0;
+            }
+        }
+
+        ReturnNodeBlock(childBase);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

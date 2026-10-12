@@ -277,6 +277,54 @@ public class OctreeTests
     }
 
     [Fact]
+    public void Prune_KeepsLiveGrandchildren()
+    {
+        using var tree = CreateTree();
+        for (int i = 0; i < 16; i++)
+        {
+            float c = 8f + i * 0.2f;
+            tree.Insert(BoxAt(c, c, c, 0.3f), i);
+        }
+
+        OctreeHandle o0 = tree.Insert(BoxAt(-8, -8, -8, 0.5f), 100);
+        OctreeHandle o1 = tree.Insert(BoxAt(-7, -7, -7, 0.5f), 101);
+        tree.Insert(BoxAt(8.05f, 8.05f, 8.05f, 0.3f), 200);
+
+        tree.Remove(o0).Should().BeTrue();
+        tree.Remove(o1).Should().BeTrue();
+
+        tree.Count.Should().Be(17u);
+
+        Span<SpatialItem<int>> buffer = stackalloc SpatialItem<int>[24];
+        var visitor = new SpanCollectorVisitor<int>(buffer);
+        tree.QueryBox(s_root, ref visitor);
+        visitor.Count.Should().Be(17);
+    }
+
+    [Fact]
+    public void Clear_InvalidatesOldHandles()
+    {
+        using var tree = CreateTree();
+        OctreeHandle old = tree.Insert(Box(0, 1), 1);
+
+        tree.Clear();
+        tree.Count.Should().Be(0u);
+
+        OctreeHandle next = tree.Insert(Box(5, 1), 2);
+        next.Should().NotBe(old);
+        tree.Remove(old).Should().BeFalse();
+        tree.Update(old, Box(0, 1), 9).Should().BeFalse();
+
+        Span<SpatialItem<int>> buffer = stackalloc SpatialItem<int>[8];
+        var visitor = new SpanCollectorVisitor<int>(buffer);
+        tree.QueryBox(Box(0, 1), ref visitor);
+        visitor.Count.Should().Be(0);
+        tree.QueryBox(Box(5, 1), ref visitor);
+        visitor.Count.Should().Be(1);
+        buffer[0].Value.Should().Be(2);
+    }
+
+    [Fact]
     public void EnumerateBox_WalksItems()
     {
         using var tree = CreateTree();
