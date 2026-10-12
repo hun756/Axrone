@@ -1,5 +1,6 @@
 namespace Axrone.Physics2D;
 
+using System.Buffers;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -161,16 +162,20 @@ public struct Contact : IEquatable<Contact>
     /// <summary>Current manifold.</summary>
     public ContactManifold Manifold { get; internal set; }
 
+    /// <summary>Whether either shape is a trigger-only sensor.</summary>
+    public bool IsSensor { get; internal set; }
+
     /// <summary>Warm-start store carried across steps.</summary>
     public ContactCache Cache { get; internal set; }
 
-    internal Contact(ShapeId shapeA, ShapeId shapeB, BodyId bodyA, BodyId bodyB, in ContactManifold manifold, ContactCache cache)
+    internal Contact(ShapeId shapeA, ShapeId shapeB, BodyId bodyA, BodyId bodyB, in ContactManifold manifold, ContactCache cache, bool isSensor)
     {
         ShapeA = shapeA;
         ShapeB = shapeB;
         BodyA = bodyA;
         BodyB = bodyB;
         Manifold = manifold;
+        IsSensor = isSensor;
         Cache = cache;
     }
 
@@ -195,6 +200,14 @@ public struct Contact : IEquatable<Contact>
 }
 
 /// <summary>
+/// Pair lifecycle notice: a shape pair started or stopped overlapping. Events
+/// accumulate across the step and clear at the start of the next one; read
+/// them after <see cref="World.Step"/>.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct ContactEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, bool Began);
+
+/// <summary>
 /// Simulation world: owns bodies, shapes and the broadphase tree, and runs
 /// the step loop — integrate, sync broadphase, collect pairs, evaluate
 /// manifolds with filtering and warm-start carry. Contacts persist across
@@ -214,6 +227,11 @@ public sealed class World : IDisposable
     private Contact[] _previous;
     private int _contactCount;
     private int _previousCount;
+    private ContactEvent[] _events;
+    private int _eventCount;
+    private PairKey[] _lastPairs;
+    private PairKey[] _currentPairs;
+    private int _lastPairCount;
     private int _disposed;
 
     /// <summary>Gravity of the world.</summary>
@@ -271,6 +289,11 @@ public sealed class World : IDisposable
         _previous = new Contact[InitialContactCapacity];
         _contactCount = 0;
         _previousCount = 0;
+        _events = new ContactEvent[InitialContactCapacity];
+        _eventCount = 0;
+        _lastPairs = new PairKey[InitialContactCapacity];
+        _currentPairs = new PairKey[InitialContactCapacity];
+        _lastPairCount = 0;
         _disposed = 0;
     }
 
@@ -320,6 +343,197 @@ public sealed class World : IDisposable
         return _contacts[index];
     }
 
+    /// <summary>Pair notices raised by the last step; cleared on the next one.</summary>
+    public int ContactEventCount
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _eventCount;
+    }
+
+    /// <summary>Reads the pair notice at <paramref name="index"/>.</summary>
+    public ContactEvent GetContactEvent(int index)
+    {
+        if ((uint)index >= (uint)_eventCount)
+        {
+            ThrowHelper.ThrowInvalidOperation("Contact event index is out of range.");
+        }
+
+        return _events[index];
+    }
+
+    /// <summary>
+    /// Casts <paramref name="ray"/> against every shape and writes the hits
+    /// into <paramref name="hits"/> in deterministic order (distance, then
+    /// shape id). Sensors report like solids; the broadphase only prunes, the
+    /// narrow phase decides.
+    /// </summary>
+    /// <param name="ray">The query ray; its direction is unit length by construction.</param>
+    /// <param name="maxDistance">Travel limit; must be positive and finite.</param>
+    /// <param name="hits">Destination span; excess hits are dropped once it is full.</param>
+    /// <returns>Number of hits written to <paramref name="hits"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public int Raycast(in Ray2D ray, float maxDistance, Span<RaycastHit2D> hits)
+    {
+        ThrowIfDisposed();
+
+        if (!(maxDistance > 0.0f) || float.IsNaN(maxDistance) || float.IsInfinity(maxDistance))
+        {
+            ThrowHelper.ThrowInvalidOperation("Raycast distance must be positive and finite.");
+        }
+
+        if (hits.IsEmpty || _tree.Count == 0)
+        {
+            return 0;
+        }
+
+        int budget = _tree.Count;
+        RayHit[] rentedCandidates = ArrayPool<RayHit>.Shared.Rent(budget);
+        RaycastHit2D[] rentedHits = ArrayPool<RaycastHit2D>.Shared.Rent(budget);
+        try
+        {
+            int candidateCount = _tree.RayCast(in ray, rentedCandidates.AsSpan(0, budget), maxDistance);
+
+            int hitCount = 0;
+            for (int i = 0; i < candidateCount; i++)
+            {
+                ShapeId shapeId = _tree.GetUserData(rentedCandidates[i].ItemId);
+                if (TryRaycastShape(shapeId, in ray, maxDistance, out RaycastHit2D hit))
+                {
+                    rentedHits[hitCount++] = hit;
+                }
+            }
+
+            SortHits(rentedHits.AsSpan(0, hitCount));
+
+            int written = Math.Min(hitCount, hits.Length);
+            rentedHits.AsSpan(0, written).CopyTo(hits);
+            return written;
+        }
+        finally
+        {
+            ArrayPool<RayHit>.Shared.Return(rentedCandidates);
+            ArrayPool<RaycastHit2D>.Shared.Return(rentedHits);
+        }
+    }
+
+    /// <summary>
+    /// Collects the shapes whose bounds overlap <paramref name="box"/> into
+    /// <paramref name="results"/> in deterministic shape-id order. Sensors
+    /// report like solids.
+    /// </summary>
+    /// <param name="box">The query bounds.</param>
+    /// <param name="results">Destination span; excess shapes are dropped once it is full.</param>
+    /// <returns>Number of shapes written to <paramref name="results"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public int OverlapAabb(in Aabb2D box, Span<ShapeId> results)
+    {
+        ThrowIfDisposed();
+
+        if (results.IsEmpty || _tree.Count == 0)
+        {
+            return 0;
+        }
+
+        int budget = _tree.Count;
+        SpatialItemId[] rented = ArrayPool<SpatialItemId>.Shared.Rent(budget);
+        ShapeId[] staged = ArrayPool<ShapeId>.Shared.Rent(budget);
+        try
+        {
+            int candidateCount = _tree.QueryOverlaps(in box, rented.AsSpan(0, budget));
+
+            for (int i = 0; i < candidateCount; i++)
+            {
+                staged[i] = _tree.GetUserData(rented[i]);
+            }
+
+            Span<ShapeId> found = staged.AsSpan(0, candidateCount);
+            for (int i = 1; i < found.Length; i++)
+            {
+                ShapeId key = found[i];
+                int j = i - 1;
+                while (j >= 0 && found[j].Value > key.Value)
+                {
+                    found[j + 1] = found[j];
+                    j--;
+                }
+
+                found[j + 1] = key;
+            }
+
+            int written = Math.Min(candidateCount, results.Length);
+            found[..written].CopyTo(results);
+            return written;
+        }
+        finally
+        {
+            ArrayPool<SpatialItemId>.Shared.Return(rented);
+            ArrayPool<ShapeId>.Shared.Return(staged);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private bool TryRaycastShape(ShapeId shapeId, in Ray2D ray, float maxDistance, out RaycastHit2D hit)
+    {
+        ref ShapeRecord record = ref _shapes.Slot(shapeId);
+
+        switch (record.Kind)
+        {
+            case ColliderKind.Circle:
+                if (ShapeRaycaster.RaycastCircle(
+                    in ray, record.WorldCircle.Center, record.WorldCircle.Radius, maxDistance,
+                    out float circleDistance, out Vec2 circleNormal, out Vec2 circlePoint))
+                {
+                    hit = new RaycastHit2D(shapeId, record.Body, circlePoint, circleNormal, circleDistance);
+                    return true;
+                }
+
+                break;
+
+            case ColliderKind.Capsule:
+                if (ShapeRaycaster.RaycastCapsule(
+                    in ray, record.WorldCapsule.P0, record.WorldCapsule.P1, record.WorldCapsule.Radius, maxDistance,
+                    out float capsuleDistance, out Vec2 capsuleNormal, out Vec2 capsulePoint))
+                {
+                    hit = new RaycastHit2D(shapeId, record.Body, capsulePoint, capsuleNormal, capsuleDistance);
+                    return true;
+                }
+
+                break;
+
+            default:
+                if (ShapeRaycaster.RaycastPolygon(
+                    in ray, record.WorldPolygon.Vertices, record.WorldPolygon.Normals, maxDistance,
+                    out float polygonDistance, out Vec2 polygonNormal, out Vec2 polygonPoint))
+                {
+                    hit = new RaycastHit2D(shapeId, record.Body, polygonPoint, polygonNormal, polygonDistance);
+                    return true;
+                }
+
+                break;
+        }
+
+        hit = default;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void SortHits(Span<RaycastHit2D> hits)
+    {
+        for (int i = 1; i < hits.Length; i++)
+        {
+            RaycastHit2D key = hits[i];
+            int j = i - 1;
+            while (j >= 0 && (hits[j].Distance > key.Distance ||
+                (hits[j].Distance == key.Distance && hits[j].Shape.Value > key.Shape.Value)))
+            {
+                hits[j + 1] = hits[j];
+                j--;
+            }
+
+            hits[j + 1] = key;
+        }
+    }
+
     /// <summary>
     /// Advances the world by <paramref name="dt"/>: fast bullets transparently
     /// split the step into sweep-bounded slices so no slice moves a bullet
@@ -342,6 +556,8 @@ public sealed class World : IDisposable
         int slices = CcdSliceCount(dt);
         float h = dt / slices;
 
+        _eventCount = 0;
+
         for (int slice = 0; slice < slices; slice++)
         {
             StepSlice(h);
@@ -355,6 +571,8 @@ public sealed class World : IDisposable
             TimeToSleep,
             LinearSleepTolerance,
             AngularSleepTolerance);
+
+        PublishContactEvents();
     }
 
     /// <summary>
@@ -539,6 +757,14 @@ public sealed class World : IDisposable
             }
         }
 
+        for (int i = _lastPairCount - 1; i >= 0; i--)
+        {
+            if (_lastPairs[i].BodyA == bodyId || _lastPairs[i].BodyB == bodyId)
+            {
+                _lastPairs[i] = _lastPairs[--_lastPairCount];
+            }
+        }
+
         _bodies.Destroy(bodyId);
     }
 
@@ -552,6 +778,11 @@ public sealed class World : IDisposable
             _previous = [];
             _contactCount = 0;
             _previousCount = 0;
+            _events = [];
+            _eventCount = 0;
+            _lastPairs = [];
+            _currentPairs = [];
+            _lastPairCount = 0;
         }
 
         GC.SuppressFinalize(this);
@@ -567,14 +798,88 @@ public sealed class World : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddContact(ShapeId shapeA, ShapeId shapeB, BodyId bodyA, BodyId bodyB, in ContactManifold manifold)
+    private void AddContact(ShapeId shapeA, ShapeId shapeB, BodyId bodyA, BodyId bodyB, in ContactManifold manifold, bool isSensor)
     {
         if (_contactCount >= _contacts.Length)
         {
             Array.Resize(ref _contacts, _contacts.Length * 2);
         }
 
-        _contacts[_contactCount++] = new Contact(shapeA, shapeB, bodyA, bodyB, in manifold, default);
+        _contacts[_contactCount++] = new Contact(shapeA, shapeB, bodyA, bodyB, in manifold, default, isSensor);
+    }
+
+    /// <summary>Pair identity snapshot for begin/end diffing; shape order matches contacts.</summary>
+    private readonly record struct PairKey(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB);
+
+    /// <summary>
+    /// Diffs this step's pairs against the last published set: unseen pairs
+    /// raise begin notices, vanished pairs raise end notices, then the
+    /// snapshot becomes the new baseline. Sensor pairs report like any other.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void PublishContactEvents()
+    {
+        if (_currentPairs.Length < _contactCount)
+        {
+            Array.Resize(ref _currentPairs, Math.Max(_contactCount, 1));
+        }
+
+        for (int i = 0; i < _contactCount; i++)
+        {
+            _currentPairs[i] = new PairKey(_contacts[i].ShapeA, _contacts[i].ShapeB, _contacts[i].BodyA, _contacts[i].BodyB);
+        }
+
+        for (int i = 0; i < _contactCount; i++)
+        {
+            bool known = false;
+            for (int j = 0; j < _lastPairCount; j++)
+            {
+                if (_lastPairs[j].ShapeA == _currentPairs[i].ShapeA && _lastPairs[j].ShapeB == _currentPairs[i].ShapeB)
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known)
+            {
+                EmitEvent(_currentPairs[i], began: true);
+            }
+        }
+
+        for (int j = 0; j < _lastPairCount; j++)
+        {
+            bool alive = false;
+            for (int i = 0; i < _contactCount; i++)
+            {
+                if (_currentPairs[i].ShapeA == _lastPairs[j].ShapeA && _currentPairs[i].ShapeB == _lastPairs[j].ShapeB)
+                {
+                    alive = true;
+                    break;
+                }
+            }
+
+            if (!alive)
+            {
+                EmitEvent(_lastPairs[j], began: false);
+            }
+        }
+
+        PairKey[] swap = _lastPairs;
+        _lastPairs = _currentPairs;
+        _currentPairs = swap;
+        _lastPairCount = _contactCount;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EmitEvent(in PairKey pair, bool began)
+    {
+        if (_eventCount >= _events.Length)
+        {
+            Array.Resize(ref _events, Math.Max(_events.Length * 2, 1));
+        }
+
+        _events[_eventCount++] = new ContactEvent(pair.ShapeA, pair.ShapeB, pair.BodyA, pair.BodyB, began);
     }
 
     private struct PairCollector : IPairVisitor<ShapeId, World>
@@ -622,7 +927,7 @@ public sealed class World : IDisposable
                 return true;
             }
 
-            _world.AddContact(shapeA, shapeB, bodyA, bodyB, in manifold);
+            _world.AddContact(shapeA, shapeB, bodyA, bodyB, in manifold, recordA.IsSensor || recordB.IsSensor);
             return true;
         }
     }

@@ -47,6 +47,11 @@ public static class ContactSolver
         for (int i = 0; i < contacts.Length; i++)
         {
             ref Contact contact = ref contacts[i];
+            if (contact.IsSensor)
+            {
+                continue;
+            }
+
             ContactManifold manifold = contact.Manifold;
 
             ref BodyState stateA = ref bodies.Slot(contact.BodyA);
@@ -138,6 +143,11 @@ public static class ContactSolver
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void SolveContactVelocity(BodyStore bodies, ShapeStore shapes, ref Contact contact)
     {
+        if (contact.IsSensor)
+        {
+            return;
+        }
+
         ref BodyState stateA = ref bodies.Slot(contact.BodyA);
         ref BodyState stateB = ref bodies.Slot(contact.BodyB);
 
@@ -376,6 +386,11 @@ public static class ContactSolver
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void SolveContactPosition(BodyStore bodies, ref Contact contact)
     {
+        if (contact.IsSensor)
+        {
+            return;
+        }
+
         ref BodyState stateA = ref bodies.Slot(contact.BodyA);
         ref BodyState stateB = ref bodies.Slot(contact.BodyB);
 

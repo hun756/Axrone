@@ -45,6 +45,9 @@ internal struct ShapeRecord
     /// <summary>Contact response.</summary>
     public PhysicsMaterial Material;
 
+    /// <summary>Trigger-only collider: overlaps report but never push.</summary>
+    public bool IsSensor;
+
     /// <summary>Local disc; live when <see cref="Kind"/> is <see cref="ColliderKind.Circle"/>.</summary>
     public Circle2 LocalCircle;
 
@@ -129,14 +132,15 @@ public sealed class ShapeStore
         CollisionFilter filter = default,
         PhysicsMaterial material = default,
         Vec2 localOffset = default,
-        float localAngle = 0.0f)
+        float localAngle = 0.0f,
+        bool isSensor = false)
         where TStrategy : struct, ISpatialPartitionStrategy2D
         where TMetrics : struct, ISpatialMetricsSink
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(tree);
         var local = new Circle2(center, radius);
-        int slot = InsertRecord(bodies, bodyId, ColliderKind.Circle, density, filter, material, localOffset, localAngle);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Circle, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalCircle = local;
         FinishAttach(bodies, tree, slot);
         return new ShapeId((uint)slot + 1u);
@@ -154,14 +158,15 @@ public sealed class ShapeStore
         CollisionFilter filter = default,
         PhysicsMaterial material = default,
         Vec2 localOffset = default,
-        float localAngle = 0.0f)
+        float localAngle = 0.0f,
+        bool isSensor = false)
         where TStrategy : struct, ISpatialPartitionStrategy2D
         where TMetrics : struct, ISpatialMetricsSink
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(tree);
         var local = new Capsule2D(p0, p1, radius);
-        int slot = InsertRecord(bodies, bodyId, ColliderKind.Capsule, density, filter, material, localOffset, localAngle);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Capsule, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalCapsule = local;
         FinishAttach(bodies, tree, slot);
         return new ShapeId((uint)slot + 1u);
@@ -177,14 +182,15 @@ public sealed class ShapeStore
         CollisionFilter filter = default,
         PhysicsMaterial material = default,
         Vec2 localOffset = default,
-        float localAngle = 0.0f)
+        float localAngle = 0.0f,
+        bool isSensor = false)
         where TStrategy : struct, ISpatialPartitionStrategy2D
         where TMetrics : struct, ISpatialMetricsSink
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(tree);
         Polygon2D local = Polygon2D.Create(vertices);
-        int slot = InsertRecord(bodies, bodyId, ColliderKind.Polygon, density, filter, material, localOffset, localAngle);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Polygon, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalPolygon = local;
         _shapes[slot].WorldVertices = new Vec2[local.Count];
         _shapes[slot].WorldNormals = new Vec2[local.Count];
@@ -357,6 +363,28 @@ public sealed class ShapeStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref ShapeRecord Slot(ShapeId id) => ref _shapes[Validate(id)];
 
+    /// <summary>Slot capacity for internal iteration.</summary>
+    internal int SlotCapacity
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _capacity;
+    }
+
+    /// <summary>Whether a raw slot holds a live shape; for internal iteration.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool IsSlotLive(int slot) => slot >= 0 && slot < _capacity && _shapes[slot].Live;
+
+    /// <summary>Whether a shape is a trigger-only sensor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsSensor(ShapeId id) => _shapes[Validate(id)].IsSensor;
+
+    /// <summary>Marks a shape as a trigger-only sensor or a solid collider. Bounds never change, so the tree needs no sync.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetSensor(ShapeId id, bool isSensor)
+    {
+        _shapes[Validate(id)].IsSensor = isSensor;
+    }
+
     private void FinishAttach<TStrategy, TMetrics>(
         BodyStore bodies,
         DynamicAabbTree2D<ShapeId, TStrategy, TMetrics> tree,
@@ -385,7 +413,8 @@ public sealed class ShapeStore
         CollisionFilter filter,
         PhysicsMaterial material,
         Vec2 localOffset,
-        float localAngle)
+        float localAngle,
+        bool isSensor)
     {
         bodies.Slot(bodyId);
 
@@ -415,6 +444,7 @@ public sealed class ShapeStore
         shape.Density = density;
         shape.Filter = filter;
         shape.Material = material;
+        shape.IsSensor = isSensor;
         shape.TreeItem = SpatialItemId.Invalid;
         shape.NextShape = -1;
         return slot;
