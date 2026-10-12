@@ -19,6 +19,9 @@ internal static class SolverTuning
 
     /// <summary>Approach speed above which restitution kicks in.</summary>
     public const float RestitutionThreshold = 1.0f;
+
+    /// <summary>Angular allowance inside which limit position correction stays quiet.</summary>
+    public const float AngularSlop = 0.0349f;
 }
 
 /// <summary>

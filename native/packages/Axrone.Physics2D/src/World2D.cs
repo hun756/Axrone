@@ -335,7 +335,7 @@ public sealed class World : IDisposable
         }
 
         ContactSolver.InitVelocityConstraints(_bodies, _shapes, _contacts.AsSpan(0, _contactCount));
-        JointSolver.InitVelocity(_bodies, _joints, LinearSleepTolerance);
+        JointSolver.InitVelocity(_bodies, _joints, LinearSleepTolerance, dt);
 
         for (int iteration = 0; iteration < VelocityIterations; iteration++)
         {
