@@ -366,6 +366,10 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref BodyState Slot(BodyId id) => ref _bodies[Validate(id)];
 
+    /// <summary>Raw slot of an identity without validation; the caller holds the invariant.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int SlotOf(BodyId id) => (int)id.Value - 1;
+
     /// <summary>Slot capacity for internal iteration.</summary>
     internal int SlotCapacity
     {

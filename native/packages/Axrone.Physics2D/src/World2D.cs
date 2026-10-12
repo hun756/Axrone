@@ -61,6 +61,51 @@ public readonly struct WorldDef
             field = value;
         }
     } = 3;
+
+    /// <summary>Quiet seconds before an island sleeps; strictly positive.</summary>
+    public float TimeToSleep
+    {
+        get => field;
+        init
+        {
+            if (!(value > 0.0f) || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowInvalidOperation("Time to sleep must be positive.");
+            }
+
+            field = value;
+        }
+    } = 0.5f;
+
+    /// <summary>Linear speed below which a body counts as quiet; never negative.</summary>
+    public float LinearSleepTolerance
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowInvalidOperation("Linear sleep tolerance must not be negative.");
+            }
+
+            field = value;
+        }
+    } = 0.01f;
+
+    /// <summary>Angular speed below which a body counts as quiet; never negative.</summary>
+    public float AngularSleepTolerance
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowInvalidOperation("Angular sleep tolerance must not be negative.");
+            }
+
+            field = value;
+        }
+    } = 0.0349f;
 }
 
 /// <summary>
@@ -133,6 +178,7 @@ public sealed class World : IDisposable
     private readonly BodyStore _bodies;
     private readonly ShapeStore _shapes;
     private readonly DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink> _tree;
+    private readonly IslandSolver _islands = new();
     private Contact[] _contacts;
     private Contact[] _previous;
     private int _contactCount;
@@ -147,6 +193,15 @@ public sealed class World : IDisposable
 
     /// <summary>Position sweeps per step.</summary>
     public int PositionIterations { get; set; }
+
+    /// <summary>Quiet seconds before an island sleeps.</summary>
+    public float TimeToSleep { get; set; }
+
+    /// <summary>Linear speed below which a body counts as quiet.</summary>
+    public float LinearSleepTolerance { get; set; }
+
+    /// <summary>Angular speed below which a body counts as quiet.</summary>
+    public float AngularSleepTolerance { get; set; }
 
     /// <summary>Creates a world with default tuning.</summary>
     public World()
@@ -166,6 +221,9 @@ public sealed class World : IDisposable
         Gravity = definition.Gravity;
         VelocityIterations = definition.VelocityIterations;
         PositionIterations = definition.PositionIterations;
+        TimeToSleep = definition.TimeToSleep;
+        LinearSleepTolerance = definition.LinearSleepTolerance;
+        AngularSleepTolerance = definition.AngularSleepTolerance;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _tree = new DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink>(definition.BroadphaseOptions);
@@ -273,6 +331,14 @@ public sealed class World : IDisposable
         SyncAwakeBodies();
 
         ContactSolver.SolvePositions(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), PositionIterations);
+
+        _islands.UpdateSleep(
+            _bodies,
+            _contacts.AsSpan(0, _contactCount),
+            dt,
+            TimeToSleep,
+            LinearSleepTolerance,
+            AngularSleepTolerance);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
