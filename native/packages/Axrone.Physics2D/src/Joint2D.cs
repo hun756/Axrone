@@ -8,6 +8,12 @@ public enum JointKind : byte
 
     /// <summary>Pinned hinge with optional limits and motor.</summary>
     Revolute = 1,
+
+    /// <summary>Locked relative pose; bodies move as one.</summary>
+    Weld = 2,
+
+    /// <summary>Slider along an axis with optional stops and motor.</summary>
+    Prismatic = 3,
 }
 
 /// <summary>Angular limit state of a revolute joint, resolved every step.</summary>
@@ -143,6 +149,48 @@ internal struct JointRecord
 
     /// <summary>Resolved limit state of the current step.</summary>
     public LimitState LimitState;
+
+    /// <summary>Slider axis in the first body frame; live for prismatic joints.</summary>
+    public Vec2 LocalAxisA;
+
+    /// <summary>Along-axis separation at creation; the prismatic zero.</summary>
+    public float ReferenceTranslation;
+
+    /// <summary>Lower slide stop along the axis.</summary>
+    public float LowerTranslation;
+
+    /// <summary>Upper slide stop along the axis.</summary>
+    public float UpperTranslation;
+
+    /// <summary>Whether slide stops apply.</summary>
+    public bool EnablePrismaticLimit;
+
+    /// <summary>Target slide speed along the axis.</summary>
+    public float PrismaticMotorSpeed;
+
+    /// <summary>Peak slide force; never negative.</summary>
+    public float MaxPrismaticForce;
+
+    /// <summary>Whether the slide motor drives.</summary>
+    public bool EnablePrismaticMotor;
+
+    /// <summary>Accumulated weld angle impulse; warm-started every step.</summary>
+    public float WeldAngleImpulse;
+
+    /// <summary>Accumulated perp impulse (.Y); the slide axis stays free except limit/motor.</summary>
+    public Vec2 PrismaticImpulse;
+
+    /// <summary>Accumulated slide motor impulse; warm-started every step.</summary>
+    public float PrismaticMotorImpulse;
+
+    /// <summary>Accumulated slide limit impulse; warm-started every step.</summary>
+    public float PrismaticLimitImpulse;
+
+    /// <summary>Slide motor impulse cap of the current step (force times dt).</summary>
+    public float PrismaticMotorMaxImpulse;
+
+    /// <summary>Resolved slide limit state of the current step.</summary>
+    public LimitState PrismaticLimitState;
 }
 
 /// <summary>
@@ -183,6 +231,72 @@ public readonly struct RevoluteDef
     public float MaxMotorTorque { get; init; } = 0.0f;
 
     /// <summary>Whether the motor drives.</summary>
+    public bool EnableMotor { get; init; } = false;
+}
+
+/// <summary>
+/// Construction parameters of a weld joint: two bodies locked through a
+/// shared world anchor. Local anchors and the reference angle derive from
+/// the world anchor at creation.
+/// </summary>
+public readonly struct WeldDef
+{
+    /// <summary>Creates default parameters.</summary>
+    public WeldDef()
+    {
+    }
+
+    /// <summary>First body.</summary>
+    public BodyId BodyA { get; init; } = BodyId.Invalid;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB { get; init; } = BodyId.Invalid;
+
+    /// <summary>Shared world anchor.</summary>
+    public Vec2 WorldAnchor { get; init; } = default;
+}
+
+/// <summary>
+/// Construction parameters of a prismatic joint: two bodies sliding along a
+/// shared world axis through a world anchor, with optional slide stops and
+/// a slide motor. Local anchors, axis and reference translation derive from
+/// the world frame at creation.
+/// </summary>
+public readonly struct PrismaticDef
+{
+    /// <summary>Creates default parameters.</summary>
+    public PrismaticDef()
+    {
+    }
+
+    /// <summary>First body.</summary>
+    public BodyId BodyA { get; init; } = BodyId.Invalid;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB { get; init; } = BodyId.Invalid;
+
+    /// <summary>Shared world anchor.</summary>
+    public Vec2 WorldAnchor { get; init; } = default;
+
+    /// <summary>Slide axis in world coordinates; normalized at creation.</summary>
+    public Vec2 WorldAxis { get; init; } = new Vec2(1, 0);
+
+    /// <summary>Lower slide stop along the axis.</summary>
+    public float LowerTranslation { get; init; } = 0.0f;
+
+    /// <summary>Upper slide stop along the axis.</summary>
+    public float UpperTranslation { get; init; } = 0.0f;
+
+    /// <summary>Whether slide stops apply.</summary>
+    public bool EnableLimit { get; init; } = false;
+
+    /// <summary>Target slide speed along the axis.</summary>
+    public float MotorSpeed { get; init; } = 0.0f;
+
+    /// <summary>Peak slide force; never negative.</summary>
+    public float MaxMotorForce { get; init; } = 0.0f;
+
+    /// <summary>Whether the slide motor drives.</summary>
     public bool EnableMotor { get; init; } = false;
 }
 
@@ -344,6 +458,134 @@ public sealed class JointStore
         return new JointId((uint)slot + 1u);
     }
 
+    /// <summary>
+    /// Creates a weld locking two bodies through a shared world anchor and
+    /// wakes both bodies. The relative angle and anchor separation freeze at
+    /// creation.
+    /// </summary>
+    /// <param name="bodies">Body registry; both bodies must be live and distinct.</param>
+    /// <param name="definition">Pin anchor.</param>
+    public JointId CreateWeld(BodyStore bodies, in WeldDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        if (!definition.BodyA.IsValid || !definition.BodyB.IsValid || definition.BodyA == definition.BodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Weld joints need two distinct live bodies.");
+        }
+
+        if (float.IsNaN(definition.WorldAnchor.X) || float.IsNaN(definition.WorldAnchor.Y) ||
+            float.IsInfinity(definition.WorldAnchor.X) || float.IsInfinity(definition.WorldAnchor.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Joint anchor must be finite.");
+        }
+
+        ref BodyState stateA = ref bodies.Slot(definition.BodyA);
+        ref BodyState stateB = ref bodies.Slot(definition.BodyB);
+
+        Transform2D transformA = Transform2D.FromRotation(stateA.Position, stateA.Cos, stateA.Sin);
+        Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
+
+        int slot = AllocateSlot();
+        ref JointRecord joint = ref _joints[slot];
+
+        joint = default;
+        joint.Live = true;
+        joint.Kind = JointKind.Weld;
+        joint.BodyA = definition.BodyA;
+        joint.BodyB = definition.BodyB;
+        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
+        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
+        joint.ReferenceAngle = transformB.Angle - transformA.Angle;
+
+        bodies.SetAwake(definition.BodyA, true);
+        bodies.SetAwake(definition.BodyB, true);
+
+        _count++;
+        return new JointId((uint)slot + 1u);
+    }
+
+    /// <summary>
+    /// Creates a slider along a world axis through a world anchor and wakes
+    /// both bodies. Slide stops and the slide motor are configured by
+    /// <paramref name="definition"/>.
+    /// </summary>
+    /// <param name="bodies">Body registry; both bodies must be live and distinct.</param>
+    /// <param name="definition">Slide anchor, axis, stops and motor tuning.</param>
+    public JointId CreatePrismatic(BodyStore bodies, in PrismaticDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        if (!definition.BodyA.IsValid || !definition.BodyB.IsValid || definition.BodyA == definition.BodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Prismatic joints need two distinct live bodies.");
+        }
+
+        if (float.IsNaN(definition.WorldAnchor.X) || float.IsNaN(definition.WorldAnchor.Y) ||
+            float.IsInfinity(definition.WorldAnchor.X) || float.IsInfinity(definition.WorldAnchor.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Joint anchor must be finite.");
+        }
+
+        if (definition.WorldAxis.LengthSquared() < 1e-12f ||
+            float.IsNaN(definition.WorldAxis.X) || float.IsNaN(definition.WorldAxis.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Slide axis must be a finite non-zero vector.");
+        }
+
+        if (definition.EnableLimit && definition.LowerTranslation > definition.UpperTranslation)
+        {
+            ThrowHelper.ThrowInvalidOperation("Lower slide stop must not exceed the upper stop.");
+        }
+
+        if (definition.EnableMotor && (!(definition.MaxMotorForce >= 0.0f) || float.IsNaN(definition.MaxMotorForce)))
+        {
+            ThrowHelper.ThrowInvalidOperation("Slide motor force must be finite and non-negative.");
+        }
+
+        if (float.IsNaN(definition.MotorSpeed) || float.IsInfinity(definition.MotorSpeed))
+        {
+            ThrowHelper.ThrowInvalidOperation("Slide motor speed must be finite.");
+        }
+
+        ref BodyState stateA = ref bodies.Slot(definition.BodyA);
+        ref BodyState stateB = ref bodies.Slot(definition.BodyB);
+
+        Transform2D transformA = Transform2D.FromRotation(stateA.Position, stateA.Cos, stateA.Sin);
+        Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
+
+        Vec2 axis = Vec2.Normalize(definition.WorldAxis);
+
+        int slot = AllocateSlot();
+        ref JointRecord joint = ref _joints[slot];
+
+        joint = default;
+        joint.Live = true;
+        joint.Kind = JointKind.Prismatic;
+        joint.BodyA = definition.BodyA;
+        joint.BodyB = definition.BodyB;
+        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
+        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
+        joint.LocalAxisA = new Vec2(
+            (transformA.Cos * axis.X) + (transformA.Sin * axis.Y),
+            (-transformA.Sin * axis.X) + (transformA.Cos * axis.Y));
+        joint.ReferenceAngle = transformB.Angle - transformA.Angle;
+        joint.ReferenceTranslation = Vec2.Dot(
+            transformB.TransformPoint(joint.LocalAnchorB) - transformA.TransformPoint(joint.LocalAnchorA), axis);
+        joint.LowerTranslation = definition.LowerTranslation;
+        joint.UpperTranslation = definition.UpperTranslation;
+        joint.EnablePrismaticLimit = definition.EnableLimit;
+        joint.PrismaticMotorSpeed = definition.MotorSpeed;
+        joint.MaxPrismaticForce = definition.MaxMotorForce;
+        joint.EnablePrismaticMotor = definition.EnableMotor;
+
+        bodies.SetAwake(definition.BodyA, true);
+        bodies.SetAwake(definition.BodyB, true);
+
+        _count++;
+        return new JointId((uint)slot + 1u);
+    }
+
     /// <summary>Whether <paramref name="id"/> names a live joint.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsValid(JointId id)
@@ -436,13 +678,20 @@ public static class JointSolver
             }
 
             ref JointRecord joint = ref joints.SlotByIndex(slot);
-            if (joint.Kind == JointKind.Distance)
+            switch (joint.Kind)
             {
-                InitDistance(bodies, ref joint, wakeTolerance);
-            }
-            else
-            {
-                InitRevolute(bodies, ref joint, wakeTolerance, dt);
+                case JointKind.Distance:
+                    InitDistance(bodies, ref joint, wakeTolerance);
+                    break;
+                case JointKind.Weld:
+                    InitWeld(bodies, ref joint, wakeTolerance);
+                    break;
+                case JointKind.Prismatic:
+                    InitPrismatic(bodies, ref joint, wakeTolerance, dt);
+                    break;
+                default:
+                    InitRevolute(bodies, ref joint, wakeTolerance, dt);
+                    break;
             }
         }
     }
@@ -464,13 +713,20 @@ public static class JointSolver
                 }
 
                 ref JointRecord joint = ref joints.SlotByIndex(slot);
-                if (joint.Kind == JointKind.Distance)
+                switch (joint.Kind)
                 {
-                    SolveJointVelocity(bodies, ref joint);
-                }
-                else
-                {
-                    SolveRevoluteVelocity(bodies, ref joint);
+                    case JointKind.Distance:
+                        SolveJointVelocity(bodies, ref joint);
+                        break;
+                    case JointKind.Weld:
+                        SolveWeldVelocity(bodies, ref joint);
+                        break;
+                    case JointKind.Prismatic:
+                        SolvePrismaticVelocity(bodies, ref joint);
+                        break;
+                    default:
+                        SolveRevoluteVelocity(bodies, ref joint);
+                        break;
                 }
             }
         }
@@ -551,13 +807,20 @@ public static class JointSolver
                 }
 
                 ref JointRecord joint = ref joints.SlotByIndex(slot);
-                if (joint.Kind == JointKind.Distance)
+                switch (joint.Kind)
                 {
-                    SolveJointPosition(bodies, ref joint);
-                }
-                else
-                {
-                    SolveRevolutePosition(bodies, ref joint);
+                    case JointKind.Distance:
+                        SolveJointPosition(bodies, ref joint);
+                        break;
+                    case JointKind.Weld:
+                        SolveWeldPosition(bodies, ref joint);
+                        break;
+                    case JointKind.Prismatic:
+                        SolvePrismaticPosition(bodies, ref joint);
+                        break;
+                    default:
+                        SolveRevolutePosition(bodies, ref joint);
+                        break;
                 }
             }
         }
@@ -956,6 +1219,543 @@ public static class JointSolver
             float correctedB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * limitCorrection);
             stateB.Cos = MathF.Cos(correctedB);
             stateB.Sin = MathF.Sin(correctedB);
+        }
+    }
+
+    /// <summary>Weld init: warm-starts the pin block and the angle lock.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void InitWeld(BodyStore bodies, ref JointRecord joint, float wakeTolerance)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(joint.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(joint.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 pointImpulse = joint.PointImpulse;
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= pointImpulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, pointImpulse) + joint.WeldAngleImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += pointImpulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, pointImpulse) + joint.WeldAngleImpulse);
+        }
+    }
+
+    /// <summary>Weld velocity sweep: angle lock, then the pin block.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SolveWeldVelocity(BodyStore bodies, ref JointRecord joint)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f && (awakeA || awakeB))
+        {
+            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
+            float delta = -rate / axialMass;
+            joint.WeldAngleImpulse += delta;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+
+        SolvePinBlock(bodies, ref joint, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+
+    /// <summary>Weld position sweep: pin correction plus angle correction to reference.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SolveWeldPosition(BodyStore bodies, ref JointRecord joint)
+    {
+        SolvePinCorrection(bodies, ref joint);
+
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+        float axialMass = invIA + invIB;
+        if (axialMass <= 0.0f)
+        {
+            return;
+        }
+
+        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+        float error = NormalizeAngle((angleB - angleA) - joint.ReferenceAngle);
+        if (MathF.Abs(error) < SolverTuning.AngularSlop)
+        {
+            return;
+        }
+
+        float correction = -error / axialMass;
+        if (awakeA)
+        {
+            float correctedA = angleA - (invIA * correction);
+            stateA.Cos = MathF.Cos(correctedA);
+            stateA.Sin = MathF.Sin(correctedA);
+        }
+
+        if (awakeB)
+        {
+            float correctedB = angleB + (invIB * correction);
+            stateB.Cos = MathF.Cos(correctedB);
+            stateB.Sin = MathF.Sin(correctedB);
+        }
+    }
+
+    /// <summary>Prismatic init: resolves the slide state, warm-starts perp, motor, limit and angle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void InitPrismatic(BodyStore bodies, ref JointRecord joint, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
+        float axisLenSq = axis.LengthSquared();
+        if (axisLenSq > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axisLenSq);
+        }
+
+        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
+        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
+        float translation = Vec2.Dot(pB - pA, axis) - joint.ReferenceTranslation;
+
+        LimitState previous = joint.PrismaticLimitState;
+        joint.PrismaticLimitState = ResolveLimitState(joint.EnablePrismaticLimit, joint.LowerTranslation, joint.UpperTranslation, translation);
+        if (joint.PrismaticLimitState != previous)
+        {
+            joint.PrismaticLimitImpulse = 0.0f;
+        }
+
+        joint.PrismaticMotorMaxImpulse = joint.EnablePrismaticMotor ? joint.MaxPrismaticForce * dt : 0.0f;
+
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(joint.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(joint.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 perp = Perp(axis);
+        Vec2 impulse = (axis * (joint.PrismaticMotorImpulse + joint.PrismaticLimitImpulse)) + (perp * joint.PrismaticImpulse.Y);
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= impulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, impulse) + joint.WeldAngleImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += impulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, impulse) + joint.WeldAngleImpulse);
+        }
+    }
+
+    /// <summary>Prismatic velocity sweep: motor, then limit, then perp, then angle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SolvePrismaticVelocity(BodyStore bodies, ref JointRecord joint)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
+        if (axis.LengthSquared() > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+        }
+
+        Vec2 perp = Perp(axis);
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+
+        float axisA = Vec2.Cross(rA, axis);
+        float axisB = Vec2.Cross(rB, axis);
+        float axisMass = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
+
+        if (joint.EnablePrismaticMotor && axisMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+            float rate = Vec2.Dot(vB - vA, axis) - joint.PrismaticMotorSpeed;
+            float impulse = -rate / axisMass;
+            float old = joint.PrismaticMotorImpulse;
+            float next = Math.Clamp(old + impulse, -joint.PrismaticMotorMaxImpulse, joint.PrismaticMotorMaxImpulse);
+            Vec2 applied = axis * (next - old);
+            joint.PrismaticMotorImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        if (joint.PrismaticLimitState != LimitState.Inactive && axisMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+            float rate = Vec2.Dot(vB - vA, axis);
+            float impulse = -rate / axisMass;
+            float old = joint.PrismaticLimitImpulse;
+            float next = joint.PrismaticLimitState switch
+            {
+                LimitState.AtLower => MathF.Max(old + impulse, 0.0f),
+                LimitState.AtUpper => MathF.Min(old + impulse, 0.0f),
+                _ => old + impulse,
+            };
+            Vec2 applied = axis * (next - old);
+            joint.PrismaticLimitImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpMass = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+            float rate = Vec2.Dot(vB - vA, perp);
+            float delta = -rate / perpMass;
+            joint.PrismaticImpulse = new Vec2(joint.PrismaticImpulse.X, joint.PrismaticImpulse.Y + delta);
+            Vec2 applied = perp * delta;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f && (awakeA || awakeB))
+        {
+            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
+            float delta = -rate / axialMass;
+            joint.WeldAngleImpulse += delta;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+    }
+
+    /// <summary>Prismatic position sweep: perp lock, angle lock, then slide limit.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SolvePrismaticPosition(BodyStore bodies, ref JointRecord joint)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
+        if (axis.LengthSquared() > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+        }
+
+        Vec2 perp = Perp(axis);
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
+        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
+        Vec2 error = pB - pA;
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpK = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpK > 0.0f)
+        {
+            float perpError = Math.Clamp(Vec2.Dot(error, perp), -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
+            Vec2 applied = perp * (-perpError / perpK);
+            ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+        }
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f)
+        {
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+            float angleError = NormalizeAngle((angleB - angleA) - joint.ReferenceAngle);
+            if (MathF.Abs(angleError) >= SolverTuning.AngularSlop)
+            {
+                float correction = -angleError / axialMass;
+                if (awakeA)
+                {
+                    float correctedA = angleA - (invIA * correction);
+                    stateA.Cos = MathF.Cos(correctedA);
+                    stateA.Sin = MathF.Sin(correctedA);
+                }
+
+                if (awakeB)
+                {
+                    float correctedB = angleB + (invIB * correction);
+                    stateB.Cos = MathF.Cos(correctedB);
+                    stateB.Sin = MathF.Sin(correctedB);
+                }
+            }
+        }
+
+        if (joint.PrismaticLimitState == LimitState.Inactive)
+        {
+            return;
+        }
+
+        float axisA = Vec2.Cross(rA, axis);
+        float axisB = Vec2.Cross(rB, axis);
+        float axisK = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
+        if (axisK <= 0.0f)
+        {
+            return;
+        }
+
+        float translation = Vec2.Dot(error, axis) - joint.ReferenceTranslation;
+        float limitError = joint.PrismaticLimitState switch
+        {
+            LimitState.AtLower => translation - joint.LowerTranslation + SolverTuning.LinearSlop,
+            LimitState.AtUpper => translation - joint.UpperTranslation - SolverTuning.LinearSlop,
+            _ => translation - joint.LowerTranslation,
+        };
+
+        bool violates = joint.PrismaticLimitState switch
+        {
+            LimitState.AtLower => limitError < 0.0f,
+            LimitState.AtUpper => limitError > 0.0f,
+            _ => limitError != 0.0f,
+        };
+
+        if (!violates)
+        {
+            return;
+        }
+
+        Vec2 limitApplied = axis * (-Math.Clamp(limitError, -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection) / axisK);
+        ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, limitApplied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+
+    /// <summary>Shared 2x2 pin velocity block used by weld joints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void SolvePinBlock(
+        BodyStore bodies, ref JointRecord joint,
+        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+
+        float det = (k11 * k22) - (k12 * k12);
+        if (det <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+        Vec2 accumulated = joint.PointImpulse;
+
+        Vec2 residual = (vB - vA) - new Vec2(
+            (k11 * accumulated.X) + (k12 * accumulated.Y),
+            (k12 * accumulated.X) + (k22 * accumulated.Y));
+
+        float invDet = 1.0f / det;
+        Vec2 solved = new(
+            ((k12 * residual.Y) - (k22 * residual.X)) * invDet,
+            ((k12 * residual.X) - (k11 * residual.Y)) * invDet);
+        Vec2 deltaImpulse = solved - accumulated;
+        joint.PointImpulse = solved;
+
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= deltaImpulse * invMassA;
+            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, deltaImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += deltaImpulse * invMassB;
+            stateB.AngularVelocity += invIB * Vec2.Cross(rB, deltaImpulse);
+        }
+    }
+
+    /// <summary>Shared pin position correction used by weld joints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static void SolvePinCorrection(BodyStore bodies, ref JointRecord joint)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+
+        float det = (k11 * k22) - (k12 * k12);
+        if (det <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
+        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
+        Vec2 error = pB - pA;
+
+        float invDet = 1.0f / det;
+        Vec2 correction = new(
+            ((k12 * error.Y) - (k22 * error.X)) * invDet,
+            ((k12 * error.X) - (k11 * error.Y)) * invDet);
+
+        ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, correction, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ApplyPositionCorrection(
+        ref BodyState stateA, ref BodyState stateB, Vec2 rA, Vec2 rB, Vec2 correction,
+        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    {
+        if (awakeA)
+        {
+            stateA.Position -= correction * invMassA;
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, correction));
+            stateA.Cos = MathF.Cos(angleA);
+            stateA.Sin = MathF.Sin(angleA);
+        }
+
+        if (awakeB)
+        {
+            stateB.Position += correction * invMassB;
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, correction));
+            stateB.Cos = MathF.Cos(angleB);
+            stateB.Sin = MathF.Sin(angleB);
         }
     }
 
