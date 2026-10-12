@@ -470,12 +470,23 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Waits out live operations (including enumerations) before releasing
+    /// the pools, mirroring the native octree: abandoning an enumerator
+    /// without disposing it blocks here until it is released.
+    /// </remarks>
     public void Dispose()
     {
         int prior = Interlocked.Exchange(ref _state.Lifecycle, LifecycleState.Disposed);
         if (prior == LifecycleState.Disposed)
         {
             return;
+        }
+
+        SpinWait spinner = default;
+        while (Volatile.Read(ref _state.ActiveCount) > 0)
+        {
+            spinner.SpinOnce();
         }
 
         lock (_syncLock)

@@ -243,6 +243,35 @@ public class QuadTreeTests
     }
 
     [Fact]
+    public void Dispose_WaitsForLiveEnumeration()
+    {
+        var tree = CreateTree();
+        tree.Insert(new Vec2(1, 1), 1);
+
+        var enumerator = tree.EnumerateRange(s_root).GetEnumerator();
+        enumerator.MoveNext().Should().BeTrue();
+
+        Task disposeTask = Task.Run(() => tree.Dispose());
+        Thread.Sleep(50);
+        disposeTask.IsCompleted.Should().BeFalse();
+
+        enumerator.Dispose();
+
+        long deadline = Environment.TickCount64 + 5000;
+        while (!disposeTask.IsCompleted)
+        {
+            if (Environment.TickCount64 > deadline)
+            {
+                Assert.Fail("Dispose did not complete after the enumerator was released.");
+            }
+
+            Thread.Sleep(0);
+        }
+
+        disposeTask.Exception.Should().BeNull();
+    }
+
+    [Fact]
     public void ElementIndex_InvalidIsNotValid()
     {
         ElementIndex.Invalid.IsValid.Should().BeFalse();
