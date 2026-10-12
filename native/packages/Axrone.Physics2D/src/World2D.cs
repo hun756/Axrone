@@ -106,6 +106,36 @@ public readonly struct WorldDef
             field = value;
         }
     } = 0.0349f;
+
+    /// <summary>Bullet translation covered per CCD substep; strictly positive.</summary>
+    public float CcdSweepStep
+    {
+        get => field;
+        init
+        {
+            if (!(value > 0.0f) || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowInvalidOperation("CCD sweep step must be positive.");
+            }
+
+            field = value;
+        }
+    } = 0.25f;
+
+    /// <summary>CCD substep cap per step; at least one.</summary>
+    public int MaxCcdSubsteps
+    {
+        get => field;
+        init
+        {
+            if (value < 1)
+            {
+                ThrowHelper.ThrowInvalidOperation("Max CCD substeps must be at least one.");
+            }
+
+            field = value;
+        }
+    } = 8;
 }
 
 /// <summary>
@@ -204,6 +234,12 @@ public sealed class World : IDisposable
     /// <summary>Angular speed below which a body counts as quiet.</summary>
     public float AngularSleepTolerance { get; set; }
 
+    /// <summary>Bullet translation covered per CCD substep.</summary>
+    public float CcdSweepStep { get; set; }
+
+    /// <summary>CCD substep cap per step.</summary>
+    public int MaxCcdSubsteps { get; set; }
+
     /// <summary>Creates a world with default tuning.</summary>
     public World()
         : this(new WorldDef())
@@ -225,6 +261,8 @@ public sealed class World : IDisposable
         TimeToSleep = definition.TimeToSleep;
         LinearSleepTolerance = definition.LinearSleepTolerance;
         AngularSleepTolerance = definition.AngularSleepTolerance;
+        CcdSweepStep = definition.CcdSweepStep;
+        MaxCcdSubsteps = definition.MaxCcdSubsteps;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _joints = new JointStore();
@@ -283,17 +321,87 @@ public sealed class World : IDisposable
     }
 
     /// <summary>
-    /// Advances the world by <paramref name="dt"/>: integrates velocities,
-    /// syncs the broadphase, collects pairs into manifolds with warm-start
-    /// carry, solves velocities, integrates positions, re-syncs, and solves
-    /// positions. New pairs wake sleeping dynamics.
+    /// Advances the world by <paramref name="dt"/>: fast bullets transparently
+    /// split the step into sweep-bounded slices so no slice moves a bullet
+    /// past a thin wall; every slice integrates velocities, syncs the
+    /// broadphase, collects pairs into manifolds with warm-start carry,
+    /// solves velocities, integrates positions, re-syncs, and solves
+    /// positions. New pairs wake sleeping dynamics. Sleep updates once per
+    /// step from the final velocities.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Step(float dt)
     {
         ThrowIfDisposed();
 
-        _bodies.IntegrateVelocities(dt, Gravity);
+        if (!(dt > 0.0f) || float.IsNaN(dt))
+        {
+            ThrowHelper.ThrowInvalidOperation("Time step must be positive.");
+        }
+
+        int slices = CcdSliceCount(dt);
+        float h = dt / slices;
+
+        for (int slice = 0; slice < slices; slice++)
+        {
+            StepSlice(h);
+        }
+
+        _islands.UpdateSleep(
+            _bodies,
+            _joints,
+            _contacts.AsSpan(0, _contactCount),
+            dt,
+            TimeToSleep,
+            LinearSleepTolerance,
+            AngularSleepTolerance);
+    }
+
+    /// <summary>
+    /// Counts the slices so no awake bullet translates past
+    /// <see cref="CcdSweepStep"/> in one slice. Rotation-only tunneling is a
+    /// known limitation; translation dominates the miss distance.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private int CcdSliceCount(float dt)
+    {
+        float furthest = 0.0f;
+
+        for (int slot = 0; slot < _bodies.SlotCapacity; slot++)
+        {
+            if (!_bodies.IsSlotLive(slot))
+            {
+                continue;
+            }
+
+            BodyId bodyId = new((uint)slot + 1u);
+            ref readonly BodyState body = ref _bodies.Slot(bodyId);
+            if (body.Type != BodyType.Dynamic || (body.Flags & BodyFlags.Awake) == 0 ||
+                (body.Flags & BodyFlags.Bullet) == 0)
+            {
+                continue;
+            }
+
+            float travel = body.LinearVelocity.LengthSquared() * dt * dt;
+            if (travel > furthest)
+            {
+                furthest = travel;
+            }
+        }
+
+        if (furthest <= CcdSweepStep * CcdSweepStep)
+        {
+            return 1;
+        }
+
+        int slices = (int)MathF.Ceiling(MathF.Sqrt(furthest) / CcdSweepStep);
+        return Math.Clamp(slices, 1, MaxCcdSubsteps);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void StepSlice(float h)
+    {
+        _bodies.IntegrateVelocities(h, Gravity);
         SyncAwakeBodies();
 
         Contact[] built = _previous;
@@ -335,7 +443,7 @@ public sealed class World : IDisposable
         }
 
         ContactSolver.InitVelocityConstraints(_bodies, _shapes, _contacts.AsSpan(0, _contactCount));
-        JointSolver.InitVelocity(_bodies, _joints, LinearSleepTolerance, dt);
+        JointSolver.InitVelocity(_bodies, _joints, LinearSleepTolerance, h);
 
         for (int iteration = 0; iteration < VelocityIterations; iteration++)
         {
@@ -343,7 +451,7 @@ public sealed class World : IDisposable
             JointSolver.SolveVelocityPass(_bodies, _joints, 1);
         }
 
-        _bodies.IntegratePositions(dt);
+        _bodies.IntegratePositions(h);
         SyncAwakeBodies();
 
         for (int iteration = 0; iteration < PositionIterations; iteration++)
@@ -351,15 +459,6 @@ public sealed class World : IDisposable
             ContactSolver.SolvePositionPass(_bodies, _shapes, _contacts.AsSpan(0, _contactCount));
             JointSolver.SolvePositionPass(_bodies, _joints, 1);
         }
-
-        _islands.UpdateSleep(
-            _bodies,
-            _joints,
-            _contacts.AsSpan(0, _contactCount),
-            dt,
-            TimeToSleep,
-            LinearSleepTolerance,
-            AngularSleepTolerance);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
