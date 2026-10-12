@@ -1,6 +1,27 @@
 namespace Axrone.Physics2D;
 
 /// <summary>
+/// Shared solver tuning: Baumgarte stabilization, the linear slop inside
+/// which resting separation is left alone, and the per-sweep correction
+/// cap. One definition so the contact and joint solvers push with the same
+/// hand.
+/// </summary>
+internal static class SolverTuning
+{
+    /// <summary>Fraction of the error corrected per position sweep.</summary>
+    public const float Baumgarte = 0.2f;
+
+    /// <summary>Penetration allowance that never corrects; rests stay quiet.</summary>
+    public const float LinearSlop = 0.005f;
+
+    /// <summary>Largest position correction applied in one sweep.</summary>
+    public const float MaxCorrection = 0.2f;
+
+    /// <summary>Approach speed above which restitution kicks in.</summary>
+    public const float RestitutionThreshold = 1.0f;
+}
+
+/// <summary>
 /// Sequential-impulse contact solver: per step it freezes the restitution
 /// bias from the approach speed, then iterates normal clamping plus Coulomb
 /// friction over every contact point, and finally pushes positions apart with
@@ -10,18 +31,12 @@ namespace Axrone.Physics2D;
 /// </summary>
 public static class ContactSolver
 {
-    private const float RestitutionThreshold = 1.0f;
-    private const float Baumgarte = 0.2f;
-    private const float LinearSlop = 0.005f;
-    private const float MaxCorrection = 0.2f;
-
     /// <summary>
-    /// Runs the velocity pass: biases frozen from approach speeds, then
-    /// <paramref name="iterations"/> sweeps of normal plus friction impulses
-    /// accumulated in place on the manifolds.
+    /// Freezes restitution biases from approach speeds; call once per step
+    /// before the iteration loop.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void SolveVelocity(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts, int iterations)
+    public static void InitVelocityConstraints(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts)
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(shapes);
@@ -48,11 +63,23 @@ public static class ContactSolver
                 Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
                 Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
                 float approach = Vec2.Dot(manifold.Normal, vB - vA);
-                manifold.SetVelocityBias(p, approach < -RestitutionThreshold ? -restitution * approach : 0.0f);
+                manifold.SetVelocityBias(p, approach < -SolverTuning.RestitutionThreshold ? -restitution * approach : 0.0f);
             }
 
             contact.Manifold = manifold;
         }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="iterations"/> sweeps of normal plus friction
+    /// impulses accumulated in place on the manifolds. Biases must be frozen
+    /// by <see cref="InitVelocityConstraints"/> first.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocityPass(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts, int iterations)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(shapes);
 
         for (int iteration = 0; iteration < iterations; iteration++)
         {
@@ -64,22 +91,44 @@ public static class ContactSolver
     }
 
     /// <summary>
-    /// Runs the position pass: <paramref name="iterations"/> sweeps of
-    /// Baumgarte correction over penetrated points. Separations inside the
-    /// linear slop are left alone so resting contact never jitters.
+    /// Runs the velocity pass: biases frozen from approach speeds, then
+    /// <paramref name="iterations"/> sweeps of normal plus friction impulses
+    /// accumulated in place on the manifolds.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void SolvePositions(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts, int iterations)
+    public static void SolveVelocity(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts, int iterations)
+    {
+        InitVelocityConstraints(bodies, shapes, contacts);
+        SolveVelocityPass(bodies, shapes, contacts, iterations);
+    }
+
+    /// <summary>
+    /// Runs one position sweep of Baumgarte correction over penetrated
+    /// points. Separations inside the linear slop are left alone so resting
+    /// contact never jitters.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePositionPass(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts)
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(shapes);
 
+        for (int i = 0; i < contacts.Length; i++)
+        {
+            SolveContactPosition(bodies, ref contacts[i]);
+        }
+    }
+
+    /// <summary>
+    /// Runs the position pass: <paramref name="iterations"/> sweeps of
+    /// Baumgarte correction over penetrated points.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePositions(BodyStore bodies, ShapeStore shapes, Span<Contact> contacts, int iterations)
+    {
         for (int iteration = 0; iteration < iterations; iteration++)
         {
-            for (int i = 0; i < contacts.Length; i++)
-            {
-                SolveContactPosition(bodies, ref contacts[i]);
-            }
+            SolvePositionPass(bodies, shapes, contacts);
         }
     }
 
@@ -355,7 +404,7 @@ public static class ContactSolver
             float rnB = Vec2.Cross(rB, normal);
             float mass = 1.0f / (invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB));
 
-            float correction = Math.Clamp(Baumgarte * (point.Separation + LinearSlop), -MaxCorrection, 0.0f);
+            float correction = Math.Clamp(SolverTuning.Baumgarte * (point.Separation + SolverTuning.LinearSlop), -SolverTuning.MaxCorrection, 0.0f);
             Vec2 impulse = normal * (-mass * correction);
 
             if (awakeA)

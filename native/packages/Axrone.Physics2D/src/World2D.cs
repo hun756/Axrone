@@ -177,6 +177,7 @@ public sealed class World : IDisposable
 
     private readonly BodyStore _bodies;
     private readonly ShapeStore _shapes;
+    private readonly JointStore _joints;
     private readonly DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink> _tree;
     private readonly IslandSolver _islands = new();
     private Contact[] _contacts;
@@ -226,6 +227,7 @@ public sealed class World : IDisposable
         AngularSleepTolerance = definition.AngularSleepTolerance;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
+        _joints = new JointStore();
         _tree = new DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink>(definition.BroadphaseOptions);
         _contacts = new Contact[InitialContactCapacity];
         _previous = new Contact[InitialContactCapacity];
@@ -246,6 +248,13 @@ public sealed class World : IDisposable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _shapes;
+    }
+
+    /// <summary>Joint registry; constrain bodies through it.</summary>
+    public JointStore Joints
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _joints;
     }
 
     /// <summary>Broadphase tree; the world keeps it in sync every step.</summary>
@@ -325,15 +334,27 @@ public sealed class World : IDisposable
             _contacts[i] = updated;
         }
 
-        ContactSolver.SolveVelocity(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), VelocityIterations);
+        ContactSolver.InitVelocityConstraints(_bodies, _shapes, _contacts.AsSpan(0, _contactCount));
+        JointSolver.InitVelocity(_bodies, _joints, LinearSleepTolerance);
+
+        for (int iteration = 0; iteration < VelocityIterations; iteration++)
+        {
+            ContactSolver.SolveVelocityPass(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), 1);
+            JointSolver.SolveVelocityPass(_bodies, _joints, 1);
+        }
 
         _bodies.IntegratePositions(dt);
         SyncAwakeBodies();
 
-        ContactSolver.SolvePositions(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), PositionIterations);
+        for (int iteration = 0; iteration < PositionIterations; iteration++)
+        {
+            ContactSolver.SolvePositionPass(_bodies, _shapes, _contacts.AsSpan(0, _contactCount));
+            JointSolver.SolvePositionPass(_bodies, _joints, 1);
+        }
 
         _islands.UpdateSleep(
             _bodies,
+            _joints,
             _contacts.AsSpan(0, _contactCount),
             dt,
             TimeToSleep,
@@ -380,14 +401,28 @@ public sealed class World : IDisposable
     }
 
     /// <summary>
-    /// Destroys a body and every shape attached to it, pulling each shape
-    /// from the broadphase and dropping tracked pairs that named them.
-    /// Destroying bodies through the raw store orphans tree items; prefer
-    /// this path.
+    /// Destroys a body, its shapes and its joints, pulling each shape from
+    /// the broadphase and dropping tracked pairs that named them.
+    /// Destroying bodies through the raw store orphans tree items and joint
+    /// links; prefer this path.
     /// </summary>
     public void DestroyBody(BodyId bodyId)
     {
         ThrowIfDisposed();
+
+        for (int slot = 0; slot < _joints.SlotCapacity; slot++)
+        {
+            if (!_joints.IsSlotLive(slot))
+            {
+                continue;
+            }
+
+            ref readonly JointRecord joint = ref _joints.SlotByIndex(slot);
+            if (joint.BodyA == bodyId || joint.BodyB == bodyId)
+            {
+                _joints.Destroy(new JointId((uint)slot + 1u));
+            }
+        }
 
         ref BodyState body = ref _bodies.Slot(bodyId);
         while (body.FirstShape != -1)

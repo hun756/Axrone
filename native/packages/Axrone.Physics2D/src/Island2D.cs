@@ -23,6 +23,7 @@ internal sealed class IslandSolver
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void UpdateSleep(
         BodyStore bodies,
+        JointStore joints,
         Span<Contact> contacts,
         float dt,
         float timeToSleep,
@@ -30,6 +31,7 @@ internal sealed class IslandSolver
         float angularTolerance)
     {
         ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(joints);
 
         int capacity = bodies.SlotCapacity;
         Ensure(capacity);
@@ -71,6 +73,23 @@ internal sealed class IslandSolver
             int slotA = BodyStore.SlotOf(contacts[i].BodyA);
             int slotB = BodyStore.SlotOf(contacts[i].BodyB);
             if (slotA >= 0 && slotB >= 0 && _parent[slotA] >= 0 && _parent[slotB] >= 0)
+            {
+                Union(slotA, slotB);
+            }
+        }
+
+        for (int slot = 0; slot < joints.SlotCapacity; slot++)
+        {
+            if (!joints.IsSlotLive(slot))
+            {
+                continue;
+            }
+
+            ref readonly JointRecord joint = ref joints.SlotByIndex(slot);
+            int slotA = BodyStore.SlotOf(joint.BodyA);
+            int slotB = BodyStore.SlotOf(joint.BodyB);
+            if (slotA >= 0 && slotB >= 0 && slotA < _parent.Length && slotB < _parent.Length &&
+                _parent[slotA] >= 0 && _parent[slotB] >= 0)
             {
                 Union(slotA, slotB);
             }
