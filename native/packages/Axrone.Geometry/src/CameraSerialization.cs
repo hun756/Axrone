@@ -54,15 +54,85 @@ public sealed record CameraSerialized
 
     /// <summary>Eye point.</summary>
     [JsonPropertyName("position")]
+    [JsonConverter(typeof(Vec3JsonConverter))]
     public Vec3 Position { get; init; }
 
     /// <summary>Look target.</summary>
     [JsonPropertyName("target")]
+    [JsonConverter(typeof(Vec3JsonConverter))]
     public Vec3 Target { get; init; }
 
     /// <summary>Up hint.</summary>
     [JsonPropertyName("up")]
+    [JsonConverter(typeof(Vec3JsonConverter))]
     public Vec3 Up { get; init; }
+}
+
+/// <summary>
+/// Field-based <see cref="Vec3"/> as <c>{"x","y","z"}</c>: the vector exposes
+/// fields rather than properties, which source generation skips by default.
+/// Explicit converter keeps the DTO shape without touching Numeric.
+/// </summary>
+internal sealed class Vec3JsonConverter : JsonConverter<Vec3>
+{
+    /// <inheritdoc/>
+    public override Vec3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new JsonException("Expected an object for a Vec3.");
+        }
+
+        float x = 0f, y = 0f, z = 0f;
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                return new Vec3(x, y, z);
+            }
+
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                throw new JsonException("Expected a property name for a Vec3 component.");
+            }
+
+            string? name = reader.GetString();
+            if (!reader.Read())
+            {
+                throw new JsonException("Truncated Vec3 payload.");
+            }
+
+            float value = (float)reader.GetDouble();
+            if (string.Equals(name, "x", StringComparison.OrdinalIgnoreCase))
+            {
+                x = value;
+            }
+            else if (string.Equals(name, "y", StringComparison.OrdinalIgnoreCase))
+            {
+                y = value;
+            }
+            else if (string.Equals(name, "z", StringComparison.OrdinalIgnoreCase))
+            {
+                z = value;
+            }
+            else
+            {
+                throw new JsonException($"Unknown Vec3 component '{name}'.");
+            }
+        }
+
+        throw new JsonException("Truncated Vec3 payload.");
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, Vec3 value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteNumber("x", value.X);
+        writer.WriteNumber("y", value.Y);
+        writer.WriteNumber("z", value.Z);
+        writer.WriteEndObject();
+    }
 }
 
 /// <summary>Source-generated JSON context (AOT-safe, no reflection).</summary>
