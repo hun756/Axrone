@@ -22,6 +22,18 @@ internal static class ThrowHelper
     }
 
     /// <summary>
+    /// Rejects an identity that names no live body: never issued, destroyed,
+    /// or past the end of the slot table.
+    /// </summary>
+    /// <param name="id">The identity to report.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowBodyNotFound(BodyId id)
+    {
+        throw new InvalidOperationException($"Body with ID {id.Value} is unallocated or has been destroyed.");
+    }
+
+    /// <summary>
     /// Rejects use of a disposed physics object.
     /// </summary>
     [DoesNotReturn]
