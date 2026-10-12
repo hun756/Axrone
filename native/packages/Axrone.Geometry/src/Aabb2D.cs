@@ -9,7 +9,7 @@ using System.Globalization;
 /// loads directly — so they are public fields rather than properties.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct Aabb2D : IEquatable<Aabb2D>, ISpanFormattable
+public readonly partial struct Aabb2D : IEquatable<Aabb2D>, ISpanFormattable
 {
     /// <summary>Inclusive lower corner; the smallest coordinates the box spans.</summary>
     public readonly Vec2 Min;
