@@ -496,7 +496,7 @@ public static class Narrowphase2D
 
         Vec2 tangent = new(-refNormal.Y, refNormal.X);
         float frontOffset = Vec2.Dot(tangent, refV1);
-        float backOffset = Vec2.Dot(tangent * -1.0f, refV0 * -1.0f);
+        float backOffset = Vec2.Dot(tangent * -1.0f, refV0);
 
         Vec2 c0 = s0;
         Vec2 c1 = s1;
