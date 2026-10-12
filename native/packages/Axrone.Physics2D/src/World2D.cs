@@ -576,14 +576,18 @@ public sealed class World : IDisposable
     }
 
     /// <summary>
-    /// Counts the slices so no awake bullet translates past
-    /// <see cref="CcdSweepStep"/> in one slice. Rotation-only tunneling is a
-    /// known limitation; translation dominates the miss distance.
+    /// Counts the slices so no awake bullet moves past
+    /// <see cref="CcdSweepStep"/> in one slice. Translation uses the body
+    /// velocity, spin uses angular velocity times the furthest shape extent,
+    /// and two opposing bullets use their closing speed, so bullet-vs-bullet
+    /// head-ons split like bullet-vs-wall.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private int CcdSliceCount(float dt)
     {
         float furthest = 0.0f;
+        float fastest = 0.0f;
+        float second = 0.0f;
 
         for (int slot = 0; slot < _bodies.SlotCapacity; slot++)
         {
@@ -600,20 +604,71 @@ public sealed class World : IDisposable
                 continue;
             }
 
-            float travel = body.LinearVelocity.LengthSquared() * dt * dt;
+            float travel = MathF.Sqrt(body.LinearVelocity.LengthSquared()) * dt;
             if (travel > furthest)
             {
                 furthest = travel;
             }
+
+            if (travel >= fastest)
+            {
+                second = fastest;
+                fastest = travel;
+            }
+            else if (travel > second)
+            {
+                second = travel;
+            }
+
+            float spin = MathF.Abs(body.AngularVelocity) * BulletRadius(in body) * dt;
+            if (spin > furthest)
+            {
+                furthest = spin;
+            }
         }
 
-        if (furthest <= CcdSweepStep * CcdSweepStep)
+        float closing = fastest + second;
+        if (closing > furthest)
+        {
+            furthest = closing;
+        }
+
+        if (furthest <= CcdSweepStep)
         {
             return 1;
         }
 
-        int slices = (int)MathF.Ceiling(MathF.Sqrt(furthest) / CcdSweepStep);
+        int slices = (int)MathF.Ceiling(furthest / CcdSweepStep);
         return Math.Clamp(slices, 1, MaxCcdSubsteps);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private float BulletRadius(in BodyState body)
+    {
+        float radius = 0.0f;
+        int current = body.FirstShape;
+        while (current != -1)
+        {
+            ShapeId shapeId = new((uint)current + 1u);
+            if (!_shapes.IsValid(shapeId))
+            {
+                break;
+            }
+
+            Aabb2D box = _shapes.GetWorldAabb(shapeId);
+            Vec2 extents = box.Extents;
+            float halfDiagonal = MathF.Sqrt(extents.LengthSquared());
+            float offSq = (box.Center - body.Position).LengthSquared();
+            float far = halfDiagonal + MathF.Sqrt(offSq);
+            if (far > radius)
+            {
+                radius = far;
+            }
+
+            current = _shapes.Slot(shapeId).NextShape;
+        }
+
+        return radius;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -757,13 +812,17 @@ public sealed class World : IDisposable
             }
         }
 
-        for (int i = _lastPairCount - 1; i >= 0; i--)
+        for (int i = _previousCount - 1; i >= 0; i--)
         {
-            if (_lastPairs[i].BodyA == bodyId || _lastPairs[i].BodyB == bodyId)
+            if (_previous[i].BodyA == bodyId || _previous[i].BodyB == bodyId)
             {
-                _lastPairs[i] = _lastPairs[--_lastPairCount];
+                _previous[i] = _previous[--_previousCount];
             }
         }
+
+        // _lastPairs is intentionally kept: the next PublishContactEvents
+        // diffs it against the rebuilt contacts and emits Began:false for
+        // the vanished pairs, so destroy is observable as end events.
 
         _bodies.Destroy(bodyId);
     }

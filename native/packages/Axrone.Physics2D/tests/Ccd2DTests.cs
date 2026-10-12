@@ -118,4 +118,60 @@ public sealed class Ccd2DTests : IDisposable
         sweep.Should().Throw<InvalidOperationException>();
         cap.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void HeadOnBullets_MeetInsteadOfPassingThrough()
+    {
+        BodyId left = _world.Bodies.Create(new BodyDef
+        {
+            Position = new Vec2(-0.1f, 0),
+            LinearVelocity = new Vec2(12, 0),
+            Bullet = true,
+        });
+        _world.Shapes.AttachCircle(_world.Bodies, _world.Broadphase, left, new Vec2(0, 0), 0.05f);
+
+        BodyId right = _world.Bodies.Create(new BodyDef
+        {
+            Position = new Vec2(0.1f, 0),
+            LinearVelocity = new Vec2(-12, 0),
+            Bullet = true,
+        });
+        _world.Shapes.AttachCircle(_world.Bodies, _world.Broadphase, right, new Vec2(0, 0), 0.05f);
+
+        _world.Step(Dt);
+
+        _world.ContactCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void FastSpin_DoesNotExplode()
+    {
+        BodyId spinner = _world.Bodies.Create(new BodyDef
+        {
+            Position = new Vec2(0, 2),
+            LinearVelocity = new Vec2(1, 0),
+            AngularVelocity = 20f,
+            Bullet = true,
+        });
+        _world.Shapes.AttachPolygon(
+            _world.Bodies, _world.Broadphase, spinner,
+            new Vec2[]
+            {
+                new(-2f, -0.1f),
+                new(2f, -0.1f),
+                new(2f, 0.1f),
+                new(-2f, 0.1f),
+            });
+
+        for (int i = 0; i < 60; i++)
+        {
+            _world.Step(Dt);
+        }
+
+        Vec2 p = _world.Bodies.GetTransform(spinner).Position;
+        p.X.Should().BeGreaterThan(-30f);
+        p.X.Should().BeLessThan(30f);
+        float.IsNaN(p.X).Should().BeFalse();
+        float.IsNaN(p.Y).Should().BeFalse();
+    }
 }

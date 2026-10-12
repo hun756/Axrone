@@ -89,4 +89,26 @@ public sealed class ContactEventTests : IDisposable
         ended.ShapeA.Should().Be(began.ShapeA);
         ended.ShapeB.Should().Be(began.ShapeB);
     }
+
+    [Fact]
+    public void DestroyBody_RaisesEndOnNextStep()
+    {
+        AddBox(new Vec2(0, 0), new Vec2(1, 1), BodyType.Static);
+        BodyId doomed = AddBox(new Vec2(0.5f, 0), new Vec2(1, 1));
+
+        _world.Step(1f / 60f);
+        _world.ContactEventCount.Should().Be(1);
+        ContactEvent began = _world.GetContactEvent(0);
+        began.Began.Should().BeTrue();
+
+        _world.DestroyBody(doomed);
+        _world.Step(1f / 60f);
+
+        _world.ContactCount.Should().Be(0);
+        _world.ContactEventCount.Should().Be(1);
+        ContactEvent ended = _world.GetContactEvent(0);
+        ended.Began.Should().BeFalse();
+        ended.ShapeA.Should().Be(began.ShapeA);
+        ended.ShapeB.Should().Be(began.ShapeB);
+    }
 }
