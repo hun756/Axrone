@@ -10,7 +10,7 @@ public class Frustum3Tests
     /// The axis-aligned cube spanning -1..1 on every axis, built by hand with inward-pointing
     /// normals: Left keeps x &gt;= -1, Right keeps x &lt;= 1, Top keeps y &lt;= 1, Bottom keeps
     /// y &gt;= -1, Near keeps z &gt;= -1 and Far keeps z &lt;= 1. This is the same orientation
-    /// <see cref="Frustum3.CreateFromMatrix"/> produces for a left-handed projection, so the
+    /// <see cref="Frustum3.CreateFromMatrix"/> produces for a right-handed zero-to-one projection, so the
     /// hand-built and matrix-built frusta agree on which plane is which.
     /// </summary>
     private static Frustum3 CubeFrustum() => new(

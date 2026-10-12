@@ -166,23 +166,19 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
         float py = delta1.Y < delta2.Y ? delta1.Y : delta2.Y;
         float pz = delta1.Z < delta2.Z ? delta1.Z : delta2.Z;
 
-        float ax = delta1.X < delta2.X ? delta1.X : delta2.X;
-        float ay = delta1.Y < delta2.Y ? delta1.Y : delta2.Y;
-        float az = delta1.Z < delta2.Z ? delta1.Z : delta2.Z;
-
-        if (ax <= ay && ax <= az)
+        if (px <= py && px <= pz)
         {
-            depth = ax;
+            depth = px;
             normal = new Vec3((float)MathF.Sign(px), 0.0F, 0.0F);
         }
-        else if (ay <= ax && ay <= az)
+        else if (py <= px && py <= pz)
         {
-            depth = ay;
+            depth = py;
             normal = new Vec3(0.0F, (float)MathF.Sign(py), 0.0F);
         }
         else
         {
-            depth = az;
+            depth = pz;
             normal = new Vec3(0.0F, 0.0F, (float)MathF.Sign(pz));
         }
 

@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 /// <remarks>
 /// The tree follows a single-writer discipline: mutations are expected from one
 /// worker thread at a time, while reads (<see cref="ISpatialReader{TUserData}"/>)
-/// stay lock-free and never invalidate an identity, a fat bound, or the tree
+/// take the gate but never invalidate an identity, a fat bound, or the tree
 /// shape. <see cref="Complete"/> closes the submission stream and
 /// <see cref="DrainAsync"/> awaits the queued work, so a caller never has to
 /// expose its own synchronization primitives.
