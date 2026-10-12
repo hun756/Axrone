@@ -304,4 +304,38 @@ internal static class ThrowHelper
     {
         throw new InvalidOperationException("Internal octree intrusive link-chain corruption detected.");
     }
+
+    /// <summary>
+    /// Rejects a null or whitespace argument with a message.
+    /// </summary>
+    /// <param name="message">The failure to report.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentException(string message)
+    {
+        throw new ArgumentException(message);
+    }
+
+    /// <summary>
+    /// Rejects a null argument.
+    /// </summary>
+    /// <param name="paramName">The parameter that received null.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentNullException(string paramName)
+    {
+        throw new ArgumentNullException(paramName);
+    }
+
+    /// <summary>
+    /// Rejects a null argument, folding the throw into an expression.
+    /// </summary>
+    /// <typeparam name="TReturn">The type the caller folds into its own control flow.</typeparam>
+    /// <param name="paramName">The parameter that received null.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowArgumentNullException<TReturn>(string paramName)
+    {
+        throw new ArgumentNullException(paramName);
+    }
 }
