@@ -58,6 +58,7 @@ public readonly record struct Alignment : IComparable<Alignment>, IEquatable<Ali
     public static Alignment CacheLine64 => new(64, true);
     public static Alignment CacheLine128 => new(128, true);
     public static Alignment Page4K => new(4096, true);
+    public static Alignment PointerAlignment => new((uint)UIntPtr.Size, true);
 
     public const int CacheLine64Bytes = 64;
     public const int CacheLine128Bytes = 128;

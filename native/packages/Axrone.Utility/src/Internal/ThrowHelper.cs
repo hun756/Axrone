@@ -51,6 +51,86 @@ public static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferFaultedException(ExceptionDispatchInfo edi) =>
+        edi.Throw();
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowFaulted(Exception? inner) =>
+        throw new InvalidOperationException("Buffer pipeline is in a faulted terminal state.", inner);
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowArgumentZero<TReturn>() =>
+        throw new ArgumentOutOfRangeException("length", "Length parameter must be non-zero.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSpanLengthExceeded(nuint length) =>
+        throw new InvalidOperationException($"Element count {length} exceeds maximum 32-bit Span threshold {int.MaxValue}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowIndexOutOfRange(nuint index, nuint length) =>
+        throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of bounds for buffer length {length}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowRangeInvalid(nuint offset, nuint count, nuint capacity) =>
+        throw new ArgumentOutOfRangeException(nameof(count), $"Range [{offset}..{offset + count}) exceeds total capacity {capacity}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowByteRangeInvalid(nuint offset, nuint count, nuint capacity) =>
+        throw new ArgumentOutOfRangeException(nameof(count), $"Byte range [{offset}..{offset + count}) exceeds total byte capacity {capacity}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowAcquisitionFailed(long controlWord) =>
+        throw new InvalidOperationException($"Lease acquisition failed under current state control word: 0x{controlWord:X16}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCounterOverflow() =>
+        throw new OverflowException("Concurrent lease registration overflowed 32-bit ceiling.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCounterUnderflow() =>
+        throw new InvalidOperationException("Unmatched lease release detected: active reference count is zero.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowInvalidAlignment<TReturn>(nuint alignment) =>
+        throw new ArgumentException($"Alignment {alignment} must be a valid power of two multiple of pointer word.", nameof(alignment));
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowInvalidState<TReturn>(long state) =>
+        throw new InvalidOperationException($"Invalid state machine transition or control word: 0x{state:X16}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowDrainingLeaseAccess<TReturn>() =>
+        throw new InvalidOperationException("Cannot acquire lease: buffer is currently draining.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowDrainedLeaseAccess<TReturn>() =>
+        throw new InvalidOperationException("Cannot acquire lease: buffer has already completed draining.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowDisposedLeaseAccess<TReturn>() =>
+        throw new ObjectDisposedException("NativeBuffer", "Cannot access lease: buffer is already disposed.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TReturn ThrowFaultedLeaseAccess<TReturn>() =>
+        throw new InvalidOperationException("Cannot acquire lease: buffer is in a faulted terminal state.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowArgumentException(string message)
     {
         throw new ArgumentException(message);
@@ -128,6 +208,36 @@ public static class ThrowHelper
     public static void ThrowMismatchedSpans()
     {
         throw new ArgumentException("Span operands must possess equal lengths for lock-step vectorized operations.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowCountOutOfRange()
+    {
+        throw new ArgumentOutOfRangeException("count", "Count cannot exceed Int32.MaxValue.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBufferTooSmall()
+    {
+        throw new InvalidOperationException("Buffer length is smaller than target type size.");
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNotActive(int state, ExceptionDispatchInfo? fault)
+    {
+        fault?.Throw();
+
+        throw state switch
+        {
+            1 => new InvalidOperationException("Arena is currently reclaiming memory."),
+            2 => new InvalidOperationException("Arena is in draining state."),
+            3 => new InvalidOperationException("Arena is in faulted state."),
+            4 => new ObjectDisposedException("Arena", "Arena has been disposed."),
+            _ => new InvalidOperationException($"Invalid arena state: {state}")
+        };
     }
 
     [DoesNotReturn]

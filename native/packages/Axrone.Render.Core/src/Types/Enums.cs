@@ -65,46 +65,6 @@ public enum ColorSpace : byte
 }
 
 /// <summary>
-/// Vertex attribute semantic locations matching GLSL layout qualifiers.
-/// Values are the attribute location indices (0-14).
-/// </summary>
-public enum VertexSemantic : uint
-{
-    /// <summary>Vertex position (vec3).</summary>
-    Position = 0,
-
-    /// <summary>Vertex normal (vec3).</summary>
-    Normal = 1,
-
-    /// <summary>Vertex tangent (vec4, w = handedness).</summary>
-    Tangent = 2,
-
-    /// <summary>Texture coordinates (vec2).</summary>
-    TexCoord = 3,
-
-    /// <summary>Vertex color (vec4).</summary>
-    Color = 4,
-
-    /// <summary>Bone joint indices (uvec4).</summary>
-    Joints = 5,
-
-    /// <summary>Bone weights (vec4).</summary>
-    Weights = 6,
-
-    /// <summary>Custom attribute slot 0.</summary>
-    Custom0 = 11,
-
-    /// <summary>Custom attribute slot 1.</summary>
-    Custom1 = 12,
-
-    /// <summary>Custom attribute slot 2.</summary>
-    Custom2 = 13,
-
-    /// <summary>Custom attribute slot 3.</summary>
-    Custom3 = 14
-}
-
-/// <summary>
 /// Texture dimension types.
 /// </summary>
 public enum TextureDimension : byte
@@ -225,45 +185,6 @@ public enum BufferUsage : byte
 
     /// <summary>Stream copy (updated every frame, copied frequently).</summary>
     StreamCopy = 8
-}
-
-/// <summary>
-/// Primitive topology for drawing.
-/// </summary>
-public enum PrimitiveTopology : byte
-{
-    /// <summary>Point list.</summary>
-    Points = 0,
-
-    /// <summary>Line list.</summary>
-    Lines = 1,
-
-    /// <summary>Line strip.</summary>
-    LineStrip = 2,
-
-    /// <summary>Triangle list.</summary>
-    Triangles = 3,
-
-    /// <summary>Triangle strip.</summary>
-    TriangleStrip = 4,
-
-    /// <summary>Triangle fan.</summary>
-    TriangleFan = 5,
-
-    /// <summary>Line list with adjacency.</summary>
-    LinesAdjacency = 6,
-
-    /// <summary>Line strip with adjacency.</summary>
-    LineStripAdjacency = 7,
-
-    /// <summary>Triangle list with adjacency.</summary>
-    TrianglesAdjacency = 8,
-
-    /// <summary>Triangle strip with adjacency.</summary>
-    TriangleStripAdjacency = 9,
-
-    /// <summary>Patches (for tessellation).</summary>
-    Patches = 10
 }
 
 /// <summary>

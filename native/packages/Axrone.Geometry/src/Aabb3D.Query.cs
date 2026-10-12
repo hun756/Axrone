@@ -166,23 +166,19 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
         float py = delta1.Y < delta2.Y ? delta1.Y : delta2.Y;
         float pz = delta1.Z < delta2.Z ? delta1.Z : delta2.Z;
 
-        float ax = delta1.X < delta2.X ? delta1.X : delta2.X;
-        float ay = delta1.Y < delta2.Y ? delta1.Y : delta2.Y;
-        float az = delta1.Z < delta2.Z ? delta1.Z : delta2.Z;
-
-        if (ax <= ay && ax <= az)
+        if (px <= py && px <= pz)
         {
-            depth = ax;
+            depth = px;
             normal = new Vec3((float)MathF.Sign(px), 0.0F, 0.0F);
         }
-        else if (ay <= ax && ay <= az)
+        else if (py <= px && py <= pz)
         {
-            depth = ay;
+            depth = py;
             normal = new Vec3(0.0F, (float)MathF.Sign(py), 0.0F);
         }
         else
         {
-            depth = az;
+            depth = pz;
             normal = new Vec3(0.0F, 0.0F, (float)MathF.Sign(pz));
         }
 
@@ -233,18 +229,26 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
         Vec3 hitOffset = hitPoint - target.Center;
         Vec3 targetExtents = target.Extents;
 
-        Vec3 normal = Vec3.Zero;
-        if (MathF.Abs(hitOffset.X) <= targetExtents.X)
+        // Contact face = the axis the hit point overshoots the most: on that
+        // axis the offset clears the target half-size by the widest margin.
+        // The normal points along the travel direction on that axis, matching
+        // the pinned X-face behavior.
+        float overX = MathF.Abs(hitOffset.X) - targetExtents.X;
+        float overY = MathF.Abs(hitOffset.Y) - targetExtents.Y;
+        float overZ = MathF.Abs(hitOffset.Z) - targetExtents.Z;
+
+        Vec3 normal;
+        if (overX >= overY && overX >= overZ)
         {
-            normal = new Vec3(0.0F, hitOffset.Y > 0.0F ? -1.0F : 1.0F, 0.0F);
+            normal = new Vec3(-MathF.Sign(hitOffset.X), 0.0F, 0.0F);
         }
-        else if (MathF.Abs(hitOffset.Y) <= targetExtents.Y)
+        else if (overY >= overZ)
         {
-            normal = new Vec3(hitOffset.X > 0.0F ? -1.0F : 1.0F, 0.0F, 0.0F);
+            normal = new Vec3(0.0F, -MathF.Sign(hitOffset.Y), 0.0F);
         }
         else
         {
-            normal = new Vec3(0.0F, 0.0F, hitOffset.Z > 0.0F ? -1.0F : 1.0F);
+            normal = new Vec3(0.0F, 0.0F, -MathF.Sign(hitOffset.Z));
         }
 
         hit = new SweepHit3(normalizedTime, normal, hitPoint);

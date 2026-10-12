@@ -10,7 +10,7 @@ using System.Globalization;
 /// APIs directly — so they are public fields rather than properties.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanFormattable
+public readonly partial struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanFormattable
 {
     /// <summary>Center of the sphere.</summary>
     public readonly Vec3 Center;
@@ -40,6 +40,18 @@ public readonly struct BoundingSphere3 : IEquatable<BoundingSphere3>, ISpanForma
     {
         float r = Radius + other.Radius;
         return Vec3.DistanceSquared(Center, other.Center) <= (r * r);
+    }
+
+    /// <summary>
+    /// Computes the smallest sphere containing <paramref name="box"/>: the box
+    /// center plus the half-diagonal. This is how mesh bounds resolve to spheres.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BoundingSphere3 FromAabb(in Aabb3D box)
+    {
+        Vec3 center = box.Center;
+        Vec3 half = box.Extents;
+        return new BoundingSphere3(center, MathF.Sqrt(half.LengthSquared()));
     }
 
     /// <inheritdoc/>

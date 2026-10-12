@@ -49,7 +49,8 @@ public readonly struct Frustum3
 
     /// <summary>
     /// Extracts the six clipping planes of a view-projection matrix by adding and
-    /// subtracting the row combinations of the left-handed clip-space convention, then
+    /// subtracting the row combinations of the right-handed zero-to-one
+    /// clip-space convention, then
     /// normalizing each so the plane distances stay in world units.
     /// </summary>
     /// <param name="m">The combined view-projection matrix; row-vector convention.</param>
