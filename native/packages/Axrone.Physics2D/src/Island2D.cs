@@ -78,28 +78,9 @@ internal sealed class IslandSolver
             }
         }
 
-        for (int slot = 0; slot < joints.SlotCapacity; slot++)
-        {
-            if (!joints.IsSlotLive(slot))
-            {
-                continue;
-            }
-
-            ref readonly JointRecord joint = ref joints.SlotByIndex(slot);
-            int slotA = BodyStore.SlotOf(joint.BodyA);
-            int slotB = BodyStore.SlotOf(joint.BodyB);
-            if (slotA >= 0 && slotB >= 0 && slotA < _parent.Length && slotB < _parent.Length &&
-                _parent[slotA] >= 0 && _parent[slotB] >= 0)
-            {
-                Union(slotA, slotB);
-            }
-
-            if (joint.Kind == JointKind.Gear)
-            {
-                UnionGearBodies(joints, joint.GearJointA);
-                UnionGearBodies(joints, joint.GearJointB);
-            }
-        }
+        UnionVisitor visitor = default;
+        IslandSolver self = this;
+        joints.Accept(ref visitor, ref self);
 
         for (int slot = 0; slot < capacity; slot++)
         {
@@ -192,21 +173,30 @@ internal sealed class IslandSolver
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void UnionGearBodies(JointStore joints, JointId gearedId)
+    /// <summary>Unions the coordinated body pair of one visited joint.</summary>
+    private struct UnionVisitor : IJointVisitor<IslandSolver>
     {
-        if (!joints.IsValid(gearedId))
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly void Visit<TPolicy, TData>(JointId id, ref TData data, ref IslandSolver context)
+            where TPolicy : struct, IJointPolicy<TPolicy, TData>
+            where TData : struct
         {
-            return;
+            TPolicy.GetBodies(ref data, out BodyId bodyA, out BodyId bodyB);
+            context.UnionPair(bodyA, bodyB);
         }
+    }
 
-        ref readonly JointRecord geared = ref joints.Slot(gearedId);
-        int gearedA = BodyStore.SlotOf(geared.BodyA);
-        int gearedB = BodyStore.SlotOf(geared.BodyB);
-        if (gearedA >= 0 && gearedB >= 0 && gearedA < _parent.Length && gearedB < _parent.Length &&
-            _parent[gearedA] >= 0 && _parent[gearedB] >= 0)
+    /// <summary>Unions two joint bodies when both take part in island tracking.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void UnionPair(BodyId bodyA, BodyId bodyB)
+    {
+        int slotA = BodyStore.SlotOf(bodyA);
+        int slotB = BodyStore.SlotOf(bodyB);
+        if (slotA >= 0 && slotB >= 0 && slotA < _parent.Length && slotB < _parent.Length &&
+            _parent[slotA] >= 0 && _parent[slotB] >= 0)
         {
-            Union(gearedA, gearedB);
+            Union(slotA, slotB);
         }
     }
 

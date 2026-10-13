@@ -165,11 +165,14 @@ public sealed class Joint2DTests : IDisposable
     [Fact]
     public void JointId_Compares()
     {
-        var first = (JointId)2u;
-        var second = (JointId)5u;
+        var first = new JointId(JointKind.Distance, 2u);
+        var second = new JointId(JointKind.Distance, 5u);
 
         (first < second).Should().BeTrue();
-        first.ToString().Should().Be("Joint(2)");
+        first.Kind.Should().Be(JointKind.Distance);
+        first.SlotIndex.Should().Be(2u);
+        first.ToString().Should().Be("Joint(Distance:2)");
+        first.IsValid.Should().BeTrue();
         JointId.Invalid.IsValid.Should().BeFalse();
     }
 }

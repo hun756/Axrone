@@ -785,7 +785,8 @@ public sealed class World : IDisposable
 
     /// <summary>
     /// Destroys a body, its shapes and its joints, pulling each shape from
-    /// the broadphase and dropping tracked pairs that named them.
+    /// the broadphase and dropping tracked pairs that named them. Gears
+    /// touching the body through either geared joint die with it.
     /// Destroying bodies through the raw store orphans tree items and joint
     /// links; prefer this path.
     /// </summary>
@@ -793,19 +794,7 @@ public sealed class World : IDisposable
     {
         ThrowIfDisposed();
 
-        for (int slot = 0; slot < _joints.SlotCapacity; slot++)
-        {
-            if (!_joints.IsSlotLive(slot))
-            {
-                continue;
-            }
-
-            JointId jointId = new((uint)slot + 1u);
-            if (_joints.TouchesBody(jointId, bodyId))
-            {
-                _joints.Destroy(jointId);
-            }
-        }
+        _joints.DestroyJointsOfBody(bodyId);
 
         ref BodyState body = ref _bodies.Slot(bodyId);
         while (body.FirstShape != -1)

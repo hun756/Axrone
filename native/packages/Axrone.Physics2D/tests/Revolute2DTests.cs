@@ -132,22 +132,20 @@ public sealed class Revolute2DTests : IDisposable
         BodyId a = _world.Bodies.Create(new BodyDef());
         BodyId b = _world.Bodies.Create(new BodyDef());
 
-        var sameBody = new RevoluteDef { BodyA = a, BodyB = a, WorldAnchor = new Vec2(0, 0) };
-        var badLimits = new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(0, 0), LowerAngle = 1f, UpperAngle = -1f, EnableLimit = true };
-        var badAnchor = new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(float.NaN, 0) };
-        var badTorque = new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(0, 0), MaxMotorTorque = -1f, EnableMotor = true };
-        var deadBody = new RevoluteDef { BodyA = a, BodyB = new BodyId(999u), WorldAnchor = new Vec2(0, 0) };
-
-        Action same = () => _world.Joints.CreateRevolute(_world.Bodies, in sameBody);
-        Action limits = () => _world.Joints.CreateRevolute(_world.Bodies, in badLimits);
-        Action anchor = () => _world.Joints.CreateRevolute(_world.Bodies, in badAnchor);
-        Action torque = () => _world.Joints.CreateRevolute(_world.Bodies, in badTorque);
-        Action dead = () => _world.Joints.CreateRevolute(_world.Bodies, in deadBody);
+        Action same = () => _world.Joints.CreateRevolute(_world.Bodies,
+            new RevoluteDef { BodyA = a, BodyB = a, WorldAnchor = new Vec2(0, 0) });
+        Action limits = () => _world.Joints.CreateRevolute(_world.Bodies,
+            new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(0, 0), LowerAngle = 1f, UpperAngle = -1f, EnableLimit = true });
+        Action anchor = () => _world.Joints.CreateRevolute(_world.Bodies,
+            new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(float.NaN, 0) });
+        Action torque = () => _ = new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(0, 0), MaxMotorTorque = -1f, EnableMotor = true };
+        Action dead = () => _world.Joints.CreateRevolute(_world.Bodies,
+            new RevoluteDef { BodyA = a, BodyB = new BodyId(999u), WorldAnchor = new Vec2(0, 0) });
 
         same.Should().Throw<InvalidOperationException>();
         limits.Should().Throw<InvalidOperationException>();
         anchor.Should().Throw<InvalidOperationException>();
-        torque.Should().Throw<InvalidOperationException>();
+        torque.Should().Throw<ArgumentOutOfRangeException>();
         dead.Should().Throw<InvalidOperationException>();
     }
 }

@@ -10,6 +10,17 @@ using System.Diagnostics.CodeAnalysis;
 internal static class ThrowHelper
 {
     /// <summary>
+    /// Rejects an out-of-range joint tuning value at the definition site.
+    /// </summary>
+    /// <param name="paramName">The offending parameter name.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void ThrowArgumentOutOfRange(string paramName)
+    {
+        throw new ArgumentOutOfRangeException(paramName);
+    }
+
+    /// <summary>
     /// Rejects an identity that names no live item: evicted, never issued, or
     /// past the end of the slot table.
     /// </summary>

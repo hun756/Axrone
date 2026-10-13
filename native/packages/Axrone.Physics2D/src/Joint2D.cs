@@ -1,6 +1,16 @@
 namespace Axrone.Physics2D;
 
-/// <summary>Stored joint kind; selects the active constraint of a joint record.</summary>
+using System;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading;
+
+#region Domain Primitives
+
+/// <summary>Stored joint kind; selects the active constraint archetype.</summary>
 public enum JointKind : byte
 {
     /// <summary>Rigid rod between two anchors.</summary>
@@ -28,10 +38,10 @@ public enum JointKind : byte
     Gear = 7,
 }
 
-/// <summary>Angular limit state of a revolute joint, resolved every step.</summary>
+/// <summary>Angular or linear limit state resolved per step.</summary>
 public enum LimitState : byte
 {
-    /// <summary>Limits disabled or angle strictly inside.</summary>
+    /// <summary>Limits disabled or value strictly inside.</summary>
     Inactive = 0,
 
     /// <summary>At the lower stop; only opening impulses apply.</summary>
@@ -40,34 +50,68 @@ public enum LimitState : byte
     /// <summary>At the upper stop; only closing impulses apply.</summary>
     AtUpper = 2,
 
-    /// <summary>Stops coincide; the angle is locked.</summary>
+    /// <summary>Stops coincide; the coordinate is locked.</summary>
     Equal = 3,
 }
 
+#endregion
+
+#region Nominal Identities
+
 /// <summary>
-/// 4-byte identity of a joint. The zero value is the invalid sentinel, so a
-/// default-initialized slot can never name a live joint.
+/// Type-safe nominal identifier for constraints. Upper 4 bits encode the joint kind,
+/// lower 28 bits encode the dense slot index. Register-passable (4 bytes).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct JointId(uint Value) : IComparable<JointId>
+public readonly record struct JointId(uint Value) :
+    IComparable<JointId>,
+    IEquatable<JointId>,
+    IComparisonOperators<JointId, JointId, bool>,
+    IEqualityOperators<JointId, JointId, bool>
 {
+    private const int KindShift = 28;
+    private const uint IndexMask = 0x0FFF_FFFF;
+
     /// <summary>Invalid sentinel; never a registered joint.</summary>
     public static JointId Invalid => default;
+
+    /// <summary>Wraps a kind and a dense slot index.</summary>
+    /// <param name="kind">The constraint archetype.</param>
+    /// <param name="index">The dense slot index.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public JointId(JointKind kind, uint index)
+        : this((((uint)kind + 1u) << KindShift) | (index & IndexMask))
+    {
+    }
 
     /// <summary>Whether this identity names a registered joint.</summary>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Value != 0;
+        get => (Value >> KindShift) != 0;
+    }
+
+    /// <summary>The constraint archetype encoded in the identity.</summary>
+    public JointKind Kind
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (JointKind)((Value >> KindShift) - 1u);
+    }
+
+    /// <summary>The dense slot index encoded in the identity.</summary>
+    public uint SlotIndex
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Value & IndexMask;
     }
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int CompareTo(JointId other) => Value.CompareTo(other.Value);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() => IsValid ? $"Joint({Value})" : "Joint(Invalid)";
+    public override string ToString() => IsValid ? $"Joint({Kind}:{SlotIndex})" : "Joint(Invalid)";
 
     /// <summary>Determines whether the left identity sorts before the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,206 +132,110 @@ public readonly record struct JointId(uint Value) : IComparable<JointId>
     /// <summary>Unwraps the underlying identifier.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator uint(JointId id) => id.Value;
-
-    /// <summary>Wraps a raw identifier.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator JointId(uint value) => new(value);
 }
+
+#endregion
+
+#region Microarchitectural Helpers
 
 /// <summary>
-/// One distance constraint: two bodies pinned through body-frame anchors at
-/// a fixed rest length. The accumulated impulse persists across steps for
-/// warm starting. Mutable storage owned by <see cref="JointStore"/>.
+/// Shared joint math: frame rotations, angle wrapping, limit resolution and the
+/// position-correction applicator. Single home for the expressions every policy
+/// repeats, so fixes land once.
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-internal struct JointRecord
+internal static class MathPhysics
 {
-    /// <summary>Whether the slot holds a live joint.</summary>
-    public bool Live;
+    /// <summary>Rotates a vector by a body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Rotate(in BodyState state, Vec2 vector) =>
+        new((state.Cos * vector.X) - (state.Sin * vector.Y), (state.Sin * vector.X) + (state.Cos * vector.Y));
 
-    /// <summary>Active constraint variant.</summary>
-    public JointKind Kind;
+    /// <summary>Returns the perpendicular follower of a vector.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Perp(Vec2 vector) => new(-vector.Y, vector.X);
 
-    /// <summary>First body.</summary>
-    public BodyId BodyA;
+    /// <summary>Wraps an angle into [-pi, pi].</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float NormalizeAngle(float angle) =>
+        angle - (MathF.Floor((angle + MathF.PI) / (2.0f * MathF.PI)) * 2.0f * MathF.PI);
 
-    /// <summary>Second body.</summary>
-    public BodyId BodyB;
+    /// <summary>Resolves the limit state of a coordinate against its stops.</summary>
+    /// <param name="enabled">Whether stops apply.</param>
+    /// <param name="lower">The lower stop.</param>
+    /// <param name="upper">The upper stop.</param>
+    /// <param name="value">The current coordinate.</param>
+    /// <param name="slop">The coincidence band fusing near-equal stops.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static LimitState ResolveLimitState(bool enabled, float lower, float upper, float value, float slop)
+    {
+        if (!enabled)
+        {
+            return LimitState.Inactive;
+        }
 
-    /// <summary>Anchor in the first body frame.</summary>
-    public Vec2 LocalAnchorA;
+        if (upper - lower < 2.0f * slop)
+        {
+            return LimitState.Equal;
+        }
 
-    /// <summary>Anchor in the second body frame.</summary>
-    public Vec2 LocalAnchorB;
+        if (value <= lower)
+        {
+            return LimitState.AtLower;
+        }
 
-    /// <summary>Rest separation of the anchors; never negative.</summary>
-    public float Length;
+        if (value >= upper)
+        {
+            return LimitState.AtUpper;
+        }
 
-    /// <summary>Accumulated impulse; warm-started every step.</summary>
-    public float Impulse;
+        return LimitState.Inactive;
+    }
 
-    /// <summary>Reference angle (second minus first) at creation.</summary>
-    public float ReferenceAngle;
+    /// <summary>Applies one position correction to a body pair with rotation coupling.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ApplyPositionCorrection(
+        ref BodyState stateA, ref BodyState stateB, Vec2 rA, Vec2 rB, Vec2 correction,
+        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    {
+        if (awakeA)
+        {
+            stateA.Position -= correction * invMassA;
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, correction));
+            stateA.Cos = MathF.Cos(angleA);
+            stateA.Sin = MathF.Sin(angleA);
+        }
 
-    /// <summary>Lower angular stop in radians.</summary>
-    public float LowerAngle;
-
-    /// <summary>Upper angular stop in radians.</summary>
-    public float UpperAngle;
-
-    /// <summary>Whether angular stops apply.</summary>
-    public bool EnableLimit;
-
-    /// <summary>Target relative angular velocity.</summary>
-    public float MotorSpeed;
-
-    /// <summary>Peak motor torque; never negative.</summary>
-    public float MaxMotorTorque;
-
-    /// <summary>Whether the motor drives.</summary>
-    public bool EnableMotor;
-
-    /// <summary>Accumulated point impulse; warm-started every step.</summary>
-    public Vec2 PointImpulse;
-
-    /// <summary>Accumulated motor impulse; warm-started every step.</summary>
-    public float MotorImpulse;
-
-    /// <summary>Accumulated limit impulse; warm-started every step.</summary>
-    public float LimitImpulse;
-
-    /// <summary>Motor impulse cap of the current step (torque times dt).</summary>
-    public float MotorMaxImpulse;
-
-    /// <summary>Resolved limit state of the current step.</summary>
-    public LimitState LimitState;
-
-    /// <summary>Slider axis in the first body frame; live for prismatic joints.</summary>
-    public Vec2 LocalAxisA;
-
-    /// <summary>Along-axis separation at creation; the prismatic zero.</summary>
-    public float ReferenceTranslation;
-
-    /// <summary>Lower slide stop along the axis.</summary>
-    public float LowerTranslation;
-
-    /// <summary>Upper slide stop along the axis.</summary>
-    public float UpperTranslation;
-
-    /// <summary>Whether slide stops apply.</summary>
-    public bool EnablePrismaticLimit;
-
-    /// <summary>Target slide speed along the axis.</summary>
-    public float PrismaticMotorSpeed;
-
-    /// <summary>Peak slide force; never negative.</summary>
-    public float MaxPrismaticForce;
-
-    /// <summary>Whether the slide motor drives.</summary>
-    public bool EnablePrismaticMotor;
-
-    /// <summary>Accumulated weld angle impulse; warm-started every step.</summary>
-    public float WeldAngleImpulse;
-
-    /// <summary>Accumulated perp impulse (.Y); the slide axis stays free except limit/motor.</summary>
-    public Vec2 PrismaticImpulse;
-
-    /// <summary>Accumulated slide motor impulse; warm-started every step.</summary>
-    public float PrismaticMotorImpulse;
-
-    /// <summary>Accumulated slide limit impulse; warm-started every step.</summary>
-    public float PrismaticLimitImpulse;
-
-    /// <summary>Slide motor impulse cap of the current step (force times dt).</summary>
-    public float PrismaticMotorMaxImpulse;
-
-    /// <summary>Resolved slide limit state of the current step.</summary>
-    public LimitState PrismaticLimitState;
-
-    /// <summary>Servo target offset in the first body frame; live for motor joints.</summary>
-    public Vec2 ServoOffset;
-
-    /// <summary>Servo target relative angle; live for motor joints.</summary>
-    public float ServoAngle;
-
-    /// <summary>Peak servo force; never negative.</summary>
-    public float ServoMaxForce;
-
-    /// <summary>Peak servo torque; never negative.</summary>
-    public float ServoMaxTorque;
-
-    /// <summary>Fraction of the pose error corrected per second; in (0, 1].</summary>
-    public float ServoFactor;
-
-    /// <summary>Servo response rate of the current step (factor over dt).</summary>
-    public float ServoRate;
-
-    /// <summary>Accumulated servo force impulse; warm-started every step.</summary>
-    public Vec2 ServoLinearImpulse;
-
-    /// <summary>Accumulated servo torque impulse; warm-started every step.</summary>
-    public float ServoAngleImpulse;
-
-    /// <summary>Servo force impulse cap of the current step.</summary>
-    public float ServoMaxLinearImpulse;
-
-    /// <summary>Servo torque impulse cap of the current step.</summary>
-    public float ServoMaxAngleImpulse;
-
-    /// <summary>Suspension frequency in hertz; live for wheel joints.</summary>
-    public float SuspensionFrequency;
-
-    /// <summary>Suspension damping ratio; live for wheel joints.</summary>
-    public float SuspensionDamping;
-
-    /// <summary>Target hub speed; live for wheel joints.</summary>
-    public float WheelMotorSpeed;
-
-    /// <summary>Peak hub torque; never negative.</summary>
-    public float WheelMaxTorque;
-
-    /// <summary>Whether the hub motor drives.</summary>
-    public bool EnableWheelMotor;
-
-    /// <summary>Accumulated hub motor impulse; warm-started every step.</summary>
-    public float WheelMotorImpulse;
-
-    /// <summary>Hub motor impulse cap of the current step.</summary>
-    public float WheelMotorMaxImpulse;
-
-    /// <summary>Accumulated lateral impulse; warm-started every step.</summary>
-    public float WheelPerpImpulse;
-
-    /// <summary>Ground pulley of the first anchor; live for pulley joints.</summary>
-    public Vec2 PulleyGroundA;
-
-    /// <summary>Ground pulley of the second anchor; live for pulley joints.</summary>
-    public Vec2 PulleyGroundB;
-
-    /// <summary>Rope length ratio; strictly positive.</summary>
-    public float PulleyRatio;
-
-    /// <summary>Fixed total rope length captured at creation.</summary>
-    public float PulleyConstant;
-
-    /// <summary>Accumulated rope impulse; warm-started every step.</summary>
-    public float PulleyImpulse;
-
-    /// <summary>First geared joint; live for gear joints, never a gear itself.</summary>
-    public JointId GearJointA;
-
-    /// <summary>Second geared joint; live for gear joints, never a gear itself.</summary>
-    public JointId GearJointB;
-
-    /// <summary>Coordinate ratio of the second joint; finite and non-zero.</summary>
-    public float GearRatio;
-
-    /// <summary>Fixed coordinate sum captured at creation.</summary>
-    public float GearConstant;
-
-    /// <summary>Accumulated gear impulse; warm-started every step.</summary>
-    public float GearImpulse;
+        if (awakeB)
+        {
+            stateB.Position += correction * invMassB;
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, correction));
+            stateB.Cos = MathF.Cos(angleB);
+            stateB.Sin = MathF.Sin(angleB);
+        }
+    }
 }
+
+/// <summary>Compile-time construction phases; invalid orders do not compile.</summary>
+#pragma warning disable CA1034 // Typestate phantoms are intentionally nested: the phase only means something qualified by its builder protocol, and unqualified top-level names would pollute the package surface.
+public static class Typestate
+{
+    /// <summary>No configuration yet.</summary>
+    public readonly struct Unconfigured;
+
+    /// <summary>Bodies bound; geometry still open.</summary>
+    public readonly struct BodiesConfigured;
+
+    /// <summary>Bodies and geometry bound; ready to build.</summary>
+    public readonly struct GeometryConfigured;
+
+    /// <summary>Geared joints bound; ready to build.</summary>
+    public readonly struct JointsConfigured;
+}
+#pragma warning restore CA1034
+
+#endregion
+
+#region Validated Parameter Definitions
 
 /// <summary>
 /// Construction parameters of a revolute joint: two bodies pinned through a
@@ -312,19 +260,67 @@ public readonly struct RevoluteDef
     public Vec2 WorldAnchor { get; init; } = default;
 
     /// <summary>Lower angular stop in radians.</summary>
-    public float LowerAngle { get; init; } = 0.0f;
+    public float LowerAngle
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(LowerAngle));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Upper angular stop in radians.</summary>
-    public float UpperAngle { get; init; } = 0.0f;
+    public float UpperAngle
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(UpperAngle));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Whether angular stops apply.</summary>
     public bool EnableLimit { get; init; } = false;
 
     /// <summary>Target relative angular velocity.</summary>
-    public float MotorSpeed { get; init; } = 0.0f;
+    public float MotorSpeed
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MotorSpeed));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Peak motor torque; never negative.</summary>
-    public float MaxMotorTorque { get; init; } = 0.0f;
+    public float MaxMotorTorque
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MaxMotorTorque));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Whether the motor drives.</summary>
     public bool EnableMotor { get; init; } = false;
@@ -378,19 +374,67 @@ public readonly struct PrismaticDef
     public Vec2 WorldAxis { get; init; } = new Vec2(1, 0);
 
     /// <summary>Lower slide stop along the axis.</summary>
-    public float LowerTranslation { get; init; } = 0.0f;
+    public float LowerTranslation
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(LowerTranslation));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Upper slide stop along the axis.</summary>
-    public float UpperTranslation { get; init; } = 0.0f;
+    public float UpperTranslation
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(UpperTranslation));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Whether slide stops apply.</summary>
     public bool EnableLimit { get; init; } = false;
 
     /// <summary>Target slide speed along the axis.</summary>
-    public float MotorSpeed { get; init; } = 0.0f;
+    public float MotorSpeed
+    {
+        get => field;
+        init
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MotorSpeed));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Peak slide force; never negative.</summary>
-    public float MaxMotorForce { get; init; } = 0.0f;
+    public float MaxMotorForce
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MaxMotorForce));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Whether the slide motor drives.</summary>
     public bool EnableMotor { get; init; } = false;
@@ -421,13 +465,49 @@ public readonly struct MotorDef
     public float AngularOffset { get; init; } = 0.0f;
 
     /// <summary>Peak servo force; never negative.</summary>
-    public float MaxForce { get; init; } = 0.0f;
+    public float MaxForce
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MaxForce));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Peak servo torque; never negative.</summary>
-    public float MaxTorque { get; init; } = 0.0f;
+    public float MaxTorque
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MaxTorque));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
 
     /// <summary>Fraction of the pose error corrected per second; in (0, 1].</summary>
-    public float CorrectionFactor { get; init; } = 0.3f;
+    public float CorrectionFactor
+    {
+        get => field;
+        init
+        {
+            if (value <= 0.0f || value > 1.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(CorrectionFactor));
+            }
+
+            field = value;
+        }
+    } = 0.3f;
 }
 
 /// <summary>
@@ -464,10 +544,34 @@ public readonly struct WheelDef
     public bool EnableMotor { get; init; } = false;
 
     /// <summary>Suspension frequency in hertz; strictly positive, stable below 1 / (pi * dt).</summary>
-    public float SuspensionFrequency { get; init; } = 2.0f;
+    public float SuspensionFrequency
+    {
+        get => field;
+        init
+        {
+            if (value <= 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(SuspensionFrequency));
+            }
+
+            field = value;
+        }
+    } = 2.0f;
 
     /// <summary>Suspension damping ratio; never negative.</summary>
-    public float SuspensionDamping { get; init; } = 0.7f;
+    public float SuspensionDamping
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(SuspensionDamping));
+            }
+
+            field = value;
+        }
+    } = 0.7f;
 }
 
 /// <summary>
@@ -501,7 +605,19 @@ public readonly struct PulleyDef
     public Vec2 WorldAnchorB { get; init; } = default;
 
     /// <summary>Rope length ratio; strictly positive.</summary>
-    public float Ratio { get; init; } = 1.0f;
+    public float Ratio
+    {
+        get => field;
+        init
+        {
+            if (value <= 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(Ratio));
+            }
+
+            field = value;
+        }
+    } = 1.0f;
 }
 
 /// <summary>
@@ -523,41 +639,2939 @@ public readonly struct GearDef
     public JointId JointB { get; init; } = JointId.Invalid;
 
     /// <summary>Coordinate ratio of the second joint; finite and non-zero.</summary>
-    public float Ratio { get; init; } = 1.0f;
+    public float Ratio
+    {
+        get => field;
+        init
+        {
+            if (value == 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(Ratio));
+            }
+
+            field = value;
+        }
+    } = 1.0f;
+}
+
+#endregion
+
+#region Compile-Time Typestate Builders
+
+#pragma warning disable CA1000 // Typestate factories live on the phased builder itself: the phase type parameter is the whole point, and a parallel factory class would split the construction protocol from its states.
+
+/// <summary>Distance joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct DistanceJointBuilder<TPhase>
+{
+    private readonly BodyId _bodyA;
+    private readonly BodyId _bodyB;
+    private readonly Vec2 _localAnchorA;
+    private readonly Vec2 _localAnchorB;
+    private readonly float _length;
+
+    internal DistanceJointBuilder(BodyId bodyA, BodyId bodyB, Vec2 anchorA, Vec2 anchorB, float length)
+    {
+        _bodyA = bodyA;
+        _bodyB = bodyB;
+        _localAnchorA = anchorA;
+        _localAnchorB = anchorB;
+        _length = length;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static DistanceJointBuilder<Typestate.Unconfigured> Create() =>
+        new(BodyId.Invalid, BodyId.Invalid, default, default, 0.0f);
+
+    internal BodyId BodyA => _bodyA;
+    internal BodyId BodyB => _bodyB;
+    internal Vec2 LocalAnchorA => _localAnchorA;
+    internal Vec2 LocalAnchorB => _localAnchorB;
+    internal float Length => _length;
+}
+
+/// <summary>Phased extensions of the distance joint builder.</summary>
+public static class DistanceJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static DistanceJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this DistanceJointBuilder<Typestate.Unconfigured> _, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Distance joint requires two distinct valid bodies.");
+        }
+
+        return new DistanceJointBuilder<Typestate.BodiesConfigured>(bodyA, bodyB, default, default, 0.0f);
+    }
+
+    /// <summary>Binds the anchors and the rest length.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static DistanceJointBuilder<Typestate.GeometryConfigured> WithAnchors(
+        this DistanceJointBuilder<Typestate.BodiesConfigured> builder,
+        Vec2 localAnchorA, Vec2 localAnchorB, float length)
+    {
+        if (length < 0.0f || float.IsNaN(length) || float.IsInfinity(length))
+        {
+            ThrowHelper.ThrowInvalidOperation("Rest length must be finite and non-negative.");
+        }
+
+        return new DistanceJointBuilder<Typestate.GeometryConfigured>(
+            builder.BodyA, builder.BodyB, localAnchorA, localAnchorB, length);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this DistanceJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        return store.CreateDistance(bodies, builder.BodyA, builder.BodyB,
+            builder.LocalAnchorA, builder.LocalAnchorB, builder.Length);
+    }
+}
+
+/// <summary>Revolute joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct RevoluteJointBuilder<TPhase>
+{
+    private readonly RevoluteDef _definition;
+
+    internal RevoluteJointBuilder(in RevoluteDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RevoluteJointBuilder<Typestate.Unconfigured> Create() => new(new RevoluteDef());
+
+    internal RevoluteDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the revolute joint builder.</summary>
+public static class RevoluteJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RevoluteJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this RevoluteJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Revolute joint requires two distinct valid bodies.");
+        }
+
+        RevoluteDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new RevoluteJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the shared world anchor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RevoluteJointBuilder<Typestate.GeometryConfigured> WithAnchor(
+        this RevoluteJointBuilder<Typestate.BodiesConfigured> builder, Vec2 worldAnchor)
+    {
+        RevoluteDef definition = builder.Definition with { WorldAnchor = worldAnchor };
+        return new RevoluteJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Binds the angular stops.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RevoluteJointBuilder<Typestate.GeometryConfigured> WithLimits(
+        this RevoluteJointBuilder<Typestate.GeometryConfigured> builder, float lowerAngle, float upperAngle)
+    {
+        RevoluteDef definition = builder.Definition with
+        {
+            LowerAngle = lowerAngle,
+            UpperAngle = upperAngle,
+            EnableLimit = true,
+        };
+        return new RevoluteJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Binds the speed motor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RevoluteJointBuilder<Typestate.GeometryConfigured> WithMotor(
+        this RevoluteJointBuilder<Typestate.GeometryConfigured> builder, float speed, float maxTorque)
+    {
+        RevoluteDef definition = builder.Definition with
+        {
+            MotorSpeed = speed,
+            MaxMotorTorque = maxTorque,
+            EnableMotor = true,
+        };
+        return new RevoluteJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this RevoluteJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        RevoluteDef definition = builder.Definition;
+        return store.CreateRevolute(bodies, in definition);
+    }
+}
+
+/// <summary>Weld joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct WeldJointBuilder<TPhase>
+{
+    private readonly WeldDef _definition;
+
+    internal WeldJointBuilder(in WeldDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WeldJointBuilder<Typestate.Unconfigured> Create() => new(new WeldDef());
+
+    internal WeldDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the weld joint builder.</summary>
+public static class WeldJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WeldJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this WeldJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Weld joint requires two distinct valid bodies.");
+        }
+
+        WeldDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new WeldJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the shared world anchor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WeldJointBuilder<Typestate.GeometryConfigured> WithAnchor(
+        this WeldJointBuilder<Typestate.BodiesConfigured> builder, Vec2 worldAnchor)
+    {
+        WeldDef definition = builder.Definition with { WorldAnchor = worldAnchor };
+        return new WeldJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this WeldJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        WeldDef definition = builder.Definition;
+        return store.CreateWeld(bodies, in definition);
+    }
+}
+
+/// <summary>Prismatic joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct PrismaticJointBuilder<TPhase>
+{
+    private readonly PrismaticDef _definition;
+
+    internal PrismaticJointBuilder(in PrismaticDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PrismaticJointBuilder<Typestate.Unconfigured> Create() => new(new PrismaticDef());
+
+    internal PrismaticDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the prismatic joint builder.</summary>
+public static class PrismaticJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PrismaticJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this PrismaticJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Prismatic joint requires two distinct valid bodies.");
+        }
+
+        PrismaticDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new PrismaticJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the shared world anchor and the slide axis.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PrismaticJointBuilder<Typestate.GeometryConfigured> WithAxis(
+        this PrismaticJointBuilder<Typestate.BodiesConfigured> builder, Vec2 worldAnchor, Vec2 worldAxis)
+    {
+        PrismaticDef definition = builder.Definition with { WorldAnchor = worldAnchor, WorldAxis = worldAxis };
+        return new PrismaticJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Binds the slide stops.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PrismaticJointBuilder<Typestate.GeometryConfigured> WithLimits(
+        this PrismaticJointBuilder<Typestate.GeometryConfigured> builder, float lower, float upper)
+    {
+        PrismaticDef definition = builder.Definition with
+        {
+            LowerTranslation = lower,
+            UpperTranslation = upper,
+            EnableLimit = true,
+        };
+        return new PrismaticJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Binds the slide motor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PrismaticJointBuilder<Typestate.GeometryConfigured> WithMotor(
+        this PrismaticJointBuilder<Typestate.GeometryConfigured> builder, float speed, float maxForce)
+    {
+        PrismaticDef definition = builder.Definition with
+        {
+            MotorSpeed = speed,
+            MaxMotorForce = maxForce,
+            EnableMotor = true,
+        };
+        return new PrismaticJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this PrismaticJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        PrismaticDef definition = builder.Definition;
+        return store.CreatePrismatic(bodies, in definition);
+    }
+}
+
+/// <summary>Motor joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct MotorJointBuilder<TPhase>
+{
+    private readonly MotorDef _definition;
+
+    internal MotorJointBuilder(in MotorDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MotorJointBuilder<Typestate.Unconfigured> Create() => new(new MotorDef());
+
+    internal MotorDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the motor joint builder.</summary>
+public static class MotorJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MotorJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this MotorJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Motor joint requires two distinct valid bodies.");
+        }
+
+        MotorDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new MotorJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the servo target, caps and response speed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MotorJointBuilder<Typestate.GeometryConfigured> WithServo(
+        this MotorJointBuilder<Typestate.BodiesConfigured> builder,
+        Vec2 linearOffset, float angularOffset, float maxForce, float maxTorque, float correctionFactor)
+    {
+        MotorDef definition = builder.Definition with
+        {
+            LinearOffset = linearOffset,
+            AngularOffset = angularOffset,
+            MaxForce = maxForce,
+            MaxTorque = maxTorque,
+            CorrectionFactor = correctionFactor,
+        };
+        return new MotorJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this MotorJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        MotorDef definition = builder.Definition;
+        return store.CreateMotor(bodies, in definition);
+    }
+}
+
+/// <summary>Wheel joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct WheelJointBuilder<TPhase>
+{
+    private readonly WheelDef _definition;
+
+    internal WheelJointBuilder(in WheelDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WheelJointBuilder<Typestate.Unconfigured> Create() => new(new WheelDef());
+
+    internal WheelDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the wheel joint builder.</summary>
+public static class WheelJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WheelJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this WheelJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Wheel joint requires two distinct valid bodies.");
+        }
+
+        WheelDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new WheelJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the suspension anchor, axis and spring tuning.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WheelJointBuilder<Typestate.GeometryConfigured> WithSuspension(
+        this WheelJointBuilder<Typestate.BodiesConfigured> builder,
+        Vec2 worldAnchor, Vec2 worldAxis, float frequency, float dampingRatio)
+    {
+        WheelDef definition = builder.Definition with
+        {
+            WorldAnchor = worldAnchor,
+            WorldAxis = worldAxis,
+            SuspensionFrequency = frequency,
+            SuspensionDamping = dampingRatio,
+        };
+        return new WheelJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Binds the hub motor.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WheelJointBuilder<Typestate.GeometryConfigured> WithMotor(
+        this WheelJointBuilder<Typestate.GeometryConfigured> builder, float speed, float maxTorque)
+    {
+        WheelDef definition = builder.Definition with
+        {
+            MotorSpeed = speed,
+            MaxMotorTorque = maxTorque,
+            EnableMotor = true,
+        };
+        return new WheelJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this WheelJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        WheelDef definition = builder.Definition;
+        return store.CreateWheel(bodies, in definition);
+    }
+}
+
+/// <summary>Pulley joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct PulleyJointBuilder<TPhase>
+{
+    private readonly PulleyDef _definition;
+
+    internal PulleyJointBuilder(in PulleyDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PulleyJointBuilder<Typestate.Unconfigured> Create() => new(new PulleyDef());
+
+    internal PulleyDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the pulley joint builder.</summary>
+public static class PulleyJointBuilderExtensions
+{
+    /// <summary>Binds the two bodies; rejects shared or invalid identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PulleyJointBuilder<Typestate.BodiesConfigured> WithBodies(
+        this PulleyJointBuilder<Typestate.Unconfigured> builder, BodyId bodyA, BodyId bodyB)
+    {
+        if (!bodyA.IsValid || !bodyB.IsValid || bodyA == bodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Pulley joint requires two distinct valid bodies.");
+        }
+
+        PulleyDef definition = builder.Definition with { BodyA = bodyA, BodyB = bodyB };
+        return new PulleyJointBuilder<Typestate.BodiesConfigured>(in definition);
+    }
+
+    /// <summary>Binds the ground pulleys, the body anchors and the rope ratio.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PulleyJointBuilder<Typestate.GeometryConfigured> WithRopes(
+        this PulleyJointBuilder<Typestate.BodiesConfigured> builder,
+        Vec2 groundA, Vec2 groundB, Vec2 anchorA, Vec2 anchorB, float ratio)
+    {
+        PulleyDef definition = builder.Definition with
+        {
+            GroundAnchorA = groundA,
+            GroundAnchorB = groundB,
+            WorldAnchorA = anchorA,
+            WorldAnchorB = anchorB,
+            Ratio = ratio,
+        };
+        return new PulleyJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this PulleyJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        PulleyDef definition = builder.Definition;
+        return store.CreatePulley(bodies, in definition);
+    }
+}
+
+/// <summary>Gear joint builder; each step returns the next phase.</summary>
+/// <typeparam name="TPhase">The current configuration phase.</typeparam>
+public readonly struct GearJointBuilder<TPhase>
+{
+    private readonly GearDef _definition;
+
+    internal GearJointBuilder(in GearDef definition)
+    {
+        _definition = definition;
+    }
+
+    /// <summary>Starts an unconfigured builder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GearJointBuilder<Typestate.Unconfigured> Create() => new(new GearDef());
+
+    internal GearDef Definition => _definition;
+}
+
+/// <summary>Phased extensions of the gear joint builder.</summary>
+public static class GearJointBuilderExtensions
+{
+    /// <summary>Binds the two geared joints; rejects shared, invalid or geared identities.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GearJointBuilder<Typestate.JointsConfigured> WithJoints(
+        this GearJointBuilder<Typestate.Unconfigured> builder, JointId jointA, JointId jointB)
+    {
+        if (!jointA.IsValid || !jointB.IsValid || jointA == jointB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Gear joint requires two distinct live joints.");
+        }
+
+        GearDef definition = builder.Definition with { JointA = jointA, JointB = jointB };
+        return new GearJointBuilder<Typestate.JointsConfigured>(in definition);
+    }
+
+    /// <summary>Binds the coordinate ratio.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GearJointBuilder<Typestate.GeometryConfigured> WithRatio(
+        this GearJointBuilder<Typestate.JointsConfigured> builder, float ratio)
+    {
+        GearDef definition = builder.Definition with { Ratio = ratio };
+        return new GearJointBuilder<Typestate.GeometryConfigured>(in definition);
+    }
+
+    /// <summary>Allocates the joint in the store.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JointId Build(
+        this GearJointBuilder<Typestate.GeometryConfigured> builder,
+        BodyStore bodies, JointStore store)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(store);
+        GearDef definition = builder.Definition;
+        return store.CreateGear(bodies, in definition);
+    }
+}
+
+#pragma warning restore CA1000
+
+#endregion
+
+#region Monomorphic Joint Traits
+
+#pragma warning disable CA1062 // Policy entry points run behind JointStorage sweeps owned by JointStore; JointSolver validates both stores once per pass, so per-sweep revalidation would pessimise the hot loop without covering new ground.
+
+/// <summary>
+/// Monomorphic constraint archetype: per-type solver entry points resolved at
+/// compile time, so the sweep loop carries no virtual dispatch.
+/// </summary>
+/// <typeparam name="TSelf">The policy type itself.</typeparam>
+/// <typeparam name="TData">The constraint storage layout.</typeparam>
+public interface IJointPolicy<TSelf, TData>
+    where TSelf : struct, IJointPolicy<TSelf, TData>
+    where TData : struct
+{
+    /// <summary>The constraint archetype.</summary>
+    static abstract JointKind Kind { get; }
+
+    /// <summary>Reads the coordinated body pair for island union.</summary>
+    static abstract void GetBodies(ref TData data, out BodyId bodyA, out BodyId bodyB);
+
+    /// <summary>
+    /// Per-step init: wakes sleeping dynamics on genuine relative motion and
+    /// applies the stored impulse to velocities. Runs once per step before
+    /// the iteration loop.
+    /// </summary>
+    static abstract void InitVelocity(
+        ref TData data,
+        BodyStore bodies,
+        JointStore store,
+        float wakeTolerance,
+        float dt);
+
+    /// <summary>Runs one sweep of velocity impulses.</summary>
+    static abstract void SolveVelocity(
+        ref TData data,
+        BodyStore bodies,
+        JointStore store);
+
+    /// <summary>Runs one sweep of position correction.</summary>
+    static abstract void SolvePosition(
+        ref TData data,
+        BodyStore bodies,
+        JointStore store);
+}
+
+/// <summary>One distance constraint: two bodies pinned through body-frame anchors at a fixed rest length.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct DistanceJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Rest separation of the anchors; never negative.</summary>
+    public float Length;
+
+    /// <summary>Accumulated impulse; warm-started every step.</summary>
+    public float Impulse;
+}
+
+/// <summary>Sequential-impulse distance constraint: bilateral impulses hold the rest length.</summary>
+public readonly struct DistancePolicy : IJointPolicy<DistancePolicy, DistanceJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Distance;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref DistanceJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref DistanceJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 pA = stateA.Position + rA;
+        Vec2 pB = stateB.Position + rB;
+        Vec2 axis = pB - pA;
+        Vec2 direction = axis.LengthSquared() > 1e-12f ? axis * (1.0f / MathF.Sqrt(axis.LengthSquared())) : Vec2.Zero;
+
+        Vec2 impulse = direction * data.Impulse;
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= impulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * Vec2.Cross(rA, impulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += impulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * Vec2.Cross(rB, impulse);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref DistanceJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        Vec2 axis = pB - pA;
+        float lengthSq = axis.LengthSquared();
+        if (lengthSq < 1e-12f)
+        {
+            return;
+        }
+
+        Vec2 direction = axis * (1.0f / MathF.Sqrt(lengthSq));
+        float rnA = Vec2.Cross(rA, direction);
+        float rnB = Vec2.Cross(rB, direction);
+        float k = invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        float velocityError = Vec2.Dot(direction, vB - vA);
+
+        float impulse = -velocityError / k;
+        data.Impulse += impulse;
+        Vec2 applied = direction * impulse;
+
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= applied * invMassA;
+            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += applied * invMassB;
+            stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref DistanceJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        Vec2 axis = pB - pA;
+        float length = MathF.Sqrt(axis.LengthSquared());
+        if (length < 1e-9f)
+        {
+            return;
+        }
+
+        Vec2 direction = axis * (1.0f / length);
+        float rnA = Vec2.Cross(rA, direction);
+        float rnB = Vec2.Cross(rB, direction);
+        float k = invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float error = Math.Clamp(length - data.Length, -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
+        Vec2 applied = direction * (-error / k);
+
+        MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+}
+
+/// <summary>One pinned hinge with optional angular stops and a speed motor.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct RevoluteJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Reference angle (second minus first) at creation.</summary>
+    public float ReferenceAngle;
+
+    /// <summary>Lower angular stop in radians.</summary>
+    public float LowerAngle;
+
+    /// <summary>Upper angular stop in radians.</summary>
+    public float UpperAngle;
+
+    /// <summary>Target relative angular velocity.</summary>
+    public float MotorSpeed;
+
+    /// <summary>Peak motor torque; never negative.</summary>
+    public float MaxMotorTorque;
+
+    /// <summary>Accumulated point impulse; warm-started every step.</summary>
+    public Vec2 PointImpulse;
+
+    /// <summary>Accumulated motor impulse; warm-started every step.</summary>
+    public float MotorImpulse;
+
+    /// <summary>Accumulated limit impulse; warm-started every step.</summary>
+    public float LimitImpulse;
+
+    /// <summary>Motor impulse cap of the current step (torque times dt).</summary>
+    public float MotorMaxImpulse;
+
+    /// <summary>Resolved limit state of the current step.</summary>
+    public LimitState LimitState;
+
+    /// <summary>Whether angular stops apply.</summary>
+    public bool EnableLimit;
+
+    /// <summary>Whether the motor drives.</summary>
+    public bool EnableMotor;
+}
+
+/// <summary>Pinned hinge: motor, then limit, then the 2x2 point block.</summary>
+public readonly struct RevolutePolicy : IJointPolicy<RevolutePolicy, RevoluteJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Revolute;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref RevoluteJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref RevoluteJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+        float jointAngle = MathPhysics.NormalizeAngle((angleB - angleA) - data.ReferenceAngle);
+
+        LimitState previous = data.LimitState;
+        data.LimitState = MathPhysics.ResolveLimitState(data.EnableLimit, data.LowerAngle, data.UpperAngle, jointAngle, SolverTuning.AngularSlop);
+        if (data.LimitState != previous)
+        {
+            data.LimitImpulse = 0.0f;
+        }
+
+        data.MotorMaxImpulse = data.EnableMotor ? data.MaxMotorTorque * dt : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 pointImpulse = data.PointImpulse;
+        float totalTorque = data.MotorImpulse + data.LimitImpulse;
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= pointImpulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, pointImpulse) + totalTorque);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += pointImpulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, pointImpulse) + totalTorque);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref RevoluteJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+        float axialMass = 1.0f / (invIA + invIB);
+
+        if (data.EnableMotor && (awakeA || awakeB))
+        {
+            float rate = (stateB.AngularVelocity - stateA.AngularVelocity) - data.MotorSpeed;
+            float impulse = -axialMass * rate;
+            float old = data.MotorImpulse;
+            float next = Math.Clamp(old + impulse, -data.MotorMaxImpulse, data.MotorMaxImpulse);
+            float delta = next - old;
+            data.MotorImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+
+        if (data.LimitState != LimitState.Inactive && (awakeA || awakeB))
+        {
+            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
+            float impulse = -axialMass * rate;
+            float old = data.LimitImpulse;
+            float next = data.LimitState switch
+            {
+                LimitState.AtLower => MathF.Max(old + impulse, 0.0f),
+                LimitState.AtUpper => MathF.Min(old + impulse, 0.0f),
+                _ => old + impulse,
+            };
+            float delta = next - old;
+            data.LimitImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+        float det = (k11 * k22) - (k12 * k12);
+        if (det <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        Vec2 accumulated = data.PointImpulse;
+        Vec2 residual = (vB - vA) - new Vec2(
+            (k11 * accumulated.X) + (k12 * accumulated.Y),
+            (k12 * accumulated.X) + (k22 * accumulated.Y));
+
+        float invDet = 1.0f / det;
+        Vec2 solved = new(
+            ((k12 * residual.Y) - (k22 * residual.X)) * invDet,
+            ((k12 * residual.X) - (k11 * residual.Y)) * invDet);
+        Vec2 deltaImpulse = solved - accumulated;
+        data.PointImpulse = solved;
+
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= deltaImpulse * invMassA;
+            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, deltaImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += deltaImpulse * invMassB;
+            stateB.AngularVelocity += invIB * Vec2.Cross(rB, deltaImpulse);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref RevoluteJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+        float det = (k11 * k22) - (k12 * k12);
+
+        if (det > 0.0f)
+        {
+            Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+            Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+            Vec2 error = pB - pA;
+            float invDet = 1.0f / det;
+            Vec2 correction = new(
+                ((k12 * error.Y) - (k22 * error.X)) * invDet,
+                ((k12 * error.X) - (k11 * error.Y)) * invDet);
+            MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, correction, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+        }
+
+        if (data.LimitState == LimitState.Inactive)
+        {
+            return;
+        }
+
+        float axialMass = 1.0f / (invIA + invIB);
+        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+        float jointAngle = MathPhysics.NormalizeAngle((angleB - angleA) - data.ReferenceAngle);
+
+        float angularError = data.LimitState switch
+        {
+            LimitState.AtLower => jointAngle - data.LowerAngle + SolverTuning.AngularSlop,
+            LimitState.AtUpper => jointAngle - data.UpperAngle - SolverTuning.AngularSlop,
+            _ => jointAngle - data.LowerAngle,
+        };
+
+        bool violates = data.LimitState switch
+        {
+            LimitState.AtLower => angularError < 0.0f,
+            LimitState.AtUpper => angularError > 0.0f,
+            _ => angularError != 0.0f,
+        };
+
+        if (!violates)
+        {
+            return;
+        }
+
+        float limitCorrection = -axialMass * angularError;
+        if (awakeA)
+        {
+            float correctedA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * limitCorrection);
+            stateA.Cos = MathF.Cos(correctedA);
+            stateA.Sin = MathF.Sin(correctedA);
+        }
+
+        if (awakeB)
+        {
+            float correctedB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * limitCorrection);
+            stateB.Cos = MathF.Cos(correctedB);
+            stateB.Sin = MathF.Sin(correctedB);
+        }
+    }
+}
+
+/// <summary>One locked relative pose: pin block plus angle lock.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct WeldJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Reference angle (second minus first) at creation.</summary>
+    public float ReferenceAngle;
+
+    /// <summary>Accumulated point impulse; warm-started every step.</summary>
+    public Vec2 PointImpulse;
+
+    /// <summary>Accumulated angle impulse; warm-started every step.</summary>
+    public float WeldAngleImpulse;
+}
+
+/// <summary>Locked pose: angle lock, then the shared pin block.</summary>
+public readonly struct WeldPolicy : IJointPolicy<WeldPolicy, WeldJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Weld;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref WeldJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref WeldJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 pointImpulse = data.PointImpulse;
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= pointImpulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, pointImpulse) + data.WeldAngleImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += pointImpulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, pointImpulse) + data.WeldAngleImpulse);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref WeldJointData data, BodyStore bodies, JointStore store)
+    {
+        SolveAngleLock(bodies, ref data);
+        SolvePinBlockVelocity(bodies, ref data);
+    }
+
+    /// <summary>Shared angle velocity lock used by weld joints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static void SolveAngleLock(BodyStore bodies, ref WeldJointData data)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+        float axialMass = invIA + invIB;
+        if (axialMass <= 0.0f || (!awakeA && !awakeB))
+        {
+            return;
+        }
+
+        float delta = -(stateB.AngularVelocity - stateA.AngularVelocity) / axialMass;
+        data.WeldAngleImpulse += delta;
+
+        if (awakeA)
+        {
+            stateA.AngularVelocity -= invIA * delta;
+        }
+
+        if (awakeB)
+        {
+            stateB.AngularVelocity += invIB * delta;
+        }
+    }
+
+    /// <summary>Shared 2x2 pin velocity block used by weld joints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static void SolvePinBlockVelocity(BodyStore bodies, ref WeldJointData data)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+        float det = (k11 * k22) - (k12 * k12);
+        if (det <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        Vec2 accumulated = data.PointImpulse;
+        Vec2 residual = (vB - vA) - new Vec2(
+            (k11 * accumulated.X) + (k12 * accumulated.Y),
+            (k12 * accumulated.X) + (k22 * accumulated.Y));
+
+        float invDet = 1.0f / det;
+        Vec2 solved = new(
+            ((k12 * residual.Y) - (k22 * residual.X)) * invDet,
+            ((k12 * residual.X) - (k11 * residual.Y)) * invDet);
+        Vec2 deltaImpulse = solved - accumulated;
+        data.PointImpulse = solved;
+
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= deltaImpulse * invMassA;
+            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, deltaImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += deltaImpulse * invMassB;
+            stateB.AngularVelocity += invIB * Vec2.Cross(rB, deltaImpulse);
+        }
+    }
+
+    /// <summary>Shared pin position correction used by weld joints.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static void SolvePinCorrection(
+        BodyStore bodies, BodyId bodyA, BodyId bodyB, Vec2 localAnchorA, Vec2 localAnchorB)
+    {
+        ref BodyState stateA = ref bodies.Slot(bodyA);
+        ref BodyState stateB = ref bodies.Slot(bodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, localAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, localAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
+        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
+        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
+        float det = (k11 * k22) - (k12 * k12);
+        if (det <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, localAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, localAnchorB);
+        Vec2 error = pB - pA;
+
+        float invDet = 1.0f / det;
+        Vec2 correction = new(
+            ((k12 * error.Y) - (k22 * error.X)) * invDet,
+            ((k12 * error.X) - (k11 * error.Y)) * invDet);
+
+        MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, correction, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref WeldJointData data, BodyStore bodies, JointStore store)
+    {
+        SolvePinCorrection(bodies, data.BodyA, data.BodyB, data.LocalAnchorA, data.LocalAnchorB);
+
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+        float axialMass = invIA + invIB;
+        if (axialMass <= 0.0f)
+        {
+            return;
+        }
+
+        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+        float angleError = MathPhysics.NormalizeAngle((angleB - angleA) - data.ReferenceAngle);
+        if (MathF.Abs(angleError) < SolverTuning.AngularSlop)
+        {
+            return;
+        }
+
+        float correction = -angleError / axialMass;
+        if (awakeA)
+        {
+            float correctedA = angleA - (invIA * correction);
+            stateA.Cos = MathF.Cos(correctedA);
+            stateA.Sin = MathF.Sin(correctedA);
+        }
+
+        if (awakeB)
+        {
+            float correctedB = angleB + (invIB * correction);
+            stateB.Cos = MathF.Cos(correctedB);
+            stateB.Sin = MathF.Sin(correctedB);
+        }
+    }
+}
+
+/// <summary>One slider along an axis with optional stops, motor and angle lock.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct PrismaticJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Slide axis in the first body frame.</summary>
+    public Vec2 LocalAxisA;
+
+    /// <summary>Reference angle (second minus first) at creation.</summary>
+    public float ReferenceAngle;
+
+    /// <summary>Along-axis separation at creation; the slide zero.</summary>
+    public float ReferenceTranslation;
+
+    /// <summary>Lower slide stop along the axis.</summary>
+    public float LowerTranslation;
+
+    /// <summary>Upper slide stop along the axis.</summary>
+    public float UpperTranslation;
+
+    /// <summary>Target slide speed along the axis.</summary>
+    public float MotorSpeed;
+
+    /// <summary>Peak slide force; never negative.</summary>
+    public float MaxMotorForce;
+
+    /// <summary>Accumulated lateral impulse (.Y); the axis stays free except limit/motor.</summary>
+    public Vec2 PrismaticImpulse;
+
+    /// <summary>Accumulated slide motor impulse; warm-started every step.</summary>
+    public float MotorImpulse;
+
+    /// <summary>Accumulated slide limit impulse; warm-started every step.</summary>
+    public float LimitImpulse;
+
+    /// <summary>Slide motor impulse cap of the current step (force times dt).</summary>
+    public float MotorMaxImpulse;
+
+    /// <summary>Accumulated angle impulse; warm-started every step.</summary>
+    public float WeldAngleImpulse;
+
+    /// <summary>Resolved slide limit state of the current step.</summary>
+    public LimitState LimitState;
+
+    /// <summary>Whether slide stops apply.</summary>
+    public bool EnableLimit;
+
+    /// <summary>Whether the slide motor drives.</summary>
+    public bool EnableMotor;
+}
+
+/// <summary>Slider: motor, then limit, then lateral lock, then angle lock.</summary>
+public readonly struct PrismaticPolicy : IJointPolicy<PrismaticPolicy, PrismaticJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Prismatic;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref PrismaticJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref PrismaticJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
+        float axisLenSq = axis.LengthSquared();
+        if (axisLenSq > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axisLenSq);
+        }
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        float translation = Vec2.Dot(pB - pA, axis) - data.ReferenceTranslation;
+
+        LimitState previous = data.LimitState;
+        data.LimitState = MathPhysics.ResolveLimitState(data.EnableLimit, data.LowerTranslation, data.UpperTranslation, translation, SolverTuning.AngularSlop);
+        if (data.LimitState != previous)
+        {
+            data.LimitImpulse = 0.0f;
+        }
+
+        data.MotorMaxImpulse = data.EnableMotor ? data.MaxMotorForce * dt : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 perp = MathPhysics.Perp(axis);
+        Vec2 impulse = (axis * (data.MotorImpulse + data.LimitImpulse)) + (perp * data.PrismaticImpulse.Y);
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= impulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, impulse) + data.WeldAngleImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += impulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, impulse) + data.WeldAngleImpulse);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref PrismaticJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
+        if (axis.LengthSquared() > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+        }
+
+        Vec2 perp = MathPhysics.Perp(axis);
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float axisA = Vec2.Cross(rA, axis);
+        float axisB = Vec2.Cross(rB, axis);
+        float axisMass = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
+
+        if (data.EnableMotor && axisMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+            float rate = Vec2.Dot(vB - vA, axis) - data.MotorSpeed;
+            float impulse = -rate / axisMass;
+            float old = data.MotorImpulse;
+            float next = Math.Clamp(old + impulse, -data.MotorMaxImpulse, data.MotorMaxImpulse);
+            Vec2 applied = axis * (next - old);
+            data.MotorImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        if (data.LimitState != LimitState.Inactive && axisMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+            float rate = Vec2.Dot(vB - vA, axis);
+            float impulse = -rate / axisMass;
+            float old = data.LimitImpulse;
+            float next = data.LimitState switch
+            {
+                LimitState.AtLower => MathF.Max(old + impulse, 0.0f),
+                LimitState.AtUpper => MathF.Min(old + impulse, 0.0f),
+                _ => old + impulse,
+            };
+            Vec2 applied = axis * (next - old);
+            data.LimitImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpMass = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpMass > 0.0f && (awakeA || awakeB))
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+            float rate = Vec2.Dot(vB - vA, perp);
+            float delta = -rate / perpMass;
+            data.PrismaticImpulse = new Vec2(data.PrismaticImpulse.X, data.PrismaticImpulse.Y + delta);
+            Vec2 applied = perp * delta;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f && (awakeA || awakeB))
+        {
+            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
+            float delta = -rate / axialMass;
+            data.WeldAngleImpulse += delta;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref PrismaticJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
+        if (axis.LengthSquared() > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+        }
+
+        Vec2 perp = MathPhysics.Perp(axis);
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        Vec2 error = pB - pA;
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpK = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpK > 0.0f)
+        {
+            float perpError = Math.Clamp(Vec2.Dot(error, perp), -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
+            Vec2 applied = perp * (-perpError / perpK);
+            MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+        }
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f)
+        {
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+            float angleError = MathPhysics.NormalizeAngle((angleB - angleA) - data.ReferenceAngle);
+            if (MathF.Abs(angleError) >= SolverTuning.AngularSlop)
+            {
+                float correction = -angleError / axialMass;
+                if (awakeA)
+                {
+                    float correctedA = angleA - (invIA * correction);
+                    stateA.Cos = MathF.Cos(correctedA);
+                    stateA.Sin = MathF.Sin(correctedA);
+                }
+
+                if (awakeB)
+                {
+                    float correctedB = angleB + (invIB * correction);
+                    stateB.Cos = MathF.Cos(correctedB);
+                    stateB.Sin = MathF.Sin(correctedB);
+                }
+            }
+        }
+
+        if (data.LimitState == LimitState.Inactive)
+        {
+            return;
+        }
+
+        float axisA = Vec2.Cross(rA, axis);
+        float axisB = Vec2.Cross(rB, axis);
+        float axisK = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
+        if (axisK <= 0.0f)
+        {
+            return;
+        }
+
+        float translation = Vec2.Dot(error, axis) - data.ReferenceTranslation;
+        float limitError = data.LimitState switch
+        {
+            LimitState.AtLower => translation - data.LowerTranslation + SolverTuning.LinearSlop,
+            LimitState.AtUpper => translation - data.UpperTranslation - SolverTuning.LinearSlop,
+            _ => translation - data.LowerTranslation,
+        };
+
+        bool violates = data.LimitState switch
+        {
+            LimitState.AtLower => limitError < 0.0f,
+            LimitState.AtUpper => limitError > 0.0f,
+            _ => limitError != 0.0f,
+        };
+
+        if (!violates)
+        {
+            return;
+        }
+
+        Vec2 limitApplied = axis * (-Math.Clamp(limitError, -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection) / axisK);
+        MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, limitApplied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+}
+
+/// <summary>One servo target: capped force and torque toward a moving frame.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct MotorJointData
+{
+    /// <summary>First body; carries the target frame.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body; servoed toward the target.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Target offset in the first body frame.</summary>
+    public Vec2 ServoOffset;
+
+    /// <summary>Target relative angle.</summary>
+    public float ServoAngle;
+
+    /// <summary>Peak servo force; never negative.</summary>
+    public float ServoMaxForce;
+
+    /// <summary>Peak servo torque; never negative.</summary>
+    public float ServoMaxTorque;
+
+    /// <summary>Fraction of the pose error corrected per second; in (0, 1].</summary>
+    public float ServoFactor;
+
+    /// <summary>Servo response rate of the current step (factor over dt).</summary>
+    public float ServoRate;
+
+    /// <summary>Accumulated servo force impulse; warm-started every step.</summary>
+    public Vec2 ServoLinearImpulse;
+
+    /// <summary>Accumulated servo torque impulse; warm-started every step.</summary>
+    public float ServoAngleImpulse;
+
+    /// <summary>Servo force impulse cap of the current step.</summary>
+    public float ServoMaxLinearImpulse;
+
+    /// <summary>Servo torque impulse cap of the current step.</summary>
+    public float ServoMaxAngleImpulse;
+}
+
+/// <summary>Capped P-servo toward the target pose; the error is re-derived every step.</summary>
+public readonly struct MotorPolicy : IJointPolicy<MotorPolicy, MotorJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Motor;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref MotorJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref MotorJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        data.ServoMaxLinearImpulse = data.ServoMaxForce * dt;
+        data.ServoMaxAngleImpulse = data.ServoMaxTorque * dt;
+        data.ServoRate = data.ServoFactor / dt;
+
+        Vec2 target = stateA.Position + MathPhysics.Rotate(stateA, data.ServoOffset);
+        Vec2 error = target - stateB.Position;
+        if (error.LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= data.ServoLinearImpulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * data.ServoAngleImpulse;
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += data.ServoLinearImpulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * data.ServoAngleImpulse;
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref MotorJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        float linearMass = invMassA + invMassB;
+        if (linearMass > 0.0f)
+        {
+            Vec2 target = stateA.Position + MathPhysics.Rotate(stateA, data.ServoOffset);
+            Vec2 desired = (target - stateB.Position) * data.ServoRate;
+            Vec2 relative = stateB.LinearVelocity - stateA.LinearVelocity;
+            Vec2 impulse = (desired - relative) * (1.0f / linearMass);
+            Vec2 next = data.ServoLinearImpulse + impulse;
+            float cap = data.ServoMaxLinearImpulse;
+            if (next.LengthSquared() > cap * cap)
+            {
+                next *= cap / MathF.Sqrt(next.LengthSquared());
+            }
+
+            Vec2 delta = next - data.ServoLinearImpulse;
+            data.ServoLinearImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= delta * invMassA;
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += delta * invMassB;
+            }
+        }
+
+        float axialMass = invIA + invIB;
+        if (axialMass > 0.0f)
+        {
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
+            float error = MathPhysics.NormalizeAngle((angleA + data.ServoAngle) - angleB);
+            float desiredRate = (error * data.ServoRate) - (stateB.AngularVelocity - stateA.AngularVelocity);
+            float impulse = desiredRate / axialMass;
+            float next = Math.Clamp(
+                data.ServoAngleImpulse + impulse,
+                -data.ServoMaxAngleImpulse, data.ServoMaxAngleImpulse);
+            float delta = next - data.ServoAngleImpulse;
+            data.ServoAngleImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SolvePosition(ref MotorJointData data, BodyStore bodies, JointStore store)
+    {
+        // Servo recomputes from pose each step; position correction is unconstrained.
+    }
+}
+
+/// <summary>One sprung suspension with a free-spinning hub and a lateral lock.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct WheelJointData
+{
+    /// <summary>First body; carries the suspension.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body; the wheel.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Suspension axis in the first body frame.</summary>
+    public Vec2 LocalAxisA;
+
+    /// <summary>Along-axis separation at creation; the spring rest length.</summary>
+    public float ReferenceTranslation;
+
+    /// <summary>Suspension frequency in hertz.</summary>
+    public float SuspensionFrequency;
+
+    /// <summary>Suspension damping ratio.</summary>
+    public float SuspensionDamping;
+
+    /// <summary>Target hub speed.</summary>
+    public float MotorSpeed;
+
+    /// <summary>Peak hub torque; never negative.</summary>
+    public float MaxMotorTorque;
+
+    /// <summary>Accumulated hub motor impulse; warm-started every step.</summary>
+    public float MotorImpulse;
+
+    /// <summary>Hub motor impulse cap of the current step.</summary>
+    public float MotorMaxImpulse;
+
+    /// <summary>Accumulated lateral impulse; warm-started every step.</summary>
+    public float PerpImpulse;
+
+    /// <summary>Whether the hub motor drives.</summary>
+    public bool EnableMotor;
+}
+
+/// <summary>Suspension: explicit spring force in init, hub motor plus lateral lock in the sweep.</summary>
+public readonly struct WheelPolicy : IJointPolicy<WheelPolicy, WheelJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Wheel;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref WheelJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <summary>Shared suspension frame: axis, lateral, COM-relative arms and anchor points.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static void Frame(
+        in BodyState stateA, in BodyState stateB,
+        Vec2 localAnchorA, Vec2 localAnchorB, Vec2 localAxisA,
+        out Vec2 axis, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB)
+    {
+        axis = MathPhysics.Rotate(stateA, localAxisA);
+        if (axis.LengthSquared() > 1e-12f)
+        {
+            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+        }
+
+        perp = MathPhysics.Perp(axis);
+        rA = MathPhysics.Rotate(stateA, localAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        rB = MathPhysics.Rotate(stateB, localAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+        pA = stateA.Position + MathPhysics.Rotate(stateA, localAnchorA);
+        pB = stateB.Position + MathPhysics.Rotate(stateB, localAnchorB);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref WheelJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        Frame(in stateA, in stateB, data.LocalAnchorA, data.LocalAnchorB, data.LocalAxisA,
+            out Vec2 axis, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        float axisA = Vec2.Cross(rA, axis);
+        float axisB = Vec2.Cross(rB, axis);
+        float springInverseMass = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
+        if (springInverseMass > 0.0f)
+        {
+            float mass = 1.0f / springInverseMass;
+            float omega = 2.0f * MathF.PI * data.SuspensionFrequency;
+            float stiffness = mass * omega * omega;
+            float damping = 2.0f * mass * data.SuspensionDamping * omega;
+
+            float stretch = Vec2.Dot(pB - pA, axis) - data.ReferenceTranslation;
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+            float rate = Vec2.Dot(vB - vA, axis);
+
+            Vec2 spring = axis * ((-(stiffness * stretch) - (damping * rate)) * dt);
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= spring * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, spring);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += spring * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, spring);
+            }
+        }
+
+        data.MotorMaxImpulse = data.EnableMotor ? data.MaxMotorTorque * dt : 0.0f;
+
+        Vec2 anchorA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 anchorB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((anchorB - anchorA).LengthSquared() > wakeTolerance * wakeTolerance ||
+            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        Vec2 impulse = perp * data.PerpImpulse;
+        if (awakeA)
+        {
+            stateA.LinearVelocity -= impulse * stateA.InverseMass;
+            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, impulse) + data.MotorImpulse);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += impulse * stateB.InverseMass;
+            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, impulse) + data.MotorImpulse);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref WheelJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Frame(in stateA, in stateB, data.LocalAnchorA, data.LocalAnchorB, data.LocalAxisA,
+            out _, out Vec2 perp, out Vec2 rA, out Vec2 rB, out _, out _);
+
+        float axialMass = invIA + invIB;
+        if (data.EnableMotor && axialMass > 0.0f)
+        {
+            float rate = (stateB.AngularVelocity - stateA.AngularVelocity) - data.MotorSpeed;
+            float impulse = -rate / axialMass;
+            float old = data.MotorImpulse;
+            float next = Math.Clamp(old + impulse, -data.MotorMaxImpulse, data.MotorMaxImpulse);
+            float delta = next - old;
+            data.MotorImpulse = next;
+
+            if (awakeA)
+            {
+                stateA.AngularVelocity -= invIA * delta;
+            }
+
+            if (awakeB)
+            {
+                stateB.AngularVelocity += invIB * delta;
+            }
+        }
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpMass = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpMass > 0.0f)
+        {
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+            float rate = Vec2.Dot(vB - vA, perp);
+            float delta = -rate / perpMass;
+            data.PerpImpulse += delta;
+            Vec2 applied = perp * delta;
+
+            if (awakeA)
+            {
+                stateA.LinearVelocity -= applied * invMassA;
+                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += applied * invMassB;
+                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref WheelJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Frame(in stateA, in stateB, data.LocalAnchorA, data.LocalAnchorB, data.LocalAxisA,
+            out _, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB);
+
+        float perpA = Vec2.Cross(rA, perp);
+        float perpB = Vec2.Cross(rB, perp);
+        float perpK = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
+        if (perpK <= 0.0f)
+        {
+            return;
+        }
+
+        float error = Math.Clamp(Vec2.Dot(pB - pA, perp), -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
+        Vec2 applied = perp * (-error / perpK);
+        MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+    }
+}
+
+/// <summary>One rope over two ground pulleys with a length ratio.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct PulleyJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec2 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec2 LocalAnchorB;
+
+    /// <summary>Fixed world pulley of the first rope.</summary>
+    public Vec2 PulleyGroundA;
+
+    /// <summary>Fixed world pulley of the second rope.</summary>
+    public Vec2 PulleyGroundB;
+
+    /// <summary>Rope length ratio; strictly positive.</summary>
+    public float PulleyRatio;
+
+    /// <summary>Fixed total rope length captured at creation.</summary>
+    public float PulleyConstant;
+
+    /// <summary>Accumulated rope impulse; warm-started every step.</summary>
+    public float PulleyImpulse;
+}
+
+/// <summary>Rope: one bilateral impulse holding the weighted total length.</summary>
+public readonly struct PulleyPolicy : IJointPolicy<PulleyPolicy, PulleyJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Pulley;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void GetBodies(ref PulleyJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <summary>Rope directions from ground pulleys to anchors; false while either rope is slack.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static bool GetDirections(in PulleyJointData data, Vec2 pA, Vec2 pB, out Vec2 uA, out Vec2 uB)
+    {
+        Vec2 dA = pA - data.PulleyGroundA;
+        Vec2 dB = pB - data.PulleyGroundB;
+        float lenASq = dA.LengthSquared();
+        float lenBSq = dB.LengthSquared();
+
+        if (lenASq <= SolverTuning.LinearSlop * SolverTuning.LinearSlop ||
+            lenBSq <= SolverTuning.LinearSlop * SolverTuning.LinearSlop)
+        {
+            uA = default;
+            uB = default;
+            return false;
+        }
+
+        uA = dA * (1.0f / MathF.Sqrt(lenASq));
+        uB = dB * (1.0f / MathF.Sqrt(lenBSq));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref PulleyJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance)
+        {
+            if (stateA.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyA, true);
+            }
+
+            if (stateB.Type == BodyType.Dynamic)
+            {
+                bodies.SetAwake(data.BodyB, true);
+            }
+        }
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+
+        if (GetDirections(in data, pA, pB, out Vec2 uA, out Vec2 uB))
+        {
+            Vec2 impulseA = uA * data.PulleyImpulse;
+            Vec2 impulseB = uB * (data.PulleyImpulse * data.PulleyRatio);
+            if (awakeA)
+            {
+                stateA.LinearVelocity += impulseA * stateA.InverseMass;
+                stateA.AngularVelocity += stateA.InverseInertia * Vec2.Cross(rA, impulseA);
+            }
+
+            if (awakeB)
+            {
+                stateB.LinearVelocity += impulseB * stateB.InverseMass;
+                stateB.AngularVelocity += stateB.InverseInertia * Vec2.Cross(rB, impulseB);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref PulleyJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        if (!GetDirections(in data, pA, pB, out Vec2 uA, out Vec2 uB))
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float ratio = data.PulleyRatio;
+        float rnA = Vec2.Cross(rA, uA);
+        float rnB = Vec2.Cross(rB, uB);
+        float k = invMassA + (ratio * ratio * invMassB) + (invIA * rnA * rnA) + (ratio * ratio * invIB * rnB * rnB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
+        float rate = Vec2.Dot(uA, vA) + (ratio * Vec2.Dot(uB, vB));
+        float delta = -rate / k;
+        data.PulleyImpulse += delta;
+
+        Vec2 appliedA = uA * delta;
+        Vec2 appliedB = uB * (delta * ratio);
+        if (awakeA)
+        {
+            stateA.LinearVelocity += appliedA * invMassA;
+            stateA.AngularVelocity += invIA * Vec2.Cross(rA, appliedA);
+        }
+
+        if (awakeB)
+        {
+            stateB.LinearVelocity += appliedB * invMassB;
+            stateB.AngularVelocity += invIB * Vec2.Cross(rB, appliedB);
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref PulleyJointData data, BodyStore bodies, JointStore store)
+    {
+        ref BodyState stateA = ref bodies.Slot(data.BodyA);
+        ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+        Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+        if (!GetDirections(in data, pA, pB, out Vec2 uA, out Vec2 uB))
+        {
+            return;
+        }
+
+        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+        Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+        Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+
+        float ratio = data.PulleyRatio;
+        float rnA = Vec2.Cross(rA, uA);
+        float rnB = Vec2.Cross(rB, uB);
+        float k = invMassA + (ratio * ratio * invMassB) + (invIA * rnA * rnA) + (ratio * ratio * invIB * rnB * rnB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float lengthA = (pA - data.PulleyGroundA).Length();
+        float lengthB = (pB - data.PulleyGroundB).Length();
+        float error = Math.Clamp(
+            (lengthA + (ratio * lengthB)) - data.PulleyConstant,
+            -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
+
+        Vec2 appliedA = uA * (-error / k);
+        Vec2 appliedB = uB * (-error * ratio / k);
+        if (awakeA)
+        {
+            stateA.Position += appliedA * invMassA;
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) + (invIA * Vec2.Cross(rA, appliedA));
+            stateA.Cos = MathF.Cos(angleA);
+            stateA.Sin = MathF.Sin(angleA);
+        }
+
+        if (awakeB)
+        {
+            stateB.Position += appliedB * invMassB;
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, appliedB));
+            stateB.Cos = MathF.Cos(angleB);
+            stateB.Sin = MathF.Sin(angleB);
+        }
+    }
+}
+
+/// <summary>One ratio lock between two geared coordinates; bridges two islands.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct GearJointData
+{
+    /// <summary>First body of the first geared joint; island bridge endpoint.</summary>
+    public BodyId BodyA;
+
+    /// <summary>First body of the second geared joint; island bridge endpoint.</summary>
+    public BodyId BodyB;
+
+    /// <summary>First geared joint; never a gear itself.</summary>
+    public JointId GearJointA;
+
+    /// <summary>Second geared joint; never a gear itself.</summary>
+    public JointId GearJointB;
+
+    /// <summary>Coordinate ratio of the second joint; finite and non-zero.</summary>
+    public float GearRatio;
+
+    /// <summary>Fixed coordinate sum captured at creation.</summary>
+    public float GearConstant;
+
+    /// <summary>Accumulated gear impulse; warm-started every step.</summary>
+    public float GearImpulse;
+}
+
+/// <summary>Ratio lock: one bilateral impulse over the summed coordinates.</summary>
+public readonly struct GearPolicy : IJointPolicy<GearPolicy, GearJointData>
+{
+    /// <inheritdoc/>
+    public static JointKind Kind => JointKind.Gear;
+
+    /// <inheritdoc/>
+    public static void GetBodies(ref GearJointData data, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = data.BodyA;
+        bodyB = data.BodyB;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(
+        ref GearJointData data, BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        if (!store.IsValid(data.GearJointA) || !store.IsValid(data.GearJointB))
+        {
+            return;
+        }
+
+        float rateA = store.GetCoordinateRate(bodies, data.GearJointA);
+        float rateB = store.GetCoordinateRate(bodies, data.GearJointB);
+        if (MathF.Abs(rateA + (data.GearRatio * rateB)) > wakeTolerance)
+        {
+            store.WakeGearedBodies(bodies, data.GearJointA);
+            store.WakeGearedBodies(bodies, data.GearJointB);
+        }
+
+        store.ApplyGearedVelocity(bodies, data.GearJointA, data.GearImpulse);
+        store.ApplyGearedVelocity(bodies, data.GearJointB, data.GearImpulse * data.GearRatio);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocity(ref GearJointData data, BodyStore bodies, JointStore store)
+    {
+        if (!store.IsValid(data.GearJointA) || !store.IsValid(data.GearJointB))
+        {
+            return;
+        }
+
+        float ratio = data.GearRatio;
+        float massA = store.GetEffectiveCoordinateMass(bodies, data.GearJointA);
+        float massB = store.GetEffectiveCoordinateMass(bodies, data.GearJointB);
+        float k = massA + (ratio * ratio * massB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float rate = store.GetCoordinateRate(bodies, data.GearJointA) + (ratio * store.GetCoordinateRate(bodies, data.GearJointB));
+        float delta = -rate / k;
+        data.GearImpulse += delta;
+
+        store.ApplyGearedVelocity(bodies, data.GearJointA, delta);
+        store.ApplyGearedVelocity(bodies, data.GearJointB, delta * ratio);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePosition(ref GearJointData data, BodyStore bodies, JointStore store)
+    {
+        if (!store.IsValid(data.GearJointA) || !store.IsValid(data.GearJointB))
+        {
+            return;
+        }
+
+        float ratio = data.GearRatio;
+        float massA = store.GetEffectiveCoordinateMass(bodies, data.GearJointA);
+        float massB = store.GetEffectiveCoordinateMass(bodies, data.GearJointB);
+        float k = massA + (ratio * ratio * massB);
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float error = (store.GetCoordinate(bodies, data.GearJointA) + (ratio * store.GetCoordinate(bodies, data.GearJointB))) - data.GearConstant;
+        if (MathF.Abs(error) < SolverTuning.LinearSlop)
+        {
+            return;
+        }
+
+        float correction = -error / k;
+        store.ApplyGearedPosition(bodies, data.GearJointA, correction);
+        store.ApplyGearedPosition(bodies, data.GearJointB, correction * ratio);
+    }
+}
+
+#pragma warning restore CA1062
+
+#endregion
+
+#region Zero-Allocation Duck-Typed Dense Storage
+
+/// <summary>Minimal storage role: live count plus slot teardown.</summary>
+public interface IJointStorage
+{
+    /// <summary>Live constraints.</summary>
+    int Count { get; }
+
+    /// <summary>Tears down one slot by sparse index; unknown slots are ignored.</summary>
+    /// <param name="sparseIndex">The sparse index to release.</param>
+    void DestroySlot(uint sparseIndex);
 }
 
 /// <summary>
-/// Dense slot store of joints: identities are slot plus one, freed slots
-/// recycle, arrays grow geometrically. Creation validates bodies and wakes
-/// sleeping dynamics; destroying a joint also drops the gears locked to it.
+/// Dense slot storage for one constraint archetype: swap-remove keeps the
+/// live set packed, sparse indices recycle, and sweeps walk raw refs with no
+/// per-item dispatch.
 /// </summary>
-public sealed class JointStore
+/// <typeparam name="TPolicy">The monomorphic solver archetype.</typeparam>
+/// <typeparam name="TData">The constraint storage layout.</typeparam>
+[StructLayout(LayoutKind.Sequential)]
+public sealed class JointStorage<TPolicy, TData> : IJointStorage
+    where TPolicy : struct, IJointPolicy<TPolicy, TData>
+    where TData : struct
 {
-    private const int InitialCapacity = 16;
-
-    private JointRecord[] _joints;
-    private int[] _freeStack;
-    private int _freeCount;
-    private int _highWater;
+    private TData[] _dense;
+    private uint[] _denseToSparse;
+    private uint[] _sparse;
+    private uint[] _freeStack;
     private int _count;
-    private int _capacity;
+    private int _freeCount;
+    private int _sparseCapacity;
 
-    /// <summary>Creates a store with room for sixteen joints.</summary>
-    public JointStore()
+    /// <summary>Creates storage with room for sixteen constraints.</summary>
+    /// <param name="capacity">The initial capacity.</param>
+    public JointStorage(int capacity = 16)
     {
-        _capacity = InitialCapacity;
-        _joints = new JointRecord[_capacity];
-        _freeStack = new int[_capacity];
-        _freeCount = 0;
-        _highWater = 0;
+        _sparseCapacity = Math.Max(16, capacity);
+        _dense = new TData[_sparseCapacity];
+        _denseToSparse = new uint[_sparseCapacity];
+        _sparse = new uint[_sparseCapacity];
+        _freeStack = new uint[_sparseCapacity];
+
+        Array.Fill(_sparse, uint.MaxValue);
         _count = 0;
+        _freeCount = 0;
     }
 
-    /// <summary>Live joints.</summary>
+    /// <inheritdoc/>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _count;
+    }
+
+    /// <summary>Live data packed front to back.</summary>
+    public ReadOnlySpan<TData> DataSpan
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _dense.AsSpan(0, _count);
+    }
+
+    /// <summary>Maps a dense position back to its sparse index.</summary>
+    /// <param name="denseIndex">The dense position.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public uint SparseOfDense(int denseIndex) => _denseToSparse[denseIndex];
+
+    /// <summary>Reads live data by sparse index; dead slots throw.</summary>
+    /// <param name="sparseIndex">The sparse index.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref TData GetBySparseIndex(uint sparseIndex)
+    {
+        if (sparseIndex >= (uint)_sparseCapacity)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(sparseIndex));
+        }
+
+        uint denseIdx = _sparse[sparseIndex];
+        if (denseIdx >= (uint)_count)
+        {
+            ThrowHelper.ThrowInvalidOperation("Accessing dead dense joint slot.");
+        }
+
+        return ref _dense[denseIdx];
+    }
+
+    /// <summary>Probes liveness by sparse index without throwing.</summary>
+    /// <param name="sparseIndex">The sparse index.</param>
+    /// <param name="denseIndex">The dense position on success.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetBySparseIndex(uint sparseIndex, out uint denseIndex)
+    {
+        if (sparseIndex < (uint)_sparseCapacity)
+        {
+            denseIndex = _sparse[sparseIndex];
+            return denseIndex < (uint)_count;
+        }
+
+        denseIndex = uint.MaxValue;
+        return false;
+    }
+
+    /// <summary>Appends an item and returns its sparse index.</summary>
+    /// <param name="item">The constraint data.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public uint Allocate(in TData item)
+    {
+        if (_count >= _dense.Length)
+        {
+            int newCap = _dense.Length * 2;
+            Array.Resize(ref _dense, newCap);
+            Array.Resize(ref _denseToSparse, newCap);
+        }
+
+        uint sparseIndex;
+        if (_freeCount > 0)
+        {
+            sparseIndex = _freeStack[--_freeCount];
+        }
+        else
+        {
+            sparseIndex = (uint)_count;
+            if (sparseIndex >= (uint)_sparseCapacity)
+            {
+                int newSparseCap = _sparseCapacity * 2;
+                Array.Resize(ref _sparse, newSparseCap);
+                Array.Resize(ref _freeStack, newSparseCap);
+                for (int i = _sparseCapacity; i < newSparseCap; i++)
+                {
+                    _sparse[i] = uint.MaxValue;
+                }
+
+                _sparseCapacity = newSparseCap;
+            }
+        }
+
+        uint denseIndex = (uint)_count++;
+        _dense[denseIndex] = item;
+        _denseToSparse[denseIndex] = sparseIndex;
+        _sparse[sparseIndex] = denseIndex;
+
+        return sparseIndex;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void DestroySlot(uint sparseIndex)
+    {
+        if (sparseIndex >= (uint)_sparseCapacity)
+        {
+            return;
+        }
+
+        uint denseIndex = _sparse[sparseIndex];
+        if (denseIndex >= (uint)_count)
+        {
+            return;
+        }
+
+        int lastDenseIndex = _count - 1;
+        if ((int)denseIndex != lastDenseIndex)
+        {
+            TData lastItem = _dense[lastDenseIndex];
+            uint lastSparseIndex = _denseToSparse[lastDenseIndex];
+
+            _dense[denseIndex] = lastItem;
+            _denseToSparse[denseIndex] = lastSparseIndex;
+            _sparse[lastSparseIndex] = denseIndex;
+        }
+
+        _sparse[sparseIndex] = uint.MaxValue;
+        _count--;
+
+        if (_freeCount >= _freeStack.Length)
+        {
+            Array.Resize(ref _freeStack, _freeStack.Length * 2);
+        }
+
+        _freeStack[_freeCount++] = sparseIndex;
+    }
+
+    /// <summary>Runs the policy init over the packed set.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void InitVelocity(BodyStore bodies, JointStore store, float wakeTolerance, float dt)
+    {
+        ref TData start = ref MemoryMarshal.GetArrayDataReference(_dense);
+        uint count = (uint)_count;
+        for (uint i = 0; i < count; i++)
+        {
+            TPolicy.InitVelocity(ref Unsafe.Add(ref start, i), bodies, store, wakeTolerance, dt);
+        }
+    }
+
+    /// <summary>Runs the policy velocity sweep over the packed set.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void SolveVelocity(BodyStore bodies, JointStore store)
+    {
+        ref TData start = ref MemoryMarshal.GetArrayDataReference(_dense);
+        uint count = (uint)_count;
+        for (uint i = 0; i < count; i++)
+        {
+            TPolicy.SolveVelocity(ref Unsafe.Add(ref start, i), bodies, store);
+        }
+    }
+
+    /// <summary>Runs the policy position sweep over the packed set.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void SolvePosition(BodyStore bodies, JointStore store)
+    {
+        ref TData start = ref MemoryMarshal.GetArrayDataReference(_dense);
+        uint count = (uint)_count;
+        for (uint i = 0; i < count; i++)
+        {
+            TPolicy.SolvePosition(ref Unsafe.Add(ref start, i), bodies, store);
+        }
+    }
+
+    /// <summary>Enumerates the packed set.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public DenseEnumerator GetEnumerator() => new(this);
+
+    /// <summary>Zero-allocation enumerator over the packed set.</summary>
+#pragma warning disable CA1034 // The enumerator rides its storage: it borrows the dense array and the live count, so it cannot meaningfully live outside the generic storage type.
+    public ref struct DenseEnumerator
+    {
+        private readonly TData[] _array;
+        private readonly int _length;
+        private int _index;
+
+        /// <summary>Binds the enumerator to storage.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal DenseEnumerator(JointStorage<TPolicy, TData> storage)
+        {
+            _array = storage._dense;
+            _length = storage._count;
+            _index = -1;
+        }
+
+        /// <summary>Advances to the next live item.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool MoveNext()
+        {
+            int next = _index + 1;
+            if (next < _length)
+            {
+                _index = next;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>The current live item.</summary>
+        public readonly ref readonly TData Current
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => ref _array[_index];
+        }
+    }
+#pragma warning restore CA1034
+}
+
+#endregion
+
+#region Segregated Role Contracts
+
+/// <summary>Public joint registry role: count, liveness and teardown.</summary>
+public interface IJointRegistry
+{
+    /// <summary>Live joints across all archetypes.</summary>
+    int Count { get; }
+
+    /// <summary>Whether an identity names a live joint.</summary>
+    /// <param name="id">The identity.</param>
+    bool IsValid(JointId id);
+
+    /// <summary>Drops a joint; unknown identities are ignored.</summary>
+    /// <param name="id">The identity.</param>
+    void Destroy(JointId id);
+}
+
+/// <summary>Zero-virtual visitor over every live joint.</summary>
+/// <typeparam name="TContext">The visitor context.</typeparam>
+public interface IJointVisitor<TContext> where TContext : allows ref struct
+{
+    /// <summary>Visits one live joint.</summary>
+    /// <typeparam name="TPolicy">The constraint archetype.</typeparam>
+    /// <typeparam name="TData">The constraint storage layout.</typeparam>
+    /// <param name="id">The joint identity.</param>
+    /// <param name="data">The live constraint data.</param>
+    /// <param name="context">The visitor context.</param>
+    void Visit<TPolicy, TData>(JointId id, ref TData data, ref TContext context)
+        where TPolicy : struct, IJointPolicy<TPolicy, TData>
+        where TData : struct;
+}
+
+#endregion
+
+#region Coordination & Arbitration Engine
+
+/// <summary>
+/// Dense segregated store of joints: one packed table per archetype, kind-tagged
+/// identities, geometrically growing buffers. Creation validates bodies and wakes
+/// sleeping dynamics; destroying a joint also drops the gears locked to it, and
+/// destroying a body drops every joint touching it.
+/// </summary>
+public sealed class JointStore : IJointRegistry
+{
+    private readonly Lock _lock = new();
+
+    private readonly JointStorage<DistancePolicy, DistanceJointData> _distance = new();
+    private readonly JointStorage<RevolutePolicy, RevoluteJointData> _revolute = new();
+    private readonly JointStorage<WeldPolicy, WeldJointData> _weld = new();
+    private readonly JointStorage<PrismaticPolicy, PrismaticJointData> _prismatic = new();
+    private readonly JointStorage<MotorPolicy, MotorJointData> _motor = new();
+    private readonly JointStorage<WheelPolicy, WheelJointData> _wheel = new();
+    private readonly JointStorage<PulleyPolicy, PulleyJointData> _pulley = new();
+    private readonly JointStorage<GearPolicy, GearJointData> _gear = new();
+
+    /// <inheritdoc/>
+    public int Count
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _distance.Count + _revolute.Count + _weld.Count + _prismatic.Count +
+               _motor.Count + _wheel.Count + _pulley.Count + _gear.Count;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsValid(JointId id)
+    {
+        if (!id.IsValid)
+        {
+            return false;
+        }
+
+        uint slot = id.SlotIndex;
+        return id.Kind switch
+        {
+            JointKind.Distance => _distance.TryGetBySparseIndex(slot, out _),
+            JointKind.Revolute => _revolute.TryGetBySparseIndex(slot, out _),
+            JointKind.Weld => _weld.TryGetBySparseIndex(slot, out _),
+            JointKind.Prismatic => _prismatic.TryGetBySparseIndex(slot, out _),
+            JointKind.Motor => _motor.TryGetBySparseIndex(slot, out _),
+            JointKind.Wheel => _wheel.TryGetBySparseIndex(slot, out _),
+            JointKind.Pulley => _pulley.TryGetBySparseIndex(slot, out _),
+            JointKind.Gear => _gear.TryGetBySparseIndex(slot, out _),
+            _ => false,
+        };
     }
 
     /// <summary>
@@ -579,6 +3593,7 @@ public sealed class JointStore
         float length)
     {
         ArgumentNullException.ThrowIfNull(bodies);
+
         bodies.Slot(bodyA);
         bodies.Slot(bodyB);
 
@@ -587,151 +3602,22 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Joint rest length must be finite and non-negative.");
         }
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Distance;
-        joint.BodyA = bodyA;
-        joint.BodyB = bodyB;
-        joint.LocalAnchorA = localAnchorA;
-        joint.LocalAnchorB = localAnchorB;
-        joint.Length = length;
-        joint.Impulse = 0.0f;
-
-        bodies.SetAwake(bodyA, true);
-        bodies.SetAwake(bodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
-    }
-
-    /// <summary>Drops a joint and every gear locked to it; their identities die with them.</summary>
-    public void Destroy(JointId id)
-    {
-        int slot = Validate(id);
-        _joints[slot] = default;
-        _freeStack[_freeCount++] = slot;
-        _count--;
-
-        for (int other = 0; other < _capacity; other++)
+        lock (_lock)
         {
-            if (!_joints[other].Live || _joints[other].Kind != JointKind.Gear)
+            DistanceJointData data = new()
             {
-                continue;
-            }
-
-            if (_joints[other].GearJointA == id || _joints[other].GearJointB == id)
-            {
-                _joints[other] = default;
-                _freeStack[_freeCount++] = other;
-                _count--;
-            }
+                BodyA = bodyA,
+                BodyB = bodyB,
+                LocalAnchorA = localAnchorA,
+                LocalAnchorB = localAnchorB,
+                Length = length,
+                Impulse = 0.0f,
+            };
+            uint sparse = _distance.Allocate(in data);
+            bodies.SetAwake(bodyA, true);
+            bodies.SetAwake(bodyB, true);
+            return new JointId(JointKind.Distance, sparse);
         }
-    }
-
-    /// <summary>Whether a joint kind carries a scalar coordinate gearable by ratio.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool IsGearedKind(JointKind kind) =>
-        kind == JointKind.Revolute || kind == JointKind.Prismatic;
-
-    /// <summary>
-    /// Reads the scalar coordinate of a revolute (angle) or prismatic
-    /// (translation) joint record: caller guarantees the kind.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    internal static float JointCoordinate(BodyStore bodies, in JointRecord geared)
-    {
-        if (geared.Kind == JointKind.Prismatic)
-        {
-            ref readonly BodyState stateA = ref bodies.Slot(geared.BodyA);
-            ref readonly BodyState stateB = ref bodies.Slot(geared.BodyB);
-            Vec2 axis = new(
-                (stateA.Cos * geared.LocalAxisA.X) - (stateA.Sin * geared.LocalAxisA.Y),
-                (stateA.Sin * geared.LocalAxisA.X) + (stateA.Cos * geared.LocalAxisA.Y));
-            float axisLenSq = axis.LengthSquared();
-            if (axisLenSq > 1e-12f)
-            {
-                axis *= 1.0f / MathF.Sqrt(axisLenSq);
-            }
-
-            Vec2 anchorA = new(
-                (stateA.Cos * geared.LocalAnchorA.X) - (stateA.Sin * geared.LocalAnchorA.Y),
-                (stateA.Sin * geared.LocalAnchorA.X) + (stateA.Cos * geared.LocalAnchorA.Y));
-            Vec2 anchorB = new(
-                (stateB.Cos * geared.LocalAnchorB.X) - (stateB.Sin * geared.LocalAnchorB.Y),
-                (stateB.Sin * geared.LocalAnchorB.X) + (stateB.Cos * geared.LocalAnchorB.Y));
-            Vec2 pA = stateA.Position + anchorA;
-            Vec2 pB = stateB.Position + anchorB;
-            return Vec2.Dot(pB - pA, axis) - geared.ReferenceTranslation;
-        }
-
-        ref readonly BodyState a = ref bodies.Slot(geared.BodyA);
-        ref readonly BodyState b = ref bodies.Slot(geared.BodyB);
-        float angleA = MathF.Atan2(a.Sin, a.Cos);
-        float angleB = MathF.Atan2(b.Sin, b.Cos);
-        return NormalizeJointAngle((angleB - angleA) - geared.ReferenceAngle);
-    }
-
-    /// <summary>Wraps an angle into [-pi, pi].</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static float NormalizeJointAngle(float angle) =>
-        angle - (MathF.Floor((angle + MathF.PI) / (2.0f * MathF.PI)) * 2.0f * MathF.PI);
-
-    /// <summary>
-    /// Whether a joint names <paramref name="body"/> directly or through a
-    /// geared joint; gears of gears never exist, so one indirection suffices.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool TouchesBody(JointId id, BodyId body)
-    {
-        ref readonly JointRecord joint = ref _joints[Validate(id)];
-        if (joint.BodyA == body || joint.BodyB == body)
-        {
-            return true;
-        }
-
-        if (joint.Kind != JointKind.Gear)
-        {
-            return false;
-        }
-
-        if (IsValid(joint.GearJointA))
-        {
-            ref readonly JointRecord gearedA = ref _joints[(int)joint.GearJointA.Value - 1];
-            if (gearedA.Live && (gearedA.BodyA == body || gearedA.BodyB == body))
-            {
-                return true;
-            }
-        }
-
-        if (IsValid(joint.GearJointB))
-        {
-            ref readonly JointRecord gearedB = ref _joints[(int)joint.GearJointB.Value - 1];
-            if (gearedB.Live && (gearedB.BodyA == body || gearedB.BodyB == body))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Collects the four bodies coupled by a gear: the two of each geared
-    /// joint. Caller guarantees a live gear.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void GearBodies(JointId id, out BodyId a, out BodyId b, out BodyId c, out BodyId d)
-    {
-        ref readonly JointRecord joint = ref _joints[Validate(id)];
-        ref readonly JointRecord gearedA = ref _joints[Validate(joint.GearJointA)];
-        ref readonly JointRecord gearedB = ref _joints[Validate(joint.GearJointB)];
-        a = gearedA.BodyA;
-        b = gearedA.BodyB;
-        c = gearedB.BodyA;
-        d = gearedB.BodyB;
     }
 
     /// <summary>
@@ -761,45 +3647,33 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Lower angular stop must not exceed the upper stop.");
         }
 
-        if (definition.EnableMotor && (!(definition.MaxMotorTorque >= 0.0f) || float.IsNaN(definition.MaxMotorTorque)))
-        {
-            ThrowHelper.ThrowInvalidOperation("Motor torque must be finite and non-negative.");
-        }
-
-        if (float.IsNaN(definition.MotorSpeed) || float.IsInfinity(definition.MotorSpeed))
-        {
-            ThrowHelper.ThrowInvalidOperation("Motor speed must be finite.");
-        }
-
         ref BodyState stateA = ref bodies.Slot(definition.BodyA);
         ref BodyState stateB = ref bodies.Slot(definition.BodyB);
 
         Transform2D transformA = Transform2D.FromRotation(stateA.Position, stateA.Cos, stateA.Sin);
         Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Revolute;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
-        joint.ReferenceAngle = transformB.Angle - transformA.Angle;
-        joint.LowerAngle = definition.LowerAngle;
-        joint.UpperAngle = definition.UpperAngle;
-        joint.EnableLimit = definition.EnableLimit;
-        joint.MotorSpeed = definition.MotorSpeed;
-        joint.MaxMotorTorque = definition.MaxMotorTorque;
-        joint.EnableMotor = definition.EnableMotor;
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+        lock (_lock)
+        {
+            RevoluteJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor),
+                LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor),
+                ReferenceAngle = transformB.Angle - transformA.Angle,
+                LowerAngle = definition.LowerAngle,
+                UpperAngle = definition.UpperAngle,
+                EnableLimit = definition.EnableLimit,
+                MotorSpeed = definition.MotorSpeed,
+                MaxMotorTorque = definition.MaxMotorTorque,
+                EnableMotor = definition.EnableMotor,
+            };
+            uint sparse = _revolute.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Revolute, sparse);
+        }
     }
 
     /// <summary>
@@ -830,23 +3704,21 @@ public sealed class JointStore
         Transform2D transformA = Transform2D.FromRotation(stateA.Position, stateA.Cos, stateA.Sin);
         Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Weld;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
-        joint.ReferenceAngle = transformB.Angle - transformA.Angle;
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+        lock (_lock)
+        {
+            WeldJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor),
+                LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor),
+                ReferenceAngle = transformB.Angle - transformA.Angle,
+            };
+            uint sparse = _weld.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Weld, sparse);
+        }
     }
 
     /// <summary>
@@ -882,16 +3754,6 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Lower slide stop must not exceed the upper stop.");
         }
 
-        if (definition.EnableMotor && (!(definition.MaxMotorForce >= 0.0f) || float.IsNaN(definition.MaxMotorForce)))
-        {
-            ThrowHelper.ThrowInvalidOperation("Slide motor force must be finite and non-negative.");
-        }
-
-        if (float.IsNaN(definition.MotorSpeed) || float.IsInfinity(definition.MotorSpeed))
-        {
-            ThrowHelper.ThrowInvalidOperation("Slide motor speed must be finite.");
-        }
-
         ref BodyState stateA = ref bodies.Slot(definition.BodyA);
         ref BodyState stateB = ref bodies.Slot(definition.BodyB);
 
@@ -900,34 +3762,36 @@ public sealed class JointStore
 
         Vec2 axis = Vec2.Normalize(definition.WorldAxis);
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
+        lock (_lock)
+        {
+            Vec2 localAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
+            Vec2 localAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
+            Vec2 localAxisA = new(
+                (transformA.Cos * axis.X) + (transformA.Sin * axis.Y),
+                (-transformA.Sin * axis.X) + (transformA.Cos * axis.Y));
 
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Prismatic;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAxisA = new Vec2(
-            (transformA.Cos * axis.X) + (transformA.Sin * axis.Y),
-            (-transformA.Sin * axis.X) + (transformA.Cos * axis.Y));
-        joint.ReferenceAngle = transformB.Angle - transformA.Angle;
-        joint.ReferenceTranslation = Vec2.Dot(
-            transformB.TransformPoint(joint.LocalAnchorB) - transformA.TransformPoint(joint.LocalAnchorA), axis);
-        joint.LowerTranslation = definition.LowerTranslation;
-        joint.UpperTranslation = definition.UpperTranslation;
-        joint.EnablePrismaticLimit = definition.EnableLimit;
-        joint.PrismaticMotorSpeed = definition.MotorSpeed;
-        joint.MaxPrismaticForce = definition.MaxMotorForce;
-        joint.EnablePrismaticMotor = definition.EnableMotor;
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+            PrismaticJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = localAnchorA,
+                LocalAnchorB = localAnchorB,
+                LocalAxisA = localAxisA,
+                ReferenceAngle = transformB.Angle - transformA.Angle,
+                ReferenceTranslation = Vec2.Dot(
+                    transformB.TransformPoint(localAnchorB) - transformA.TransformPoint(localAnchorA), axis),
+                LowerTranslation = definition.LowerTranslation,
+                UpperTranslation = definition.UpperTranslation,
+                EnableLimit = definition.EnableLimit,
+                MotorSpeed = definition.MotorSpeed,
+                MaxMotorForce = definition.MaxMotorForce,
+                EnableMotor = definition.EnableMotor,
+            };
+            uint sparse = _prismatic.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Prismatic, sparse);
+        }
     }
 
     /// <summary>
@@ -957,44 +3821,26 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Servo angle must be finite.");
         }
 
-        if (!(definition.MaxForce >= 0.0f) || float.IsNaN(definition.MaxForce) || float.IsInfinity(definition.MaxForce))
-        {
-            ThrowHelper.ThrowInvalidOperation("Servo force must be finite and non-negative.");
-        }
-
-        if (!(definition.MaxTorque >= 0.0f) || float.IsNaN(definition.MaxTorque) || float.IsInfinity(definition.MaxTorque))
-        {
-            ThrowHelper.ThrowInvalidOperation("Servo torque must be finite and non-negative.");
-        }
-
-        if (!(definition.CorrectionFactor > 0.0f) || definition.CorrectionFactor > 1.0f ||
-            float.IsNaN(definition.CorrectionFactor))
-        {
-            ThrowHelper.ThrowInvalidOperation("Correction factor must be in (0, 1].");
-        }
-
         bodies.Slot(definition.BodyA);
         bodies.Slot(definition.BodyB);
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Motor;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.ServoOffset = definition.LinearOffset;
-        joint.ServoAngle = definition.AngularOffset;
-        joint.ServoMaxForce = definition.MaxForce;
-        joint.ServoMaxTorque = definition.MaxTorque;
-        joint.ServoFactor = definition.CorrectionFactor;
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+        lock (_lock)
+        {
+            MotorJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                ServoOffset = definition.LinearOffset,
+                ServoAngle = definition.AngularOffset,
+                ServoMaxForce = definition.MaxForce,
+                ServoMaxTorque = definition.MaxTorque,
+                ServoFactor = definition.CorrectionFactor,
+            };
+            uint sparse = _motor.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Motor, sparse);
+        }
     }
 
     /// <summary>
@@ -1025,28 +3871,6 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Suspension axis must be a finite non-zero vector.");
         }
 
-        if (!(definition.SuspensionFrequency > 0.0f) || float.IsNaN(definition.SuspensionFrequency) ||
-            float.IsInfinity(definition.SuspensionFrequency))
-        {
-            ThrowHelper.ThrowInvalidOperation("Suspension frequency must be positive and finite.");
-        }
-
-        if (!(definition.SuspensionDamping >= 0.0f) || float.IsNaN(definition.SuspensionDamping) ||
-            float.IsInfinity(definition.SuspensionDamping))
-        {
-            ThrowHelper.ThrowInvalidOperation("Suspension damping must be finite and non-negative.");
-        }
-
-        if (definition.EnableMotor && (!(definition.MaxMotorTorque >= 0.0f) || float.IsNaN(definition.MaxMotorTorque)))
-        {
-            ThrowHelper.ThrowInvalidOperation("Hub torque must be finite and non-negative.");
-        }
-
-        if (float.IsNaN(definition.MotorSpeed) || float.IsInfinity(definition.MotorSpeed))
-        {
-            ThrowHelper.ThrowInvalidOperation("Hub speed must be finite.");
-        }
-
         ref BodyState stateA = ref bodies.Slot(definition.BodyA);
         ref BodyState stateB = ref bodies.Slot(definition.BodyB);
 
@@ -1055,32 +3879,34 @@ public sealed class JointStore
 
         Vec2 axis = Vec2.Normalize(definition.WorldAxis);
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
+        lock (_lock)
+        {
+            Vec2 localAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
+            Vec2 localAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
+            Vec2 localAxisA = new(
+                (transformA.Cos * axis.X) + (transformA.Sin * axis.Y),
+                (-transformA.Sin * axis.X) + (transformA.Cos * axis.Y));
 
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Wheel;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchor);
-        joint.LocalAxisA = new Vec2(
-            (transformA.Cos * axis.X) + (transformA.Sin * axis.Y),
-            (-transformA.Sin * axis.X) + (transformA.Cos * axis.Y));
-        joint.ReferenceTranslation = Vec2.Dot(
-            transformB.TransformPoint(joint.LocalAnchorB) - transformA.TransformPoint(joint.LocalAnchorA), axis);
-        joint.WheelMotorSpeed = definition.MotorSpeed;
-        joint.WheelMaxTorque = definition.MaxMotorTorque;
-        joint.EnableWheelMotor = definition.EnableMotor;
-        joint.SuspensionFrequency = definition.SuspensionFrequency;
-        joint.SuspensionDamping = definition.SuspensionDamping;
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+            WheelJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = localAnchorA,
+                LocalAnchorB = localAnchorB,
+                LocalAxisA = localAxisA,
+                ReferenceTranslation = Vec2.Dot(
+                    transformB.TransformPoint(localAnchorB) - transformA.TransformPoint(localAnchorA), axis),
+                MotorSpeed = definition.MotorSpeed,
+                MaxMotorTorque = definition.MaxMotorTorque,
+                EnableMotor = definition.EnableMotor,
+                SuspensionFrequency = definition.SuspensionFrequency,
+                SuspensionDamping = definition.SuspensionDamping,
+            };
+            uint sparse = _wheel.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Wheel, sparse);
+        }
     }
 
     /// <summary>
@@ -1115,47 +3941,37 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Body anchors must be finite.");
         }
 
-        if (!(definition.Ratio > 0.0f) || float.IsNaN(definition.Ratio) || float.IsInfinity(definition.Ratio))
-        {
-            ThrowHelper.ThrowInvalidOperation("Pulley ratio must be positive and finite.");
-        }
-
         ref BodyState stateA = ref bodies.Slot(definition.BodyA);
         ref BodyState stateB = ref bodies.Slot(definition.BodyB);
 
         Transform2D transformA = Transform2D.FromRotation(stateA.Position, stateA.Cos, stateA.Sin);
         Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
 
-        float lengthA = (definition.WorldAnchorA - definition.GroundAnchorA).LengthSquared();
-        float lengthB = (definition.WorldAnchorB - definition.GroundAnchorB).LengthSquared();
-        lengthA = MathF.Sqrt(lengthA);
-        lengthB = MathF.Sqrt(lengthB);
-
+        float lengthA = (definition.WorldAnchorA - definition.GroundAnchorA).Length();
+        float lengthB = (definition.WorldAnchorB - definition.GroundAnchorB).Length();
         if (lengthA <= SolverTuning.LinearSlop || lengthB <= SolverTuning.LinearSlop)
         {
             ThrowHelper.ThrowInvalidOperation("Body anchors must start clear of their ground pulleys.");
         }
 
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Pulley;
-        joint.BodyA = definition.BodyA;
-        joint.BodyB = definition.BodyB;
-        joint.LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchorA);
-        joint.LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchorB);
-        joint.PulleyGroundA = definition.GroundAnchorA;
-        joint.PulleyGroundB = definition.GroundAnchorB;
-        joint.PulleyRatio = definition.Ratio;
-        joint.PulleyConstant = lengthA + (definition.Ratio * lengthB);
-
-        bodies.SetAwake(definition.BodyA, true);
-        bodies.SetAwake(definition.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
+        lock (_lock)
+        {
+            PulleyJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = transformA.InverseTransformPoint(definition.WorldAnchorA),
+                LocalAnchorB = transformB.InverseTransformPoint(definition.WorldAnchorB),
+                PulleyGroundA = definition.GroundAnchorA,
+                PulleyGroundB = definition.GroundAnchorB,
+                PulleyRatio = definition.Ratio,
+                PulleyConstant = lengthA + (definition.Ratio * lengthB),
+            };
+            uint sparse = _pulley.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Pulley, sparse);
+        }
     }
 
     /// <summary>
@@ -1174,1830 +3990,375 @@ public sealed class JointStore
             ThrowHelper.ThrowInvalidOperation("Gear joints need two distinct live joints.");
         }
 
-        if (definition.Ratio == 0.0f || float.IsNaN(definition.Ratio) || float.IsInfinity(definition.Ratio))
-        {
-            ThrowHelper.ThrowInvalidOperation("Gear ratio must be finite and non-zero.");
-        }
-
-        ref JointRecord gearedA = ref Slot(definition.JointA);
-        ref JointRecord gearedB = ref Slot(definition.JointB);
-
-        if (gearedA.Kind == JointKind.Gear || gearedB.Kind == JointKind.Gear)
+        if (definition.JointA.Kind == JointKind.Gear || definition.JointB.Kind == JointKind.Gear)
         {
             ThrowHelper.ThrowInvalidOperation("Gear joints cannot reference other gears.");
         }
 
-        if (!IsGearedKind(gearedA.Kind) || !IsGearedKind(gearedB.Kind))
+        if (!IsGearedKind(definition.JointA.Kind) || !IsGearedKind(definition.JointB.Kind))
         {
             ThrowHelper.ThrowInvalidOperation("Gear joints need revolute or prismatic joints.");
         }
 
-        float coordinateA = JointCoordinate(bodies, in gearedA);
-        float coordinateB = JointCoordinate(bodies, in gearedB);
-
-        int slot = AllocateSlot();
-        ref JointRecord joint = ref _joints[slot];
-
-        joint = default;
-        joint.Live = true;
-        joint.Kind = JointKind.Gear;
-        joint.BodyA = gearedA.BodyA;
-        joint.BodyB = gearedB.BodyA;
-        joint.GearJointA = definition.JointA;
-        joint.GearJointB = definition.JointB;
-        joint.GearRatio = definition.Ratio;
-        joint.GearConstant = coordinateA + (definition.Ratio * coordinateB);
-
-        bodies.SetAwake(gearedA.BodyA, true);
-        bodies.SetAwake(gearedA.BodyB, true);
-        bodies.SetAwake(gearedB.BodyA, true);
-        bodies.SetAwake(gearedB.BodyB, true);
-
-        _count++;
-        return new JointId((uint)slot + 1u);
-    }
-
-    /// <summary>Whether <paramref name="id"/> names a live joint.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsValid(JointId id)
-    {
-        int slot = (int)id.Value - 1;
-        return id.Value != 0 && slot >= 0 && slot < _capacity && _joints[slot].Live;
-    }
-
-    /// <summary>Internal slot access for the solver and the world; validated.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref JointRecord Slot(JointId id) => ref _joints[Validate(id)];
-
-    /// <summary>Slot capacity for internal iteration.</summary>
-    internal int SlotCapacity
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _capacity;
-    }
-
-    /// <summary>Whether a raw slot holds a live joint; for internal iteration.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool IsSlotLive(int slot) => slot >= 0 && slot < _capacity && _joints[slot].Live;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int AllocateSlot()
-    {
-        if (_freeCount > 0)
+        if (!IsValid(definition.JointA) || !IsValid(definition.JointB))
         {
-            return _freeStack[--_freeCount];
+            ThrowHelper.ThrowInvalidOperation("Gear joints need live joints.");
         }
 
-        if (_highWater >= _capacity)
+        float coordinateA = GetCoordinate(bodies, definition.JointA);
+        float coordinateB = GetCoordinate(bodies, definition.JointB);
+
+        lock (_lock)
         {
-            Grow();
-        }
+            GetGearedBodies(definition.JointA, out BodyId bridgeA, out _);
+            GetGearedBodies(definition.JointB, out BodyId bridgeB, out _);
 
-        return _highWater++;
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void Grow()
-    {
-        int newCapacity = _capacity * 2;
-        Array.Resize(ref _joints, newCapacity);
-        Array.Resize(ref _freeStack, newCapacity);
-        _capacity = newCapacity;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int Validate(JointId id)
-    {
-        int slot = (int)id.Value - 1;
-        if (id.Value == 0 || slot < 0 || slot >= _capacity || !_joints[slot].Live)
-        {
-            ThrowHelper.ThrowInvalidOperation($"Joint with ID {id.Value} is unallocated or has been destroyed.");
-        }
-
-        return slot;
-    }
-
-    /// <summary>Unvalidated slot access for internal iteration; check <see cref="IsSlotLive"/> first.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref JointRecord SlotByIndex(int slot) => ref _joints[slot];
-}
-
-/// <summary>
-/// Sequential-impulse solver for joints: init freezes the effective masses
-/// and warm-starts the stored impulses (waking sleeping dynamics on real
-/// relative motion), then bilateral, capped and soft impulses hold every
-/// constraint in velocity and position. Sleeping endpoints read as infinite
-/// mass.
-/// </summary>
-public static class JointSolver
-{
-    /// <summary>
-    /// Per-step init: wakes sleeping dynamics on genuine relative motion and
-    /// applies the stored impulse to velocities. Call once per step before
-    /// the iteration loop.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void InitVelocity(BodyStore bodies, JointStore joints, float wakeTolerance, float dt)
-    {
-        ArgumentNullException.ThrowIfNull(bodies);
-        ArgumentNullException.ThrowIfNull(joints);
-
-        for (int slot = 0; slot < joints.SlotCapacity; slot++)
-        {
-            if (!joints.IsSlotLive(slot))
+            GearJointData data = new()
             {
-                continue;
-            }
+                BodyA = bridgeA,
+                BodyB = bridgeB,
+                GearJointA = definition.JointA,
+                GearJointB = definition.JointB,
+                GearRatio = definition.Ratio,
+                GearConstant = coordinateA + (definition.Ratio * coordinateB),
+            };
+            uint sparse = _gear.Allocate(in data);
+            WakeGearedBodies(bodies, definition.JointA);
+            WakeGearedBodies(bodies, definition.JointB);
+            return new JointId(JointKind.Gear, sparse);
+        }
+    }
 
-            ref JointRecord joint = ref joints.SlotByIndex(slot);
-            switch (joint.Kind)
+    /// <inheritdoc/>
+    public void Destroy(JointId id)
+    {
+        if (!id.IsValid)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            switch (id.Kind)
             {
                 case JointKind.Distance:
-                    InitDistance(bodies, ref joint, wakeTolerance);
+                    _distance.DestroySlot(id.SlotIndex);
+                    break;
+                case JointKind.Revolute:
+                    _revolute.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Weld:
-                    InitWeld(bodies, ref joint, wakeTolerance);
+                    _weld.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Prismatic:
-                    InitPrismatic(bodies, ref joint, wakeTolerance, dt);
+                    _prismatic.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Motor:
-                    InitMotor(bodies, ref joint, wakeTolerance, dt);
+                    _motor.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Wheel:
-                    InitWheel(bodies, ref joint, wakeTolerance, dt);
+                    _wheel.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Pulley:
-                    InitPulley(bodies, ref joint, wakeTolerance);
+                    _pulley.DestroySlot(id.SlotIndex);
                     break;
                 case JointKind.Gear:
-                    InitGear(bodies, joints, ref joint, wakeTolerance);
+                    _gear.DestroySlot(id.SlotIndex);
                     break;
                 default:
-                    InitRevolute(bodies, ref joint, wakeTolerance, dt);
-                    break;
+                    return;
             }
+
+            CascadeGearDestruction(id);
         }
     }
 
-    /// <summary>Runs <paramref name="iterations"/> sweeps of bilateral velocity impulses.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void SolveVelocityPass(BodyStore bodies, JointStore joints, int iterations)
+    /// <summary>Drops every gear locked to a destroyed joint.</summary>
+    /// <param name="droppedId">The destroyed joint.</param>
+    private void CascadeGearDestruction(JointId droppedId)
     {
-        ArgumentNullException.ThrowIfNull(bodies);
-        ArgumentNullException.ThrowIfNull(joints);
-
-        for (int iteration = 0; iteration < iterations; iteration++)
+        ReadOnlySpan<GearJointData> gears = _gear.DataSpan;
+        for (int i = gears.Length - 1; i >= 0; i--)
         {
-            for (int slot = 0; slot < joints.SlotCapacity; slot++)
+            ref readonly GearJointData gear = ref gears[i];
+            if (gear.GearJointA == droppedId || gear.GearJointB == droppedId)
             {
-                if (!joints.IsSlotLive(slot))
-                {
-                    continue;
-                }
-
-                ref JointRecord joint = ref joints.SlotByIndex(slot);
-                switch (joint.Kind)
-                {
-                    case JointKind.Distance:
-                        SolveJointVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Weld:
-                        SolveWeldVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Prismatic:
-                        SolvePrismaticVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Motor:
-                        SolveMotorVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Wheel:
-                        SolveWheelVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Pulley:
-                        SolvePulleyVelocity(bodies, ref joint);
-                        break;
-                    case JointKind.Gear:
-                        SolveGearVelocity(bodies, joints, ref joint);
-                        break;
-                    default:
-                        SolveRevoluteVelocity(bodies, ref joint);
-                        break;
-                }
+                _gear.DestroySlot(_gear.SparseOfDense(i));
             }
         }
     }
 
-    /// <summary>Distance velocity sweep: one bilateral impulse along the rod.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveJointVelocity(BodyStore bodies, ref JointRecord joint)
+    /// <summary>Drops every joint naming a destroyed body, gears included through their geared joints.</summary>
+    /// <param name="body">The destroyed body.</param>
+    internal void DestroyJointsOfBody(BodyId body)
     {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        Vec2 axis = pB - pA;
-        float lengthSq = axis.LengthSquared();
-        if (lengthSq < 1e-12f)
+        int budget = Count;
+        if (budget <= 0)
         {
             return;
         }
 
-        Vec2 direction = axis * (1.0f / MathF.Sqrt(lengthSq));
-
-        float rnA = Vec2.Cross(rA, direction);
-        float rnB = Vec2.Cross(rB, direction);
-        float k = invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
-        if (k <= 0.0f)
+        JointId[] rented = ArrayPool<JointId>.Shared.Rent(budget);
+        try
         {
-            return;
+            int found = CollectTouching(body, rented.AsSpan(0, budget));
+            for (int i = 0; i < found; i++)
+            {
+                Destroy(rented[i]);
+            }
         }
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        float velocityError = Vec2.Dot(direction, vB - vA);
-
-        float impulse = -velocityError / k;
-        joint.Impulse += impulse;
-
-        Vec2 applied = direction * impulse;
-        if (awakeA)
+        finally
         {
-            stateA.LinearVelocity -= applied * invMassA;
-            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += applied * invMassB;
-            stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
+            ArrayPool<JointId>.Shared.Return(rented);
         }
     }
 
-    /// <summary>Runs <paramref name="iterations"/> sweeps of bilateral position correction.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void SolvePositionPass(BodyStore bodies, JointStore joints, int iterations)
+    /// <summary>Collects the identities touching a body, gears resolved through their geared joints.</summary>
+    /// <param name="body">The body to match.</param>
+    /// <param name="destination">The destination span.</param>
+    /// <returns>The number of identities written.</returns>
+    internal int CollectTouching(BodyId body, Span<JointId> destination)
     {
-        ArgumentNullException.ThrowIfNull(bodies);
-        ArgumentNullException.ThrowIfNull(joints);
+        int count = 0;
+        count += CollectFrom(_distance, JointKind.Distance, body, destination[count..]);
+        count += CollectFrom(_revolute, JointKind.Revolute, body, destination[count..]);
+        count += CollectFrom(_weld, JointKind.Weld, body, destination[count..]);
+        count += CollectFrom(_prismatic, JointKind.Prismatic, body, destination[count..]);
+        count += CollectFrom(_motor, JointKind.Motor, body, destination[count..]);
+        count += CollectFrom(_wheel, JointKind.Wheel, body, destination[count..]);
+        count += CollectFrom(_pulley, JointKind.Pulley, body, destination[count..]);
 
-        for (int iteration = 0; iteration < iterations; iteration++)
+        ReadOnlySpan<GearJointData> gears = _gear.DataSpan;
+        for (int i = 0; i < gears.Length && count < destination.Length; i++)
         {
-            for (int slot = 0; slot < joints.SlotCapacity; slot++)
+            ref readonly GearJointData gear = ref gears[i];
+            if (GearTouchesBody(in gear, body))
             {
-                if (!joints.IsSlotLive(slot))
-                {
-                    continue;
-                }
-
-                ref JointRecord joint = ref joints.SlotByIndex(slot);
-                switch (joint.Kind)
-                {
-                    case JointKind.Distance:
-                        SolveJointPosition(bodies, ref joint);
-                        break;
-                    case JointKind.Weld:
-                        SolveWeldPosition(bodies, ref joint);
-                        break;
-                    case JointKind.Prismatic:
-                        SolvePrismaticPosition(bodies, ref joint);
-                        break;
-                    case JointKind.Wheel:
-                        SolveWheelPosition(bodies, ref joint);
-                        break;
-                    case JointKind.Pulley:
-                        SolvePulleyPosition(bodies, ref joint);
-                        break;
-                    case JointKind.Gear:
-                        SolveGearPosition(bodies, joints, ref joint);
-                        break;
-                    case JointKind.Motor:
-                        // Servo re-derives its error every step; no position drift to correct.
-                        break;
-                    default:
-                        SolveRevolutePosition(bodies, ref joint);
-                        break;
-                }
+                destination[count++] = new JointId(JointKind.Gear, _gear.SparseOfDense(i));
             }
         }
+
+        return count;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitDistance(BodyStore bodies, ref JointRecord joint, float wakeTolerance)
+    private static int CollectFrom<TPolicy, TData>(
+        JointStorage<TPolicy, TData> storage, JointKind kind, BodyId body, Span<JointId> destination)
+        where TPolicy : struct, IJointPolicy<TPolicy, TData>
+        where TData : struct
     {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB);
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance)
+        ReadOnlySpan<TData> span = storage.DataSpan;
+        int count = 0;
+        for (int i = 0; i < span.Length && count < destination.Length; i++)
         {
-            if (stateA.Type == BodyType.Dynamic)
+            TPolicy.GetBodies(ref Unsafe.AsRef(in span[i]), out BodyId bodyA, out BodyId bodyB);
+            if (bodyA == body || bodyB == body)
             {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
+                destination[count++] = new JointId(kind, storage.SparseOfDense(i));
             }
         }
 
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        Vec2 axis = pB - pA;
-        Vec2 direction = axis.LengthSquared() > 1e-12f ? axis * (1.0f / MathF.Sqrt(axis.LengthSquared())) : Vec2.Zero;
-
-        Vec2 impulse = direction * joint.Impulse;
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= impulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * Vec2.Cross(rA, impulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += impulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * Vec2.Cross(rB, impulse);
-        }
+        return count;
     }
 
-    /// <summary>Revolute init: resolves the limit state, warm-starts point, motor and limit impulses.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitRevolute(BodyStore bodies, ref JointRecord joint, float wakeTolerance, float dt)
+    /// <summary>Whether a gear names a body directly or through either geared joint.</summary>
+    private bool GearTouchesBody(in GearJointData gear, BodyId body)
     {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
-        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
-        float jointAngle = NormalizeAngle((angleB - angleA) - joint.ReferenceAngle);
-
-        LimitState previous = joint.LimitState;
-        joint.LimitState = ResolveLimitState(joint.EnableLimit, joint.LowerAngle, joint.UpperAngle, jointAngle);
-        if (joint.LimitState != previous)
+        if (gear.BodyA == body || gear.BodyB == body)
         {
-            joint.LimitImpulse = 0.0f;
+            return true;
         }
 
-        joint.MotorMaxImpulse = joint.EnableMotor ? joint.MaxMotorTorque * dt : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
-            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
+        if (GearedBodies(gear.GearJointA, out BodyId aA, out BodyId aB) &&
+            (aA == body || aB == body))
         {
-            if (stateA.Type == BodyType.Dynamic)
+            return true;
+        }
+
+        return GearedBodies(gear.GearJointB, out BodyId bA, out BodyId bB) &&
+            (bA == body || bB == body);
+    }
+
+    /// <summary>Reads the four bodies coupled by a gear reference; false while either side is dead.</summary>
+    private bool GearedBodies(JointId id, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = BodyId.Invalid;
+        bodyB = BodyId.Invalid;
+
+        if (id.Kind == JointKind.Revolute)
+        {
+            if (!_revolute.TryGetBySparseIndex(id.SlotIndex, out uint dense))
             {
-                bodies.SetAwake(joint.BodyA, true);
+                return false;
             }
 
-            if (stateB.Type == BodyType.Dynamic)
+            RevoluteJointData data = _revolute.DataSpan[(int)dense];
+            bodyA = data.BodyA;
+            bodyB = data.BodyB;
+            return true;
+        }
+
+        if (id.Kind == JointKind.Prismatic)
+        {
+            if (!_prismatic.TryGetBySparseIndex(id.SlotIndex, out uint dense))
             {
-                bodies.SetAwake(joint.BodyB, true);
+                return false;
             }
+
+            PrismaticJointData data = _prismatic.DataSpan[(int)dense];
+            bodyA = data.BodyA;
+            bodyB = data.BodyB;
+            return true;
         }
 
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+        return false;
+    }
 
-        Vec2 pointImpulse = joint.PointImpulse;
-        if (awakeA)
+    /// <summary>Reads the two bodies of a geared joint reference.</summary>
+    private void GetGearedBodies(JointId id, out BodyId bodyA, out BodyId bodyB)
+    {
+        bodyA = BodyId.Invalid;
+        bodyB = BodyId.Invalid;
+
+        if (id.Kind == JointKind.Revolute)
         {
-            stateA.LinearVelocity -= pointImpulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, pointImpulse) + joint.MotorImpulse + joint.LimitImpulse);
+            ref readonly RevoluteJointData data = ref _revolute.GetBySparseIndex(id.SlotIndex);
+            bodyA = data.BodyA;
+            bodyB = data.BodyB;
         }
-
-        if (awakeB)
+        else if (id.Kind == JointKind.Prismatic)
         {
-            stateB.LinearVelocity += pointImpulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, pointImpulse) + joint.MotorImpulse + joint.LimitImpulse);
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            bodyA = data.BodyA;
+            bodyB = data.BodyB;
         }
     }
 
-    /// <summary>Resolves the angular limit state from the current joint angle.</summary>
+    /// <summary>Whether a joint kind carries a scalar coordinate gearable by ratio.</summary>
+    /// <param name="kind">The kind to test.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static LimitState ResolveLimitState(bool enabled, float lower, float upper, float angle)
-    {
-        if (!enabled)
-        {
-            return LimitState.Inactive;
-        }
+    internal static bool IsGearedKind(JointKind kind) =>
+        kind == JointKind.Revolute || kind == JointKind.Prismatic;
 
-        if (upper - lower < 2.0f * SolverTuning.AngularSlop)
-        {
-            return LimitState.Equal;
-        }
-
-        if (angle <= lower)
-        {
-            return LimitState.AtLower;
-        }
-
-        if (angle >= upper)
-        {
-            return LimitState.AtUpper;
-        }
-
-        return LimitState.Inactive;
-    }
-
-    /// <summary>Wraps an angle into [-pi, pi].</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float NormalizeAngle(float angle)
-    {
-        float wrapped = angle - (MathF.Floor((angle + MathF.PI) / (2.0f * MathF.PI)) * 2.0f * MathF.PI);
-        return wrapped;
-    }
-
-    /// <summary>Revolute velocity sweep: motor, then limit, then the point block.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveRevoluteVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        float axialMass = 1.0f / (invIA + invIB);
-
-        if (joint.EnableMotor && (awakeA || awakeB))
-        {
-            float rate = (stateB.AngularVelocity - stateA.AngularVelocity) - joint.MotorSpeed;
-            float impulse = -axialMass * rate;
-            float old = joint.MotorImpulse;
-            float next = Math.Clamp(old + impulse, -joint.MotorMaxImpulse, joint.MotorMaxImpulse);
-            float delta = next - old;
-            joint.MotorImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-
-        if (joint.LimitState != LimitState.Inactive && (awakeA || awakeB))
-        {
-            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
-            float impulse = -axialMass * rate;
-            float old = joint.LimitImpulse;
-            float next = joint.LimitState switch
-            {
-                LimitState.AtLower => MathF.Max(old + impulse, 0.0f),
-                LimitState.AtUpper => MathF.Min(old + impulse, 0.0f),
-                _ => old + impulse,
-            };
-            float delta = next - old;
-            joint.LimitImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
-        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
-        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
-
-        float det = (k11 * k22) - (k12 * k12);
-        if (det <= 0.0f)
-        {
-            return;
-        }
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        Vec2 accumulated = joint.PointImpulse;
-
-        Vec2 residual = (vB - vA) - new Vec2(
-            (k11 * accumulated.X) + (k12 * accumulated.Y),
-            (k12 * accumulated.X) + (k22 * accumulated.Y));
-
-        float invDet = 1.0f / det;
-        Vec2 solved = new(
-            ((k12 * residual.Y) - (k22 * residual.X)) * invDet,
-            ((k12 * residual.X) - (k11 * residual.Y)) * invDet);
-        Vec2 deltaImpulse = solved - accumulated;
-        joint.PointImpulse = solved;
-
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= deltaImpulse * invMassA;
-            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, deltaImpulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += deltaImpulse * invMassB;
-            stateB.AngularVelocity += invIB * Vec2.Cross(rB, deltaImpulse);
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveJointPosition(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        Vec2 axis = pB - pA;
-        float length = MathF.Sqrt(axis.LengthSquared());
-        if (length < 1e-9f)
-        {
-            return;
-        }
-
-        Vec2 direction = axis * (1.0f / length);
-
-        float rnA = Vec2.Cross(rA, direction);
-        float rnB = Vec2.Cross(rB, direction);
-        float k = invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
-        if (k <= 0.0f)
-        {
-            return;
-        }
-
-        float error = Math.Clamp(length - joint.Length, -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
-        Vec2 applied = direction * (-error / k);
-
-        if (awakeA)
-        {
-            stateA.Position -= applied * invMassA;
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, applied));
-            stateA.Cos = MathF.Cos(angleA);
-            stateA.Sin = MathF.Sin(angleA);
-        }
-
-        if (awakeB)
-        {
-            stateB.Position += applied * invMassB;
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, applied));
-            stateB.Cos = MathF.Cos(angleB);
-            stateB.Sin = MathF.Sin(angleB);
-        }
-    }
-
-    /// <summary>Revolute position sweep: pin correction plus angular limit correction.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveRevolutePosition(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
-        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
-        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
-
-        float det = (k11 * k22) - (k12 * k12);
-        if (det > 0.0f)
-        {
-            Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-            Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-            Vec2 error = pB - pA;
-
-            float invDet = 1.0f / det;
-            Vec2 correction = new(
-                ((k12 * error.Y) - (k22 * error.X)) * invDet,
-                ((k12 * error.X) - (k11 * error.Y)) * invDet);
-
-            if (awakeA)
-            {
-                stateA.Position -= correction * invMassA;
-                float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, correction));
-                stateA.Cos = MathF.Cos(angleA);
-                stateA.Sin = MathF.Sin(angleA);
-            }
-
-            if (awakeB)
-            {
-                stateB.Position += correction * invMassB;
-                float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, correction));
-                stateB.Cos = MathF.Cos(angleB);
-                stateB.Sin = MathF.Sin(angleB);
-            }
-        }
-
-        if (joint.LimitState == LimitState.Inactive)
-        {
-            return;
-        }
-
-        float axialMass = 1.0f / (invIA + invIB);
-        float angleA2 = MathF.Atan2(stateA.Sin, stateA.Cos);
-        float angleB2 = MathF.Atan2(stateB.Sin, stateB.Cos);
-        float jointAngle = NormalizeAngle((angleB2 - angleA2) - joint.ReferenceAngle);
-
-        float angularError = joint.LimitState switch
-        {
-            LimitState.AtLower => jointAngle - joint.LowerAngle + SolverTuning.AngularSlop,
-            LimitState.AtUpper => jointAngle - joint.UpperAngle - SolverTuning.AngularSlop,
-            _ => jointAngle - joint.LowerAngle,
-        };
-
-        bool violates = joint.LimitState switch
-        {
-            LimitState.AtLower => angularError < 0.0f,
-            LimitState.AtUpper => angularError > 0.0f,
-            _ => angularError != 0.0f,
-        };
-
-        if (!violates)
-        {
-            return;
-        }
-
-        float limitCorrection = -axialMass * angularError;
-        if (awakeA)
-        {
-            float correctedA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * limitCorrection);
-            stateA.Cos = MathF.Cos(correctedA);
-            stateA.Sin = MathF.Sin(correctedA);
-        }
-
-        if (awakeB)
-        {
-            float correctedB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * limitCorrection);
-            stateB.Cos = MathF.Cos(correctedB);
-            stateB.Sin = MathF.Sin(correctedB);
-        }
-    }
-
-    /// <summary>Weld init: warm-starts the pin block and the angle lock.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitWeld(BodyStore bodies, ref JointRecord joint, float wakeTolerance)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
-            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
-        {
-            if (stateA.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
-            }
-        }
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        Vec2 pointImpulse = joint.PointImpulse;
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= pointImpulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, pointImpulse) + joint.WeldAngleImpulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += pointImpulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, pointImpulse) + joint.WeldAngleImpulse);
-        }
-    }
-
-    /// <summary>Weld velocity sweep: angle lock, then the pin block.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveWeldVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        float axialMass = invIA + invIB;
-        if (axialMass > 0.0f && (awakeA || awakeB))
-        {
-            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
-            float delta = -rate / axialMass;
-            joint.WeldAngleImpulse += delta;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-
-        SolvePinBlock(bodies, ref joint, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
-    }
-
-    /// <summary>Weld position sweep: pin correction plus angle correction to reference.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveWeldPosition(BodyStore bodies, ref JointRecord joint)
-    {
-        SolvePinCorrection(bodies, ref joint);
-
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-        float axialMass = invIA + invIB;
-        if (axialMass <= 0.0f)
-        {
-            return;
-        }
-
-        float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
-        float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
-        float error = NormalizeAngle((angleB - angleA) - joint.ReferenceAngle);
-        if (MathF.Abs(error) < SolverTuning.AngularSlop)
-        {
-            return;
-        }
-
-        float correction = -error / axialMass;
-        if (awakeA)
-        {
-            float correctedA = angleA - (invIA * correction);
-            stateA.Cos = MathF.Cos(correctedA);
-            stateA.Sin = MathF.Sin(correctedA);
-        }
-
-        if (awakeB)
-        {
-            float correctedB = angleB + (invIB * correction);
-            stateB.Cos = MathF.Cos(correctedB);
-            stateB.Sin = MathF.Sin(correctedB);
-        }
-    }
-
-    /// <summary>Prismatic init: resolves the slide state, warm-starts perp, motor, limit and angle.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitPrismatic(BodyStore bodies, ref JointRecord joint, float wakeTolerance, float dt)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
-        float axisLenSq = axis.LengthSquared();
-        if (axisLenSq > 1e-12f)
-        {
-            axis *= 1.0f / MathF.Sqrt(axisLenSq);
-        }
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        float translation = Vec2.Dot(pB - pA, axis) - joint.ReferenceTranslation;
-
-        LimitState previous = joint.PrismaticLimitState;
-        joint.PrismaticLimitState = ResolveLimitState(joint.EnablePrismaticLimit, joint.LowerTranslation, joint.UpperTranslation, translation);
-        if (joint.PrismaticLimitState != previous)
-        {
-            joint.PrismaticLimitImpulse = 0.0f;
-        }
-
-        joint.PrismaticMotorMaxImpulse = joint.EnablePrismaticMotor ? joint.MaxPrismaticForce * dt : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance ||
-            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
-        {
-            if (stateA.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
-            }
-        }
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        Vec2 perp = Perp(axis);
-        Vec2 impulse = (axis * (joint.PrismaticMotorImpulse + joint.PrismaticLimitImpulse)) + (perp * joint.PrismaticImpulse.Y);
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= impulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, impulse) + joint.WeldAngleImpulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += impulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, impulse) + joint.WeldAngleImpulse);
-        }
-    }
-
-    /// <summary>Prismatic velocity sweep: motor, then limit, then perp, then angle.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePrismaticVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
-        if (axis.LengthSquared() > 1e-12f)
-        {
-            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
-        }
-
-        Vec2 perp = Perp(axis);
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float axisA = Vec2.Cross(rA, axis);
-        float axisB = Vec2.Cross(rB, axis);
-        float axisMass = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
-
-        if (joint.EnablePrismaticMotor && axisMass > 0.0f && (awakeA || awakeB))
-        {
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-            float rate = Vec2.Dot(vB - vA, axis) - joint.PrismaticMotorSpeed;
-            float impulse = -rate / axisMass;
-            float old = joint.PrismaticMotorImpulse;
-            float next = Math.Clamp(old + impulse, -joint.PrismaticMotorMaxImpulse, joint.PrismaticMotorMaxImpulse);
-            Vec2 applied = axis * (next - old);
-            joint.PrismaticMotorImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= applied * invMassA;
-                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += applied * invMassB;
-                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
-            }
-        }
-
-        if (joint.PrismaticLimitState != LimitState.Inactive && axisMass > 0.0f && (awakeA || awakeB))
-        {
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-            float rate = Vec2.Dot(vB - vA, axis);
-            float impulse = -rate / axisMass;
-            float old = joint.PrismaticLimitImpulse;
-            float next = joint.PrismaticLimitState switch
-            {
-                LimitState.AtLower => MathF.Max(old + impulse, 0.0f),
-                LimitState.AtUpper => MathF.Min(old + impulse, 0.0f),
-                _ => old + impulse,
-            };
-            Vec2 applied = axis * (next - old);
-            joint.PrismaticLimitImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= applied * invMassA;
-                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += applied * invMassB;
-                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
-            }
-        }
-
-        float perpA = Vec2.Cross(rA, perp);
-        float perpB = Vec2.Cross(rB, perp);
-        float perpMass = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
-        if (perpMass > 0.0f && (awakeA || awakeB))
-        {
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-            float rate = Vec2.Dot(vB - vA, perp);
-            float delta = -rate / perpMass;
-            joint.PrismaticImpulse = new Vec2(joint.PrismaticImpulse.X, joint.PrismaticImpulse.Y + delta);
-            Vec2 applied = perp * delta;
-
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= applied * invMassA;
-                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += applied * invMassB;
-                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
-            }
-        }
-
-        float axialMass = invIA + invIB;
-        if (axialMass > 0.0f && (awakeA || awakeB))
-        {
-            float rate = stateB.AngularVelocity - stateA.AngularVelocity;
-            float delta = -rate / axialMass;
-            joint.WeldAngleImpulse += delta;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-    }
-
-    /// <summary>Prismatic position sweep: perp lock, angle lock, then slide limit.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePrismaticPosition(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 axis = Rotate(stateA, joint.LocalAxisA);
-        if (axis.LengthSquared() > 1e-12f)
-        {
-            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
-        }
-
-        Vec2 perp = Perp(axis);
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        Vec2 error = pB - pA;
-
-        float perpA = Vec2.Cross(rA, perp);
-        float perpB = Vec2.Cross(rB, perp);
-        float perpK = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
-        if (perpK > 0.0f)
-        {
-            float perpError = Math.Clamp(Vec2.Dot(error, perp), -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
-            Vec2 applied = perp * (-perpError / perpK);
-            ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
-        }
-
-        float axialMass = invIA + invIB;
-        if (axialMass > 0.0f)
-        {
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
-            float angleError = NormalizeAngle((angleB - angleA) - joint.ReferenceAngle);
-            if (MathF.Abs(angleError) >= SolverTuning.AngularSlop)
-            {
-                float correction = -angleError / axialMass;
-                if (awakeA)
-                {
-                    float correctedA = angleA - (invIA * correction);
-                    stateA.Cos = MathF.Cos(correctedA);
-                    stateA.Sin = MathF.Sin(correctedA);
-                }
-
-                if (awakeB)
-                {
-                    float correctedB = angleB + (invIB * correction);
-                    stateB.Cos = MathF.Cos(correctedB);
-                    stateB.Sin = MathF.Sin(correctedB);
-                }
-            }
-        }
-
-        if (joint.PrismaticLimitState == LimitState.Inactive)
-        {
-            return;
-        }
-
-        float axisA = Vec2.Cross(rA, axis);
-        float axisB = Vec2.Cross(rB, axis);
-        float axisK = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
-        if (axisK <= 0.0f)
-        {
-            return;
-        }
-
-        float translation = Vec2.Dot(error, axis) - joint.ReferenceTranslation;
-        float limitError = joint.PrismaticLimitState switch
-        {
-            LimitState.AtLower => translation - joint.LowerTranslation + SolverTuning.LinearSlop,
-            LimitState.AtUpper => translation - joint.UpperTranslation - SolverTuning.LinearSlop,
-            _ => translation - joint.LowerTranslation,
-        };
-
-        bool violates = joint.PrismaticLimitState switch
-        {
-            LimitState.AtLower => limitError < 0.0f,
-            LimitState.AtUpper => limitError > 0.0f,
-            _ => limitError != 0.0f,
-        };
-
-        if (!violates)
-        {
-            return;
-        }
-
-        Vec2 limitApplied = axis * (-Math.Clamp(limitError, -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection) / axisK);
-        ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, limitApplied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
-    }
-
-    /// <summary>Motor init: freezes force/torque caps and warm-starts the servo.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitMotor(BodyStore bodies, ref JointRecord joint, float wakeTolerance, float dt)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        joint.ServoMaxLinearImpulse = joint.ServoMaxForce * dt;
-        joint.ServoMaxAngleImpulse = joint.ServoMaxTorque * dt;
-        joint.ServoRate = joint.ServoFactor / dt;
-
-        Vec2 target = stateA.Position + Rotate(stateA, joint.ServoOffset);
-        Vec2 error = target - stateB.Position;
-        if (error.LengthSquared() > wakeTolerance * wakeTolerance ||
-            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
-        {
-            if (stateA.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
-            }
-        }
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= joint.ServoLinearImpulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * joint.ServoAngleImpulse;
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += joint.ServoLinearImpulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * joint.ServoAngleImpulse;
-        }
-    }
-
-    /// <summary>Motor velocity sweep: capped P-servo toward the target pose.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveMotorVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        float linearMass = invMassA + invMassB;
-        if (linearMass > 0.0f)
-        {
-            Vec2 target = stateA.Position + Rotate(stateA, joint.ServoOffset);
-            Vec2 desired = (target - stateB.Position) * joint.ServoRate;
-            Vec2 relative = stateB.LinearVelocity - stateA.LinearVelocity;
-            Vec2 impulse = (desired - relative) * (1.0f / linearMass);
-            Vec2 next = joint.ServoLinearImpulse + impulse;
-            float cap = joint.ServoMaxLinearImpulse;
-            if (next.LengthSquared() > cap * cap)
-            {
-                next *= cap / MathF.Sqrt(next.LengthSquared());
-            }
-
-            Vec2 delta = next - joint.ServoLinearImpulse;
-            joint.ServoLinearImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= delta * invMassA;
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += delta * invMassB;
-            }
-        }
-
-        float axialMass = invIA + invIB;
-        if (axialMass > 0.0f)
-        {
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos);
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos);
-            float error = NormalizeAngle((angleA + joint.ServoAngle) - angleB);
-            float desiredRate = (error * joint.ServoRate) - (stateB.AngularVelocity - stateA.AngularVelocity);
-            float impulse = desiredRate / axialMass;
-            float next = Math.Clamp(
-                joint.ServoAngleImpulse + impulse,
-                -joint.ServoMaxAngleImpulse, joint.ServoMaxAngleImpulse);
-            float delta = next - joint.ServoAngleImpulse;
-            joint.ServoAngleImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Wheel init: applies one explicit suspension force, then warm-starts
-    /// the hub motor and the lateral lock. The spring is explicit
-    /// (force from the current stretch and rate), so it stays stable for
-    /// suspension frequencies below 1 / (pi * dt) and needs no iteration.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitWheel(BodyStore bodies, ref JointRecord joint, float wakeTolerance, float dt)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        WheelFrame(in stateA, in stateB, in joint,
-            out Vec2 axis, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        float axisA = Vec2.Cross(rA, axis);
-        float axisB = Vec2.Cross(rB, axis);
-        float springInverseMass = invMassA + invMassB + (invIA * axisA * axisA) + (invIB * axisB * axisB);
-        if (springInverseMass > 0.0f)
-        {
-            float mass = 1.0f / springInverseMass;
-            float omega = 2.0f * MathF.PI * joint.SuspensionFrequency;
-            float stiffness = mass * omega * omega;
-            float damping = 2.0f * mass * joint.SuspensionDamping * omega;
-
-            float stretch = Vec2.Dot(pB - pA, axis) - joint.ReferenceTranslation;
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-            float rate = Vec2.Dot(vB - vA, axis);
-
-            Vec2 spring = axis * ((-(stiffness * stretch) - (damping * rate)) * dt);
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= spring * invMassA;
-                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, spring);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += spring * invMassB;
-                stateB.AngularVelocity += invIB * Vec2.Cross(rB, spring);
-            }
-        }
-
-        joint.WheelMotorMaxImpulse = joint.EnableWheelMotor ? joint.WheelMaxTorque * dt : 0.0f;
-
-        Vec2 anchorA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 anchorB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((anchorB - anchorA).LengthSquared() > wakeTolerance * wakeTolerance ||
-            MathF.Abs(stateB.AngularVelocity - stateA.AngularVelocity) > wakeTolerance)
-        {
-            if (stateA.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
-            }
-        }
-
-        awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        Vec2 impulse = perp * joint.WheelPerpImpulse;
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= impulse * stateA.InverseMass;
-            stateA.AngularVelocity -= stateA.InverseInertia * (Vec2.Cross(rA, impulse) + joint.WheelMotorImpulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += impulse * stateB.InverseMass;
-            stateB.AngularVelocity += stateB.InverseInertia * (Vec2.Cross(rB, impulse) + joint.WheelMotorImpulse);
-        }
-    }
-
-    /// <summary>Wheel velocity sweep: hub motor, then lateral lock. The spring already ran in init.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveWheelVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        WheelFrame(in stateA, in stateB, in joint,
-            out _, out Vec2 perp, out Vec2 rA, out Vec2 rB, out _, out _);
-
-        float axialMass = invIA + invIB;
-        if (joint.EnableWheelMotor && axialMass > 0.0f)
-        {
-            float rate = (stateB.AngularVelocity - stateA.AngularVelocity) - joint.WheelMotorSpeed;
-            float impulse = -rate / axialMass;
-            float old = joint.WheelMotorImpulse;
-            float next = Math.Clamp(old + impulse, -joint.WheelMotorMaxImpulse, joint.WheelMotorMaxImpulse);
-            float delta = next - old;
-            joint.WheelMotorImpulse = next;
-
-            if (awakeA)
-            {
-                stateA.AngularVelocity -= invIA * delta;
-            }
-
-            if (awakeB)
-            {
-                stateB.AngularVelocity += invIB * delta;
-            }
-        }
-
-        float perpA = Vec2.Cross(rA, perp);
-        float perpB = Vec2.Cross(rB, perp);
-        float perpMass = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
-        if (perpMass > 0.0f)
-        {
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-            float rate = Vec2.Dot(vB - vA, perp);
-            float delta = -rate / perpMass;
-            joint.WheelPerpImpulse += delta;
-            Vec2 applied = perp * delta;
-
-            if (awakeA)
-            {
-                stateA.LinearVelocity -= applied * invMassA;
-                stateA.AngularVelocity -= invIA * Vec2.Cross(rA, applied);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += applied * invMassB;
-                stateB.AngularVelocity += invIB * Vec2.Cross(rB, applied);
-            }
-        }
-    }
-
-    /// <summary>Wheel position sweep: lateral lock only; the spring converges through its bias.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveWheelPosition(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        WheelFrame(in stateA, in stateB, in joint,
-            out _, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB);
-
-        float perpA = Vec2.Cross(rA, perp);
-        float perpB = Vec2.Cross(rB, perp);
-        float perpK = invMassA + invMassB + (invIA * perpA * perpA) + (invIB * perpB * perpB);
-        if (perpK <= 0.0f)
-        {
-            return;
-        }
-
-        float error = Math.Clamp(Vec2.Dot(pB - pA, perp), -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
-        Vec2 applied = perp * (-error / perpK);
-        ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, applied, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
-    }
-
-    /// <summary>Shared suspension frame: axis, lateral, COM-relative arms and anchor points.</summary>
+    /// <summary>Reads the scalar coordinate of a geared joint: angle or translation.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void WheelFrame(in BodyState stateA, in BodyState stateB, in JointRecord joint,
-        out Vec2 axis, out Vec2 perp, out Vec2 rA, out Vec2 rB, out Vec2 pA, out Vec2 pB)
+    internal float GetCoordinate(BodyStore bodies, JointId id)
     {
-        axis = Rotate(stateA, joint.LocalAxisA);
-        if (axis.LengthSquared() > 1e-12f)
+        if (id.Kind == JointKind.Prismatic)
         {
-            axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
-        }
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            ref readonly BodyState stateA = ref bodies.Slot(data.BodyA);
+            ref readonly BodyState stateB = ref bodies.Slot(data.BodyB);
 
-        perp = Perp(axis);
-        rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-        pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-    }
-
-    /// <summary>Pulley init: freezes rope directions and warm-starts the rope impulse.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitPulley(BodyStore bodies, ref JointRecord joint, float wakeTolerance)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        if ((vB - vA).LengthSquared() > wakeTolerance * wakeTolerance)
-        {
-            if (stateA.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyA, true);
-            }
-
-            if (stateB.Type == BodyType.Dynamic)
-            {
-                bodies.SetAwake(joint.BodyB, true);
-            }
-        }
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        if (PulleyDirections(in joint, pA, pB, out Vec2 uA, out Vec2 uB))
-        {
-            Vec2 impulseA = uA * joint.PulleyImpulse;
-            Vec2 impulseB = uB * (joint.PulleyImpulse * joint.PulleyRatio);
-            if (awakeA)
-            {
-                stateA.LinearVelocity += impulseA * stateA.InverseMass;
-                stateA.AngularVelocity += stateA.InverseInertia * Vec2.Cross(rA, impulseA);
-            }
-
-            if (awakeB)
-            {
-                stateB.LinearVelocity += impulseB * stateB.InverseMass;
-                stateB.AngularVelocity += stateB.InverseInertia * Vec2.Cross(rB, impulseB);
-            }
-        }
-    }
-
-    /// <summary>Pulley velocity sweep: one bilateral impulse holding the weighted rope length.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePulleyVelocity(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        if (!PulleyDirections(in joint, pA, pB, out Vec2 uA, out Vec2 uB))
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float ratio = joint.PulleyRatio;
-        float rnA = Vec2.Cross(rA, uA);
-        float rnB = Vec2.Cross(rB, uB);
-        float k = invMassA + (ratio * ratio * invMassB) + (invIA * rnA * rnA) + (ratio * ratio * invIB * rnB * rnB);
-        if (k <= 0.0f)
-        {
-            return;
-        }
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        float rate = Vec2.Dot(uA, vA) + (ratio * Vec2.Dot(uB, vB));
-
-        float delta = -rate / k;
-        joint.PulleyImpulse += delta;
-
-        Vec2 appliedA = uA * delta;
-        Vec2 appliedB = uB * (delta * ratio);
-        if (awakeA)
-        {
-            stateA.LinearVelocity += appliedA * invMassA;
-            stateA.AngularVelocity += invIA * Vec2.Cross(rA, appliedA);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += appliedB * invMassB;
-            stateB.AngularVelocity += invIB * Vec2.Cross(rB, appliedB);
-        }
-    }
-
-    /// <summary>Pulley position sweep: clamped correction of the weighted rope error.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePulleyPosition(BodyStore bodies, ref JointRecord joint)
-    {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        if (!PulleyDirections(in joint, pA, pB, out Vec2 uA, out Vec2 uB))
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float ratio = joint.PulleyRatio;
-        float rnA = Vec2.Cross(rA, uA);
-        float rnB = Vec2.Cross(rB, uB);
-        float k = invMassA + (ratio * ratio * invMassB) + (invIA * rnA * rnA) + (ratio * ratio * invIB * rnB * rnB);
-        if (k <= 0.0f)
-        {
-            return;
-        }
-
-        float lengthA = MathF.Sqrt((pA - joint.PulleyGroundA).LengthSquared());
-        float lengthB = MathF.Sqrt((pB - joint.PulleyGroundB).LengthSquared());
-        float error = Math.Clamp(
-            (lengthA + (ratio * lengthB)) - joint.PulleyConstant,
-            -SolverTuning.MaxCorrection, SolverTuning.MaxCorrection);
-
-        Vec2 appliedA = uA * (-error / k);
-        Vec2 appliedB = uB * (-error * ratio / k);
-        if (awakeA)
-        {
-            stateA.Position += appliedA * invMassA;
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) + (invIA * Vec2.Cross(rA, appliedA));
-            stateA.Cos = MathF.Cos(angleA);
-            stateA.Sin = MathF.Sin(angleA);
-        }
-
-        if (awakeB)
-        {
-            stateB.Position += appliedB * invMassB;
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, appliedB));
-            stateB.Cos = MathF.Cos(angleB);
-            stateB.Sin = MathF.Sin(angleB);
-        }
-    }
-
-    /// <summary>Rope directions from ground pulleys to anchors; false while either rope is slack.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static bool PulleyDirections(in JointRecord joint, Vec2 pA, Vec2 pB, out Vec2 uA, out Vec2 uB)
-    {
-        Vec2 dA = pA - joint.PulleyGroundA;
-        Vec2 dB = pB - joint.PulleyGroundB;
-        float lenASq = dA.LengthSquared();
-        float lenBSq = dB.LengthSquared();
-
-        if (lenASq <= SolverTuning.LinearSlop * SolverTuning.LinearSlop ||
-            lenBSq <= SolverTuning.LinearSlop * SolverTuning.LinearSlop)
-        {
-            uA = default;
-            uB = default;
-            return false;
-        }
-
-        uA = dA * (1.0f / MathF.Sqrt(lenASq));
-        uB = dB * (1.0f / MathF.Sqrt(lenBSq));
-        return true;
-    }
-
-    /// <summary>Gear init: wakes the coupled bodies and warm-starts the ratio impulse.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void InitGear(BodyStore bodies, JointStore joints, ref JointRecord joint, float wakeTolerance)
-    {
-        if (!joints.IsValid(joint.GearJointA) || !joints.IsValid(joint.GearJointB))
-        {
-            return;
-        }
-
-        ref readonly JointRecord gearedA = ref joints.Slot(joint.GearJointA);
-        ref readonly JointRecord gearedB = ref joints.Slot(joint.GearJointB);
-
-        float rateA = GearCoordinateRate(bodies, in gearedA);
-        float rateB = GearCoordinateRate(bodies, in gearedB);
-        if (MathF.Abs(rateA + (joint.GearRatio * rateB)) > wakeTolerance)
-        {
-            bodies.SetAwake(gearedA.BodyA, true);
-            bodies.SetAwake(gearedA.BodyB, true);
-            bodies.SetAwake(gearedB.BodyA, true);
-            bodies.SetAwake(gearedB.BodyB, true);
-        }
-
-        GearApplyVelocity(bodies, in gearedA, joint.GearImpulse);
-        GearApplyVelocity(bodies, in gearedB, joint.GearImpulse * joint.GearRatio);
-    }
-
-    /// <summary>Gear velocity sweep: one bilateral impulse locking the coordinate ratio.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveGearVelocity(BodyStore bodies, JointStore joints, ref JointRecord joint)
-    {
-        if (!joints.IsValid(joint.GearJointA) || !joints.IsValid(joint.GearJointB))
-        {
-            return;
-        }
-
-        ref readonly JointRecord gearedA = ref joints.Slot(joint.GearJointA);
-        ref readonly JointRecord gearedB = ref joints.Slot(joint.GearJointB);
-
-        float ratio = joint.GearRatio;
-        float massA = GearEffectiveMass(bodies, in gearedA);
-        float massB = GearEffectiveMass(bodies, in gearedB);
-        float k = massA + (ratio * ratio * massB);
-        if (k <= 0.0f)
-        {
-            return;
-        }
-
-        float rate = GearCoordinateRate(bodies, in gearedA) + (ratio * GearCoordinateRate(bodies, in gearedB));
-        float delta = -rate / k;
-        joint.GearImpulse += delta;
-
-        GearApplyVelocity(bodies, in gearedA, delta);
-        GearApplyVelocity(bodies, in gearedB, delta * ratio);
-    }
-
-    /// <summary>Gear position sweep: direct correction of the coordinate error.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void SolveGearPosition(BodyStore bodies, JointStore joints, ref JointRecord joint)
-    {
-        if (!joints.IsValid(joint.GearJointA) || !joints.IsValid(joint.GearJointB))
-        {
-            return;
-        }
-
-        ref readonly JointRecord gearedA = ref joints.Slot(joint.GearJointA);
-        ref readonly JointRecord gearedB = ref joints.Slot(joint.GearJointB);
-
-        float ratio = joint.GearRatio;
-        float massA = GearEffectiveMass(bodies, in gearedA);
-        float massB = GearEffectiveMass(bodies, in gearedB);
-        float k = massA + (ratio * ratio * massB);
-        if (k <= 0.0f)
-        {
-            return;
-        }
-
-        float error = (JointStore.JointCoordinate(bodies, in gearedA) + (ratio * JointStore.JointCoordinate(bodies, in gearedB))) - joint.GearConstant;
-        if (MathF.Abs(error) < SolverTuning.LinearSlop)
-        {
-            return;
-        }
-
-        float correction = -error / k;
-        GearApplyPosition(bodies, in gearedA, correction);
-        GearApplyPosition(bodies, in gearedB, correction * ratio);
-    }
-
-    /// <summary>Coordinate rate of a geared joint: relative spin or slide speed.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static float GearCoordinateRate(BodyStore bodies, in JointRecord geared)
-    {
-        ref readonly BodyState stateA = ref bodies.Slot(geared.BodyA);
-        ref readonly BodyState stateB = ref bodies.Slot(geared.BodyB);
-
-        if (geared.Kind == JointKind.Prismatic)
-        {
-            Vec2 axis = Rotate(stateA, geared.LocalAxisA);
+            Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
             if (axis.LengthSquared() > 1e-12f)
             {
                 axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
             }
 
-            Vec2 rA = Rotate(stateA, geared.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-            Vec2 rB = Rotate(stateB, geared.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
+            Vec2 pA = stateA.Position + MathPhysics.Rotate(stateA, data.LocalAnchorA);
+            Vec2 pB = stateB.Position + MathPhysics.Rotate(stateB, data.LocalAnchorB);
+            return Vec2.Dot(pB - pA, axis) - data.ReferenceTranslation;
+        }
+
+        ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+        ref readonly BodyState a = ref bodies.Slot(revolute.BodyA);
+        ref readonly BodyState b = ref bodies.Slot(revolute.BodyB);
+
+        float angleA = MathF.Atan2(a.Sin, a.Cos);
+        float angleB = MathF.Atan2(b.Sin, b.Cos);
+        return MathPhysics.NormalizeAngle((angleB - angleA) - revolute.ReferenceAngle);
+    }
+
+    /// <summary>Reads the coordinate rate of a geared joint: relative spin or slide speed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal float GetCoordinateRate(BodyStore bodies, JointId id)
+    {
+        if (id.Kind == JointKind.Prismatic)
+        {
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            ref readonly BodyState stateA = ref bodies.Slot(data.BodyA);
+            ref readonly BodyState stateB = ref bodies.Slot(data.BodyB);
+
+            Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
+            if (axis.LengthSquared() > 1e-12f)
+            {
+                axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+            }
+
+            Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+            Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+            Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * MathPhysics.Perp(rA));
+            Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * MathPhysics.Perp(rB));
             return Vec2.Dot(vB - vA, axis);
         }
 
-        return stateB.AngularVelocity - stateA.AngularVelocity;
+        ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+        return bodies.Slot(revolute.BodyB).AngularVelocity - bodies.Slot(revolute.BodyA).AngularVelocity;
     }
 
-    /// <summary>Effective mass of a geared coordinate with sleep-gated inverses.</summary>
+    /// <summary>Reads the effective mass of a geared coordinate with sleep-gated inverses.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static float GearEffectiveMass(BodyStore bodies, in JointRecord geared)
+    internal float GetEffectiveCoordinateMass(BodyStore bodies, JointId id)
     {
-        ref readonly BodyState stateA = ref bodies.Slot(geared.BodyA);
-        ref readonly BodyState stateB = ref bodies.Slot(geared.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        if (geared.Kind == JointKind.Prismatic)
+        if (id.Kind == JointKind.Prismatic)
         {
-            float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-            float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-            Vec2 axis = Rotate(stateA, geared.LocalAxisA);
-            if (axis.LengthSquared() > 1e-12f)
-            {
-                axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
-            }
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            ref readonly BodyState stateA = ref bodies.Slot(data.BodyA);
+            ref readonly BodyState stateB = ref bodies.Slot(data.BodyB);
 
-            Vec2 rA = Rotate(stateA, geared.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-            Vec2 rB = Rotate(stateB, geared.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-            float rnA = Vec2.Cross(rA, axis);
-            float rnB = Vec2.Cross(rB, axis);
-            return invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
-        }
-
-        return invIA + invIB;
-    }
-
-    /// <summary>Applies a generalized velocity impulse to a geared coordinate.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void GearApplyVelocity(BodyStore bodies, in JointRecord geared, float impulse)
-    {
-        ref BodyState stateA = ref bodies.Slot(geared.BodyA);
-        ref BodyState stateB = ref bodies.Slot(geared.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-
-        if (geared.Kind == JointKind.Prismatic)
-        {
+            bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+            bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
             float invMassA = awakeA ? stateA.InverseMass : 0.0f;
             float invMassB = awakeB ? stateB.InverseMass : 0.0f;
             float invIA = awakeA ? stateA.InverseInertia : 0.0f;
             float invIB = awakeB ? stateB.InverseInertia : 0.0f;
 
-            Vec2 axis = Rotate(stateA, geared.LocalAxisA);
+            Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
             if (axis.LengthSquared() > 1e-12f)
             {
                 axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
             }
 
-            Vec2 rA = Rotate(stateA, geared.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-            Vec2 rB = Rotate(stateB, geared.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
+            Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+            Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+            float rnA = Vec2.Cross(rA, axis);
+            float rnB = Vec2.Cross(rB, axis);
+            return invMassA + invMassB + (invIA * rnA * rnA) + (invIB * rnB * rnB);
+        }
+
+        ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+        ref readonly BodyState a = ref bodies.Slot(revolute.BodyA);
+        ref readonly BodyState b = ref bodies.Slot(revolute.BodyB);
+        float iA = (a.Flags & BodyFlags.Awake) != 0 ? a.InverseInertia : 0.0f;
+        float iB = (b.Flags & BodyFlags.Awake) != 0 ? b.InverseInertia : 0.0f;
+        return iA + iB;
+    }
+
+    /// <summary>Applies a generalized velocity impulse to a geared coordinate.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal void ApplyGearedVelocity(BodyStore bodies, JointId id, float impulse)
+    {
+        if (id.Kind == JointKind.Prismatic)
+        {
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            ref BodyState stateA = ref bodies.Slot(data.BodyA);
+            ref BodyState stateB = ref bodies.Slot(data.BodyB);
+
+            bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+            bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+            float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+            float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+            float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+            float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+            Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
+            if (axis.LengthSquared() > 1e-12f)
+            {
+                axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
+            }
+
+            Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+            Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
             Vec2 applied = axis * impulse;
 
             if (awakeA)
@@ -3015,195 +4376,239 @@ public static class JointSolver
             return;
         }
 
-        float revoluteInvIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float revoluteInvIB = awakeB ? stateB.InverseInertia : 0.0f;
+        ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+        ref BodyState revoluteA = ref bodies.Slot(revolute.BodyA);
+        ref BodyState revoluteB = ref bodies.Slot(revolute.BodyB);
+        bool revoluteAwakeA = (revoluteA.Flags & BodyFlags.Awake) != 0;
+        bool revoluteAwakeB = (revoluteB.Flags & BodyFlags.Awake) != 0;
+        float revoluteInvIA = revoluteAwakeA ? revoluteA.InverseInertia : 0.0f;
+        float revoluteInvIB = revoluteAwakeB ? revoluteB.InverseInertia : 0.0f;
 
-        if (awakeA)
+        if (revoluteAwakeA)
         {
-            stateA.AngularVelocity -= revoluteInvIA * impulse;
+            revoluteA.AngularVelocity -= revoluteInvIA * impulse;
         }
 
-        if (awakeB)
+        if (revoluteAwakeB)
         {
-            stateB.AngularVelocity += revoluteInvIB * impulse;
+            revoluteB.AngularVelocity += revoluteInvIB * impulse;
         }
     }
 
     /// <summary>Applies a generalized position correction to a geared coordinate.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void GearApplyPosition(BodyStore bodies, in JointRecord geared, float correction)
+    internal void ApplyGearedPosition(BodyStore bodies, JointId id, float correction)
     {
-        ref BodyState stateA = ref bodies.Slot(geared.BodyA);
-        ref BodyState stateB = ref bodies.Slot(geared.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
+        if (id.Kind == JointKind.Prismatic)
         {
-            return;
-        }
+            ref readonly PrismaticJointData data = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            ref BodyState stateA = ref bodies.Slot(data.BodyA);
+            ref BodyState stateB = ref bodies.Slot(data.BodyB);
 
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+            bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+            bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+            if (!awakeA && !awakeB)
+            {
+                return;
+            }
 
-        if (geared.Kind == JointKind.Prismatic)
-        {
-            Vec2 axis = Rotate(stateA, geared.LocalAxisA);
+            float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+            float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+            float invIA = awakeA ? stateA.InverseInertia : 0.0f;
+            float invIB = awakeB ? stateB.InverseInertia : 0.0f;
+
+            Vec2 axis = MathPhysics.Rotate(stateA, data.LocalAxisA);
             if (axis.LengthSquared() > 1e-12f)
             {
                 axis *= 1.0f / MathF.Sqrt(axis.LengthSquared());
             }
 
-            Vec2 rA = Rotate(stateA, geared.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-            Vec2 rB = Rotate(stateB, geared.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-            ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, axis * correction,
+            Vec2 rA = MathPhysics.Rotate(stateA, data.LocalAnchorA) - MathPhysics.Rotate(stateA, stateA.LocalCenter);
+            Vec2 rB = MathPhysics.Rotate(stateB, data.LocalAnchorB) - MathPhysics.Rotate(stateB, stateB.LocalCenter);
+            MathPhysics.ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, axis * correction,
                 invMassA, invMassB, invIA, invIB, awakeA, awakeB);
             return;
         }
 
-        float axialMass = invIA + invIB;
+        ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+        ref BodyState revoluteA = ref bodies.Slot(revolute.BodyA);
+        ref BodyState revoluteB = ref bodies.Slot(revolute.BodyB);
+
+        bool revoluteAwakeA = (revoluteA.Flags & BodyFlags.Awake) != 0;
+        bool revoluteAwakeB = (revoluteB.Flags & BodyFlags.Awake) != 0;
+        if (!revoluteAwakeA && !revoluteAwakeB)
+        {
+            return;
+        }
+
+        float revoluteInvIA = revoluteAwakeA ? revoluteA.InverseInertia : 0.0f;
+        float revoluteInvIB = revoluteAwakeB ? revoluteB.InverseInertia : 0.0f;
+        float axialMass = revoluteInvIA + revoluteInvIB;
         if (axialMass <= 0.0f)
         {
             return;
         }
 
-        if (awakeA)
+        if (revoluteAwakeA)
         {
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * correction);
-            stateA.Cos = MathF.Cos(angleA);
-            stateA.Sin = MathF.Sin(angleA);
+            float angleA = MathF.Atan2(revoluteA.Sin, revoluteA.Cos) - (revoluteInvIA * correction);
+            revoluteA.Cos = MathF.Cos(angleA);
+            revoluteA.Sin = MathF.Sin(angleA);
         }
 
-        if (awakeB)
+        if (revoluteAwakeB)
         {
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * correction);
-            stateB.Cos = MathF.Cos(angleB);
-            stateB.Sin = MathF.Sin(angleB);
+            float angleB = MathF.Atan2(revoluteB.Sin, revoluteB.Cos) + (revoluteInvIB * correction);
+            revoluteB.Cos = MathF.Cos(angleB);
+            revoluteB.Sin = MathF.Sin(angleB);
         }
     }
 
-    /// <summary>Shared 2x2 pin velocity block used by weld joints.</summary>
+    /// <summary>Wakes every body coupled by a geared joint reference.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void WakeGearedBodies(BodyStore bodies, JointId id)
+    {
+        if (id.Kind == JointKind.Prismatic)
+        {
+            ref readonly PrismaticJointData prismatic = ref _prismatic.GetBySparseIndex(id.SlotIndex);
+            bodies.SetAwake(prismatic.BodyA, true);
+            bodies.SetAwake(prismatic.BodyB, true);
+        }
+        else if (id.Kind == JointKind.Revolute)
+        {
+            ref readonly RevoluteJointData revolute = ref _revolute.GetBySparseIndex(id.SlotIndex);
+            bodies.SetAwake(revolute.BodyA, true);
+            bodies.SetAwake(revolute.BodyB, true);
+        }
+    }
+
+    /// <summary>Runs the policy init over every packed table.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePinBlock(
-        BodyStore bodies, ref JointRecord joint,
-        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    internal void InitVelocityPass(BodyStore bodies, float wakeTolerance, float dt)
     {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
-        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
-        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
-
-        float det = (k11 * k22) - (k12 * k12);
-        if (det <= 0.0f)
-        {
-            return;
-        }
-
-        Vec2 vA = stateA.LinearVelocity + (stateA.AngularVelocity * Perp(rA));
-        Vec2 vB = stateB.LinearVelocity + (stateB.AngularVelocity * Perp(rB));
-        Vec2 accumulated = joint.PointImpulse;
-
-        Vec2 residual = (vB - vA) - new Vec2(
-            (k11 * accumulated.X) + (k12 * accumulated.Y),
-            (k12 * accumulated.X) + (k22 * accumulated.Y));
-
-        float invDet = 1.0f / det;
-        Vec2 solved = new(
-            ((k12 * residual.Y) - (k22 * residual.X)) * invDet,
-            ((k12 * residual.X) - (k11 * residual.Y)) * invDet);
-        Vec2 deltaImpulse = solved - accumulated;
-        joint.PointImpulse = solved;
-
-        if (awakeA)
-        {
-            stateA.LinearVelocity -= deltaImpulse * invMassA;
-            stateA.AngularVelocity -= invIA * Vec2.Cross(rA, deltaImpulse);
-        }
-
-        if (awakeB)
-        {
-            stateB.LinearVelocity += deltaImpulse * invMassB;
-            stateB.AngularVelocity += invIB * Vec2.Cross(rB, deltaImpulse);
-        }
+        _distance.InitVelocity(bodies, this, wakeTolerance, dt);
+        _revolute.InitVelocity(bodies, this, wakeTolerance, dt);
+        _weld.InitVelocity(bodies, this, wakeTolerance, dt);
+        _prismatic.InitVelocity(bodies, this, wakeTolerance, dt);
+        _motor.InitVelocity(bodies, this, wakeTolerance, dt);
+        _wheel.InitVelocity(bodies, this, wakeTolerance, dt);
+        _pulley.InitVelocity(bodies, this, wakeTolerance, dt);
+        _gear.InitVelocity(bodies, this, wakeTolerance, dt);
     }
 
-    /// <summary>Shared pin position correction used by weld joints.</summary>
+    /// <summary>Runs one velocity sweep over every packed table.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolvePinCorrection(BodyStore bodies, ref JointRecord joint)
+    internal void SolveVelocitySweep(BodyStore bodies)
     {
-        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
-        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
-
-        bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
-        bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
-        if (!awakeA && !awakeB)
-        {
-            return;
-        }
-
-        float invMassA = awakeA ? stateA.InverseMass : 0.0f;
-        float invMassB = awakeB ? stateB.InverseMass : 0.0f;
-        float invIA = awakeA ? stateA.InverseInertia : 0.0f;
-        float invIB = awakeB ? stateB.InverseInertia : 0.0f;
-
-        Vec2 rA = Rotate(stateA, joint.LocalAnchorA) - Rotate(stateA, stateA.LocalCenter);
-        Vec2 rB = Rotate(stateB, joint.LocalAnchorB) - Rotate(stateB, stateB.LocalCenter);
-
-        float k11 = invMassA + invMassB + (invIA * rA.Y * rA.Y) + (invIB * rB.Y * rB.Y);
-        float k22 = invMassA + invMassB + (invIA * rA.X * rA.X) + (invIB * rB.X * rB.X);
-        float k12 = (invIA * rA.X * rA.Y) - (invIB * rB.X * rB.Y);
-
-        float det = (k11 * k22) - (k12 * k12);
-        if (det <= 0.0f)
-        {
-            return;
-        }
-
-        Vec2 pA = stateA.Position + Rotate(stateA, joint.LocalAnchorA);
-        Vec2 pB = stateB.Position + Rotate(stateB, joint.LocalAnchorB);
-        Vec2 error = pB - pA;
-
-        float invDet = 1.0f / det;
-        Vec2 correction = new(
-            ((k12 * error.Y) - (k22 * error.X)) * invDet,
-            ((k12 * error.X) - (k11 * error.Y)) * invDet);
-
-        ApplyPositionCorrection(ref stateA, ref stateB, rA, rB, correction, invMassA, invMassB, invIA, invIB, awakeA, awakeB);
+        _distance.SolveVelocity(bodies, this);
+        _revolute.SolveVelocity(bodies, this);
+        _weld.SolveVelocity(bodies, this);
+        _prismatic.SolveVelocity(bodies, this);
+        _motor.SolveVelocity(bodies, this);
+        _wheel.SolveVelocity(bodies, this);
+        _pulley.SolveVelocity(bodies, this);
+        _gear.SolveVelocity(bodies, this);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ApplyPositionCorrection(
-        ref BodyState stateA, ref BodyState stateB, Vec2 rA, Vec2 rB, Vec2 correction,
-        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    /// <summary>Runs one position sweep over every packed table.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal void SolvePositionSweep(BodyStore bodies)
     {
-        if (awakeA)
-        {
-            stateA.Position -= correction * invMassA;
-            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, correction));
-            stateA.Cos = MathF.Cos(angleA);
-            stateA.Sin = MathF.Sin(angleA);
-        }
-
-        if (awakeB)
-        {
-            stateB.Position += correction * invMassB;
-            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, correction));
-            stateB.Cos = MathF.Cos(angleB);
-            stateB.Sin = MathF.Sin(angleB);
-        }
+        _distance.SolvePosition(bodies, this);
+        _revolute.SolvePosition(bodies, this);
+        _weld.SolvePosition(bodies, this);
+        _prismatic.SolvePosition(bodies, this);
+        _wheel.SolvePosition(bodies, this);
+        _pulley.SolvePosition(bodies, this);
+        _gear.SolvePosition(bodies, this);
     }
 
+    /// <summary>Visits every live joint across all packed tables.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vec2 Rotate(in BodyState state, Vec2 vector) =>
-        new((state.Cos * vector.X) - (state.Sin * vector.Y), (state.Sin * vector.X) + (state.Cos * vector.Y));
+    public void Accept<TVisitor, TContext>(ref TVisitor visitor, ref TContext context)
+        where TVisitor : struct, IJointVisitor<TContext>
+        where TContext : allows ref struct
+    {
+        AcceptFrom(_distance, JointKind.Distance, ref visitor, ref context);
+        AcceptFrom(_revolute, JointKind.Revolute, ref visitor, ref context);
+        AcceptFrom(_weld, JointKind.Weld, ref visitor, ref context);
+        AcceptFrom(_prismatic, JointKind.Prismatic, ref visitor, ref context);
+        AcceptFrom(_motor, JointKind.Motor, ref visitor, ref context);
+        AcceptFrom(_wheel, JointKind.Wheel, ref visitor, ref context);
+        AcceptFrom(_pulley, JointKind.Pulley, ref visitor, ref context);
+        AcceptFrom(_gear, JointKind.Gear, ref visitor, ref context);
+    }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vec2 Perp(Vec2 vector) => new(-vector.Y, vector.X);
+    private static void AcceptFrom<TPolicy, TData, TVisitor, TContext>(
+        JointStorage<TPolicy, TData> storage, JointKind kind, ref TVisitor visitor, ref TContext context)
+        where TPolicy : struct, IJointPolicy<TPolicy, TData>
+        where TData : struct
+        where TVisitor : struct, IJointVisitor<TContext>
+        where TContext : allows ref struct
+    {
+        ReadOnlySpan<TData> span = storage.DataSpan;
+        for (int i = 0; i < span.Length; i++)
+        {
+            visitor.Visit<TPolicy, TData>(
+                new JointId(kind, storage.SparseOfDense(i)), ref Unsafe.AsRef(in span[i]), ref context);
+        }
+    }
 }
+
+#endregion
+
+#region Zero-Vtable Sequential-Impulse Solver
+
+/// <summary>
+/// Sequential-impulse joint solver: init freezes the effective masses and
+/// warm-starts the stored impulses (waking sleeping dynamics on real relative
+/// motion), then sweeps hold every constraint in velocity and position.
+/// Sleeping endpoints read as infinite mass.
+/// </summary>
+public static class JointSolver
+{
+    /// <summary>
+    /// Per-step init: wakes sleeping dynamics on genuine relative motion and
+    /// applies the stored impulses to velocities. Call once per step before
+    /// the iteration loop.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void InitVelocity(BodyStore bodies, JointStore joints, float wakeTolerance, float dt)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        ArgumentNullException.ThrowIfNull(joints);
+
+        joints.InitVelocityPass(bodies, wakeTolerance, dt);
+    }
+
+    /// <summary>Runs <paramref name="iterations"/> sweeps of velocity impulses.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolveVelocityPass(BodyStore bodies, JointStore joints, int iterations)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        ArgumentNullException.ThrowIfNull(joints);
+
+        for (int i = 0; i < iterations; i++)
+        {
+            joints.SolveVelocitySweep(bodies);
+        }
+    }
+
+    /// <summary>Runs <paramref name="iterations"/> sweeps of position correction.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolvePositionPass(BodyStore bodies, JointStore joints, int iterations)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        ArgumentNullException.ThrowIfNull(joints);
+
+        for (int i = 0; i < iterations; i++)
+        {
+            joints.SolvePositionSweep(bodies);
+        }
+    }
+}
+
+#endregion

@@ -88,11 +88,11 @@ public sealed class JointAdvancedTests : IDisposable
         Action sameBody = () => _world.Joints.CreateMotor(_world.Bodies, new MotorDef { BodyA = a, BodyB = a });
         sameBody.Should().Throw<InvalidOperationException>();
 
-        Action badFactor = () => _world.Joints.CreateMotor(_world.Bodies, new MotorDef { BodyA = a, BodyB = b, CorrectionFactor = 0f });
-        badFactor.Should().Throw<InvalidOperationException>();
+        Action badFactor = () => _ = new MotorDef { BodyA = a, BodyB = b, CorrectionFactor = 0f };
+        badFactor.Should().Throw<ArgumentOutOfRangeException>();
 
-        Action badForce = () => _world.Joints.CreateMotor(_world.Bodies, new MotorDef { BodyA = a, BodyB = b, MaxForce = -1f });
-        badForce.Should().Throw<InvalidOperationException>();
+        Action badForce = () => _ = new MotorDef { BodyA = a, BodyB = b, MaxForce = -1f };
+        badForce.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
@@ -167,15 +167,15 @@ public sealed class JointAdvancedTests : IDisposable
         });
         badAxis.Should().Throw<InvalidOperationException>();
 
-        Action badFrequency = () => _world.Joints.CreateWheel(_world.Bodies, new WheelDef
+        Action badFrequency = () => _ = new WheelDef
         {
             BodyA = a,
             BodyB = b,
             WorldAnchor = new Vec2(0, 0),
             WorldAxis = new Vec2(0, 1),
             SuspensionFrequency = 0f,
-        });
-        badFrequency.Should().Throw<InvalidOperationException>();
+        };
+        badFrequency.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public sealed class JointAdvancedTests : IDisposable
         BodyId a = AddBall(new Vec2(0, 2));
         BodyId b = AddBall(new Vec2(4, 2));
 
-        Action badRatio = () => _world.Joints.CreatePulley(_world.Bodies, new PulleyDef
+        Action badRatio = () => _ = new PulleyDef
         {
             BodyA = a,
             BodyB = b,
@@ -258,8 +258,8 @@ public sealed class JointAdvancedTests : IDisposable
             WorldAnchorA = new Vec2(0, 2),
             WorldAnchorB = new Vec2(4, 2),
             Ratio = 0f,
-        });
-        badRatio.Should().Throw<InvalidOperationException>();
+        };
+        badRatio.Should().Throw<ArgumentOutOfRangeException>();
 
         Action slack = () => _world.Joints.CreatePulley(_world.Bodies, new PulleyDef
         {
@@ -410,7 +410,7 @@ public sealed class JointAdvancedTests : IDisposable
         Action gearOfGear = () => _world.Joints.CreateGear(_world.Bodies, new GearDef { JointA = hinge, JointB = gear, Ratio = 1.0f });
         gearOfGear.Should().Throw<InvalidOperationException>();
 
-        Action badRatio = () => _world.Joints.CreateGear(_world.Bodies, new GearDef { JointA = hinge, JointB = hinge2, Ratio = 0f });
-        badRatio.Should().Throw<InvalidOperationException>();
+        Action badRatio = () => _ = new GearDef { JointA = hinge, JointB = hinge2, Ratio = 0f };
+        badRatio.Should().Throw<ArgumentOutOfRangeException>();
     }
 }
