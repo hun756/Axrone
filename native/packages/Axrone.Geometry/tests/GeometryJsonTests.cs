@@ -29,7 +29,7 @@ public class GeometryJsonTests
     [Fact]
     public void SpatialItemId_RoundTrips()
     {
-        var id = new SpatialItemId(42);
+        var id = SpatialItemId.FromRaw(42);
         string json = JsonSerializer.Serialize(id, AabbJsonContext.Default.SpatialItemId);
         JsonSerializer.Deserialize(json, AabbJsonContext.Default.SpatialItemId).Should().Be(id);
     }
@@ -37,7 +37,7 @@ public class GeometryJsonTests
     [Fact]
     public void RayHit_RoundTrips()
     {
-        var hit = new RayHit(new SpatialItemId(7), 1.5f);
+        var hit = new RayHit(SpatialItemId.FromRaw(7), 1.5f);
         string json = JsonSerializer.Serialize(hit, AabbJsonContext.Default.RayHit);
         JsonSerializer.Deserialize(json, AabbJsonContext.Default.RayHit).Should().Be(hit);
     }

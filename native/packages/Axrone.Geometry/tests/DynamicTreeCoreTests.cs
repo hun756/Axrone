@@ -127,7 +127,7 @@ public class DynamicTreeCoreTests
     {
         var tree = CreateTree();
 
-        var act = () => tree.Remove(new SpatialItemId(9999));
+        var act = () => tree.Remove(SpatialItemId.FromRaw(9999));
 
         act.Should().Throw<InvalidOperationException>();
     }

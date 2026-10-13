@@ -168,7 +168,7 @@ public class SpatialPartitioningTests
         using var tree = CreateTree();
 
         tree.UpdateEx(SpatialHandle.Invalid, Box(0, 0, 0, 1, 1, 1)).Outcome.Should().Be(TreeUpdateOutcome.HandleNotFound);
-        tree.UpdateEx(SpatialHandle.Create(new NodeIndex(5000), new NodeGeneration(1)), Box(0, 0, 0, 1, 1, 1)).Outcome
+        tree.UpdateEx(SpatialHandle.Create(NodeIndex.FromRaw(5000), new NodeGeneration(1)), Box(0, 0, 0, 1, 1, 1)).Outcome
             .Should().Be(TreeUpdateOutcome.HandleNotFound);
     }
 
@@ -362,7 +362,7 @@ public class SpatialPartitioningTests
 
         Action insert = () => tree.Insert(Box(0, 0, 0, 1, 1, 1), "a");
         insert.Should().Throw<ObjectDisposedException>();
-        tree.UpdateEx(SpatialHandle.Create(new NodeIndex(0), new NodeGeneration(1)), Box(0, 0, 0, 1, 1, 1)).Outcome
+        tree.UpdateEx(SpatialHandle.Create(NodeIndex.FromRaw(0), new NodeGeneration(1)), Box(0, 0, 0, 1, 1, 1)).Outcome
             .Should().Be(TreeUpdateOutcome.Disposed);
     }
 
@@ -388,10 +388,10 @@ public class SpatialPartitioningTests
     [Fact]
     public void Nominals_RoundTrip()
     {
-        SpatialHandle handle = SpatialHandle.Create(new NodeIndex(7), new NodeGeneration(3));
+        SpatialHandle handle = SpatialHandle.Create(NodeIndex.FromRaw(7), new NodeGeneration(3));
 
         handle.IsValid.Should().BeTrue();
-        handle.Index.Value.Should().Be(7);
+        handle.Index.RawValue.Should().Be(7);
         handle.Generation.Value.Should().Be(3);
         SpatialHandle.Invalid.IsValid.Should().BeFalse();
 

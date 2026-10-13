@@ -277,7 +277,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
 
                 BeginMutation();
 
-                NodeIndex currentIdx = new(0);
+                NodeIndex currentIdx = NodeIndex.FromIndex(0);
                 while (true)
                 {
                     ref QuadNode currNode = ref GetNodeRef(currentIdx);
@@ -342,7 +342,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
 
                 BeginMutation();
 
-                NodeIndex currentIdx = new(0);
+                NodeIndex currentIdx = NodeIndex.FromIndex(0);
                 while (true)
                 {
                     ref QuadNode currNode = ref GetNodeRef(currentIdx);
@@ -522,13 +522,13 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref readonly QuadNode GetNode(NodeIndex index) => ref _nodes[index.Value];
+    internal ref readonly QuadNode GetNode(NodeIndex index) => ref _nodes[index.RawValue];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref readonly QuadElementEntry<T> GetElement(ElementIndex index) => ref _elements[index.Value];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private ref QuadNode GetNodeRef(NodeIndex index) => ref _nodes[index.Value];
+    private ref QuadNode GetNodeRef(NodeIndex index) => ref _nodes[index.RawValue];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private ref QuadElementEntry<T> GetElementRef(ElementIndex index) => ref _elements[index.Value];
@@ -543,7 +543,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static NodeIndex ChildAt(NodeIndex childBase, Quadrant quadrant) =>
-        new(childBase.Value + (int)quadrant);
+        NodeIndex.FromRaw(childBase.RawValue + (int)quadrant);
 
     private void SplitNode(NodeIndex nodeIdx)
     {
@@ -557,7 +557,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
         Vec2 max = bounds.Max;
         Vec2 center = bounds.Center;
 
-        GetNodeRef(new NodeIndex(childBase.Value + 0)) = new QuadNode
+        GetNodeRef(NodeIndex.FromRaw(childBase.RawValue + 0)) = new QuadNode
         {
             Bounds = new Aabb2D(min.X, center.Y, center.X, max.Y),
             Depth = nextDepth,
@@ -568,7 +568,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
             NextFreeNode = NodeIndex.Null,
         };
 
-        GetNodeRef(new NodeIndex(childBase.Value + 1)) = new QuadNode
+        GetNodeRef(NodeIndex.FromRaw(childBase.RawValue + 1)) = new QuadNode
         {
             Bounds = new Aabb2D(center.X, center.Y, max.X, max.Y),
             Depth = nextDepth,
@@ -579,7 +579,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
             NextFreeNode = NodeIndex.Null,
         };
 
-        GetNodeRef(new NodeIndex(childBase.Value + 2)) = new QuadNode
+        GetNodeRef(NodeIndex.FromRaw(childBase.RawValue + 2)) = new QuadNode
         {
             Bounds = new Aabb2D(min.X, min.Y, center.X, center.Y),
             Depth = nextDepth,
@@ -590,7 +590,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
             NextFreeNode = NodeIndex.Null,
         };
 
-        GetNodeRef(new NodeIndex(childBase.Value + 3)) = new QuadNode
+        GetNodeRef(NodeIndex.FromRaw(childBase.RawValue + 3)) = new QuadNode
         {
             Bounds = new Aabb2D(center.X, min.Y, max.X, center.Y),
             Depth = nextDepth,
@@ -678,7 +678,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics> : IQuadIndex<T>
             Volatile.Write(ref _nodes, newArr);
         }
 
-        NodeIndex baseIdx = new((int)_nodeCount);
+        NodeIndex baseIdx = NodeIndex.FromIndex((int)_nodeCount);
         _nodeCount += 4;
         return baseIdx;
     }

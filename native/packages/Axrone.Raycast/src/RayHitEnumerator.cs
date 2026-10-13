@@ -87,7 +87,7 @@ public unsafe ref struct RayHitEnumerator<TPrimitive>
 
             if (nodePtr->IsLeaf)
             {
-                _currentLeafStart = nodePtr->ChildOrIndex.Value;
+                _currentLeafStart = nodePtr->ChildOrIndex.RawValue;
                 _currentLeafCount = nodePtr->PrimitiveCount;
                 _currentLeafOffset = 0;
 
@@ -108,7 +108,7 @@ public unsafe ref struct RayHitEnumerator<TPrimitive>
             }
             else
             {
-                int leftChild = nodePtr->ChildOrIndex.Value;
+                int leftChild = nodePtr->ChildOrIndex.RawValue;
                 int rightChild = leftChild + 1;
 
                 LinearBvhNode* leftPtr = _nodes + leftChild;

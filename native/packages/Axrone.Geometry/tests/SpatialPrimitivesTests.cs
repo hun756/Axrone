@@ -8,7 +8,7 @@ public class SpatialItemIdTests
     [Fact]
     public void Invalid_Sentinel_HasZeroValue_AndIsNotValid()
     {
-        SpatialItemId.Invalid.Value.Should().Be(0U);
+        SpatialItemId.Invalid.RawValue.Should().Be(0U);
         SpatialItemId.Invalid.IsValid.Should().BeFalse();
         default(SpatialItemId).Should().Be(SpatialItemId.Invalid);
     }
@@ -16,16 +16,16 @@ public class SpatialItemIdTests
     [Fact]
     public void NonZeroValue_IsValid()
     {
-        new SpatialItemId(1U).IsValid.Should().BeTrue();
-        new SpatialItemId(uint.MaxValue).IsValid.Should().BeTrue();
+        SpatialItemId.FromRaw(1U).IsValid.Should().BeTrue();
+        SpatialItemId.FromRaw(uint.MaxValue).IsValid.Should().BeTrue();
     }
 
     [Fact]
     public void ComparisonOperators_FollowNumericOrder()
     {
-        var low = new SpatialItemId(3U);
-        var high = new SpatialItemId(9U);
-        var sameAsLow = new SpatialItemId(3U);
+        var low = SpatialItemId.FromRaw(3U);
+        var high = SpatialItemId.FromRaw(9U);
+        var sameAsLow = SpatialItemId.FromRaw(3U);
 
         (low < high).Should().BeTrue();
         (high > low).Should().BeTrue();
@@ -38,8 +38,8 @@ public class SpatialItemIdTests
     [Fact]
     public void CompareTo_OrdersByValue()
     {
-        var low = new SpatialItemId(2U);
-        var high = new SpatialItemId(5U);
+        var low = SpatialItemId.FromRaw(2U);
+        var high = SpatialItemId.FromRaw(5U);
 
         low.CompareTo(high).Should().BeNegative();
         high.CompareTo(low).Should().BePositive();
@@ -47,11 +47,11 @@ public class SpatialItemIdTests
     }
 
     [Fact]
-    public void ImplicitAndExplicitCasts_RoundTrip()
+    public void ExplicitCast_RoundTrips()
     {
-        SpatialItemId id = new(42U);
+        SpatialItemId id = SpatialItemId.FromRaw(42U);
 
-        uint raw = id;
+        uint raw = id.RawValue;
         raw.Should().Be(42U);
 
         ((SpatialItemId)raw).Should().Be(id);
@@ -60,16 +60,16 @@ public class SpatialItemIdTests
     [Fact]
     public void Equality_IsValueBased()
     {
-        new SpatialItemId(7U).Should().Be(new SpatialItemId(7U));
-        (new SpatialItemId(7U) == new SpatialItemId(7U)).Should().BeTrue();
-        (new SpatialItemId(7U) != new SpatialItemId(8U)).Should().BeTrue();
-        new SpatialItemId(7U).GetHashCode().Should().Be(new SpatialItemId(7U).GetHashCode());
+        SpatialItemId.FromRaw(7U).Should().Be(SpatialItemId.FromRaw(7U));
+        (SpatialItemId.FromRaw(7U) == SpatialItemId.FromRaw(7U)).Should().BeTrue();
+        (SpatialItemId.FromRaw(7U) != SpatialItemId.FromRaw(8U)).Should().BeTrue();
+        SpatialItemId.FromRaw(7U).GetHashCode().Should().Be(SpatialItemId.FromRaw(7U).GetHashCode());
     }
 
     [Fact]
     public void ToString_UsesNamedForm()
     {
-        new SpatialItemId(42U).ToString().Should().Be("Item(42)");
+        SpatialItemId.FromRaw(42U).ToString().Should().Be("Item(42)");
         SpatialItemId.Invalid.ToString().Should().Be("Item(Invalid)");
     }
 }
@@ -79,7 +79,7 @@ public class NodeIndexTests
     [Fact]
     public void Null_Sentinel_IsNegative_AndNotValid()
     {
-        NodeIndex.Null.Value.Should().Be(-1);
+        NodeIndex.Null.RawValue.Should().Be(-1);
         NodeIndex.Null.IsNull.Should().BeTrue();
         NodeIndex.Null.IsValid.Should().BeFalse();
     }
@@ -87,17 +87,17 @@ public class NodeIndexTests
     [Fact]
     public void NonNegativeValue_IsValid_AndNotNull()
     {
-        new NodeIndex(0).IsValid.Should().BeTrue();
-        new NodeIndex(0).IsNull.Should().BeFalse();
-        new NodeIndex(1234).IsValid.Should().BeTrue();
+        NodeIndex.FromRaw(0).IsValid.Should().BeTrue();
+        NodeIndex.FromRaw(0).IsNull.Should().BeFalse();
+        NodeIndex.FromRaw(1234).IsValid.Should().BeTrue();
     }
 
     [Fact]
     public void ComparisonOperators_FollowNumericOrder()
     {
-        var low = new NodeIndex(2);
-        var high = new NodeIndex(8);
-        var sameAsLow = new NodeIndex(2);
+        var low = NodeIndex.FromRaw(2);
+        var high = NodeIndex.FromRaw(8);
+        var sameAsLow = NodeIndex.FromRaw(2);
 
         (low < high).Should().BeTrue();
         (high > low).Should().BeTrue();
@@ -110,8 +110,8 @@ public class NodeIndexTests
     [Fact]
     public void CompareTo_OrdersByValue()
     {
-        var low = new NodeIndex(1);
-        var high = new NodeIndex(4);
+        var low = NodeIndex.FromRaw(1);
+        var high = NodeIndex.FromRaw(4);
 
         low.CompareTo(high).Should().BeNegative();
         high.CompareTo(low).Should().BePositive();
@@ -119,11 +119,11 @@ public class NodeIndexTests
     }
 
     [Fact]
-    public void ImplicitAndExplicitCasts_RoundTrip()
+    public void ExplicitCast_RoundTrips()
     {
-        NodeIndex index = new(11);
+        NodeIndex index = NodeIndex.FromRaw(11);
 
-        int raw = index;
+        int raw = index.RawValue;
         raw.Should().Be(11);
 
         ((NodeIndex)raw).Should().Be(index);
@@ -132,16 +132,16 @@ public class NodeIndexTests
     [Fact]
     public void Equality_IsValueBased()
     {
-        new NodeIndex(5).Should().Be(new NodeIndex(5));
-        (new NodeIndex(5) == new NodeIndex(5)).Should().BeTrue();
-        (new NodeIndex(5) != new NodeIndex(6)).Should().BeTrue();
-        new NodeIndex(5).GetHashCode().Should().Be(new NodeIndex(5).GetHashCode());
+        NodeIndex.FromRaw(5).Should().Be(NodeIndex.FromRaw(5));
+        (NodeIndex.FromRaw(5) == NodeIndex.FromRaw(5)).Should().BeTrue();
+        (NodeIndex.FromRaw(5) != NodeIndex.FromRaw(6)).Should().BeTrue();
+        NodeIndex.FromRaw(5).GetHashCode().Should().Be(NodeIndex.FromRaw(5).GetHashCode());
     }
 
     [Fact]
     public void ToString_UsesNamedForm()
     {
-        new NodeIndex(17).ToString().Should().Be("Node(17)");
+        NodeIndex.FromRaw(17).ToString().Should().Be("Node(17)");
         NodeIndex.Null.ToString().Should().Be("Node(Null)");
     }
 }

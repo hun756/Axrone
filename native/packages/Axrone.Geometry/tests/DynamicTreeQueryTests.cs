@@ -51,8 +51,8 @@ public class DynamicTreeQueryTests
     {
         public bool OnPair(SpatialItemId idA, string dataA, SpatialItemId idB, string dataB, ref List<(uint, uint)> context)
         {
-            uint a = idA.Value;
-            uint b = idB.Value;
+            uint a = idA.RawValue;
+            uint b = idB.RawValue;
             context.Add(a < b ? (a, b) : (b, a));
             return true;
         }
@@ -196,8 +196,8 @@ public class DynamicTreeQueryTests
         tree.FindPairs(ref visitor, ref pairs);
 
         pairs.Should().HaveCount(1);
-        uint x = a.Value;
-        uint y = c.Value;
+        uint x = a.RawValue;
+        uint y = c.RawValue;
         pairs[0].Should().Be(x < y ? (x, y) : (y, x));
     }
 

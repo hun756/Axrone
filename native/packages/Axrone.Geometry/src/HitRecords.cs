@@ -21,7 +21,7 @@ public readonly record struct RayHit(SpatialItemId ItemId, float Distance) : ICo
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"Hit(Id={ItemId.Value}, Distance={Distance:F4})");
+        string.Create(CultureInfo.InvariantCulture, $"Hit(Id={ItemId.RawValue}, Distance={Distance:F4})");
 }
 
 /// <summary>
@@ -202,5 +202,5 @@ public readonly struct KnnResult<TUserData> : IComparable<KnnResult<TUserData>>
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"Knn(Id={_itemId.Value}, DistSq={_distanceSq.Value:F4})");
+        string.Create(CultureInfo.InvariantCulture, $"Knn(Id={_itemId.RawValue}, DistSq={_distanceSq.Value:F4})");
 }

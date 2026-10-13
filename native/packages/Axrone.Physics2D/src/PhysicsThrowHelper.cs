@@ -29,7 +29,7 @@ internal static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static void ThrowItemNotFound(SpatialItemId id)
     {
-        throw new InvalidOperationException($"Spatial entity with ID {id.Value} is unallocated or has been removed.");
+        throw new InvalidOperationException($"Spatial entity with ID {id.RawValue} is unallocated or has been removed.");
     }
 
     /// <summary>

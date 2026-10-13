@@ -288,7 +288,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
                 item.NextItemIndex = SlotIndex.Invalid;
                 Generation generation = item.Generation;
 
-                NodeIndex targetNode = NavigateTargetNode(new NodeIndex(0), in bounds);
+                NodeIndex targetNode = NavigateTargetNode(NodeIndex.FromIndex(0), in bounds);
                 LinkItem(itemSlot, targetNode);
 
                 uint active = ++_activeItemCount;
@@ -393,7 +393,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
                 }
 
                 NodeIndex currentNodeIndex = item.HomeNode;
-                ref OctreeNode currentNode = ref _nodes[currentNodeIndex.Value];
+                ref OctreeNode currentNode = ref _nodes[currentNodeIndex.RawValue];
 
                 if (currentNode.Bounds.Contains(in newBounds))
                 {
@@ -411,7 +411,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
                 item.Bounds = newBounds;
                 item.Value = newValue;
 
-                NodeIndex targetNode = NavigateTargetNode(new NodeIndex(0), in newBounds);
+                NodeIndex targetNode = NavigateTargetNode(NodeIndex.FromIndex(0), in newBounds);
                 LinkItem(handle.Slot, targetNode);
                 return true;
             }
@@ -623,14 +623,14 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
 
         while (true)
         {
-            ref OctreeNode node = ref _nodes[current.Value];
+            ref OctreeNode node = ref _nodes[current.RawValue];
 
             if (node.ChildBaseIndex.IsValid)
             {
                 int octant = ClassifyOctant(node.Center, in bounds);
                 if (octant != -1)
                 {
-                    current = new NodeIndex(node.ChildBaseIndex.Value + octant);
+                    current = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
                     continue;
                 }
 
@@ -650,13 +650,13 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     private unsafe void SplitNode(NodeIndex nodeIndex)
     {
         NodeIndex childBase = RentNodeBlock();
-        ref OctreeNode parent = ref _nodes[nodeIndex.Value];
+        ref OctreeNode parent = ref _nodes[nodeIndex.RawValue];
         Vec3 center = parent.Center;
         TreeDepth childDepth = parent.Depth.Increment();
 
         for (int i = 0; i < 8; i++)
         {
-            ref OctreeNode child = ref _nodes[childBase.Value + i];
+            ref OctreeNode child = ref _nodes[childBase.RawValue + i];
             child.Bounds = CalculateChildBounds(in parent.Bounds, center, i);
             child.Center = child.Bounds.Center;
             child.ChildBaseIndex = NodeIndex.Null;
@@ -683,7 +683,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
 
             if (octant != -1)
             {
-                LinkItem(currentItem, new NodeIndex(childBase.Value + octant));
+                LinkItem(currentItem, NodeIndex.FromIndex(childBase.RawValue + octant));
             }
             else
             {
@@ -700,7 +700,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private unsafe void LinkItem(SlotIndex itemSlot, NodeIndex nodeIndex)
     {
-        ref OctreeNode node = ref _nodes[nodeIndex.Value];
+        ref OctreeNode node = ref _nodes[nodeIndex.RawValue];
         ref OctreeItem<T> item = ref _items[itemSlot.Value];
 
         item.NextItemIndex = node.FirstItemIndex;
@@ -712,7 +712,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private unsafe void UnlinkItem(SlotIndex itemSlot, NodeIndex nodeIndex)
     {
-        ref OctreeNode node = ref _nodes[nodeIndex.Value];
+        ref OctreeNode node = ref _nodes[nodeIndex.RawValue];
         SlotIndex current = node.FirstItemIndex;
         SlotIndex previous = SlotIndex.Invalid;
 
@@ -748,7 +748,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
 
         while (current.IsValid)
         {
-            ref OctreeNode node = ref _nodes[current.Value];
+            ref OctreeNode node = ref _nodes[current.RawValue];
             if (!node.ChildBaseIndex.IsValid)
             {
                 current = node.ParentIndex;
@@ -783,7 +783,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         uint total = 0;
         for (int i = 0; i < 8; i++)
         {
-            ref OctreeNode child = ref _nodes[childBase.Value + i];
+            ref OctreeNode child = ref _nodes[childBase.RawValue + i];
             total += child.ItemCount;
             if (total > ushort.MaxValue)
             {
@@ -808,7 +808,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     {
         for (int i = 0; i < 8; i++)
         {
-            ref OctreeNode child = ref _nodes[childBase.Value + i];
+            ref OctreeNode child = ref _nodes[childBase.RawValue + i];
             if (child.ChildBaseIndex.IsValid)
             {
                 CollapseSubtree(child.ChildBaseIndex);
@@ -826,7 +826,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
         if (_freeNodeBlockHead.IsValid)
         {
             NodeIndex reused = _freeNodeBlockHead;
-            _freeNodeBlockHead = _nodes[reused.Value].ChildBaseIndex;
+            _freeNodeBlockHead = _nodes[reused.RawValue].ChildBaseIndex;
             return reused;
         }
 
@@ -835,7 +835,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
             GrowNodeMemory();
         }
 
-        NodeIndex allocated = new((int)_nodeCount);
+        NodeIndex allocated = NodeIndex.FromIndex((int)_nodeCount);
         _nodeCount += 8;
         return allocated;
     }
@@ -843,7 +843,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics> : IOctreeIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private unsafe void ReturnNodeBlock(NodeIndex childBase)
     {
-        _nodes[childBase.Value].ChildBaseIndex = _freeNodeBlockHead;
+        _nodes[childBase.RawValue].ChildBaseIndex = _freeNodeBlockHead;
         _freeNodeBlockHead = childBase;
     }
 

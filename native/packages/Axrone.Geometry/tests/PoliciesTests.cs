@@ -78,7 +78,7 @@ public class SpatialVisitorContractTests
         where TVisitor : struct, ISpatialVisitor<TUserData, TContext>
         where TContext : allows ref struct
     {
-        return visitor.OnOverlap(new(7U), userData, in box, ref context);
+        return visitor.OnOverlap(SpatialItemId.FromRaw(7U), userData, in box, ref context);
     }
 }
 

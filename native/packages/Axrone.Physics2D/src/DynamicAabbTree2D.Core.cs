@@ -127,7 +127,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
     /// <summary>Returns a reference to the node stored at <paramref name="index"/>.</summary>
     /// <param name="index">The slot to address.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref Node2D GetNodeRef(NodeIndex index) => ref _nodes[(uint)index.Value];
+    internal ref Node2D GetNodeRef(NodeIndex index) => ref _nodes[(uint)index.RawValue];
 
     /// <summary>
     /// Adds an item and returns its identity. The world bounds are grown by the
@@ -152,14 +152,14 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
 
             ref Node2D node = ref GetNodeRef(nodeIndex);
             node.Box = fatBox;
-            node.ItemId = new SpatialItemId((uint)itemSlot + 1U);
+            node.ItemId = SpatialItemId.FromIndex(itemSlot);
             node.Height = 0;
             node.ParentIndex = NodeIndex.Null;
             node.LeftChild = NodeIndex.Null;
             node.RightChild = NodeIndex.Null;
 
             _userData[itemSlot] = userData;
-            _itemToNode[itemSlot] = nodeIndex;
+            _itemToNode[itemSlot] = nodeIndex.RawValue;
 
             InsertLeaf(nodeIndex);
 
@@ -189,7 +189,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
         try
         {
             ValidateItem(itemId);
-            int itemSlot = (int)itemId.Value - 1;
+            int itemSlot = itemId.ToIndex();
             NodeIndex nodeIndex = (NodeIndex)_itemToNode[itemSlot];
             ref Node2D node = ref GetNodeRef(nodeIndex);
 
@@ -248,7 +248,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
         try
         {
             ValidateItem(itemId);
-            int itemSlot = (int)itemId.Value - 1;
+            int itemSlot = itemId.ToIndex();
             NodeIndex nodeIndex = (NodeIndex)_itemToNode[itemSlot];
             ref Node2D node = ref GetNodeRef(nodeIndex);
 
@@ -280,7 +280,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
         try
         {
             ValidateItem(itemId);
-            int itemSlot = (int)itemId.Value - 1;
+            int itemSlot = itemId.ToIndex();
             NodeIndex nodeIndex = (NodeIndex)_itemToNode[itemSlot];
 
             RemoveLeaf(nodeIndex);
@@ -310,7 +310,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
     public Aabb2D GetFatAabb(SpatialItemId itemId)
     {
         ValidateItem(itemId);
-        return GetNodeRef((NodeIndex)_itemToNode[(int)itemId.Value - 1]).Box;
+        return GetNodeRef((NodeIndex)_itemToNode[itemId.ToIndex()]).Box;
     }
 
     /// <summary>
@@ -485,12 +485,12 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ValidateItem(SpatialItemId itemId)
     {
-        if (itemId.Value == 0)
+        if (!itemId.IsValid)
         {
             throw new InvalidOperationException("The item identity is invalid.");
         }
 
-        int itemSlot = (int)itemId.Value - 1;
+        int itemSlot = itemId.ToIndex();
         if (itemSlot >= _itemToNode.Length || _itemToNode[itemSlot] < 0)
         {
             ThrowHelper.ThrowItemNotFound(itemId);
@@ -504,7 +504,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
     /// </summary>
     /// <param name="itemId">A validated identity.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ref TUserData? PayloadOf(SpatialItemId itemId) => ref _userData[(int)itemId.Value - 1];
+    private ref TUserData? PayloadOf(SpatialItemId itemId) => ref _userData[itemId.ToIndex()];
 
     /// <summary>
     /// Links a leaf into the tree: it descends from the root by the strategy's
@@ -813,10 +813,10 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
     {
         for (int i = start; i < end; ++i)
         {
-            _nodes[i].NextFree = i + 1 < end ? new NodeIndex(i + 1) : NodeIndex.Null;
+            _nodes[i].NextFree = i + 1 < end ? NodeIndex.FromIndex(i + 1) : NodeIndex.Null;
         }
 
-        _freeListHead = start < end ? new NodeIndex(start) : NodeIndex.Null;
+        _freeListHead = start < end ? NodeIndex.FromIndex(start) : NodeIndex.Null;
     }
 
     /// <summary>

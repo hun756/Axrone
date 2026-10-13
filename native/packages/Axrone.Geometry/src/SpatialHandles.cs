@@ -73,7 +73,7 @@ public readonly record struct SpatialHandle(uint Raw) : IComparable<SpatialHandl
 
         return new SpatialHandle(
             ((generation.Value & NodeGeneration.Mask) << GenerationShift)
-            | ((uint)(index.Value + 1) & IndexMask));
+            | ((uint)(index.RawValue + 1) & IndexMask));
     }
 
     /// <summary>Whether this handle names a possibly-live item.</summary>
@@ -87,7 +87,7 @@ public readonly record struct SpatialHandle(uint Raw) : IComparable<SpatialHandl
     public NodeIndex Index
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new((int)(Raw & IndexMask) - 1);
+        get => NodeIndex.FromRaw((int)(Raw & IndexMask) - 1);
     }
 
     /// <summary>Allocation epoch observed when this handle was issued.</summary>
@@ -105,7 +105,7 @@ public readonly record struct SpatialHandle(uint Raw) : IComparable<SpatialHandl
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override string ToString() =>
         IsValid
-            ? string.Create(CultureInfo.InvariantCulture, $"Handle({Index.Value}:{Generation.Value})")
+            ? string.Create(CultureInfo.InvariantCulture, $"Handle({Index.RawValue}:{Generation.Value})")
             : "Handle(Invalid)";
 
     /// <summary>Determines whether the left handle sorts before the right one.</summary>
