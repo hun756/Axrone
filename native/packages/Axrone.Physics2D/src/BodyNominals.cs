@@ -19,6 +19,15 @@ public readonly record struct BodyId(uint Value) : IComparable<BodyId>
         get => Value != 0;
     }
 
+    /// <summary>Converts a 1-based identity to its 0-based slot index.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SlotIndex ToSlotIndex() => new((int)Value - 1);
+
+    /// <summary>Wraps a 0-based slot index as a 1-based identity.</summary>
+    /// <param name="slot">The slot index.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BodyId FromSlotIndex(SlotIndex slot) => new((uint)slot.Value + 1u);
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public int CompareTo(BodyId other) => Value.CompareTo(other.Value);

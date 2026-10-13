@@ -222,7 +222,7 @@ public sealed class World : IDisposable
     private readonly ShapeStore _shapes;
     private readonly JointStore _joints;
     private readonly DynamicAabbTree2D<ShapeId, SurfaceAreaHeuristicStrategy2D, NullSpatialMetricsSink> _tree;
-    private readonly IslandSolver _islands = new();
+    private readonly IslandSolver<DefaultSleepPolicy> _islands = new();
     private Contact[] _contacts;
     private Contact[] _previous;
     private int _contactCount;
@@ -316,6 +316,13 @@ public sealed class World : IDisposable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _joints;
+    }
+
+    /// <summary>Island solver diagnostics: completed passes and rested bodies.</summary>
+    public IslandSolverMetrics IslandMetrics
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _islands.Metrics;
     }
 
     /// <summary>Broadphase tree; the world keeps it in sync every step.</summary>
@@ -574,14 +581,43 @@ public sealed class World : IDisposable
             StepSlice(h);
         }
 
-        _islands.UpdateSleep(
-            _bodies,
-            _joints,
-            _contacts.AsSpan(0, _contactCount),
-            dt,
-            TimeToSleep,
-            LinearSleepTolerance,
-            AngularSleepTolerance);
+        BodyStoreAdapter adapter = new(_bodies);
+        SimulationParameters parameters = new(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
+
+        ContactPair[] rentedContacts = _contactCount > 0
+            ? ArrayPool<ContactPair>.Shared.Rent(_contactCount)
+            : [];
+        for (int i = 0; i < _contactCount; i++)
+        {
+            rentedContacts[i] = new ContactPair(_contacts[i].BodyA, _contacts[i].BodyB);
+        }
+
+        int jointBudget = _joints.Count;
+        JointPair[] rentedJoints = jointBudget > 0
+            ? ArrayPool<JointPair>.Shared.Rent(jointBudget)
+            : [];
+        int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
+
+        try
+        {
+            _islands.UpdateSleep(
+                ref adapter,
+                rentedContacts.AsSpan(0, _contactCount),
+                rentedJoints.AsSpan(0, jointPairs),
+                in parameters);
+        }
+        finally
+        {
+            if (rentedContacts.Length > 0)
+            {
+                ArrayPool<ContactPair>.Shared.Return(rentedContacts);
+            }
+
+            if (rentedJoints.Length > 0)
+            {
+                ArrayPool<JointPair>.Shared.Return(rentedJoints);
+            }
+        }
 
         PublishContactEvents();
     }
@@ -833,6 +869,7 @@ public sealed class World : IDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
             _tree.Dispose();
+            _islands.Dispose();
             _contacts = [];
             _previous = [];
             _contactCount = 0;

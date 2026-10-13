@@ -594,6 +594,39 @@ public sealed class JointStore : IJointRegistry
         }
     }
 
+    /// <summary>Copies every live joint as a body pair for island wiring.</summary>
+    /// <param name="destination">The destination span.</param>
+    /// <returns>The number of pairs written.</returns>
+    internal int CopyJointPairs(Span<JointPair> destination)
+    {
+        int count = 0;
+        count += CopyPairsFrom(_distance, destination[count..]);
+        count += CopyPairsFrom(_revolute, destination[count..]);
+        count += CopyPairsFrom(_weld, destination[count..]);
+        count += CopyPairsFrom(_prismatic, destination[count..]);
+        count += CopyPairsFrom(_motor, destination[count..]);
+        count += CopyPairsFrom(_wheel, destination[count..]);
+        count += CopyPairsFrom(_pulley, destination[count..]);
+        count += CopyPairsFrom(_gear, destination[count..]);
+        return count;
+    }
+
+    private static int CopyPairsFrom<TPolicy, TData>(
+        JointStorage<TPolicy, TData> storage, Span<JointPair> destination)
+        where TPolicy : struct, IJointPolicy<TPolicy, TData>
+        where TData : struct
+    {
+        ReadOnlySpan<TData> span = storage.DataSpan;
+        int count = 0;
+        for (int i = 0; i < span.Length && count < destination.Length; i++)
+        {
+            TPolicy.GetBodies(ref Unsafe.AsRef(in span[i]), out BodyId bodyA, out BodyId bodyB);
+            destination[count++] = new JointPair(bodyA, bodyB);
+        }
+
+        return count;
+    }
+
     /// <summary>Collects the identities touching a body, gears resolved through their geared joints.</summary>
     /// <param name="body">The body to match.</param>
     /// <param name="destination">The destination span.</param>
