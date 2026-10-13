@@ -152,7 +152,7 @@ public sealed class ShapeStore
         int slot = InsertRecord(bodies, bodyId, ColliderKind.Circle, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalCircle = local;
         FinishAttach(bodies, tree, slot);
-        return new ShapeId((uint)slot + 1u);
+        return ShapeId.FromIndex(slot);
     }
 
     /// <summary>Attaches a stadium to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
@@ -178,7 +178,7 @@ public sealed class ShapeStore
         int slot = InsertRecord(bodies, bodyId, ColliderKind.Capsule, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalCapsule = local;
         FinishAttach(bodies, tree, slot);
-        return new ShapeId((uint)slot + 1u);
+        return ShapeId.FromIndex(slot);
     }
 
     /// <summary>Attaches a convex polygon to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
@@ -204,7 +204,7 @@ public sealed class ShapeStore
         _shapes[slot].WorldVertices = new Vec2[local.Count];
         _shapes[slot].WorldNormals = new Vec2[local.Count];
         FinishAttach(bodies, tree, slot);
-        return new ShapeId((uint)slot + 1u);
+        return ShapeId.FromIndex(slot);
     }
 
     /// <summary>Attaches a thin static segment to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
@@ -229,7 +229,7 @@ public sealed class ShapeStore
         int slot = InsertRecord(bodies, bodyId, ColliderKind.Edge, density, filter, material, localOffset, localAngle, isSensor);
         _shapes[slot].LocalEdge = local;
         FinishAttach(bodies, tree, slot);
-        return new ShapeId((uint)slot + 1u);
+        return ShapeId.FromIndex(slot);
     }
 
     /// <summary>
@@ -355,8 +355,8 @@ public sealed class ShapeStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsValid(ShapeId id)
     {
-        int slot = (int)id.Value - 1;
-        return id.Value != 0 && slot >= 0 && slot < _capacity && _shapes[slot].Live;
+        int slot = id.ToIndex();
+        return id.IsValid && slot >= 0 && slot < _capacity && _shapes[slot].Live;
     }
 
     /// <summary>Reads the owning body of a shape.</summary>
@@ -476,7 +476,7 @@ public sealed class ShapeStore
     {
         RefreshWorld(bodies, slot);
         ref ShapeRecord shape = ref _shapes[slot];
-        shape.TreeItem = tree.Insert(in shape.WorldAabb, new ShapeId((uint)slot + 1u));
+        shape.TreeItem = tree.Insert(in shape.WorldAabb, ShapeId.FromIndex(slot));
 
         ref BodyState body = ref bodies.Slot(shape.Body);
         shape.NextShape = body.FirstShape;
@@ -743,8 +743,8 @@ public sealed class ShapeStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Validate(ShapeId id)
     {
-        int slot = (int)id.Value - 1;
-        if (id.Value == 0 || slot < 0 || slot >= _capacity || !_shapes[slot].Live)
+        int slot = id.ToIndex();
+        if (!id.IsValid || slot < 0 || slot >= _capacity || !_shapes[slot].Live)
         {
             ThrowHelper.ThrowInvalidOperation("Shape ID is unallocated or has been detached.");
         }

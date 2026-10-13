@@ -91,7 +91,7 @@ public sealed class BodyStore
         body.GravityScale = definition.GravityScale;
 
         _count++;
-        return new BodyId((uint)slot + 1u);
+        return BodyId.FromIndex(slot);
     }
 
     /// <summary>Drops a body; its identity dies with it.</summary>
@@ -107,8 +107,8 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsValid(BodyId id)
     {
-        int slot = (int)id.Value - 1;
-        return id.Value != 0 && slot >= 0 && slot < _capacity && _bodies[slot].Live;
+        int slot = id.ToIndex();
+        return id.IsValid && slot >= 0 && slot < _capacity && _bodies[slot].Live;
     }
 
     /// <summary>Reads the frame of a body.</summary>
@@ -368,7 +368,7 @@ public sealed class BodyStore
 
     /// <summary>Raw slot of an identity without validation; the caller holds the invariant.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int SlotOf(BodyId id) => (int)id.Value - 1;
+    internal static int SlotOf(BodyId id) => id.ToIndex();
 
     /// <summary>Slot capacity for internal iteration.</summary>
     internal int SlotCapacity
@@ -409,8 +409,8 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Validate(BodyId id)
     {
-        int slot = (int)id.Value - 1;
-        if (id.Value == 0 || slot < 0 || slot >= _capacity || !_bodies[slot].Live)
+        int slot = id.ToIndex();
+        if (!id.IsValid || slot < 0 || slot >= _capacity || !_bodies[slot].Live)
         {
             ThrowHelper.ThrowBodyNotFound(id);
         }

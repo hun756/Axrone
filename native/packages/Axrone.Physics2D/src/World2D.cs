@@ -458,7 +458,7 @@ public sealed class World : IDisposable
             {
                 ShapeId key = found[i];
                 int j = i - 1;
-                while (j >= 0 && found[j].Value > key.Value)
+                while (j >= 0 && found[j] > key)
                 {
                     found[j + 1] = found[j];
                     j--;
@@ -542,7 +542,7 @@ public sealed class World : IDisposable
             RaycastHit2D key = hits[i];
             int j = i - 1;
             while (j >= 0 && (hits[j].Distance > key.Distance ||
-                (hits[j].Distance == key.Distance && hits[j].Shape.Value > key.Shape.Value)))
+                (hits[j].Distance == key.Distance && hits[j].Shape > key.Shape)))
             {
                 hits[j + 1] = hits[j];
                 j--;
@@ -643,7 +643,7 @@ public sealed class World : IDisposable
                 continue;
             }
 
-            BodyId bodyId = new((uint)slot + 1u);
+            BodyId bodyId = BodyId.FromIndex(slot);
             ref readonly BodyState body = ref _bodies.Slot(bodyId);
             if (body.Type != BodyType.Dynamic || (body.Flags & BodyFlags.Awake) == 0 ||
                 (body.Flags & BodyFlags.Bullet) == 0)
@@ -696,7 +696,7 @@ public sealed class World : IDisposable
         int current = body.FirstShape;
         while (current != -1)
         {
-            ShapeId shapeId = new((uint)current + 1u);
+            ShapeId shapeId = ShapeId.FromIndex(current);
             if (!_shapes.IsValid(shapeId))
             {
                 break;
@@ -791,7 +791,7 @@ public sealed class World : IDisposable
                 continue;
             }
 
-            BodyId bodyId = new((uint)slot + 1u);
+            BodyId bodyId = BodyId.FromIndex(slot);
             ref BodyState body = ref _bodies.Slot(bodyId);
             if (body.Type == BodyType.Static || (body.Flags & BodyFlags.Awake) == 0)
             {
@@ -835,7 +835,7 @@ public sealed class World : IDisposable
         ref BodyState body = ref _bodies.Slot(bodyId);
         while (body.FirstShape != -1)
         {
-            ShapeId shapeId = new((uint)body.FirstShape + 1u);
+            ShapeId shapeId = ShapeId.FromIndex(body.FirstShape);
             _shapes.Detach(_bodies, _tree, shapeId);
             body = ref _bodies.Slot(bodyId);
         }
@@ -990,8 +990,8 @@ public sealed class World : IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public bool OnPair(SpatialItemId idA, ShapeId dataA, SpatialItemId idB, ShapeId dataB, ref World context)
         {
-            ShapeId shapeA = dataA.Value < dataB.Value ? dataA : dataB;
-            ShapeId shapeB = dataA.Value < dataB.Value ? dataB : dataA;
+            ShapeId shapeA = dataA < dataB ? dataA : dataB;
+            ShapeId shapeB = dataA < dataB ? dataB : dataA;
 
             ref ShapeRecord recordA = ref _world._shapes.Slot(shapeA);
             ref ShapeRecord recordB = ref _world._shapes.Slot(shapeB);

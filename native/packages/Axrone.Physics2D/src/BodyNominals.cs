@@ -1,114 +1,361 @@
 namespace Axrone.Physics2D;
 
-using System.Globalization;
+using Axrone.Utility.Identifiers;
+
+/// <summary>Domain metadata tag for simulated bodies (1-based; zero is invalid).</summary>
+public readonly struct BodyTag : IIdentifierTag<BodyTag>
+{
+    /// <inheritdoc/>
+    public static string TagName => "Body";
+
+    /// <inheritdoc/>
+    public static string Prefix => "b";
+
+    /// <inheritdoc/>
+    public static bool IsOneBased => true;
+}
+
+/// <summary>Domain metadata tag for attached colliders (1-based; zero is invalid).</summary>
+public readonly struct ShapeTag : IIdentifierTag<ShapeTag>
+{
+    /// <inheritdoc/>
+    public static string TagName => "Shape";
+
+    /// <inheritdoc/>
+    public static string Prefix => "s";
+
+    /// <inheritdoc/>
+    public static bool IsOneBased => true;
+}
 
 /// <summary>
 /// 4-byte identity of a simulated body. The zero value is the invalid
 /// sentinel, so a default-initialized slot can never name a live body.
+/// Backed by the centralized identifier engine.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct BodyId(uint Value) : IComparable<BodyId>
+public readonly record struct BodyId(StrongId<BodyTag, uint> Handle) : IStrongId<BodyId, uint>
 {
     /// <summary>Invalid sentinel; never a registered body.</summary>
-    public static BodyId Invalid => default;
+    public static BodyId Invalid
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new(StrongId<BodyTag, uint>.Invalid);
+    }
+
+    /// <summary>The backing value.</summary>
+    public uint RawValue
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Handle.RawValue;
+    }
 
     /// <summary>Whether this identity names a registered body.</summary>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Value != 0;
+        get => Handle.IsValid;
     }
+
+    /// <summary>Wraps a raw value without validation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BodyId FromRaw(uint value) => new(StrongId<BodyTag, uint>.FromRaw(value));
+
+    /// <summary>Converts a 0-based slot index.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static BodyId FromIndex(int index) => new(StrongId<BodyTag, uint>.FromIndex(index));
+
+    /// <summary>Converts back to a 0-based slot index, or -1 while invalid.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ToIndex() => Handle.ToIndex();
 
     /// <summary>Converts a 1-based identity to its 0-based slot index.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SlotIndex ToSlotIndex() => new((int)Value - 1);
+    public SlotIndex ToSlotIndex() => IsValid ? SlotIndex.FromIndex(ToIndex()) : SlotIndex.Invalid;
 
     /// <summary>Wraps a 0-based slot index as a 1-based identity.</summary>
     /// <param name="slot">The slot index.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static BodyId FromSlotIndex(SlotIndex slot) => new((uint)slot.Value + 1u);
+    public static BodyId FromSlotIndex(SlotIndex slot) => FromIndex(slot.ToIndex());
+
+    /// <summary>Wraps an engine handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator StrongId<BodyTag, uint>(BodyId id) => id.Handle;
+
+    /// <summary>Unwraps an engine handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator BodyId(StrongId<BodyTag, uint> handle) => new(handle);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public int CompareTo(BodyId other) => Value.CompareTo(other.Value);
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() => IsValid ? string.Create(CultureInfo.InvariantCulture, $"Body({Value})") : "Body(Invalid)";
-
-    /// <summary>Unwraps the underlying identifier.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator uint(BodyId id) => id.Value;
-
-    /// <summary>Wraps a raw identifier.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator BodyId(uint value) => new(value);
+    public int CompareTo(BodyId other) => Handle.CompareTo(other.Handle);
 
     /// <summary>Determines whether the left identity sorts before the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(BodyId left, BodyId right) => left.Value < right.Value;
+    public static bool operator <(BodyId left, BodyId right) => left.Handle < right.Handle;
 
     /// <summary>Determines whether the left identity sorts after the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(BodyId left, BodyId right) => left.Value > right.Value;
+    public static bool operator >(BodyId left, BodyId right) => left.Handle > right.Handle;
 
     /// <summary>Determines whether the left identity sorts at or before the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(BodyId left, BodyId right) => left.Value <= right.Value;
+    public static bool operator <=(BodyId left, BodyId right) => left.Handle <= right.Handle;
 
     /// <summary>Determines whether the left identity sorts at or after the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(BodyId left, BodyId right) => left.Value >= right.Value;
+    public static bool operator >=(BodyId left, BodyId right) => left.Handle >= right.Handle;
+
+    /// <inheritdoc/>
+    public bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        if (!IsValid)
+        {
+            ReadOnlySpan<char> invalid = "Body(Invalid)";
+            if (destination.Length < invalid.Length)
+            {
+                charsWritten = 0;
+                return false;
+            }
+
+            invalid.CopyTo(destination);
+            charsWritten = invalid.Length;
+            return true;
+        }
+
+        if (destination.Length < 7)
+        {
+            charsWritten = 0;
+            return false;
+        }
+
+        "Body(".AsSpan().CopyTo(destination);
+        if (RawValue.TryFormat(destination.Slice(5), out int valueChars, format, provider) &&
+            5 + valueChars < destination.Length)
+        {
+            destination[5 + valueChars] = ')';
+            charsWritten = 6 + valueChars;
+            return true;
+        }
+
+        charsWritten = 0;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        if (utf8Destination.Length < 7)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        utf8Destination[0] = (byte)'B';
+        utf8Destination[1] = (byte)'o';
+        utf8Destination[2] = (byte)'d';
+        utf8Destination[3] = (byte)'y';
+        utf8Destination[4] = (byte)'(';
+        if (RawValue.TryFormat(utf8Destination.Slice(5), out int valueBytes, format, provider) &&
+            5 + valueBytes < utf8Destination.Length)
+        {
+            utf8Destination[5 + valueBytes] = (byte)')';
+            bytesWritten = 6 + valueBytes;
+            return true;
+        }
+
+        bytesWritten = 0;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        if (!IsValid)
+        {
+            return "Body(Invalid)";
+        }
+
+        Span<char> buffer = stackalloc char[32];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return buffer.Slice(0, charsWritten).ToString();
+        }
+
+        return $"Body({RawValue})";
+    }
+
+    /// <inheritdoc/>
+    public override string ToString() => ToString(null, null);
 }
 
 /// <summary>
 /// 4-byte identity of a collider attached to a body. The zero value is the
 /// invalid sentinel, so a default-initialized slot can never name a live shape.
+/// Backed by the centralized identifier engine.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct ShapeId(uint Value) : IComparable<ShapeId>
+public readonly record struct ShapeId(StrongId<ShapeTag, uint> Handle) : IStrongId<ShapeId, uint>
 {
     /// <summary>Invalid sentinel; never a registered shape.</summary>
-    public static ShapeId Invalid => default;
+    public static ShapeId Invalid
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new(StrongId<ShapeTag, uint>.Invalid);
+    }
+
+    /// <summary>The backing value.</summary>
+    public uint RawValue
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Handle.RawValue;
+    }
 
     /// <summary>Whether this identity names a registered shape.</summary>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Value != 0;
+        get => Handle.IsValid;
     }
+
+    /// <summary>Wraps a raw value without validation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ShapeId FromRaw(uint value) => new(StrongId<ShapeTag, uint>.FromRaw(value));
+
+    /// <summary>Converts a 0-based slot index.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ShapeId FromIndex(int index) => new(StrongId<ShapeTag, uint>.FromIndex(index));
+
+    /// <summary>Converts back to a 0-based slot index, or -1 while invalid.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ToIndex() => Handle.ToIndex();
+
+    /// <summary>Wraps an engine handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator StrongId<ShapeTag, uint>(ShapeId id) => id.Handle;
+
+    /// <summary>Unwraps an engine handle.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ShapeId(StrongId<ShapeTag, uint> handle) => new(handle);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public int CompareTo(ShapeId other) => Value.CompareTo(other.Value);
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() => IsValid ? string.Create(CultureInfo.InvariantCulture, $"Shape({Value})") : "Shape(Invalid)";
-
-    /// <summary>Unwraps the underlying identifier.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator uint(ShapeId id) => id.Value;
-
-    /// <summary>Wraps a raw identifier.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator ShapeId(uint value) => new(value);
+    public int CompareTo(ShapeId other) => Handle.CompareTo(other.Handle);
 
     /// <summary>Determines whether the left identity sorts before the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(ShapeId left, ShapeId right) => left.Value < right.Value;
+    public static bool operator <(ShapeId left, ShapeId right) => left.Handle < right.Handle;
 
     /// <summary>Determines whether the left identity sorts after the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(ShapeId left, ShapeId right) => left.Value > right.Value;
+    public static bool operator >(ShapeId left, ShapeId right) => left.Handle > right.Handle;
 
     /// <summary>Determines whether the left identity sorts at or before the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(ShapeId left, ShapeId right) => left.Value <= right.Value;
+    public static bool operator <=(ShapeId left, ShapeId right) => left.Handle <= right.Handle;
 
     /// <summary>Determines whether the left identity sorts at or after the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(ShapeId left, ShapeId right) => left.Value >= right.Value;
+    public static bool operator >=(ShapeId left, ShapeId right) => left.Handle >= right.Handle;
+
+    /// <inheritdoc/>
+    public bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        if (!IsValid)
+        {
+            ReadOnlySpan<char> invalid = "Shape(Invalid)";
+            if (destination.Length < invalid.Length)
+            {
+                charsWritten = 0;
+                return false;
+            }
+
+            invalid.CopyTo(destination);
+            charsWritten = invalid.Length;
+            return true;
+        }
+
+        if (destination.Length < 8)
+        {
+            charsWritten = 0;
+            return false;
+        }
+
+        "Shape(".AsSpan().CopyTo(destination);
+        if (RawValue.TryFormat(destination.Slice(6), out int valueChars, format, provider) &&
+            6 + valueChars < destination.Length)
+        {
+            destination[6 + valueChars] = ')';
+            charsWritten = 7 + valueChars;
+            return true;
+        }
+
+        charsWritten = 0;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public bool TryFormat(
+        Span<byte> utf8Destination,
+        out int bytesWritten,
+        ReadOnlySpan<char> format = default,
+        IFormatProvider? provider = null)
+    {
+        if (utf8Destination.Length < 8)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
+        utf8Destination[0] = (byte)'S';
+        utf8Destination[1] = (byte)'h';
+        utf8Destination[2] = (byte)'a';
+        utf8Destination[3] = (byte)'p';
+        utf8Destination[4] = (byte)'e';
+        utf8Destination[5] = (byte)'(';
+        if (RawValue.TryFormat(utf8Destination.Slice(6), out int valueBytes, format, provider) &&
+            6 + valueBytes < utf8Destination.Length)
+        {
+            utf8Destination[6 + valueBytes] = (byte)')';
+            bytesWritten = 7 + valueBytes;
+            return true;
+        }
+
+        bytesWritten = 0;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        if (!IsValid)
+        {
+            return "Shape(Invalid)";
+        }
+
+        Span<char> buffer = stackalloc char[32];
+        if (TryFormat(buffer, out int charsWritten, format, formatProvider))
+        {
+            return buffer.Slice(0, charsWritten).ToString();
+        }
+
+        return $"Shape({RawValue})";
+    }
+
+    /// <inheritdoc/>
+    public override string ToString() => ToString(null, null);
 }
 
 /// <summary>How a body moves: fixed scenery, script-driven kinematics, or simulated dynamics.</summary>

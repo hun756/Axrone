@@ -151,7 +151,7 @@ public class ShapeStoreTests
         Action negativeRadius = () => fx.Shapes.AttachCircle(fx.Bodies, fx.Tree, body, new Vec2(0, 0), -1f);
         Action zeroDensity = () => fx.Shapes.AttachCircle(fx.Bodies, fx.Tree, body, new Vec2(0, 0), 1f, density: 0f);
         Action badPolygon = () => fx.Shapes.AttachPolygon(fx.Bodies, fx.Tree, body, new Vec2[] { new(0, 0), new(1, 1) });
-        Action deadBody = () => fx.Shapes.AttachCircle(fx.Bodies, fx.Tree, new BodyId(999u), new Vec2(0, 0), 1f);
+        Action deadBody = () => fx.Shapes.AttachCircle(fx.Bodies, fx.Tree, BodyId.FromRaw(999u), new Vec2(0, 0), 1f);
 
         negativeRadius.Should().Throw<ArgumentOutOfRangeException>();
         zeroDensity.Should().Throw<InvalidOperationException>();

@@ -81,7 +81,7 @@ public sealed class Determinism2DTests : IDisposable
 
         for (int slot = 0; slot < 32; slot++)
         {
-            BodyId id = new((uint)slot + 1u);
+            BodyId id = BodyId.FromIndex(slot);
             if (!world.Bodies.IsValid(id))
             {
                 continue;

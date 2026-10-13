@@ -62,7 +62,7 @@ public sealed class SensorTests : IDisposable
         _world.Shapes.SetSensor(shape, false);
         _world.Shapes.IsSensor(shape).Should().BeFalse();
 
-        Action unknown = () => _world.Shapes.SetSensor(new ShapeId(999u), true);
+        Action unknown = () => _world.Shapes.SetSensor(ShapeId.FromRaw(999u), true);
         unknown.Should().Throw<InvalidOperationException>();
     }
 

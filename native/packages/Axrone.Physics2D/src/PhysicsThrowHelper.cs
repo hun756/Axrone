@@ -41,7 +41,7 @@ internal static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static void ThrowBodyNotFound(BodyId id)
     {
-        throw new InvalidOperationException($"Body with ID {id.Value} is unallocated or has been destroyed.");
+        throw new InvalidOperationException($"Body with ID {id.RawValue} is unallocated or has been destroyed.");
     }
 
     /// <summary>

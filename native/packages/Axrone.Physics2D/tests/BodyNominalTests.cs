@@ -11,16 +11,16 @@ public class BodyNominalTests
         BodyId.Invalid.IsValid.Should().BeFalse();
         ShapeId.Invalid.IsValid.Should().BeFalse();
 
-        var body = (BodyId)3u;
-        var shape = (ShapeId)7u;
+        var body = BodyId.FromRaw(3u);
+        var shape = ShapeId.FromRaw(7u);
 
         body.IsValid.Should().BeTrue();
         shape.IsValid.Should().BeTrue();
-        ((uint)body).Should().Be(3u);
-        ((uint)shape).Should().Be(7u);
+        body.RawValue.Should().Be(3u);
+        shape.RawValue.Should().Be(7u);
         body.ToString().Should().Be("Body(3)");
         shape.ToString().Should().Be("Shape(7)");
-        (body < (BodyId)4u).Should().BeTrue();
+        (body < BodyId.FromRaw(4u)).Should().BeTrue();
     }
 
     [Fact]

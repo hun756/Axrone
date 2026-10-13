@@ -155,7 +155,7 @@ public sealed class Joint2DTests : IDisposable
 
         Action negative = () => _world.Joints.CreateDistance(_world.Bodies, a, b, new Vec2(0, 0), new Vec2(0, 0), -1f);
         Action nan = () => _world.Joints.CreateDistance(_world.Bodies, a, b, new Vec2(0, 0), new Vec2(0, 0), float.NaN);
-        Action dead = () => _world.Joints.CreateDistance(_world.Bodies, a, new BodyId(999u), new Vec2(0, 0), new Vec2(0, 0), 1f);
+        Action dead = () => _world.Joints.CreateDistance(_world.Bodies, a, BodyId.FromRaw(999u), new Vec2(0, 0), new Vec2(0, 0), 1f);
 
         negative.Should().Throw<InvalidOperationException>();
         nan.Should().Throw<InvalidOperationException>();

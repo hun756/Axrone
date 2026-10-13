@@ -140,7 +140,7 @@ public sealed class Revolute2DTests : IDisposable
             new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(float.NaN, 0) });
         Action torque = () => _ = new RevoluteDef { BodyA = a, BodyB = b, WorldAnchor = new Vec2(0, 0), MaxMotorTorque = -1f, EnableMotor = true };
         Action dead = () => _world.Joints.CreateRevolute(_world.Bodies,
-            new RevoluteDef { BodyA = a, BodyB = new BodyId(999u), WorldAnchor = new Vec2(0, 0) });
+            new RevoluteDef { BodyA = a, BodyB = BodyId.FromRaw(999u), WorldAnchor = new Vec2(0, 0) });
 
         same.Should().Throw<InvalidOperationException>();
         limits.Should().Throw<InvalidOperationException>();

@@ -27,11 +27,11 @@ internal readonly struct BodyStoreAdapter : IBodyStore
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsSlotLive(SlotIndex slot) => _bodies.IsSlotLive(slot.Value);
+    public bool IsSlotLive(SlotIndex slot) => _bodies.IsSlotLive(slot.RawValue);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref BodyState GetSlot(SlotIndex slot) => ref _bodies.Slot(new BodyId((uint)slot.Value + 1u));
+    public ref BodyState GetSlot(SlotIndex slot) => ref _bodies.Slot(BodyId.FromSlotIndex(slot));
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -299,14 +299,14 @@ internal readonly unsafe ref struct IslandPipelineCommitted<TPolicy>
     /// <summary>Enumerates the members of a root.</summary>
     /// <param name="root">The root slot.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IslandMembersEnumerable EnumerateMembers(SlotIndex root) => new(_nodes, _capacity, root.Value);
+    public IslandMembersEnumerable EnumerateMembers(SlotIndex root) => new(_nodes, _capacity, root.RawValue);
 
     /// <summary>Summarizes one root's resolution.</summary>
     /// <param name="rootSlot">The queried slot.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IslandEvaluationSummary Summarize(SlotIndex rootSlot)
     {
-        int root = rootSlot.Value;
+        int root = rootSlot.RawValue;
         if ((uint)root >= (uint)_capacity || _nodes[root].Parent < 0)
         {
             return new IslandEvaluationSummary(IslandEvaluationStatus.AwakeActive, 0, 0.0f, rootSlot);
