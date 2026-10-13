@@ -1,0 +1,98 @@
+namespace Axrone.Physics2D;
+
+using System.Runtime.CompilerServices;
+
+/// <summary>
+/// Shared joint math: frame rotations, angle wrapping, limit resolution and the
+/// position-correction applicator. Single home for the expressions every policy
+/// repeats, so fixes land once.
+/// </summary>
+internal static class MathPhysics
+{
+    /// <summary>Rotates a vector by a body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Rotate(in BodyState state, Vec2 vector) =>
+        new((state.Cos * vector.X) - (state.Sin * vector.Y), (state.Sin * vector.X) + (state.Cos * vector.Y));
+
+    /// <summary>Returns the perpendicular follower of a vector.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec2 Perp(Vec2 vector) => new(-vector.Y, vector.X);
+
+    /// <summary>Wraps an angle into [-pi, pi].</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float NormalizeAngle(float angle) =>
+        angle - (MathF.Floor((angle + MathF.PI) / (2.0f * MathF.PI)) * 2.0f * MathF.PI);
+
+    /// <summary>Resolves the limit state of a coordinate against its stops.</summary>
+    /// <param name="enabled">Whether stops apply.</param>
+    /// <param name="lower">The lower stop.</param>
+    /// <param name="upper">The upper stop.</param>
+    /// <param name="value">The current coordinate.</param>
+    /// <param name="slop">The coincidence band fusing near-equal stops.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static LimitState ResolveLimitState(bool enabled, float lower, float upper, float value, float slop)
+    {
+        if (!enabled)
+        {
+            return LimitState.Inactive;
+        }
+
+        if (upper - lower < 2.0f * slop)
+        {
+            return LimitState.Equal;
+        }
+
+        if (value <= lower)
+        {
+            return LimitState.AtLower;
+        }
+
+        if (value >= upper)
+        {
+            return LimitState.AtUpper;
+        }
+
+        return LimitState.Inactive;
+    }
+
+    /// <summary>Applies one position correction to a body pair with rotation coupling.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ApplyPositionCorrection(
+        ref BodyState stateA, ref BodyState stateB, Vec2 rA, Vec2 rB, Vec2 correction,
+        float invMassA, float invMassB, float invIA, float invIB, bool awakeA, bool awakeB)
+    {
+        if (awakeA)
+        {
+            stateA.Position -= correction * invMassA;
+            float angleA = MathF.Atan2(stateA.Sin, stateA.Cos) - (invIA * Vec2.Cross(rA, correction));
+            stateA.Cos = MathF.Cos(angleA);
+            stateA.Sin = MathF.Sin(angleA);
+        }
+
+        if (awakeB)
+        {
+            stateB.Position += correction * invMassB;
+            float angleB = MathF.Atan2(stateB.Sin, stateB.Cos) + (invIB * Vec2.Cross(rB, correction));
+            stateB.Cos = MathF.Cos(angleB);
+            stateB.Sin = MathF.Sin(angleB);
+        }
+    }
+}
+
+/// <summary>Compile-time construction phases; invalid orders do not compile.</summary>
+#pragma warning disable CA1034 // Typestate phantoms are intentionally nested: the phase only means something qualified by its builder protocol, and unqualified top-level names would pollute the package surface.
+public static class Typestate
+{
+    /// <summary>No configuration yet.</summary>
+    public readonly struct Unconfigured;
+
+    /// <summary>Bodies bound; geometry still open.</summary>
+    public readonly struct BodiesConfigured;
+
+    /// <summary>Bodies and geometry bound; ready to build.</summary>
+    public readonly struct GeometryConfigured;
+
+    /// <summary>Geared joints bound; ready to build.</summary>
+    public readonly struct JointsConfigured;
+}
+#pragma warning restore CA1034
