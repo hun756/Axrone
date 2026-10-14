@@ -24,6 +24,9 @@
     <!-- CA1815: Equals on stateless tag structs — identifier tags carry no state
          to compare; an elementwise Equals would be surface nobody should call. -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — the oriented support bindings
+         expose the shape contract statically by design; instances never dispatch. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

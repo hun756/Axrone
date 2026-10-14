@@ -196,6 +196,60 @@ public sealed class ShapeStore
         return ShapeId.FromIndex(slot);
     }
 
+    /// <summary>Attaches a cylinder to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachCylinder<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec3 center,
+        float radius,
+        float height,
+        ShapeAxis3D axis = ShapeAxis3D.Y,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Cylinder3(center, radius, height, axis);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Cylinder, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalCylinder = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
+    /// <summary>Attaches a cone to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachCone<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec3 center,
+        float radius,
+        float height,
+        ShapeAxis3D axis = ShapeAxis3D.Y,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Cone3(center, radius, height, axis);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Cone, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalCone = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
     /// <summary>Drops a shape, unlinks it from its body, pulls it from the tree and re-sums the body mass.</summary>
     public void Detach<TStrategy, TMetrics>(
         BodyStore bodies,
@@ -325,6 +379,14 @@ public sealed class ShapeStore
         return new Capsule3(frame.TransformPoint(shape.LocalCapsule.P0), frame.TransformPoint(shape.LocalCapsule.P1), shape.LocalCapsule.Radius);
     }
 
+    /// <summary>Reads the local cylinder of a cylinder shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Cylinder3 GetCylinder(ShapeId id) => _shapes[Validate(id)].LocalCylinder;
+
+    /// <summary>Reads the local cone of a cone shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Cone3 GetCone(ShapeId id) => _shapes[Validate(id)].LocalCone;
+
     /// <summary>Reads the world bounds of a shape.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Aabb3D GetWorldAabb(ShapeId id) => _shapes[Validate(id)].WorldAabb;
@@ -436,6 +498,28 @@ public sealed class ShapeStore
             Vec3 p1 = world.TransformPoint(shape.LocalCapsule.P1);
             shape.WorldCentroid = (p0 + p1) * 0.5f;
             shape.WorldAabb = Capsule3.ComputeBounds(new Capsule3(p0, p1, shape.LocalCapsule.Radius));
+            return;
+        }
+
+        if (shape.Kind == ColliderKind.Cylinder)
+        {
+            Vec3 shapeCenter = world.TransformPoint(shape.LocalCylinder.Center);
+            shape.WorldCentroid = shapeCenter;
+            shape.WorldAabb = RotatedBoxBounds(
+                shapeCenter, world.Rotation,
+                ShapeAxis.Extents(shape.LocalCylinder.Radius, shape.LocalCylinder.Height * 0.5f, shape.LocalCylinder.Axis));
+            return;
+        }
+
+        if (shape.Kind == ColliderKind.Cone)
+        {
+            Vec3 shapeCenter = world.TransformPoint(shape.LocalCone.Center);
+            shape.WorldCentroid = shapeCenter;
+            Vec3 localAxis = ShapeAxis.Vector(shape.LocalCone.Axis);
+            Vec3 boundsCenter = world.TransformPoint(shape.LocalCone.Center + (localAxis * (shape.LocalCone.Height * 0.25f)));
+            shape.WorldAabb = RotatedBoxBounds(
+                boundsCenter, world.Rotation,
+                ShapeAxis.Extents(shape.LocalCone.Radius, shape.LocalCone.Height * 0.5f, shape.LocalCone.Axis));
             return;
         }
 

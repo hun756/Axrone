@@ -604,3 +604,83 @@ public readonly struct Cone3 : ISupportShape3D<Cone3>, IEquatable<Cone3>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator !=(Cone3 left, Cone3 right) => !left.Equals(right);
 }
+
+/// <summary>
+/// Binds a canonical local shape to its world frame: rotates the query
+/// direction into the local frame, evaluates the local support, and maps
+/// the witness back. Lets GJK and EPA traverse rotated prisms, cylinders,
+/// cones and hulls with zero allocation and no virtual dispatch.
+/// </summary>
+/// <typeparam name="TShape">The canonical local shape type.</typeparam>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct OrientedShape<TShape> : ISupportShape3D<OrientedShape<TShape>>, IEquatable<OrientedShape<TShape>>
+    where TShape : ISupportShape3D<TShape>
+{
+    /// <summary>Canonical local shape.</summary>
+    public readonly TShape Local;
+
+    /// <summary>Frame carrying the shape to world space.</summary>
+    public readonly RigidTransform3D Frame;
+
+    /// <summary>Binds a local shape to its world frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public OrientedShape(TShape local, in RigidTransform3D frame)
+    {
+        Local = local;
+        Frame = frame;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(in OrientedShape<TShape> shape, Vec3 direction)
+    {
+        Vec3 localDirection = shape.Frame.Rotation.Conjugate() * direction;
+        Vec3 localSupport = TShape.Support(shape.Local, localDirection);
+        return shape.Frame.TransformPoint(localSupport);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 ComputeCentroid(in OrientedShape<TShape> shape) =>
+        shape.Frame.TransformPoint(TShape.ComputeCentroid(shape.Local));
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D ComputeBounds(in OrientedShape<TShape> shape)
+    {
+        Aabb3D local = TShape.ComputeBounds(shape.Local);
+        Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = new Vec3(
+                (i & 1) == 0 ? local.Min.X : local.Max.X,
+                (i & 2) == 0 ? local.Min.Y : local.Max.Y,
+                (i & 4) == 0 ? local.Min.Z : local.Max.Z);
+            Vec3 world = shape.Frame.TransformPoint(corner);
+            min = Vec3.Min(min, world);
+            max = Vec3.Max(max, world);
+        }
+
+        return new Aabb3D(min, max);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(OrientedShape<TShape> other) =>
+        EqualityComparer<TShape>.Default.Equals(Local, other.Local) && Frame == other.Frame;
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is OrientedShape<TShape> other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(Local, Frame);
+
+    /// <summary>Determines whether two bindings match.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(OrientedShape<TShape> left, OrientedShape<TShape> right) => left.Equals(right);
+
+    /// <summary>Determines whether two bindings differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(OrientedShape<TShape> left, OrientedShape<TShape> right) => !left.Equals(right);
+}

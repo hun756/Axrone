@@ -34,6 +34,127 @@ public static class Gjk3D
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
+        Span<Simplex3D.Vertex> captured = stackalloc Simplex3D.Vertex[4];
+        return Core(in shapeA, in shapeB, false, captured, out _, out distance, out pointA, out pointB);
+    }
+
+    /// <summary>
+    /// Runs the traversal capturing the enclosing tetrahedron on overlap for
+    /// EPA expansion. Returns <see langword="true"/> with four simplex
+    /// vertices when the shapes overlap.
+    /// </summary>
+    internal static bool TryCaptureOverlap<TA, TB>(
+        in TA shapeA, in TB shapeB, Span<Simplex3D.Vertex> simplex, out int count)
+        where TA : ISupportShape3D<TA>
+        where TB : ISupportShape3D<TB>
+    {
+        bool separated = Core(in shapeA, in shapeB, true, simplex, out count, out _, out _, out _);
+        if (!separated && count == 4)
+        {
+            return true;
+        }
+
+        if (separated || !ExpandToTetrahedron(in shapeA, in shapeB, simplex, ref count))
+        {
+            return false;
+        }
+
+        return count == 4
+            && Simplex3D.TetrahedronContainsOrigin(
+                simplex[0].Difference, simplex[1].Difference, simplex[2].Difference, simplex[3].Difference);
+    }
+
+    /// <summary>
+    /// Expands a boundary simplex to a tetrahedron with face-normal supports,
+    /// mirroring the reference EPA bootstrap for flat-faced shapes whose
+    /// supports repeat before enclosure.
+    /// </summary>
+    private static bool ExpandToTetrahedron<TA, TB>(
+        in TA shapeA, in TB shapeB, Span<Simplex3D.Vertex> simplex, ref int count)
+        where TA : ISupportShape3D<TA>
+        where TB : ISupportShape3D<TB>
+    {
+        if (count >= 4 || simplex.Length < 4)
+        {
+            return count == 4;
+        }
+
+        if (count == 0)
+        {
+            return false;
+        }
+
+        if (count == 1)
+        {
+            Vec3 d = simplex[0].Difference;
+            Vec3 axis = d.LengthSquared() > 1e-12f ? Vec3.Normalize(d) : new Vec3(1.0f, 0.0f, 0.0f);
+            Vec3 perp = MathF.Abs(axis.Y) < 0.99f ? new Vec3(0.0f, 1.0f, 0.0f) : new Vec3(1.0f, 0.0f, 0.0f);
+            Vec3 side = Vec3.Normalize(Vec3.Cross(axis, perp));
+            AddSupport(in shapeA, in shapeB, axis, simplex, ref count);
+            AddSupport(in shapeA, in shapeB, axis * -1.0f, simplex, ref count);
+            AddSupport(in shapeA, in shapeB, side, simplex, ref count);
+            return count == 4;
+        }
+
+        if (count == 2)
+        {
+            Vec3 edge = simplex[1].Difference - simplex[0].Difference;
+            if (edge.LengthSquared() <= 1e-24f)
+            {
+                return false;
+            }
+
+            Vec3 reference = MathF.Abs(edge.Y) < 0.99f ? new Vec3(0.0f, 1.0f, 0.0f) : new Vec3(1.0f, 0.0f, 0.0f);
+            Vec3 n1 = Vec3.Normalize(Vec3.Cross(edge, reference));
+            Vec3 n2 = Vec3.Cross(edge, n1);
+            AddSupport(in shapeA, in shapeB, n1, simplex, ref count);
+            AddSupport(in shapeA, in shapeB, n2, simplex, ref count);
+            return count == 4;
+        }
+
+        Vec3 ab = simplex[1].Difference - simplex[0].Difference;
+        Vec3 ac = simplex[2].Difference - simplex[0].Difference;
+        Vec3 normal = Vec3.Cross(ab, ac);
+        if (normal.LengthSquared() <= 1e-24f)
+        {
+            return false;
+        }
+
+        normal = Vec3.Normalize(normal);
+        AddSupport(in shapeA, in shapeB, normal, simplex, ref count);
+        if (count < 4)
+        {
+            AddSupport(in shapeA, in shapeB, normal * -1.0f, simplex, ref count);
+        }
+
+        return count == 4;
+    }
+
+    /// <summary>Adds a Minkowski support vertex along a direction.</summary>
+    private static void AddSupport<TA, TB>(
+        in TA shapeA, in TB shapeB, Vec3 direction,
+        Span<Simplex3D.Vertex> simplex, ref int count)
+        where TA : ISupportShape3D<TA>
+        where TB : ISupportShape3D<TB>
+    {
+        if (count >= simplex.Length)
+        {
+            return;
+        }
+
+        Vec3 supportA = TA.Support(in shapeA, direction);
+        Vec3 supportB = TB.Support(in shapeB, direction * -1.0f);
+        simplex[count++] = new Simplex3D.Vertex(supportA - supportB, supportA, supportB);
+    }
+
+    /// <summary>Shared traversal: distance by default, tetrahedron capture for EPA on demand.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static bool Core<TA, TB>(
+        in TA shapeA, in TB shapeB, bool capture, Span<Simplex3D.Vertex> captured, out int capturedCount,
+        out float distance, out Vec3 pointA, out Vec3 pointB)
+        where TA : ISupportShape3D<TA>
+        where TB : ISupportShape3D<TB>
+    {
         Vec3 centroidA = TA.ComputeCentroid(in shapeA);
         Vec3 centroidB = TB.ComputeCentroid(in shapeB);
 
@@ -59,6 +180,15 @@ public static class Gjk3D
         {
             if (Reduce(simplex, ref count, weights, out Vec3 closest))
             {
+                capturedCount = count;
+                if (capture)
+                {
+                    for (int i = 0; i < count && i < captured.Length; i++)
+                    {
+                        captured[i] = simplex[i];
+                    }
+                }
+
                 distance = 0.0f;
                 pointA = bestA;
                 pointB = bestB;
@@ -66,8 +196,9 @@ public static class Gjk3D
             }
 
             float distSq = closest.LengthSquared();
-            if (distSq <= OverlapDistanceSquared)
+            if (distSq <= OverlapDistanceSquared && !capture)
             {
+                capturedCount = count;
                 distance = 0.0f;
                 pointA = bestA;
                 pointB = bestB;
@@ -76,6 +207,7 @@ public static class Gjk3D
 
             if (distSq >= bestDistSq - ImprovementTolerance)
             {
+                FinishCapture(simplex, count, captured, out capturedCount);
                 break;
             }
 
@@ -105,16 +237,41 @@ public static class Gjk3D
 
             if (duplicate)
             {
+                FinishCapture(simplex, count, captured, out capturedCount);
                 break;
             }
 
             simplex[count++] = candidate;
         }
 
+        if (!capture)
+        {
+            capturedCount = 0;
+        }
+        else
+        {
+            FinishCapture(simplex, count, captured, out capturedCount);
+        }
+
         distance = MathF.Sqrt(bestDistSq);
         pointA = bestA;
         pointB = bestB;
         return bestDistSq > OverlapDistanceSquared;
+    }
+
+    /// <summary>Copies the boundary simplex for EPA bootstrap on capture runs.</summary>
+    private static void FinishCapture(
+        Span<Simplex3D.Vertex> simplex, int count,
+        Span<Simplex3D.Vertex> captured, out int capturedCount)
+    {
+        capturedCount = 0;
+        int copy = Math.Min(count, captured.Length);
+        for (int i = 0; i < copy; i++)
+        {
+            captured[i] = simplex[i];
+        }
+
+        capturedCount = copy;
     }
 
     /// <summary>Reduces the simplex to its closest feature; returns true on containment (overlap).</summary>

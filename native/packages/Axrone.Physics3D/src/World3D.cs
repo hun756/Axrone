@@ -596,14 +596,31 @@ public sealed class World : IDisposable
             return false;
         }
 
-        // Curved-prism pairs route through GJK/EPA in a later slice; until then
-        // they never touch. The kinds are not attachable yet, so this is a guard.
+        // Curved prisms and everything touching them resolve through EPA over
+        // oriented supports; analytic rows above already handled the rest.
         if (recordA.Kind is ColliderKind.Cylinder or ColliderKind.Cone ||
             recordB.Kind is ColliderKind.Cylinder or ColliderKind.Cone)
         {
-            return false;
+            AnyCollider colliderA = AnyCollider.FromRecord(in recordA, _shapes.GetWorldFrame(shapeA));
+            AnyCollider colliderB = AnyCollider.FromRecord(in recordB, _shapes.GetWorldFrame(shapeB));
+            if (!Epa3D.ComputePenetration(in colliderA, in colliderB, out Manifold3D epa))
+            {
+                return false;
+            }
+
+            contact = new Contact3D
+            {
+                BodyA = recordA.Body,
+                BodyB = recordB.Body,
+                ShapeA = shapeA,
+                ShapeB = shapeB,
+                IsSensor = recordA.IsSensor || recordB.IsSensor,
+                Manifold = epa,
+            };
+            return true;
         }
-        if (!EvaluateNarrowphase(shapeA, in recordA, shapeB, in recordB, out Manifold3D manifold))
+
+        if (!EvaluateNarrowphase(shapeA, in recordA, shapeB, in recordB, out Manifold3D rest))
         {
             return false;
         }
@@ -615,7 +632,7 @@ public sealed class World : IDisposable
             ShapeA = shapeA,
             ShapeB = shapeB,
             IsSensor = recordA.IsSensor || recordB.IsSensor,
-            Manifold = manifold,
+            Manifold = rest,
         };
         return true;
     }

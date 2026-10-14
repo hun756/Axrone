@@ -736,3 +736,159 @@ public static class Penetration3D
         quad[3] = (faceCenter + (tangentU * extentU)) - (tangentV * extentV);
     }
 }
+
+/// <summary>
+/// Tagged support union over every local shape: one monomorphic support
+/// map feeding GJK and EPA, so curved prisms and future hulls resolve
+/// without a combinatorial explosion of generic instantiations. Orientation
+/// rides in <see cref="Frame"/>; geometry stays canonical and local.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<AnyCollider>
+{
+    /// <summary>Active geometry variant.</summary>
+    public readonly ColliderKind Kind;
+
+    /// <summary>Frame carrying the shape to world space.</summary>
+    public readonly RigidTransform3D Frame;
+
+    /// <summary>Local geometry variants; exactly one is live per <see cref="Kind"/>.</summary>
+    public readonly Sphere3 Sphere;
+    /// <summary>Local box variant.</summary>
+    public readonly Box3 Box;
+    /// <summary>Local capsule variant.</summary>
+    public readonly Capsule3 Capsule;
+    /// <summary>Local cylinder variant.</summary>
+    public readonly Cylinder3 Cylinder;
+    /// <summary>Local cone variant.</summary>
+    public readonly Cone3 Cone;
+
+    private AnyCollider(
+        ColliderKind kind, in RigidTransform3D frame,
+        Sphere3 sphere, Box3 box, Capsule3 capsule, Cylinder3 cylinder, Cone3 cone)
+    {
+        Kind = kind;
+        Frame = frame;
+        Sphere = sphere;
+        Box = box;
+        Capsule = capsule;
+        Cylinder = cylinder;
+        Cone = cone;
+    }
+
+    /// <summary>Wraps a ball.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromSphere(Sphere3 sphere, in RigidTransform3D frame) =>
+        new(ColliderKind.Sphere, frame, sphere, default, default, default, default);
+
+    /// <summary>Wraps a box.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromBox(Box3 box, in RigidTransform3D frame) =>
+        new(ColliderKind.Box, frame, default, box, default, default, default);
+
+    /// <summary>Wraps a capsule.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromCapsule(Capsule3 capsule, in RigidTransform3D frame) =>
+        new(ColliderKind.Capsule, frame, default, default, capsule, default, default);
+
+    /// <summary>Wraps a cylinder.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromCylinder(Cylinder3 cylinder, in RigidTransform3D frame) =>
+        new(ColliderKind.Cylinder, frame, default, default, default, cylinder, default);
+
+    /// <summary>Wraps a cone.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromCone(Cone3 cone, in RigidTransform3D frame) =>
+        new(ColliderKind.Cone, frame, default, default, default, default, cone);
+
+    /// <summary>Builds the union for a shape record from its local geometry and world frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static AnyCollider FromRecord(in ShapeRecord record, in RigidTransform3D frame) => record.Kind switch
+    {
+        ColliderKind.Sphere => FromSphere(record.LocalSphere, frame),
+        ColliderKind.Box => FromBox(record.LocalBox, frame),
+        ColliderKind.Capsule => FromCapsule(record.LocalCapsule, frame),
+        ColliderKind.Cylinder => FromCylinder(record.LocalCylinder, frame),
+        _ => FromCone(record.LocalCone, frame),
+    };
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(in AnyCollider shape, Vec3 direction)
+    {
+        Vec3 localDirection = shape.Frame.Rotation.Conjugate() * direction;
+        Vec3 local = shape.Kind switch
+        {
+            ColliderKind.Sphere => Sphere3.Support(shape.Sphere, localDirection),
+            ColliderKind.Box => Box3.Support(shape.Box, localDirection),
+            ColliderKind.Capsule => Capsule3.Support(shape.Capsule, localDirection),
+            ColliderKind.Cylinder => Cylinder3.Support(shape.Cylinder, localDirection),
+            _ => Cone3.Support(shape.Cone, localDirection),
+        };
+        return shape.Frame.TransformPoint(local);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 ComputeCentroid(in AnyCollider shape)
+    {
+        Vec3 local = shape.Kind switch
+        {
+            ColliderKind.Sphere => Sphere3.ComputeCentroid(shape.Sphere),
+            ColliderKind.Box => Box3.ComputeCentroid(shape.Box),
+            ColliderKind.Capsule => Capsule3.ComputeCentroid(shape.Capsule),
+            ColliderKind.Cylinder => Cylinder3.ComputeCentroid(shape.Cylinder),
+            _ => Cone3.ComputeCentroid(shape.Cone),
+        };
+        return shape.Frame.TransformPoint(local);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D ComputeBounds(in AnyCollider shape)
+    {
+        Aabb3D local = shape.Kind switch
+        {
+            ColliderKind.Sphere => Sphere3.ComputeBounds(shape.Sphere),
+            ColliderKind.Box => Box3.ComputeBounds(shape.Box),
+            ColliderKind.Capsule => Capsule3.ComputeBounds(shape.Capsule),
+            ColliderKind.Cylinder => Cylinder3.ComputeBounds(shape.Cylinder),
+            _ => Cone3.ComputeBounds(shape.Cone),
+        };
+
+        Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = new Vec3(
+                (i & 1) == 0 ? local.Min.X : local.Max.X,
+                (i & 2) == 0 ? local.Min.Y : local.Max.Y,
+                (i & 4) == 0 ? local.Min.Z : local.Max.Z);
+            Vec3 world = shape.Frame.TransformPoint(corner);
+            min = Vec3.Min(min, world);
+            max = Vec3.Max(max, world);
+        }
+
+        return new Aabb3D(min, max);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(AnyCollider other) =>
+        Kind == other.Kind && Frame == other.Frame && Sphere == other.Sphere && Box == other.Box &&
+        Capsule == other.Capsule && Cylinder == other.Cylinder && Cone == other.Cone;
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is AnyCollider other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine((int)Kind, Frame, Sphere, Box);
+
+    /// <summary>Determines whether two unions match.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(AnyCollider left, AnyCollider right) => left.Equals(right);
+
+    /// <summary>Determines whether two unions differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(AnyCollider left, AnyCollider right) => !left.Equals(right);
+}
