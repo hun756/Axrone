@@ -89,6 +89,19 @@ public class Penetration3DTests
     }
 
     [Fact]
+    public void SphereBox_OffsetCenter_Resolves_InBoxFrame()
+    {
+        var sphere = new Sphere3(new Vec3(0.0f, 0.4f, 0.0f), 0.5f);
+        var box = new Box3(new Vec3(0.0f, -1.0f, 0.0f), new Vec3(10.0f, 1.0f, 10.0f));
+
+        bool hit = Penetration3D.SphereBox(sphere, box, RigidTransform3D.Identity, out Manifold3D manifold);
+
+        hit.Should().BeTrue();
+        manifold.Normal.Y.Should().BeApproximately(1.0f, 1e-5f);
+        manifold[0].Separation.Should().BeApproximately(-0.1f, 1e-4f);
+    }
+
+    [Fact]
     public void TransformedBox_Support_Matches_RotatedCorner()
     {
         var local = new Box3(Vec3.Zero, new Vec3(1.0f, 1.0f, 1.0f));

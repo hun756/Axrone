@@ -95,17 +95,21 @@ public static class Penetration3D
         return true;
     }
 
-    /// <summary>Penetration of a ball against a box bound to <paramref name="boxFrame"/>; disjoint pairs report no contact.</summary>
+    /// <summary>Penetration of a world ball against a box bound to <paramref name="boxFrame"/>; disjoint pairs report no contact.</summary>
+    /// <param name="sphere">The ball in world space.</param>
+    /// <param name="box">The box in its local frame.</param>
+    /// <param name="boxFrame">The frame carrying the box to world space.</param>
+    /// <param name="manifold">The contact manifold while overlapping.</param>
     /// <returns><see langword="true"/> with a single-point manifold while overlapping.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool SphereBox(in Sphere3 sphere, in Box3 box, in RigidTransform3D boxFrame, out Manifold3D manifold)
     {
-        Vec3 localCenter = boxFrame.InverseTransformPoint(sphere.Center);
+        Vec3 localCenter = boxFrame.InverseTransformPoint(sphere.Center) - box.Center;
         Vec3 clamped = ClampToBox(localCenter, box.HalfExtents);
 
         if ((clamped - localCenter).LengthSquared() > SeparationSlop)
         {
-            Vec3 worldClosest = boxFrame.TransformPoint(clamped);
+            Vec3 worldClosest = boxFrame.TransformPoint(box.Center + clamped);
             Vec3 delta = sphere.Center - worldClosest;
             float distSq = delta.LengthSquared();
             if (distSq >= sphere.Radius * sphere.Radius)
@@ -125,7 +129,7 @@ public static class Penetration3D
         PushOutOfBox(localCenter, box.HalfExtents, out Vec3 pushAxis, out float pushDepth);
         Vec3 worldNormal = boxFrame.Rotation * pushAxis;
         float separation = -(pushDepth + sphere.Radius);
-        Vec3 contactB = boxFrame.TransformPoint(localCenter);
+        Vec3 contactB = boxFrame.TransformPoint(box.Center + localCenter);
         var inside = new ContactPoint3D(
             sphere.Center - (worldNormal * sphere.Radius), contactB, separation, 0xFFu);
         manifold = Manifold3D.One(worldNormal, inside);
@@ -133,6 +137,11 @@ public static class Penetration3D
     }
 
     /// <summary>Penetration of two framed boxes; disjoint pairs report no contact.</summary>
+    /// <param name="boxA">The first box in its local frame.</param>
+    /// <param name="frameA">The frame carrying the first box to world space.</param>
+    /// <param name="boxB">The second box in its local frame.</param>
+    /// <param name="frameB">The frame carrying the second box to world space.</param>
+    /// <param name="manifold">The contact manifold while overlapping.</param>
     /// <returns><see langword="true"/> with a one- or two-point manifold while overlapping.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool BoxBox(
