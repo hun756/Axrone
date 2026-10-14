@@ -1,5 +1,6 @@
 namespace Axrone.Physics3D;
 
+using System.Buffers;
 using System.Threading;
 
 /// <summary>
@@ -161,6 +162,7 @@ public sealed class World : IDisposable
     private readonly ShapeStore _shapes;
     private readonly JointStore _joints;
     private readonly DynamicAabbTree<ShapeId, SurfaceAreaHeuristicStrategy, NullSpatialMetricsSink> _tree;
+    private readonly IslandSolver3D<DefaultSleepPolicy3D> _islands = new();
     private Contact3D[] _contacts;
     private Contact3D[] _previous;
     private int _contactCount;
@@ -250,6 +252,13 @@ public sealed class World : IDisposable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _joints;
+    }
+
+    /// <summary>Island solver diagnostics: completed passes and rested bodies.</summary>
+    public IslandMetrics3D IslandMetrics
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _islands.Metrics;
     }
 
     /// <summary>Broadphase tree; the world keeps it in sync every step.</summary>
@@ -394,7 +403,7 @@ public sealed class World : IDisposable
             StepSlice(h);
         }
 
-        UpdateSleep(dt);
+        UpdateIslands(dt);
         PublishContactEvents();
     }
 
@@ -763,42 +772,6 @@ public sealed class World : IDisposable
         return radius;
     }
 
-    /// <summary>Puts quiet bodies to sleep; sensors never pin bodies awake.</summary>
-    private void UpdateSleep(float dt)
-    {
-        for (int slot = 0; slot < _bodies.SlotCapacity; slot++)
-        {
-            if (!_bodies.IsSlotLive(slot))
-            {
-                continue;
-            }
-
-            BodyId bodyId = BodyId.FromIndex(slot);
-            ref BodyState body = ref _bodies.Slot(bodyId);
-            if (body.Type != BodyType.Dynamic || (body.Flags & BodyFlags.Awake) == 0 ||
-                (body.Flags & BodyFlags.AllowSleep) == 0)
-            {
-                continue;
-            }
-
-            float linear = body.LinearVelocity.LengthSquared();
-            float angular = body.AngularVelocity.LengthSquared();
-            if (linear < LinearSleepTolerance * LinearSleepTolerance &&
-                angular < AngularSleepTolerance * AngularSleepTolerance)
-            {
-                body.SleepTime += dt;
-                if (body.SleepTime >= TimeToSleep)
-                {
-                    _bodies.SetAwake(bodyId, false);
-                }
-            }
-            else
-            {
-                body.SleepTime = 0.0f;
-            }
-        }
-    }
-
     /// <summary>Snapshots the step-open contact pairs for event diffing.</summary>
     private void SnapshotStepPairs()
     {
@@ -813,6 +786,47 @@ public sealed class World : IDisposable
         }
 
         _stepPairCount = _contactCount;
+    }
+
+    /// <summary>Runs the island sleep pass over the contact and joint graph.</summary>
+    private void UpdateIslands(float dt)
+    {
+        var parameters = new SimulationParameters3D(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
+
+        ContactPair3D[] rentedContacts = _contactCount > 0
+            ? ArrayPool<ContactPair3D>.Shared.Rent(_contactCount)
+            : [];
+        for (int i = 0; i < _contactCount; i++)
+        {
+            rentedContacts[i] = new ContactPair3D(_contacts[i].BodyA, _contacts[i].BodyB);
+        }
+
+        int jointBudget = _joints.Count;
+        JointPair3D[] rentedJoints = jointBudget > 0
+            ? ArrayPool<JointPair3D>.Shared.Rent(jointBudget)
+            : [];
+        int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
+
+        try
+        {
+            _islands.UpdateSleep(
+                _bodies,
+                rentedContacts.AsSpan(0, _contactCount),
+                rentedJoints.AsSpan(0, jointPairs),
+                in parameters);
+        }
+        finally
+        {
+            if (rentedContacts.Length > 0)
+            {
+                ArrayPool<ContactPair3D>.Shared.Return(rentedContacts);
+            }
+
+            if (rentedJoints.Length > 0)
+            {
+                ArrayPool<JointPair3D>.Shared.Return(rentedJoints);
+            }
+        }
     }
 
     /// <summary>Diffs the confirmed contact sets into begin/end events.</summary>

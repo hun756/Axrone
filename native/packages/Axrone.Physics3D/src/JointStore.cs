@@ -589,6 +589,53 @@ public sealed class JointStore
         }
     }
 
+    /// <summary>Copies every live joint edge into the destination; returns the edges written.</summary>
+    internal int CopyJointPairs(Span<JointPair3D> destination)
+    {
+        int count = 0;
+        for (int i = 0; i < _distance.Length && count < destination.Length; i++)
+        {
+            if (_distance[i].Live)
+            {
+                destination[count++] = new JointPair3D(_distance[i].BodyA, _distance[i].BodyB);
+            }
+        }
+
+        for (int i = 0; i < _ballSocket.Length && count < destination.Length; i++)
+        {
+            if (_ballSocket[i].Live)
+            {
+                destination[count++] = new JointPair3D(_ballSocket[i].BodyA, _ballSocket[i].BodyB);
+            }
+        }
+
+        for (int i = 0; i < _weld.Length && count < destination.Length; i++)
+        {
+            if (_weld[i].Live)
+            {
+                destination[count++] = new JointPair3D(_weld[i].BodyA, _weld[i].BodyB);
+            }
+        }
+
+        for (int i = 0; i < _hinge.Length && count < destination.Length; i++)
+        {
+            if (_hinge[i].Live)
+            {
+                destination[count++] = new JointPair3D(_hinge[i].BodyA, _hinge[i].BodyB);
+            }
+        }
+
+        for (int i = 0; i < _prismatic.Length && count < destination.Length; i++)
+        {
+            if (_prismatic[i].Live)
+            {
+                destination[count++] = new JointPair3D(_prismatic[i].BodyA, _prismatic[i].BodyB);
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>Internal table access for the solver; validated.</summary>
     internal ref DistanceJointData Distance(int slot) => ref _distance[slot];
 
