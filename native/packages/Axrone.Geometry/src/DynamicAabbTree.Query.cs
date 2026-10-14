@@ -121,7 +121,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
                     if (node.IsLeaf())
                     {
                         hitCount++;
-                        TUserData data = _userData[(uint)node.ItemId.Value - 1U]!;
+                        TUserData data = _userData[(uint)node.ItemId.ToIndex()]!;
                         if (!visitor.OnOverlap(node.ItemId, data, in node.Box, ref context))
                         {
                             break;
@@ -265,7 +265,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
 
                 if (node.IsLeaf())
                 {
-                    TUserData data = _userData[(uint)node.ItemId.Value - 1U]!;
+                    TUserData data = _userData[(uint)node.ItemId.ToIndex()]!;
                     if (!visitor.OnHit(node.ItemId, data, in ray, ref currentMaxDist, ref context))
                     {
                         return;
@@ -329,7 +329,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
 
                 if (node.IsLeaf())
                 {
-                    TUserData data = _userData[(uint)node.ItemId.Value - 1U]!;
+                    TUserData data = _userData[(uint)node.ItemId.ToIndex()]!;
                     if (!visitor.OnVisible(node.ItemId, data, in node.Box, ref context))
                     {
                         return;
@@ -363,7 +363,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
 
             if (node.IsLeaf())
             {
-                TUserData data = _userData[(uint)node.ItemId.Value - 1U]!;
+                TUserData data = _userData[(uint)node.ItemId.ToIndex()]!;
                 if (!visitor.OnVisible(node.ItemId, data, in node.Box, ref context))
                 {
                     return;
@@ -424,8 +424,8 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
 
                 if (nodeA.IsLeaf() && nodeB.IsLeaf())
                 {
-                    TUserData dataA = _userData[(uint)nodeA.ItemId.Value - 1U]!;
-                    TUserData dataB = _userData[(uint)nodeB.ItemId.Value - 1U]!;
+                    TUserData dataA = _userData[(uint)nodeA.ItemId.ToIndex()]!;
+                    TUserData dataB = _userData[(uint)nodeB.ItemId.ToIndex()]!;
                     if (!visitor.OnPair(nodeA.ItemId, dataA, nodeB.ItemId, dataB, ref context))
                     {
                         return;
@@ -506,7 +506,7 @@ public sealed partial class DynamicAabbTree<TUserData, TStrategy, TMetrics>
 
                 if (node.IsLeaf())
                 {
-                    TUserData data = _userData[(uint)node.ItemId.Value - 1U]!;
+                    TUserData data = _userData[(uint)node.ItemId.ToIndex()]!;
                     KnnResult<TUserData> item = new(node.ItemId, data, new DistanceSquared(nodeDistSq));
 
                     if (heapCount < results.Length)

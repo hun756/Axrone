@@ -192,7 +192,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
             else
             {
                 NodeIndex childBase = node.FirstChildIndex;
-                if (!childBase.IsValid || (uint)childBase.Value + 3u >= nodeLength)
+                if (!childBase.IsValid || (uint)childBase.RawValue + 3u >= nodeLength)
                 {
                     return false;
                 }
@@ -202,7 +202,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
                     return false;
                 }
 
-                uint child = (uint)childBase.Value;
+                uint child = (uint)childBase.RawValue;
                 stack[stackPtr++] = child + 3u;
                 stack[stackPtr++] = child + 2u;
                 stack[stackPtr++] = child + 1u;
@@ -254,7 +254,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
             }
             else
             {
-                uint child = (uint)node.FirstChildIndex.Value;
+                uint child = (uint)node.FirstChildIndex.RawValue;
                 stack[stackPtr++] = child + 3u;
                 stack[stackPtr++] = child + 2u;
                 stack[stackPtr++] = child + 1u;
@@ -325,7 +325,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
             else
             {
                 NodeIndex childBase = node.FirstChildIndex;
-                if (!childBase.IsValid || (uint)childBase.Value + 3u >= nodeLength)
+                if (!childBase.IsValid || (uint)childBase.RawValue + 3u >= nodeLength)
                 {
                     return false;
                 }
@@ -335,7 +335,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
                     return false;
                 }
 
-                PushOrderedChildren(ref nodeBase, (uint)childBase.Value, in target, nearestDistSq, stack, ref stackPtr);
+                PushOrderedChildren(ref nodeBase, (uint)childBase.RawValue, in target, nearestDistSq, stack, ref stackPtr);
             }
         }
 
@@ -392,7 +392,7 @@ public sealed partial class QuadTree<T, TBackoff, TMetrics>
             }
             else
             {
-                PushOrderedChildren(ref nodeBase, (uint)node.FirstChildIndex.Value, in target, nearestDistSq, stack, ref stackPtr);
+                PushOrderedChildren(ref nodeBase, (uint)node.FirstChildIndex.RawValue, in target, nearestDistSq, stack, ref stackPtr);
             }
         }
 
@@ -568,7 +568,7 @@ public ref struct SpatialRangeEnumerator<T, TBackoff, TMetrics>
 
         while (_stackPtr > 0)
         {
-            NodeIndex nodeIdx = new((int)_stack[--_stackPtr]);
+            NodeIndex nodeIdx = NodeIndex.FromRaw((int)_stack[--_stackPtr]);
 
             ref readonly QuadNode node = ref _tree.GetNode(nodeIdx);
             if (!node.Bounds.Overlaps(in _range))
@@ -595,7 +595,7 @@ public ref struct SpatialRangeEnumerator<T, TBackoff, TMetrics>
                 NodeIndex childBase = node.FirstChildIndex;
                 if (childBase.IsValid && _stackPtr + 4 <= 128)
                 {
-                    uint child = (uint)childBase.Value;
+                    uint child = (uint)childBase.RawValue;
                     _stack[_stackPtr++] = child + 3u;
                     _stack[_stackPtr++] = child + 2u;
                     _stack[_stackPtr++] = child + 1u;

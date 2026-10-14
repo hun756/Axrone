@@ -9,8 +9,8 @@ public class RayHitTests
     [Fact]
     public void CompareTo_OrdersByDistance()
     {
-        var near = new RayHit(new SpatialItemId(1U), 1.5F);
-        var far = new RayHit(new SpatialItemId(2U), 9F);
+        var near = new RayHit(SpatialItemId.FromRaw(1U), 1.5F);
+        var far = new RayHit(SpatialItemId.FromRaw(2U), 9F);
 
         near.CompareTo(far).Should().BeNegative();
         far.CompareTo(near).Should().BePositive();
@@ -22,37 +22,37 @@ public class RayHitTests
     {
         RayHit[] hits =
         [
-            new(new SpatialItemId(9U), 4F),
-            new(new SpatialItemId(1U), 0.25F),
-            new(new SpatialItemId(5U), 2F),
+            new(SpatialItemId.FromRaw(9U), 4F),
+            new(SpatialItemId.FromRaw(1U), 0.25F),
+            new(SpatialItemId.FromRaw(5U), 2F),
         ];
 
         Array.Sort(hits);
 
         hits.Select(hit => hit.Distance).Should().Equal(0.25F, 2F, 4F);
-        hits[0].ItemId.Should().Be(new SpatialItemId(1U));
+        hits[0].ItemId.Should().Be(SpatialItemId.FromRaw(1U));
     }
 
     [Fact]
     public void Fields_RoundTrip()
     {
-        var hit = new RayHit(new SpatialItemId(7U), 2.25F);
+        var hit = new RayHit(SpatialItemId.FromRaw(7U), 2.25F);
 
-        hit.ItemId.Value.Should().Be(7U);
+        hit.ItemId.RawValue.Should().Be(7U);
         hit.Distance.Should().Be(2.25F);
     }
 
     [Fact]
     public void Equality_IsValueBased()
     {
-        new RayHit(new SpatialItemId(3U), 1F).Should().Be(new RayHit(new SpatialItemId(3U), 1F));
-        (new RayHit(new SpatialItemId(3U), 1F) == new RayHit(new SpatialItemId(3U), 1F)).Should().BeTrue();
+        new RayHit(SpatialItemId.FromRaw(3U), 1F).Should().Be(new RayHit(SpatialItemId.FromRaw(3U), 1F));
+        (new RayHit(SpatialItemId.FromRaw(3U), 1F) == new RayHit(SpatialItemId.FromRaw(3U), 1F)).Should().BeTrue();
     }
 
     [Fact]
     public void ToString_UsesInvariantNamedForm()
     {
-        new RayHit(new SpatialItemId(42U), 1.5F).ToString().Should().Be("Hit(Id=42, Distance=1.5000)");
+        new RayHit(SpatialItemId.FromRaw(42U), 1.5F).ToString().Should().Be("Hit(Id=42, Distance=1.5000)");
     }
 }
 
@@ -72,7 +72,7 @@ public class RayIntersectionTests
     [Fact]
     public void FromHit_KeepsItemIdAndDistance()
     {
-        var id = new SpatialItemId(11U);
+        var id = SpatialItemId.FromRaw(11U);
 
         RayIntersection hit = RayIntersection.FromHit(id, 3.5F);
 
@@ -213,9 +213,9 @@ public class KnnResultTests
     [Fact]
     public void Fields_RoundTrip()
     {
-        var result = new KnnResult<string>(new SpatialItemId(4U), "alpha", new DistanceSquared(16F));
+        var result = new KnnResult<string>(SpatialItemId.FromRaw(4U), "alpha", new DistanceSquared(16F));
 
-        result.ItemId.Should().Be(new SpatialItemId(4U));
+        result.ItemId.Should().Be(SpatialItemId.FromRaw(4U));
         result.UserData.Should().Be("alpha");
         result.DistanceSq.Should().Be(new DistanceSquared(16F));
     }
@@ -223,8 +223,8 @@ public class KnnResultTests
     [Fact]
     public void CompareTo_OrdersByDistanceSq()
     {
-        var near = new KnnResult<string>(new SpatialItemId(1U), "near", new DistanceSquared(1F));
-        var far = new KnnResult<string>(new SpatialItemId(2U), "far", new DistanceSquared(25F));
+        var near = new KnnResult<string>(SpatialItemId.FromRaw(1U), "near", new DistanceSquared(1F));
+        var far = new KnnResult<string>(SpatialItemId.FromRaw(2U), "far", new DistanceSquared(25F));
 
         near.CompareTo(far).Should().BeNegative();
         far.CompareTo(near).Should().BePositive();
@@ -236,9 +236,9 @@ public class KnnResultTests
     {
         KnnResult<string>[] results =
         [
-            new(new SpatialItemId(1U), "third", new DistanceSquared(9F)),
-            new(new SpatialItemId(2U), "first", new DistanceSquared(1F)),
-            new(new SpatialItemId(3U), "second", new DistanceSquared(4F)),
+            new(SpatialItemId.FromRaw(1U), "third", new DistanceSquared(9F)),
+            new(SpatialItemId.FromRaw(2U), "first", new DistanceSquared(1F)),
+            new(SpatialItemId.FromRaw(3U), "second", new DistanceSquared(4F)),
         ];
 
         Array.Sort(results);
@@ -250,7 +250,7 @@ public class KnnResultTests
     [Fact]
     public void ToString_IsNonEmpty_AndMentionsIdAndData()
     {
-        string text = new KnnResult<string>(new SpatialItemId(4U), "alpha", new DistanceSquared(16F)).ToString();
+        string text = new KnnResult<string>(SpatialItemId.FromRaw(4U), "alpha", new DistanceSquared(16F)).ToString();
 
         text.Should().NotBeNullOrEmpty();
         text.Should().Contain("Id=4");

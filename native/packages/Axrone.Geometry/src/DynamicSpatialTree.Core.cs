@@ -124,7 +124,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
         _state.VelocityMultiplier = velocityMultiplier;
         _state.Capacity = capacity.Value;
         _state.Root = NodeIndex.Null;
-        _state.FreeList = new NodeIndex(0);
+        _state.FreeList = NodeIndex.FromIndex(0);
         _state.Count = 0;
         _state.Disposed = 0;
 
@@ -259,7 +259,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             }
 
             NodeIndex nodeId = handle.Index;
-            if ((uint)nodeId.Value >= (uint)_state.Capacity)
+            if ((uint)nodeId.RawValue >= (uint)_state.Capacity)
             {
                 return new TreeUpdateResult(TreeUpdateOutcome.HandleNotFound, handle);
             }
@@ -300,7 +300,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             EnsureNotDisposed();
 
             NodeIndex nodeId = handle.Index;
-            if ((uint)nodeId.Value >= (uint)_state.Capacity)
+            if ((uint)nodeId.RawValue >= (uint)_state.Capacity)
             {
                 return false;
             }
@@ -334,7 +334,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             EnsureNotDisposed();
 
             NodeIndex nodeId = handle.Index;
-            if ((uint)nodeId.Value >= (uint)_state.Capacity)
+            if ((uint)nodeId.RawValue >= (uint)_state.Capacity)
             {
                 bounds = default;
                 return false;
@@ -367,7 +367,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             EnsureNotDisposed();
 
             NodeIndex nodeId = handle.Index;
-            if ((uint)nodeId.Value >= (uint)_state.Capacity)
+            if ((uint)nodeId.RawValue >= (uint)_state.Capacity)
             {
                 payload = default;
                 return false;
@@ -393,7 +393,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
             EnsureNotDisposed();
 
             _state.Root = NodeIndex.Null;
-            _state.FreeList = new NodeIndex(0);
+            _state.FreeList = NodeIndex.FromIndex(0);
             _state.Count = 0;
 
             // Bump every slot's epoch instead of resetting it: per-slot
@@ -434,7 +434,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref DynamicTreeNode<T> GetNodeRef(NodeIndex index) => ref _nodes[index.Value];
+    internal ref DynamicTreeNode<T> GetNodeRef(NodeIndex index) => ref _nodes[index.RawValue];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static float HalfArea(Aabb3D box) => box.SurfaceArea() * 0.5f;
@@ -445,7 +445,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
         int end = start + length;
         for (int i = start; i < end - 1; i++)
         {
-            nodes[i].Parent = new NodeIndex(i + 1);
+            nodes[i].Parent = NodeIndex.FromIndex(i + 1);
             nodes[i].Left = NodeIndex.Null;
             nodes[i].Right = NodeIndex.Null;
             nodes[i].Height = -1;
@@ -813,7 +813,7 @@ public partial class DynamicSpatialTree<T, TExpansionPolicy, TSAHPolicy> : ISpat
         Array.Copy(_nodes, newNodes, oldCapacity);
         InitializeFreeRange(newNodes, oldCapacity, newCapacity - oldCapacity);
 
-        _state.FreeList = new NodeIndex(oldCapacity);
+        _state.FreeList = NodeIndex.FromIndex(oldCapacity);
         _nodes = newNodes;
         _state.Capacity = newCapacity;
     }

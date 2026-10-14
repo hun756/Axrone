@@ -166,7 +166,7 @@ public class RaycastingTests
     {
         var node = new LinearBvhNode(
             new Aabb3D(new Vec3(2, -1, -1), new Vec3(3, 1, 1)),
-            new NodeIndex(4),
+            NodeIndex.FromRaw(4),
             0);
 
         node.IsLeaf.Should().BeFalse();

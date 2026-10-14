@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Physics2D</RootNamespace>
+    <AssemblyName>Axrone.Physics2D</AssemblyName>
+    <Description>2D rigid-body physics for the Axrone engine: broadphase, narrowphase, solver and islands over the primitives owned by Axrone.Geometry.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Operator overloads need named alternatives — the identity casts
+         are the documented API surface. The Value property and the public
+         constructors already cover the shapes that need an expression form. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on stateless structs — partition strategies carry no state
+         to compare; an elementwise Equals would be surface nobody should call. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2007: the bulk-drain lifecycle awaits its own spin/yield loop, which is built on
+         Task.Yield and carries no captured-context dependency; the awaits stay bare so the
+         drain behaves identically on the worker thread and on a pooled caller. -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Physics2D.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

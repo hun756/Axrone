@@ -208,7 +208,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
 
         if (count <= maxLeafCapacity)
         {
-            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, new NodeIndex(start), count);
+            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, NodeIndex.FromRaw(start), count);
             return;
         }
 
@@ -232,7 +232,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
 
         if (maxExtent < 1e-6f)
         {
-            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, new NodeIndex(start), count);
+            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, NodeIndex.FromRaw(start), count);
             return;
         }
 
@@ -308,7 +308,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
         int mid;
         if (bestCost >= count && count <= (maxLeafCapacity * 2))
         {
-            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, new NodeIndex(start), count);
+            nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, NodeIndex.FromRaw(start), count);
             return;
         }
 
@@ -357,7 +357,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
         BuildSubtree(leftChild, start, leftCount, indices, primitives, bounds, centroids, ref allocatedNodes, nodes, maxLeafCapacity, sahBinCount);
         BuildSubtree(rightChild, mid, rightCount, indices, primitives, bounds, centroids, ref allocatedNodes, nodes, maxLeafCapacity, sahBinCount);
 
-        nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, new NodeIndex(leftChild), 0);
+        nodes[nodeIndex] = new LinearBvhNode(in nodeBounds, NodeIndex.FromRaw(leftChild), 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -540,7 +540,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
 
                 if (nodePtr->IsLeaf)
                 {
-                    int startOffset = nodePtr->ChildOrIndex.Value;
+                    int startOffset = nodePtr->ChildOrIndex.RawValue;
                     int count = nodePtr->PrimitiveCount;
 
                     for (int i = 0; i < count; i++)
@@ -564,7 +564,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
                 }
                 else
                 {
-                    int leftChild = nodePtr->ChildOrIndex.Value;
+                    int leftChild = nodePtr->ChildOrIndex.RawValue;
                     int rightChild = leftChild + 1;
 
                     LinearBvhNode* leftPtr = nodeArray + leftChild;
@@ -660,7 +660,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
 
                 if (nodePtr->IsLeaf)
                 {
-                    int startOffset = nodePtr->ChildOrIndex.Value;
+                    int startOffset = nodePtr->ChildOrIndex.RawValue;
                     int count = nodePtr->PrimitiveCount;
 
                     for (int i = 0; i < count; i++)
@@ -683,7 +683,7 @@ public sealed partial class BvhPipeline<TPrimitive> :
                 }
                 else
                 {
-                    int leftChild = nodePtr->ChildOrIndex.Value;
+                    int leftChild = nodePtr->ChildOrIndex.RawValue;
                     int rightChild = leftChild + 1;
 
                     LinearBvhNode* leftPtr = nodeArray + leftChild;

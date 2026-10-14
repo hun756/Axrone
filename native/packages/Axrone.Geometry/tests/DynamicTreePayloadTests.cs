@@ -12,7 +12,7 @@ public class DynamicTreePayloadTests
     {
         public bool OnOverlap(SpatialItemId itemId, string userData, in Aabb3D box, ref Dictionary<uint, string> context)
         {
-            context[itemId.Value] = userData;
+            context[itemId.RawValue] = userData;
             return true;
         }
     }
@@ -21,7 +21,7 @@ public class DynamicTreePayloadTests
     {
         public bool OnHit(SpatialItemId itemId, string userData, in Ray3D ray, ref float maxDistance, ref Dictionary<uint, string> context)
         {
-            context[itemId.Value] = userData;
+            context[itemId.RawValue] = userData;
             return true;
         }
     }
@@ -30,7 +30,7 @@ public class DynamicTreePayloadTests
     {
         public bool OnVisible(SpatialItemId itemId, string userData, in Aabb3D box, ref Dictionary<uint, string> context)
         {
-            context[itemId.Value] = userData;
+            context[itemId.RawValue] = userData;
             return true;
         }
     }
@@ -39,8 +39,8 @@ public class DynamicTreePayloadTests
     {
         public bool OnPair(SpatialItemId idA, string dataA, SpatialItemId idB, string dataB, ref Dictionary<uint, string> context)
         {
-            dataA.Should().Be(context[idA.Value]);
-            dataB.Should().Be(context[idB.Value]);
+            dataA.Should().Be(context[idA.RawValue]);
+            dataB.Should().Be(context[idB.RawValue]);
             return true;
         }
     }
@@ -69,7 +69,7 @@ public class DynamicTreePayloadTests
         var truth = new Dictionary<uint, string>();
         foreach (SpatialItemId id in ids)
         {
-            truth[id.Value] = tree.GetUserData(id);
+            truth[id.RawValue] = tree.GetUserData(id);
         }
 
         return truth;

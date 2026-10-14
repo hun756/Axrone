@@ -27,7 +27,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
         {
             TraversalStack128 stack = default;
             int stackPtr = 0;
-            stack[stackPtr++] = new NodeIndex(0);
+            stack[stackPtr++] = NodeIndex.FromIndex(0);
 
             OctreeNode* nodes = _nodes;
             OctreeItem<T>* items = _items;
@@ -37,7 +37,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
             while (stackPtr > 0)
             {
                 NodeIndex nodeIdx = stack[--stackPtr];
-                ref OctreeNode node = ref nodes[nodeIdx.Value];
+                ref OctreeNode node = ref nodes[nodeIdx.RawValue];
 
                 if (!node.Bounds.Overlaps(in queryBox))
                 {
@@ -73,7 +73,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
                             ThrowHelper.ThrowStackDepthExceeded();
                         }
 
-                        stack[stackPtr++] = new NodeIndex(node.ChildBaseIndex.Value + octant);
+                        stack[stackPtr++] = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
                     }
                 }
             }
@@ -109,7 +109,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
             float limit = maxDistance.Value;
             TraversalStack128 stack = default;
             int stackPtr = 0;
-            stack[stackPtr++] = new NodeIndex(0);
+            stack[stackPtr++] = NodeIndex.FromIndex(0);
 
             OctreeNode* nodes = _nodes;
             OctreeItem<T>* items = _items;
@@ -117,7 +117,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
             while (stackPtr > 0)
             {
                 NodeIndex nodeIdx = stack[--stackPtr];
-                ref OctreeNode node = ref nodes[nodeIdx.Value];
+                ref OctreeNode node = ref nodes[nodeIdx.RawValue];
 
                 if (!node.Bounds.Intersects(in ray, limit, out _))
                 {
@@ -147,8 +147,8 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
                         int octant = BitOperations.TrailingZeroCount(mask);
                         mask &= mask - 1u;
 
-                        NodeIndex childIdx = new(node.ChildBaseIndex.Value + octant);
-                        if (nodes[childIdx.Value].Bounds.Intersects(in ray, limit, out _))
+                        NodeIndex childIdx = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
+                        if (nodes[childIdx.RawValue].Bounds.Intersects(in ray, limit, out _))
                         {
                             if ((uint)stackPtr >= 128u)
                             {
@@ -183,7 +183,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
         {
             TraversalStack128 stack = default;
             int stackPtr = 0;
-            stack[stackPtr++] = new NodeIndex(0);
+            stack[stackPtr++] = NodeIndex.FromIndex(0);
 
             OctreeNode* nodes = _nodes;
             OctreeItem<T>* items = _items;
@@ -191,7 +191,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
             while (stackPtr > 0)
             {
                 NodeIndex nodeIdx = stack[--stackPtr];
-                ref OctreeNode node = ref nodes[nodeIdx.Value];
+                ref OctreeNode node = ref nodes[nodeIdx.RawValue];
 
                 if (!node.Bounds.Intersects(in sphere))
                 {
@@ -221,8 +221,8 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
                         int octant = BitOperations.TrailingZeroCount(mask);
                         mask &= mask - 1u;
 
-                        NodeIndex childIdx = new(node.ChildBaseIndex.Value + octant);
-                        if (nodes[childIdx.Value].Bounds.Intersects(in sphere))
+                        NodeIndex childIdx = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
+                        if (nodes[childIdx.RawValue].Bounds.Intersects(in sphere))
                         {
                             if ((uint)stackPtr >= 128u)
                             {
@@ -256,7 +256,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
         {
             TraversalStack128 stack = default;
             int stackPtr = 0;
-            stack[stackPtr++] = new NodeIndex(0);
+            stack[stackPtr++] = NodeIndex.FromIndex(0);
 
             float bestDistSq = maxDistance.Value * maxDistance.Value;
             bool found = false;
@@ -269,7 +269,7 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
             while (stackPtr > 0)
             {
                 NodeIndex nodeIdx = stack[--stackPtr];
-                ref OctreeNode node = ref nodes[nodeIdx.Value];
+                ref OctreeNode node = ref nodes[nodeIdx.RawValue];
 
                 if (node.Bounds.DistanceSquared(in point) > bestDistSq)
                 {
@@ -301,8 +301,8 @@ public sealed partial class NativeOctree<T, TPartition, TMetrics>
                         int octant = BitOperations.TrailingZeroCount(mask);
                         mask &= mask - 1u;
 
-                        NodeIndex childIdx = new(node.ChildBaseIndex.Value + octant);
-                        float childDistSq = nodes[childIdx.Value].Bounds.DistanceSquared(in point);
+                        NodeIndex childIdx = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
+                        float childDistSq = nodes[childIdx.RawValue].Bounds.DistanceSquared(in point);
                         if (childDistSq <= bestDistSq)
                         {
                             childSortBuffer[validCount++] = (childIdx, childDistSq);
@@ -388,7 +388,7 @@ public ref struct BoxQueryEnumerator<T, TPartition, TMetrics>
         _held = tree.TryEnterOperation();
         if (_held)
         {
-            _stack[_stackPtr++] = new NodeIndex(0);
+            _stack[_stackPtr++] = NodeIndex.FromIndex(0);
         }
     }
 
@@ -439,7 +439,7 @@ public ref struct BoxQueryEnumerator<T, TPartition, TMetrics>
             }
 
             NodeIndex nodeIdx = _stack[--_stackPtr];
-            ref OctreeNode node = ref _tree.NodeAt((uint)nodeIdx.Value);
+            ref OctreeNode node = ref _tree.NodeAt((uint)nodeIdx.RawValue);
 
             if (!node.Bounds.Overlaps(in _queryBox))
             {
@@ -460,7 +460,7 @@ public ref struct BoxQueryEnumerator<T, TPartition, TMetrics>
                         ThrowHelper.ThrowStackDepthExceeded();
                     }
 
-                    _stack[_stackPtr++] = new NodeIndex(node.ChildBaseIndex.Value + octant);
+                    _stack[_stackPtr++] = NodeIndex.FromIndex(node.ChildBaseIndex.RawValue + octant);
                 }
             }
 
