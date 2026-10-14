@@ -20,6 +20,15 @@ public struct ContactPoint3D : IEquatable<ContactPoint3D>
     /// <summary>Accumulated normal impulse.</summary>
     public float NormalImpulse;
 
+    /// <summary>Accumulated friction impulse along the first tangent.</summary>
+    public float TangentImpulse1;
+
+    /// <summary>Accumulated friction impulse along the second tangent.</summary>
+    public float TangentImpulse2;
+
+    /// <summary>Restitution bias frozen once per step from the approach speed.</summary>
+    public float VelocityBias;
+
     /// <summary>Feature fingerprint stabilizing the point across steps.</summary>
     public uint Id;
 
@@ -31,6 +40,9 @@ public struct ContactPoint3D : IEquatable<ContactPoint3D>
         PositionB = positionB;
         Separation = separation;
         NormalImpulse = 0.0f;
+        TangentImpulse1 = 0.0f;
+        TangentImpulse2 = 0.0f;
+        VelocityBias = 0.0f;
         Id = id;
     }
 
