@@ -320,6 +320,11 @@ public sealed class World : IDisposable
                 Sphere3 world = _shapes.GetWorldSphere(shapeId);
                 struck = ShapeRaycast3D.RaySphere(in ray, maxDistance, in world, out distance, out normal);
             }
+            else if (record.Kind == ColliderKind.Capsule)
+            {
+                Capsule3 world = _shapes.GetWorldCapsule(shapeId);
+                struck = ShapeRaycast3D.RayCapsule(in ray, maxDistance, in world, out distance, out normal);
+            }
             else
             {
                 Box3 local = record.LocalBox;
@@ -591,6 +596,13 @@ public sealed class World : IDisposable
             return false;
         }
 
+        // Curved-prism pairs route through GJK/EPA in a later slice; until then
+        // they never touch. The kinds are not attachable yet, so this is a guard.
+        if (recordA.Kind is ColliderKind.Cylinder or ColliderKind.Cone ||
+            recordB.Kind is ColliderKind.Cylinder or ColliderKind.Cone)
+        {
+            return false;
+        }
         if (!EvaluateNarrowphase(shapeA, in recordA, shapeB, in recordB, out Manifold3D manifold))
         {
             return false;
@@ -619,6 +631,55 @@ public sealed class World : IDisposable
             Sphere3 worldA = _shapes.GetWorldSphere(shapeA);
             Sphere3 worldB = _shapes.GetWorldSphere(shapeB);
             return Penetration3D.SphereSphere(in worldA, in worldB, out manifold);
+        }
+
+        if (recordA.Kind == ColliderKind.Capsule && recordB.Kind == ColliderKind.Capsule)
+        {
+            Capsule3 worldA = _shapes.GetWorldCapsule(shapeA);
+            Capsule3 worldB = _shapes.GetWorldCapsule(shapeB);
+            return Penetration3D.CapsuleCapsule(in worldA, in worldB, out manifold);
+        }
+
+        if (recordA.Kind == ColliderKind.Capsule && recordB.Kind == ColliderKind.Sphere)
+        {
+            Capsule3 worldCapsule = _shapes.GetWorldCapsule(shapeA);
+            Sphere3 worldSphere = _shapes.GetWorldSphere(shapeB);
+            return Penetration3D.CapsuleSphere(in worldCapsule, in worldSphere, out manifold);
+        }
+
+        if (recordA.Kind == ColliderKind.Sphere && recordB.Kind == ColliderKind.Capsule)
+        {
+            Capsule3 worldCapsule = _shapes.GetWorldCapsule(shapeB);
+            Sphere3 worldSphere = _shapes.GetWorldSphere(shapeA);
+            bool hit = Penetration3D.CapsuleSphere(in worldCapsule, in worldSphere, out manifold);
+            if (hit)
+            {
+                FlipManifold(ref manifold);
+            }
+
+            return hit;
+        }
+
+        if (recordA.Kind == ColliderKind.Capsule && recordB.Kind == ColliderKind.Box)
+        {
+            Capsule3 worldCapsule = _shapes.GetWorldCapsule(shapeA);
+            Box3 localBox = recordB.LocalBox;
+            RigidTransform3D boxFrame = _shapes.GetWorldFrame(shapeB);
+            return Penetration3D.CapsuleBox(in worldCapsule, in localBox, boxFrame, out manifold);
+        }
+
+        if (recordA.Kind == ColliderKind.Box && recordB.Kind == ColliderKind.Capsule)
+        {
+            Capsule3 worldCapsule = _shapes.GetWorldCapsule(shapeB);
+            Box3 localBox = recordA.LocalBox;
+            RigidTransform3D boxFrame = _shapes.GetWorldFrame(shapeA);
+            bool hit = Penetration3D.CapsuleBox(in worldCapsule, in localBox, boxFrame, out manifold);
+            if (hit)
+            {
+                FlipManifold(ref manifold);
+            }
+
+            return hit;
         }
 
         if (recordA.Kind == ColliderKind.Sphere)

@@ -52,13 +52,81 @@ public static class ShapeRaycast3D
         return true;
     }
 
+    /// <summary>Casts a ray against a world capsule.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool RayCapsule(
+        in Ray3D ray, float maxDistance, in Capsule3 capsule,
+        out float distance, out Vec3 normal)
+    {
+        Vec3 axis = ray.Direction;
+        float axisLenSq = axis.LengthSquared();
+        if (axisLenSq <= 1e-24f)
+        {
+            distance = 0.0f;
+            normal = Vec3.Zero;
+            return false;
+        }
+
+        Vec3 unit = axis / MathF.Sqrt(axisLenSq);
+        Vec3 seg = capsule.P1 - capsule.P0;
+        Vec3 origin = ray.Origin - capsule.P0;
+
+        float b = Vec3.Dot(unit, seg);
+        float c = Vec3.Dot(seg, seg);
+        float d = Vec3.Dot(unit, origin);
+        float e = Vec3.Dot(seg, origin);
+        float denom = c - (b * b);
+
+        float sRay;
+        float sSeg;
+        if (denom <= 1e-12f)
+        {
+            sSeg = 0.0f;
+            sRay = -d;
+        }
+        else
+        {
+            sSeg = Math.Clamp((e - (b * d)) / denom, 0.0f, 1.0f);
+            sRay = (b * sSeg) - d;
+            if (sRay < 0.0f)
+            {
+                sRay = 0.0f;
+                sSeg = c > 1e-12f ? Math.Clamp(e / c, 0.0f, 1.0f) : 0.0f;
+            }
+        }
+
+        Vec3 closest = capsule.P0 + (seg * sSeg);
+        Vec3 delta = (ray.Origin + (unit * sRay)) - closest;
+        float distSq = delta.LengthSquared();
+        if (distSq >= capsule.Radius * capsule.Radius)
+        {
+            distance = 0.0f;
+            normal = Vec3.Zero;
+            return false;
+        }
+
+        float dist = MathF.Sqrt(distSq);
+        float back = MathF.Sqrt(MathF.Max(capsule.Radius * capsule.Radius - distSq, 0.0f));
+        float hit = sRay - back;
+        if (hit < 0.0f || hit * hit > maxDistance * maxDistance * axisLenSq)
+        {
+            distance = 0.0f;
+            normal = Vec3.Zero;
+            return false;
+        }
+
+        distance = hit;
+        normal = dist > 1e-9f ? delta / dist : unit * -1.0f;
+        return true;
+    }
+
     /// <summary>Casts a ray against a framed box.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool RayBox(
         in Ray3D ray, float maxDistance, in Box3 box, in RigidTransform3D frame,
         out float distance, out Vec3 normal)
     {
-        Vec3 localOrigin = frame.InverseTransformPoint(ray.Origin);
+        Vec3 localOrigin = frame.InverseTransformPoint(ray.Origin) - box.Center;
         Vec3 localDirection = frame.Rotation.Conjugate() * ray.Direction;
 
         float tMin = 0.0f;

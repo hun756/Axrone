@@ -266,6 +266,255 @@ public static class Penetration3D
     private static Vec3 SupportPoint(Box3 box, in RigidTransform3D frame, Vec3 direction) =>
         frame.TransformPoint(Box3.Support(box, frame.Rotation.Conjugate() * direction));
 
+    /// <summary>Penetration of two capsules; disjoint pairs report no contact.</summary>
+    /// <param name="capsuleA">The first capsule in world space.</param>
+    /// <param name="capsuleB">The second capsule in world space.</param>
+    /// <param name="manifold">The contact manifold while overlapping.</param>
+    /// <returns><see langword="true"/> with a single-point manifold while overlapping.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool CapsuleCapsule(in Capsule3 capsuleA, in Capsule3 capsuleB, out Manifold3D manifold)
+    {
+        SegmentSegmentClosest(
+            capsuleA.P0, capsuleA.P1, capsuleB.P0, capsuleB.P1,
+            out Vec3 closestA, out Vec3 closestB);
+
+        Vec3 delta = closestA - closestB;
+        float distSq = delta.LengthSquared();
+        float radiusSum = capsuleA.Radius + capsuleB.Radius;
+        if (distSq >= radiusSum * radiusSum)
+        {
+            manifold = Manifold3D.Empty;
+            return false;
+        }
+
+        float dist = MathF.Sqrt(distSq);
+        Vec3 normal = dist > 1e-9f ? delta / dist : new Vec3(1.0f, 0.0f, 0.0f);
+        var point = new ContactPoint3D(
+            closestA - (normal * capsuleA.Radius), closestB + (normal * capsuleB.Radius),
+            dist - radiusSum, 0u);
+        manifold = Manifold3D.One(normal, point);
+        return true;
+    }
+
+    /// <summary>Penetration of a capsule against a ball; disjoint pairs report no contact.</summary>
+    /// <param name="capsule">The capsule in world space.</param>
+    /// <param name="sphere">The ball in world space.</param>
+    /// <param name="manifold">The contact manifold while overlapping.</param>
+    /// <returns><see langword="true"/> with a single-point manifold while overlapping.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool CapsuleSphere(in Capsule3 capsule, in Sphere3 sphere, out Manifold3D manifold)
+    {
+        Vec3 closest = ClosestPointOnSegment(sphere.Center, capsule.P0, capsule.P1);
+        Vec3 delta = closest - sphere.Center;
+        float distSq = delta.LengthSquared();
+        float radiusSum = capsule.Radius + sphere.Radius;
+        if (distSq >= radiusSum * radiusSum)
+        {
+            manifold = Manifold3D.Empty;
+            return false;
+        }
+
+        float dist = MathF.Sqrt(distSq);
+        Vec3 normal = dist > 1e-9f ? delta / dist : new Vec3(1.0f, 0.0f, 0.0f);
+        var point = new ContactPoint3D(
+            closest - (normal * capsule.Radius), sphere.Center + (normal * sphere.Radius),
+            dist - radiusSum, 0u);
+        manifold = Manifold3D.One(normal, point);
+        return true;
+    }
+
+    /// <summary>Penetration of a capsule against a framed box; disjoint pairs report no contact.</summary>
+    /// <param name="capsule">The capsule in world space.</param>
+    /// <param name="box">The box in its local frame.</param>
+    /// <param name="boxFrame">The frame carrying the box to world space.</param>
+    /// <param name="manifold">The contact manifold while overlapping.</param>
+    /// <returns><see langword="true"/> with a single-point manifold while overlapping.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool CapsuleBox(in Capsule3 capsule, in Box3 box, in RigidTransform3D boxFrame, out Manifold3D manifold)
+    {
+        Vec3 localP0 = boxFrame.InverseTransformPoint(capsule.P0) - box.Center;
+        Vec3 localP1 = boxFrame.InverseTransformPoint(capsule.P1) - box.Center;
+
+        ClosestSegmentBox(localP0, localP1, box.HalfExtents, out Vec3 segPoint, out Vec3 boxPoint, out bool intersecting);
+        if (!intersecting)
+        {
+            Vec3 worldSeg = boxFrame.TransformPoint(box.Center + segPoint);
+            Vec3 worldBox = boxFrame.TransformPoint(box.Center + boxPoint);
+            Vec3 delta = worldSeg - worldBox;
+            float distSq = delta.LengthSquared();
+            if (distSq >= capsule.Radius * capsule.Radius)
+            {
+                manifold = Manifold3D.Empty;
+                return false;
+            }
+
+            float dist = MathF.Sqrt(distSq);
+            Vec3 normal = dist > 1e-9f ? delta / dist : boxFrame.Rotation * new Vec3(1.0f, 0.0f, 0.0f);
+            var point = new ContactPoint3D(
+                worldSeg - (normal * capsule.Radius), worldBox, dist - capsule.Radius, FaceId(boxPoint, box.HalfExtents));
+            manifold = Manifold3D.One(normal, point);
+            return true;
+        }
+
+        PushOutOfBox(segPoint, box.HalfExtents, out Vec3 pushAxis, out float pushDepth);
+        Vec3 worldNormal = boxFrame.Rotation * pushAxis;
+        float separation = -(pushDepth + capsule.Radius);
+        Vec3 contactB = boxFrame.TransformPoint(box.Center + segPoint);
+        Vec3 contactA = boxFrame.TransformPoint(box.Center + segPoint) - (worldNormal * capsule.Radius);
+        var inside = new ContactPoint3D(contactA, contactB, separation, 0xFFu);
+        manifold = Manifold3D.One(worldNormal, inside);
+        return true;
+    }
+
+    /// <summary>Closest point on a segment to a query point.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static Vec3 ClosestPointOnSegment(Vec3 point, Vec3 a, Vec3 b)
+    {
+        Vec3 ab = b - a;
+        float denom = Vec3.Dot(ab, ab);
+        if (denom <= 1e-24f)
+        {
+            return a;
+        }
+
+        float t = Math.Clamp(Vec3.Dot(point - a, ab) / denom, 0.0f, 1.0f);
+        return a + (ab * t);
+    }
+
+    /// <summary>Closest points between two segments (Ericson 5.1.9).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal static void SegmentSegmentClosest(
+        Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2, out Vec3 closest1, out Vec3 closest2)
+    {
+        Vec3 d1 = q1 - p1;
+        Vec3 d2 = q2 - p2;
+        Vec3 r = p1 - p2;
+        float a = Vec3.Dot(d1, d1);
+        float e = Vec3.Dot(d2, d2);
+        float f = Vec3.Dot(d2, r);
+
+        float s;
+        float t;
+        if (a <= 1e-12f && e <= 1e-12f)
+        {
+            s = 0.0f;
+            t = 0.0f;
+        }
+        else if (a <= 1e-12f)
+        {
+            s = 0.0f;
+            t = Math.Clamp(f / e, 0.0f, 1.0f);
+        }
+        else
+        {
+            float c = Vec3.Dot(d1, r);
+            if (e <= 1e-12f)
+            {
+                t = 0.0f;
+                s = Math.Clamp(-c / a, 0.0f, 1.0f);
+            }
+            else
+            {
+                float b = Vec3.Dot(d1, d2);
+                float denom = (a * e) - (b * b);
+                s = denom != 0.0f ? Math.Clamp(((b * f) - (c * e)) / denom, 0.0f, 1.0f) : 0.0f;
+                t = ((b * s) + f) / e;
+                if (t < 0.0f)
+                {
+                    t = 0.0f;
+                    s = Math.Clamp(-c / a, 0.0f, 1.0f);
+                }
+                else if (t > 1.0f)
+                {
+                    t = 1.0f;
+                    s = Math.Clamp((b - c) / a, 0.0f, 1.0f);
+                }
+            }
+        }
+
+        closest1 = p1 + (d1 * s);
+        closest2 = p2 + (d2 * t);
+    }
+
+    /// <summary>
+    /// Closest points between a segment and a box surface. Endpoints inside
+    /// the box report intersection with the deepest endpoint; otherwise the
+    /// minimum of endpoint clamps and edge spans wins.
+    /// </summary>
+    internal static void ClosestSegmentBox(
+        Vec3 p0, Vec3 p1, Vec3 halfExtents,
+        out Vec3 segPoint, out Vec3 boxPoint, out bool intersecting)
+    {
+        bool inside0 = IsInsideBox(p0, halfExtents);
+        bool inside1 = IsInsideBox(p1, halfExtents);
+        if (inside0 || inside1)
+        {
+            PushOutOfBox(p0, halfExtents, out _, out float depth0);
+            PushOutOfBox(p1, halfExtents, out _, out float depth1);
+            segPoint = depth0 >= depth1 ? p0 : p1;
+            boxPoint = segPoint;
+            intersecting = true;
+            return;
+        }
+
+        float bestDistSq = float.PositiveInfinity;
+        segPoint = p0;
+        boxPoint = ClampToBox(p0, halfExtents);
+
+        TrySegmentBoxCandidate(p0, ClampToBox(p0, halfExtents), ref bestDistSq, ref segPoint, ref boxPoint);
+        TrySegmentBoxCandidate(p1, ClampToBox(p1, halfExtents), ref bestDistSq, ref segPoint, ref boxPoint);
+
+        Span<Vec3> corners = stackalloc Vec3[8];
+        BoxCorners(halfExtents, corners);
+        ReadOnlySpan<int> edges = stackalloc int[]
+        {
+            0, 1, 1, 3, 3, 2, 2, 0,
+            4, 5, 5, 7, 7, 6, 6, 4,
+            0, 4, 1, 5, 3, 7, 2, 6,
+        };
+        for (int e = 0; e < 12; e++)
+        {
+            SegmentSegmentClosest(p0, p1, corners[edges[e * 2]], corners[edges[e * 2 + 1]], out Vec3 s, out Vec3 b);
+            TrySegmentBoxCandidate(s, b, ref bestDistSq, ref segPoint, ref boxPoint);
+        }
+
+        intersecting = false;
+    }
+
+    /// <summary>Keeps the closest segment-box candidate.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void TrySegmentBoxCandidate(
+        Vec3 s, Vec3 b, ref float bestDistSq, ref Vec3 segPoint, ref Vec3 boxPoint)
+    {
+        float distSq = (s - b).LengthSquared();
+        if (distSq < bestDistSq)
+        {
+            bestDistSq = distSq;
+            segPoint = s;
+            boxPoint = b;
+        }
+    }
+
+    /// <summary>Eight corners of a box centered at the origin.</summary>
+    private static void BoxCorners(Vec3 halfExtents, Span<Vec3> corners)
+    {
+        corners[0] = new Vec3(-halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        corners[1] = new Vec3(halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        corners[2] = new Vec3(-halfExtents.X, halfExtents.Y, -halfExtents.Z);
+        corners[3] = new Vec3(halfExtents.X, halfExtents.Y, -halfExtents.Z);
+        corners[4] = new Vec3(-halfExtents.X, -halfExtents.Y, halfExtents.Z);
+        corners[5] = new Vec3(halfExtents.X, -halfExtents.Y, halfExtents.Z);
+        corners[6] = new Vec3(-halfExtents.X, halfExtents.Y, halfExtents.Z);
+        corners[7] = new Vec3(halfExtents.X, halfExtents.Y, halfExtents.Z);
+    }
+
+    /// <summary>Whether a point lies inside a centered box.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsInsideBox(Vec3 point, Vec3 halfExtents) =>
+        MathF.Abs(point.X) <= halfExtents.X &&
+        MathF.Abs(point.Y) <= halfExtents.Y &&
+        MathF.Abs(point.Z) <= halfExtents.Z;
+
     /// <summary>Clamps a point to the box volume.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private static Vec3 ClampToBox(Vec3 point, Vec3 halfExtents) => new(

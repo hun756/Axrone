@@ -8,6 +8,15 @@ public enum ColliderKind : byte
 
     /// <summary>Axis-aligned box collider.</summary>
     Box = 1,
+
+    /// <summary>Stadium-solid collider.</summary>
+    Capsule = 2,
+
+    /// <summary>Cylinder collider around a principal axis.</summary>
+    Cylinder = 3,
+
+    /// <summary>Cone collider around a principal axis.</summary>
+    Cone = 4,
 }
 
 /// <summary>
@@ -49,6 +58,15 @@ internal struct ShapeRecord
 
     /// <summary>Local box; live when <see cref="Kind"/> is <see cref="ColliderKind.Box"/>.</summary>
     public Box3 LocalBox;
+
+    /// <summary>Local capsule; live when <see cref="Kind"/> is <see cref="ColliderKind.Capsule"/>.</summary>
+    public Capsule3 LocalCapsule;
+
+    /// <summary>Local cylinder; live when <see cref="Kind"/> is <see cref="ColliderKind.Cylinder"/>.</summary>
+    public Cylinder3 LocalCylinder;
+
+    /// <summary>Local cone; live when <see cref="Kind"/> is <see cref="ColliderKind.Cone"/>.</summary>
+    public Cone3 LocalCone;
 
     /// <summary>World frame; refreshed on sync.</summary>
     public RigidTransform3D WorldFrame;
@@ -148,6 +166,32 @@ public sealed class ShapeStore
         var local = new Box3(center, halfExtents);
         int slot = InsertRecord(bodies, bodyId, ColliderKind.Box, density, filter, material, localOffset, localRotation, isSensor);
         _shapes[slot].LocalBox = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
+    /// <summary>Attaches a stadium solid to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachCapsule<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec3 p0,
+        Vec3 p1,
+        float radius,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Capsule3(p0, p1, radius);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Capsule, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalCapsule = local;
         FinishAttach(bodies, tree, slot);
         return ShapeId.FromIndex(slot);
     }
@@ -272,6 +316,15 @@ public sealed class ShapeStore
         return new Box3(shape.WorldFrame.TransformPoint(shape.LocalBox.Center), shape.LocalBox.HalfExtents);
     }
 
+    /// <summary>Reads the world capsule of a capsule shape.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Capsule3 GetWorldCapsule(ShapeId id)
+    {
+        ref readonly ShapeRecord shape = ref _shapes[Validate(id)];
+        RigidTransform3D frame = shape.WorldFrame;
+        return new Capsule3(frame.TransformPoint(shape.LocalCapsule.P0), frame.TransformPoint(shape.LocalCapsule.P1), shape.LocalCapsule.Radius);
+    }
+
     /// <summary>Reads the world bounds of a shape.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Aabb3D GetWorldAabb(ShapeId id) => _shapes[Validate(id)].WorldAabb;
@@ -377,6 +430,15 @@ public sealed class ShapeStore
             return;
         }
 
+        if (shape.Kind == ColliderKind.Capsule)
+        {
+            Vec3 p0 = world.TransformPoint(shape.LocalCapsule.P0);
+            Vec3 p1 = world.TransformPoint(shape.LocalCapsule.P1);
+            shape.WorldCentroid = (p0 + p1) * 0.5f;
+            shape.WorldAabb = Capsule3.ComputeBounds(new Capsule3(p0, p1, shape.LocalCapsule.Radius));
+            return;
+        }
+
         Vec3 center = world.TransformPoint(shape.LocalBox.Center);
         shape.WorldCentroid = center;
         shape.WorldAabb = RotatedBoxBounds(center, world.Rotation, shape.LocalBox.HalfExtents);
@@ -417,9 +479,14 @@ public sealed class ShapeStore
         while (current != -1)
         {
             ref readonly ShapeRecord shape = ref _shapes[current];
-            MassData3D data = shape.Kind == ColliderKind.Sphere
-                ? LocalMassSphere(in shape)
-                : LocalMassBox(in shape);
+            MassData3D data = shape.Kind switch
+            {
+                ColliderKind.Sphere => LocalMassSphere(in shape),
+                ColliderKind.Capsule => LocalMassCapsule(in shape),
+                ColliderKind.Cylinder => LocalMassCylinder(in shape),
+                ColliderKind.Cone => LocalMassCone(in shape),
+                _ => LocalMassBox(in shape),
+            };
 
             totalMass += data.Mass;
             weightedCenter += data.Centroid * data.Mass;
@@ -477,6 +544,37 @@ public sealed class ShapeStore
         float inertia = 0.4f * mass * shape.LocalSphere.Radius * shape.LocalSphere.Radius;
         var diagonal = new Vec3(inertia, inertia, inertia);
         return new MassData3D(mass, 0.0f, diagonal, Vec3.Zero, center);
+    }
+
+    /// <summary>Mass of a capsule moved into the body frame; isotropic per the web descriptors.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassCapsule(in ShapeRecord shape)
+    {
+        Vec3 p0 = shape.LocalFrame.TransformPoint(shape.LocalCapsule.P0);
+        Vec3 p1 = shape.LocalFrame.TransformPoint(shape.LocalCapsule.P1);
+        var moved = new Capsule3(p0, p1, shape.LocalCapsule.Radius);
+        MassData3D data = moved.ComputeMass(shape.Density);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, data.Centroid);
+    }
+
+    /// <summary>Mass of a cylinder moved into the body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassCylinder(in ShapeRecord shape)
+    {
+        Vec3 center = shape.LocalFrame.TransformPoint(shape.LocalCylinder.Center);
+        var moved = new Cylinder3(center, shape.LocalCylinder.Radius, shape.LocalCylinder.Height, shape.LocalCylinder.Axis);
+        MassData3D data = moved.ComputeMass(shape.Density);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, data.Centroid);
+    }
+
+    /// <summary>Mass of a cone moved into the body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassCone(in ShapeRecord shape)
+    {
+        Vec3 center = shape.LocalFrame.TransformPoint(shape.LocalCone.Center);
+        var moved = new Cone3(center, shape.LocalCone.Radius, shape.LocalCone.Height, shape.LocalCone.Axis);
+        MassData3D data = moved.ComputeMass(shape.Density);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, data.Centroid);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
