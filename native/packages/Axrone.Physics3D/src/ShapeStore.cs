@@ -466,6 +466,10 @@ public sealed class ShapeStore
         return new Box3(shape.WorldFrame.TransformPoint(shape.LocalBox.Center), shape.LocalBox.HalfExtents);
     }
 
+    /// <summary>Reads the local capsule of a capsule shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Capsule3 GetCapsule(ShapeId id) => _shapes[Validate(id)].LocalCapsule;
+
     /// <summary>Reads the world capsule of a capsule shape.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Capsule3 GetWorldCapsule(ShapeId id)

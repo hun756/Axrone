@@ -219,22 +219,19 @@ public static class ShapeRaycast3D
 
         float t0 = (-halfExtent - origin) / direction;
         float t1 = (halfExtent - origin) / direction;
-        Vec3 faceNormal = axis * (direction > 0.0f ? -1.0f : 1.0f);
-        if (t0 > t1)
+        float tNear = direction > 0.0f ? t0 : t1;
+        float tFar = direction > 0.0f ? t1 : t0;
+        Vec3 nearNormal = axis * (direction > 0.0f ? -1.0f : 1.0f);
+
+        if (tNear > tMin)
         {
-            (t0, t1) = (t1, t0);
-            faceNormal = faceNormal * -1.0f;
+            tMin = tNear;
+            hitNormal = nearNormal;
         }
 
-        if (t0 > tMin)
+        if (tFar < tMax)
         {
-            tMin = t0;
-            hitNormal = faceNormal;
-        }
-
-        if (t1 < tMax)
-        {
-            tMax = t1;
+            tMax = tFar;
         }
 
         return tMin <= tMax;
