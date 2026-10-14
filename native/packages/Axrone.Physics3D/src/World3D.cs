@@ -159,6 +159,7 @@ public sealed class World : IDisposable
 
     private readonly BodyStore _bodies;
     private readonly ShapeStore _shapes;
+    private readonly JointStore _joints;
     private readonly DynamicAabbTree<ShapeId, SurfaceAreaHeuristicStrategy, NullSpatialMetricsSink> _tree;
     private Contact3D[] _contacts;
     private Contact3D[] _previous;
@@ -215,6 +216,7 @@ public sealed class World : IDisposable
         MaxCcdSubsteps = definition.MaxCcdSubsteps;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
+        _joints = new JointStore();
         _tree = new DynamicAabbTree<ShapeId, SurfaceAreaHeuristicStrategy, NullSpatialMetricsSink>(definition.BroadphaseOptions);
         _contacts = new Contact3D[InitialContactCapacity];
         _previous = new Contact3D[InitialContactCapacity];
@@ -241,6 +243,13 @@ public sealed class World : IDisposable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _shapes;
+    }
+
+    /// <summary>Joint registry; constrain bodies through it.</summary>
+    public JointStore Joints
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _joints;
     }
 
     /// <summary>Broadphase tree; the world keeps it in sync every step.</summary>
@@ -398,6 +407,8 @@ public sealed class World : IDisposable
     {
         ThrowIfDisposed();
 
+        _joints.DestroyJointsOfBody(bodyId);
+
         ref BodyState body = ref _bodies.Slot(bodyId);
         int current = body.FirstShape;
         while (current != -1)
@@ -505,10 +516,16 @@ public sealed class World : IDisposable
 
         ContactSolver.SolveVelocity(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), VelocityIterations);
 
+        for (int iteration = 0; iteration < VelocityIterations; iteration++)
+        {
+            JointSolver.SolveVelocityPass(_bodies, _joints);
+        }
+
         _bodies.IntegratePositions(h);
         SyncAwakeBodies();
 
         ContactSolver.SolvePositions(_bodies, _contacts.AsSpan(0, _contactCount), PositionIterations);
+        JointSolver.SolvePositionPass(_bodies, _joints);
     }
 
     /// <summary>Carries previous impulses into matching points by feature id.</summary>
