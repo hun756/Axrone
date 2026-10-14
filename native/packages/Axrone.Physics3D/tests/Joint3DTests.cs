@@ -189,4 +189,76 @@ public sealed class Joint3DTests : IDisposable
 
         _world.Bodies.GetAngularVelocity(arm).Z.Should().BeLessThan(2.0f);
     }
+
+    [Fact]
+    public void Prismatic_Slides_AlongAxisOnly()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId slider = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, slider, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(slider, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetLinearVelocity(slider, new Vec3(2.0f, 0.0f, 0.0f));
+
+        _world.Joints.CreatePrismatic(
+            _world.Bodies, frame, slider, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(1.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f));
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        Vec3 position = _world.Bodies.GetTransform(slider).Position;
+        position.Y.Should().BeApproximately(3.0f, 0.2f);
+        position.Z.Should().BeApproximately(0.0f, 0.2f);
+        position.X.Should().BeGreaterThan(0.5f);
+    }
+
+    [Fact]
+    public void PrismaticMotor_Drives_AtTargetSpeed()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId slider = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, slider, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(slider, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+
+        _world.Joints.CreatePrismatic(
+            _world.Bodies, frame, slider, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(1.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f),
+            motorSpeed: 2.0f, maxMotorForce: 100.0f, enableMotor: true);
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        _world.Bodies.GetLinearVelocity(slider).X.Should().BeApproximately(2.0f, 0.3f);
+    }
+
+    [Fact]
+    public void PrismaticLimit_Stops_AtUpperStop()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId slider = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, slider, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(slider, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetLinearVelocity(slider, new Vec3(5.0f, 0.0f, 0.0f));
+
+        _world.Joints.CreatePrismatic(
+            _world.Bodies, frame, slider, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(1.0f, 0.0f, 0.0f), new Vec3(1.0f, 0.0f, 0.0f),
+            lowerLimit: -1.0f, upperLimit: 1.0f, enableLimit: true);
+
+        for (int i = 0; i < 240; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        float travel = _world.Bodies.GetTransform(slider).Position.X;
+        travel.Should().BeLessThan(1.3f);
+        _world.Bodies.GetLinearVelocity(slider).X.Should().BeLessThan(0.5f);
+    }
 }

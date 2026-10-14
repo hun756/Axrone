@@ -140,6 +140,65 @@ internal struct HingeJointData
     public bool Live;
 }
 
+/// <summary>Slider state: translation locked to one axis with stops and a drive motor.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+internal struct PrismaticJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec3 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec3 LocalAnchorB;
+
+    /// <summary>Slide axis in the first body frame.</summary>
+    public Vec3 LocalAxisA;
+
+    /// <summary>Slide axis in the second body frame.</summary>
+    public Vec3 LocalAxisB;
+
+    /// <summary>Lower translation stop along the axis.</summary>
+    public float LowerLimit;
+
+    /// <summary>Upper translation stop along the axis.</summary>
+    public float UpperLimit;
+
+    /// <summary>Whether stops are enforced.</summary>
+    public bool EnableLimit;
+
+    /// <summary>Motor target speed along the axis.</summary>
+    public float MotorSpeed;
+
+    /// <summary>Motor force cap.</summary>
+    public float MaxMotorForce;
+
+    /// <summary>Whether the motor drives.</summary>
+    public bool EnableMotor;
+
+    /// <summary>Accumulated point-to-line impulse (two rows).</summary>
+    public Vec3 LineImpulse;
+
+    /// <summary>Accumulated axis-alignment impulse (two rows).</summary>
+    public Vec3 AxisImpulse;
+
+    /// <summary>Accumulated rotation-lock impulse.</summary>
+    public Vec3 AngularImpulse;
+
+    /// <summary>Accumulated limit impulse.</summary>
+    public float LimitImpulse;
+
+    /// <summary>Accumulated motor impulse.</summary>
+    public float MotorImpulse;
+
+    /// <summary>Whether the slot holds a live joint.</summary>
+    public bool Live;
+}
+
 /// <summary>
 /// Dense segregated store of joints: one packed table per archetype,
 /// kind-tagged identities, stable slots recycled through intrusive stacks.
@@ -174,6 +233,12 @@ public sealed class JointStore
     private int _hingeHighWater;
     private int _hingeCount;
 
+    private PrismaticJointData[] _prismatic;
+    private int[] _prismaticFree;
+    private int _prismaticFreeCount;
+    private int _prismaticHighWater;
+    private int _prismaticCount;
+
     /// <summary>Creates a store with room for eight joints per archetype.</summary>
     public JointStore()
     {
@@ -185,13 +250,15 @@ public sealed class JointStore
         _weldFree = new int[InitialCapacity];
         _hinge = new HingeJointData[InitialCapacity];
         _hingeFree = new int[InitialCapacity];
+        _prismatic = new PrismaticJointData[InitialCapacity];
+        _prismaticFree = new int[InitialCapacity];
     }
 
     /// <summary>Live joints across all archetypes.</summary>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount;
+        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount + _prismaticCount;
     }
 
     /// <summary>Whether <paramref name="id"/> names a live joint.</summary>
@@ -210,6 +277,7 @@ public sealed class JointStore
             JointKind.BallSocket => slot < _ballSocket.Length && _ballSocket[slot].Live,
             JointKind.Weld => slot < _weld.Length && _weld[slot].Live,
             JointKind.Hinge => slot < _hinge.Length && _hinge[slot].Live,
+            JointKind.Prismatic => slot < _prismatic.Length && _prismatic[slot].Live,
             _ => false,
         };
     }
@@ -376,6 +444,73 @@ public sealed class JointStore
         return new JointId(JointKind.Hinge, (uint)slot);
     }
 
+    /// <summary>Creates a slider along a body-frame axis with optional stops and motor; wakes both bodies.</summary>
+    /// <param name="bodies">Body registry; both bodies must be live.</param>
+    /// <param name="bodyA">First body.</param>
+    /// <param name="bodyB">Second body.</param>
+    /// <param name="localAnchorA">Anchor in the first body frame.</param>
+    /// <param name="localAnchorB">Anchor in the second body frame.</param>
+    /// <param name="localAxisA">Slide axis in the first body frame; must be a unit vector.</param>
+    /// <param name="localAxisB">Slide axis in the second body frame; must be a unit vector.</param>
+    /// <param name="lowerLimit">Lower translation stop along the axis.</param>
+    /// <param name="upperLimit">Upper translation stop along the axis.</param>
+    /// <param name="enableLimit">Whether stops are enforced.</param>
+    /// <param name="motorSpeed">Motor target speed along the axis.</param>
+    /// <param name="maxMotorForce">Motor force cap.</param>
+    /// <param name="enableMotor">Whether the motor drives.</param>
+    public JointId CreatePrismatic(
+        BodyStore bodies, BodyId bodyA, BodyId bodyB,
+        Vec3 localAnchorA, Vec3 localAnchorB, Vec3 localAxisA, Vec3 localAxisB,
+        float lowerLimit = 0.0f, float upperLimit = 0.0f, bool enableLimit = false,
+        float motorSpeed = 0.0f, float maxMotorForce = 0.0f, bool enableMotor = false)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        bodies.Slot(bodyA);
+        bodies.Slot(bodyB);
+
+        if (MathF.Abs(localAxisA.LengthSquared() - 1.0f) > 1e-4f || MathF.Abs(localAxisB.LengthSquared() - 1.0f) > 1e-4f)
+        {
+            ThrowHelper.ThrowInvalidOperation("Prismatic axes must be unit vectors.");
+        }
+
+        if (enableLimit && lowerLimit > upperLimit)
+        {
+            ThrowHelper.ThrowInvalidOperation("Prismatic lower limit must not exceed the upper limit.");
+        }
+
+        if (enableMotor && (!(maxMotorForce >= 0.0f) || float.IsNaN(maxMotorForce)))
+        {
+            ThrowHelper.ThrowInvalidOperation("Prismatic motor force cap must not be negative.");
+        }
+
+        int slot = AllocatePrismatic();
+        _prismatic[slot] = new PrismaticJointData
+        {
+            BodyA = bodyA,
+            BodyB = bodyB,
+            LocalAnchorA = localAnchorA,
+            LocalAnchorB = localAnchorB,
+            LocalAxisA = localAxisA,
+            LocalAxisB = localAxisB,
+            LowerLimit = lowerLimit,
+            UpperLimit = upperLimit,
+            EnableLimit = enableLimit,
+            MotorSpeed = motorSpeed,
+            MaxMotorForce = maxMotorForce,
+            EnableMotor = enableMotor,
+            LineImpulse = Vec3.Zero,
+            AxisImpulse = Vec3.Zero,
+            AngularImpulse = Vec3.Zero,
+            LimitImpulse = 0.0f,
+            MotorImpulse = 0.0f,
+            Live = true,
+        };
+        _prismaticCount++;
+        bodies.SetAwake(bodyA, true);
+        bodies.SetAwake(bodyB, true);
+        return new JointId(JointKind.Prismatic, (uint)slot);
+    }
+
     /// <summary>Drops a joint; its identity dies with it.</summary>
     public void Destroy(JointId id)
     {
@@ -397,10 +532,15 @@ public sealed class JointStore
                 _weldFree[_weldFreeCount++] = slot;
                 _weldCount--;
                 break;
-            default:
+            case JointKind.Hinge:
                 _hinge[slot] = default;
                 _hingeFree[_hingeFreeCount++] = slot;
                 _hingeCount--;
+                break;
+            default:
+                _prismatic[slot] = default;
+                _prismaticFree[_prismaticFreeCount++] = slot;
+                _prismaticCount--;
                 break;
         }
     }
@@ -439,6 +579,14 @@ public sealed class JointStore
                 Destroy(new JointId(JointKind.Hinge, (uint)i));
             }
         }
+
+        for (int i = 0; i < _prismatic.Length; i++)
+        {
+            if (_prismatic[i].Live && (_prismatic[i].BodyA == bodyId || _prismatic[i].BodyB == bodyId))
+            {
+                Destroy(new JointId(JointKind.Prismatic, (uint)i));
+            }
+        }
     }
 
     /// <summary>Internal table access for the solver; validated.</summary>
@@ -453,6 +601,9 @@ public sealed class JointStore
     /// <summary>Internal table access for the solver; validated.</summary>
     internal ref HingeJointData Hinge(int slot) => ref _hinge[slot];
 
+    /// <summary>Internal table access for the solver; validated.</summary>
+    internal ref PrismaticJointData Prismatic(int slot) => ref _prismatic[slot];
+
     /// <summary>Table length for solver iteration.</summary>
     internal int DistanceCapacity => _distance.Length;
 
@@ -465,6 +616,9 @@ public sealed class JointStore
     /// <summary>Table length for solver iteration.</summary>
     internal int HingeCapacity => _hinge.Length;
 
+    /// <summary>Table length for solver iteration.</summary>
+    internal int PrismaticCapacity => _prismatic.Length;
+
     /// <summary>Whether a distance slot holds a live joint; for solver iteration.</summary>
     internal bool IsDistanceLive(int slot) => _distance[slot].Live;
 
@@ -476,6 +630,9 @@ public sealed class JointStore
 
     /// <summary>Whether a hinge slot holds a live joint; for solver iteration.</summary>
     internal bool IsHingeLive(int slot) => _hinge[slot].Live;
+
+    /// <summary>Whether a prismatic slot holds a live joint; for solver iteration.</summary>
+    internal bool IsPrismaticLive(int slot) => _prismatic[slot].Live;
 
     private int AllocateDistance()
     {
@@ -541,6 +698,22 @@ public sealed class JointStore
         }
 
         return _hingeHighWater++;
+    }
+
+    private int AllocatePrismatic()
+    {
+        if (_prismaticFreeCount > 0)
+        {
+            return _prismaticFree[--_prismaticFreeCount];
+        }
+
+        if (_prismaticHighWater >= _prismatic.Length)
+        {
+            Array.Resize(ref _prismatic, _prismatic.Length * 2);
+            Array.Resize(ref _prismaticFree, _prismaticFree.Length * 2);
+        }
+
+        return _prismaticHighWater++;
     }
 
     /// <summary>Builds a unit perpendicular to an axis.</summary>
