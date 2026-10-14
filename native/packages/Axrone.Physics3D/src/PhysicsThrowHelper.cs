@@ -10,4 +10,11 @@ internal static class ThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowInvalidOperation(string message) => throw new InvalidOperationException(message);
+
+    /// <summary>Throws when an identity names no live body.</summary>
+    /// <param name="id">The dead identity.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowBodyNotFound(BodyId id) =>
+        throw new InvalidOperationException($"Body {id.RawValue} is unallocated or has been removed.");
 }
