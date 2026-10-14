@@ -120,6 +120,65 @@ public static class ShapeRaycast3D
         return true;
     }
 
+    /// <summary>Casts a ray against a triangle mesh with Moller-Trumbore tests.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool RayMesh(
+        in Ray3D ray, float maxDistance, in Mesh3D mesh, in RigidTransform3D frame,
+        out float distance, out Vec3 normal)
+    {
+        distance = maxDistance;
+        normal = Vec3.Zero;
+        bool struck = false;
+
+        Vec3 localOrigin = frame.InverseTransformPoint(ray.Origin);
+        Vec3 localDirection = frame.Rotation.Conjugate() * ray.Direction;
+
+        int[] indices = mesh.Indices;
+        Vec3[] vertices = mesh.Vertices;
+        for (int t = 0; t < indices.Length; t += 3)
+        {
+            Vec3 v0 = vertices[indices[t]];
+            Vec3 edge1 = vertices[indices[t + 1]] - v0;
+            Vec3 edge2 = vertices[indices[t + 2]] - v0;
+            Vec3 pvec = Vec3.Cross(localDirection, edge2);
+            float det = Vec3.Dot(edge1, pvec);
+            if (MathF.Abs(det) < 1e-12f)
+            {
+                continue;
+            }
+
+            float invDet = 1.0f / det;
+            Vec3 tvec = localOrigin - v0;
+            float u = Vec3.Dot(tvec, pvec) * invDet;
+            if (u < 0.0f || u > 1.0f)
+            {
+                continue;
+            }
+
+            Vec3 qvec = Vec3.Cross(tvec, edge1);
+            float v = Vec3.Dot(localDirection, qvec) * invDet;
+            if (v < 0.0f || u + v > 1.0f)
+            {
+                continue;
+            }
+
+            float hit = Vec3.Dot(edge2, qvec) * invDet;
+            if (hit >= 0.0f && hit < distance)
+            {
+                distance = hit;
+                normal = Vec3.Normalize(Vec3.Cross(edge1, edge2)) * (det > 0.0f ? 1.0f : -1.0f);
+                struck = true;
+            }
+        }
+
+        if (struck)
+        {
+            normal = frame.Rotation * normal;
+        }
+
+        return struck;
+    }
+
     /// <summary>Casts a ray against a framed box.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool RayBox(
@@ -179,5 +238,41 @@ public static class ShapeRaycast3D
         }
 
         return tMin <= tMax;
+    }
+
+    /// <summary>
+    /// Casts a ray against any support-mapped world shape with conservative
+    /// advancement: each step asks GJK for the distance from the ray front
+    /// to the shape and walks exactly that far. Convex shapes converge to
+    /// the first touch; misses exhaust the budget.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool RaySupport<TShape>(
+        in Ray3D ray, float maxDistance, in TShape shape,
+        out float distance, out Vec3 normal)
+        where TShape : ISupportShape3D<TShape>
+    {
+        float traveled = 0.0f;
+        for (int iteration = 0; iteration < 32; iteration++)
+        {
+            var front = new Sphere3(ray.Origin + (ray.Direction * traveled), 0.0f);
+            if (!Gjk3D.ComputeDistance(front, shape, out float gap, out _, out Vec3 surface))
+            {
+                distance = traveled;
+                Vec3 outward = (ray.Origin + (ray.Direction * traveled)) - surface;
+                normal = outward.LengthSquared() > 1e-12f ? Vec3.Normalize(outward) : ray.Direction * -1.0f;
+                return true;
+            }
+
+            traveled += gap;
+            if (traveled > maxDistance)
+            {
+                break;
+            }
+        }
+
+        distance = 0.0f;
+        normal = Vec3.Zero;
+        return false;
     }
 }

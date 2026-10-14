@@ -762,10 +762,17 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
     public readonly Cylinder3 Cylinder;
     /// <summary>Local cone variant.</summary>
     public readonly Cone3 Cone;
+    /// <summary>Local hull variant.</summary>
+    public readonly Hull3D Hull;
+    /// <summary>Local mesh variant.</summary>
+    public readonly Mesh3D Mesh;
+    /// <summary>Local heightfield variant.</summary>
+    public readonly Heightfield3D Heightfield;
 
     private AnyCollider(
         ColliderKind kind, in RigidTransform3D frame,
-        Sphere3 sphere, Box3 box, Capsule3 capsule, Cylinder3 cylinder, Cone3 cone)
+        Sphere3 sphere, Box3 box, Capsule3 capsule, Cylinder3 cylinder, Cone3 cone,
+        Hull3D hull, Mesh3D mesh, Heightfield3D field)
     {
         Kind = kind;
         Frame = frame;
@@ -774,32 +781,50 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
         Capsule = capsule;
         Cylinder = cylinder;
         Cone = cone;
+        Hull = hull;
+        Mesh = mesh;
+        Heightfield = field;
     }
 
     /// <summary>Wraps a ball.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AnyCollider FromSphere(Sphere3 sphere, in RigidTransform3D frame) =>
-        new(ColliderKind.Sphere, frame, sphere, default, default, default, default);
+        new(ColliderKind.Sphere, frame, sphere, default, default, default, default, default, default, default);
 
     /// <summary>Wraps a box.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AnyCollider FromBox(Box3 box, in RigidTransform3D frame) =>
-        new(ColliderKind.Box, frame, default, box, default, default, default);
+        new(ColliderKind.Box, frame, default, box, default, default, default, default, default, default);
 
     /// <summary>Wraps a capsule.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AnyCollider FromCapsule(Capsule3 capsule, in RigidTransform3D frame) =>
-        new(ColliderKind.Capsule, frame, default, default, capsule, default, default);
+        new(ColliderKind.Capsule, frame, default, default, capsule, default, default, default, default, default);
 
     /// <summary>Wraps a cylinder.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AnyCollider FromCylinder(Cylinder3 cylinder, in RigidTransform3D frame) =>
-        new(ColliderKind.Cylinder, frame, default, default, default, cylinder, default);
+        new(ColliderKind.Cylinder, frame, default, default, default, cylinder, default, default, default, default);
 
     /// <summary>Wraps a cone.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AnyCollider FromCone(Cone3 cone, in RigidTransform3D frame) =>
-        new(ColliderKind.Cone, frame, default, default, default, default, cone);
+        new(ColliderKind.Cone, frame, default, default, default, default, cone, default, default, default);
+
+    /// <summary>Wraps a hull.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromHull(Hull3D hull, in RigidTransform3D frame) =>
+        new(ColliderKind.Hull, frame, default, default, default, default, default, hull, default, default);
+
+    /// <summary>Wraps a mesh.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromMesh(Mesh3D mesh, in RigidTransform3D frame) =>
+        new(ColliderKind.Mesh, frame, default, default, default, default, default, default, mesh, default);
+
+    /// <summary>Wraps a heightfield.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static AnyCollider FromHeightfield(Heightfield3D field, in RigidTransform3D frame) =>
+        new(ColliderKind.Heightfield, frame, default, default, default, default, default, default, default, field);
 
     /// <summary>Builds the union for a shape record from its local geometry and world frame.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -809,7 +834,10 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
         ColliderKind.Box => FromBox(record.LocalBox, frame),
         ColliderKind.Capsule => FromCapsule(record.LocalCapsule, frame),
         ColliderKind.Cylinder => FromCylinder(record.LocalCylinder, frame),
-        _ => FromCone(record.LocalCone, frame),
+        ColliderKind.Cone => FromCone(record.LocalCone, frame),
+        ColliderKind.Hull => FromHull(record.LocalHull, frame),
+        ColliderKind.Mesh => FromMesh(record.LocalMesh, frame),
+        _ => FromHeightfield(record.LocalHeightfield, frame),
     };
 
     /// <inheritdoc/>
@@ -823,7 +851,10 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
             ColliderKind.Box => Box3.Support(shape.Box, localDirection),
             ColliderKind.Capsule => Capsule3.Support(shape.Capsule, localDirection),
             ColliderKind.Cylinder => Cylinder3.Support(shape.Cylinder, localDirection),
-            _ => Cone3.Support(shape.Cone, localDirection),
+            ColliderKind.Cone => Cone3.Support(shape.Cone, localDirection),
+            ColliderKind.Hull => Hull3D.Support(shape.Hull, localDirection),
+            ColliderKind.Mesh => Mesh3D.Support(shape.Mesh, localDirection),
+            _ => Heightfield3D.Support(shape.Heightfield, localDirection),
         };
         return shape.Frame.TransformPoint(local);
     }
@@ -838,7 +869,10 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
             ColliderKind.Box => Box3.ComputeCentroid(shape.Box),
             ColliderKind.Capsule => Capsule3.ComputeCentroid(shape.Capsule),
             ColliderKind.Cylinder => Cylinder3.ComputeCentroid(shape.Cylinder),
-            _ => Cone3.ComputeCentroid(shape.Cone),
+            ColliderKind.Cone => Cone3.ComputeCentroid(shape.Cone),
+            ColliderKind.Hull => Hull3D.ComputeCentroid(shape.Hull),
+            ColliderKind.Mesh => Mesh3D.ComputeCentroid(shape.Mesh),
+            _ => Heightfield3D.ComputeCentroid(shape.Heightfield),
         };
         return shape.Frame.TransformPoint(local);
     }
@@ -853,7 +887,10 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
             ColliderKind.Box => Box3.ComputeBounds(shape.Box),
             ColliderKind.Capsule => Capsule3.ComputeBounds(shape.Capsule),
             ColliderKind.Cylinder => Cylinder3.ComputeBounds(shape.Cylinder),
-            _ => Cone3.ComputeBounds(shape.Cone),
+            ColliderKind.Cone => Cone3.ComputeBounds(shape.Cone),
+            ColliderKind.Hull => Hull3D.ComputeBounds(shape.Hull),
+            ColliderKind.Mesh => Mesh3D.ComputeBounds(shape.Mesh),
+            _ => Heightfield3D.ComputeBounds(shape.Heightfield),
         };
 
         Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
@@ -876,13 +913,14 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(AnyCollider other) =>
         Kind == other.Kind && Frame == other.Frame && Sphere == other.Sphere && Box == other.Box &&
-        Capsule == other.Capsule && Cylinder == other.Cylinder && Cone == other.Cone;
+        Capsule == other.Capsule && Cylinder == other.Cylinder && Cone == other.Cone &&
+        Hull == other.Hull && Mesh == other.Mesh && Heightfield == other.Heightfield;
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is AnyCollider other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine((int)Kind, Frame, Sphere, Box);
+    public override int GetHashCode() => HashCode.Combine((int)Kind, Frame, Sphere, Box, Capsule, Cylinder, Cone);
 
     /// <summary>Determines whether two unions match.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

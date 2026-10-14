@@ -17,6 +17,15 @@ public enum ColliderKind : byte
 
     /// <summary>Cone collider around a principal axis.</summary>
     Cone = 4,
+
+    /// <summary>Convex point-cloud collider.</summary>
+    Hull = 5,
+
+    /// <summary>Triangle-soup collider; convex-approximated in contact.</summary>
+    Mesh = 6,
+
+    /// <summary>Terrain-grid collider.</summary>
+    Heightfield = 7,
 }
 
 /// <summary>
@@ -67,6 +76,15 @@ internal struct ShapeRecord
 
     /// <summary>Local cone; live when <see cref="Kind"/> is <see cref="ColliderKind.Cone"/>.</summary>
     public Cone3 LocalCone;
+
+    /// <summary>Local hull; live when <see cref="Kind"/> is <see cref="ColliderKind.Hull"/>.</summary>
+    public Hull3D LocalHull;
+
+    /// <summary>Local mesh; live when <see cref="Kind"/> is <see cref="ColliderKind.Mesh"/>.</summary>
+    public Mesh3D LocalMesh;
+
+    /// <summary>Local heightfield; live when <see cref="Kind"/> is <see cref="ColliderKind.Heightfield"/>.</summary>
+    public Heightfield3D LocalHeightfield;
 
     /// <summary>World frame; refreshed on sync.</summary>
     public RigidTransform3D WorldFrame;
@@ -250,6 +268,84 @@ public sealed class ShapeStore
         return ShapeId.FromIndex(slot);
     }
 
+    /// <summary>Attaches a convex hull to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachHull<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec3[] vertices,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Hull3D(vertices);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Hull, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalHull = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
+    /// <summary>Attaches a triangle mesh to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachMesh<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        Vec3[] vertices,
+        int[] indices,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Mesh3D(vertices, indices);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Mesh, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalMesh = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
+    /// <summary>Attaches a heightfield to <paramref name="bodyId"/> and inserts it into <paramref name="tree"/>.</summary>
+    public ShapeId AttachHeightfield<TStrategy, TMetrics>(
+        BodyStore bodies,
+        DynamicAabbTree<ShapeId, TStrategy, TMetrics> tree,
+        BodyId bodyId,
+        float[] heights,
+        int width,
+        int depth,
+        float scaleX = 1.0f,
+        float scaleY = 1.0f,
+        float scaleZ = 1.0f,
+        float density = 1.0f,
+        CollisionFilter filter = default,
+        PhysicsMaterial material = default,
+        Vec3 localOffset = default,
+        Quat localRotation = default,
+        bool isSensor = false)
+        where TStrategy : struct, ISpatialPartitionStrategy
+        where TMetrics : struct, ISpatialMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(tree);
+        var local = new Heightfield3D(heights, width, depth, scaleX, scaleY, scaleZ);
+        int slot = InsertRecord(bodies, bodyId, ColliderKind.Heightfield, density, filter, material, localOffset, localRotation, isSensor);
+        _shapes[slot].LocalHeightfield = local;
+        FinishAttach(bodies, tree, slot);
+        return ShapeId.FromIndex(slot);
+    }
+
     /// <summary>Drops a shape, unlinks it from its body, pulls it from the tree and re-sums the body mass.</summary>
     public void Detach<TStrategy, TMetrics>(
         BodyStore bodies,
@@ -387,6 +483,18 @@ public sealed class ShapeStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Cone3 GetCone(ShapeId id) => _shapes[Validate(id)].LocalCone;
 
+    /// <summary>Reads the local hull of a hull shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Hull3D GetHull(ShapeId id) => _shapes[Validate(id)].LocalHull;
+
+    /// <summary>Reads the local mesh of a mesh shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Mesh3D GetMesh(ShapeId id) => _shapes[Validate(id)].LocalMesh;
+
+    /// <summary>Reads the local heightfield of a heightfield shape; orientation via <see cref="GetWorldFrame"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Heightfield3D GetHeightfield(ShapeId id) => _shapes[Validate(id)].LocalHeightfield;
+
     /// <summary>Reads the world bounds of a shape.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Aabb3D GetWorldAabb(ShapeId id) => _shapes[Validate(id)].WorldAabb;
@@ -523,6 +631,67 @@ public sealed class ShapeStore
             return;
         }
 
+        if (shape.Kind == ColliderKind.Hull)
+        {
+            Vec3[] vertices = shape.LocalHull.Vertices;
+            Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            Vec3 sum = Vec3.Zero;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vec3 w = world.TransformPoint(vertices[i]);
+                min = Vec3.Min(min, w);
+                max = Vec3.Max(max, w);
+                sum += w;
+            }
+
+            shape.WorldCentroid = sum * (1.0f / vertices.Length);
+            shape.WorldAabb = new Aabb3D(min, max);
+            return;
+        }
+
+        if (shape.Kind == ColliderKind.Mesh)
+        {
+            Vec3[] vertices = shape.LocalMesh.Vertices;
+            Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            Vec3 sum = Vec3.Zero;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vec3 w = world.TransformPoint(vertices[i]);
+                min = Vec3.Min(min, w);
+                max = Vec3.Max(max, w);
+                sum += w;
+            }
+
+            shape.WorldCentroid = sum * (1.0f / vertices.Length);
+            shape.WorldAabb = new Aabb3D(min, max);
+            return;
+        }
+
+        if (shape.Kind == ColliderKind.Heightfield)
+        {
+            Heightfield3D field = shape.LocalHeightfield;
+            Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            Vec3 sum = Vec3.Zero;
+            int total = field.Width * field.Depth;
+            for (int z = 0; z < field.Depth; z++)
+            {
+                for (int x = 0; x < field.Width; x++)
+                {
+                    Vec3 w = world.TransformPoint(field.Vertex(x, z));
+                    min = Vec3.Min(min, w);
+                    max = Vec3.Max(max, w);
+                    sum += w;
+                }
+            }
+
+            shape.WorldCentroid = sum * (1.0f / total);
+            shape.WorldAabb = new Aabb3D(min, max);
+            return;
+        }
+
         Vec3 center = world.TransformPoint(shape.LocalBox.Center);
         shape.WorldCentroid = center;
         shape.WorldAabb = RotatedBoxBounds(center, world.Rotation, shape.LocalBox.HalfExtents);
@@ -569,6 +738,9 @@ public sealed class ShapeStore
                 ColliderKind.Capsule => LocalMassCapsule(in shape),
                 ColliderKind.Cylinder => LocalMassCylinder(in shape),
                 ColliderKind.Cone => LocalMassCone(in shape),
+                ColliderKind.Hull => LocalMassHull(in shape),
+                ColliderKind.Mesh => LocalMassMesh(in shape),
+                ColliderKind.Heightfield => LocalMassHeightfield(in shape),
                 _ => LocalMassBox(in shape),
             };
 
@@ -659,6 +831,35 @@ public sealed class ShapeStore
         var moved = new Cone3(center, shape.LocalCone.Radius, shape.LocalCone.Height, shape.LocalCone.Axis);
         MassData3D data = moved.ComputeMass(shape.Density);
         return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, data.Centroid);
+    }
+
+    /// <summary>Mass of a hull moved into the body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassHull(in ShapeRecord shape)
+    {
+        MassData3D data = new Hull3D(shape.LocalHull.Vertices).ComputeMass(shape.Density);
+        Vec3 centroid = shape.LocalFrame.TransformPoint(data.Centroid);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, centroid);
+    }
+
+    /// <summary>Mass of a mesh moved into the body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassMesh(in ShapeRecord shape)
+    {
+        MassData3D data = new Mesh3D(shape.LocalMesh.Vertices, shape.LocalMesh.Indices).ComputeMass(shape.Density);
+        Vec3 centroid = shape.LocalFrame.TransformPoint(data.Centroid);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, centroid);
+    }
+
+    /// <summary>Mass of a heightfield moved into the body frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private static MassData3D LocalMassHeightfield(in ShapeRecord shape)
+    {
+        Heightfield3D field = shape.LocalHeightfield;
+        MassData3D data = new Heightfield3D(
+            field.Heights, field.Width, field.Depth, field.ScaleX, field.ScaleY, field.ScaleZ).ComputeMass(shape.Density);
+        Vec3 centroid = shape.LocalFrame.TransformPoint(data.Centroid);
+        return new MassData3D(data.Mass, 0.0f, data.InertiaDiagonal, Vec3.Zero, centroid);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

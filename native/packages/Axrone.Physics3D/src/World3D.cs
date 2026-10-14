@@ -325,6 +325,40 @@ public sealed class World : IDisposable
                 Capsule3 world = _shapes.GetWorldCapsule(shapeId);
                 struck = ShapeRaycast3D.RayCapsule(in ray, maxDistance, in world, out distance, out normal);
             }
+            else if (record.Kind == ColliderKind.Mesh)
+            {
+                Mesh3D local = _shapes.GetMesh(shapeId);
+                RigidTransform3D frame = _shapes.GetWorldFrame(shapeId);
+                struck = ShapeRaycast3D.RayMesh(in ray, maxDistance, in local, frame, out distance, out normal);
+            }
+            else if (record.Kind == ColliderKind.Hull)
+            {
+                Hull3D local = _shapes.GetHull(shapeId);
+                RigidTransform3D frame = _shapes.GetWorldFrame(shapeId);
+                var world = new OrientedShape<Hull3D>(local, frame);
+                struck = ShapeRaycast3D.RaySupport(in ray, maxDistance, in world, out distance, out normal);
+            }
+            else if (record.Kind == ColliderKind.Heightfield)
+            {
+                Heightfield3D local = _shapes.GetHeightfield(shapeId);
+                RigidTransform3D frame = _shapes.GetWorldFrame(shapeId);
+                var world = new OrientedShape<Heightfield3D>(local, frame);
+                struck = ShapeRaycast3D.RaySupport(in ray, maxDistance, in world, out distance, out normal);
+            }
+            else if (record.Kind == ColliderKind.Cylinder)
+            {
+                Cylinder3 local = _shapes.GetCylinder(shapeId);
+                RigidTransform3D frame = _shapes.GetWorldFrame(shapeId);
+                var world = new OrientedShape<Cylinder3>(local, frame);
+                struck = ShapeRaycast3D.RaySupport(in ray, maxDistance, in world, out distance, out normal);
+            }
+            else if (record.Kind == ColliderKind.Cone)
+            {
+                Cone3 local = _shapes.GetCone(shapeId);
+                RigidTransform3D frame = _shapes.GetWorldFrame(shapeId);
+                var world = new OrientedShape<Cone3>(local, frame);
+                struck = ShapeRaycast3D.RaySupport(in ray, maxDistance, in world, out distance, out normal);
+            }
             else
             {
                 Box3 local = record.LocalBox;
@@ -596,10 +630,13 @@ public sealed class World : IDisposable
             return false;
         }
 
-        // Curved prisms and everything touching them resolve through EPA over
-        // oriented supports; analytic rows above already handled the rest.
-        if (recordA.Kind is ColliderKind.Cylinder or ColliderKind.Cone ||
-            recordB.Kind is ColliderKind.Cylinder or ColliderKind.Cone)
+        // Curved prisms, hulls, meshes, heightfields and everything touching
+        // them resolve through EPA over oriented supports; analytic rows above
+        // already handled the rest.
+        if (recordA.Kind is ColliderKind.Cylinder or ColliderKind.Cone
+            or ColliderKind.Hull or ColliderKind.Mesh or ColliderKind.Heightfield
+            || recordB.Kind is ColliderKind.Cylinder or ColliderKind.Cone
+            or ColliderKind.Hull or ColliderKind.Mesh or ColliderKind.Heightfield)
         {
             AnyCollider colliderA = AnyCollider.FromRecord(in recordA, _shapes.GetWorldFrame(shapeA));
             AnyCollider colliderB = AnyCollider.FromRecord(in recordB, _shapes.GetWorldFrame(shapeB));

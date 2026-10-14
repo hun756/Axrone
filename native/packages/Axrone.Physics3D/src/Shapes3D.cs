@@ -606,6 +606,360 @@ public readonly struct Cone3 : ISupportShape3D<Cone3>, IEquatable<Cone3>
 }
 
 /// <summary>
+/// Convex point cloud: collision resolves over the convex hull of the
+/// vertices through the support map (vertex argmax), mirroring the web
+/// descriptors. Mass follows the bounding box, like the web.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct Hull3D : ISupportShape3D<Hull3D>, IEquatable<Hull3D>
+{
+    /// <summary>Hull vertices; never empty.</summary>
+    public readonly Vec3[] Vertices;
+
+    /// <summary>Creates a hull, rejecting empty or degenerate vertex sets.</summary>
+    public Hull3D(Vec3[] vertices)
+    {
+        ArgumentNullException.ThrowIfNull(vertices);
+        if (vertices.Length == 0)
+        {
+            ThrowHelper.ThrowInvalidOperation("Hull requires at least one vertex.");
+        }
+
+        Vertices = vertices;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(in Hull3D shape, Vec3 direction) => Hull3DHelpers.Support(shape.Vertices, direction);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 ComputeCentroid(in Hull3D shape) => Hull3DHelpers.Centroid(shape.Vertices);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D ComputeBounds(in Hull3D shape) => Hull3DHelpers.Bounds(shape.Vertices);
+
+    /// <summary>Computes bounding-box mass at <paramref name="density"/> per the web descriptors.</summary>
+    /// <param name="density">Mass per unit volume.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MassData3D ComputeMass(float density) => Hull3DHelpers.Mass(Vertices, density);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(Hull3D other) => ReferenceEquals(Vertices, other.Vertices);
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is Hull3D other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => Vertices != null ? Vertices.GetHashCode() : 0;
+
+    /// <summary>Determines whether two hulls share their vertex buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Hull3D left, Hull3D right) => left.Equals(right);
+
+    /// <summary>Determines whether two hulls differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Hull3D left, Hull3D right) => !left.Equals(right);
+}
+
+/// <summary>
+/// Triangle soup: narrowphase resolves over the convex vertex set like the
+/// web descriptors, while raycasts strike exact triangles. Best suited to
+/// static scenery; dynamic meshes carry bounding-box mass.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct Mesh3D : ISupportShape3D<Mesh3D>, IEquatable<Mesh3D>
+{
+    /// <summary>Mesh vertices.</summary>
+    public readonly Vec3[] Vertices;
+
+    /// <summary>Triangle indices into <see cref="Vertices"/>; a multiple of three.</summary>
+    public readonly int[] Indices;
+
+    /// <summary>Creates a mesh, rejecting empty or malformed topology.</summary>
+    public Mesh3D(Vec3[] vertices, int[] indices)
+    {
+        ArgumentNullException.ThrowIfNull(vertices);
+        ArgumentNullException.ThrowIfNull(indices);
+        if (vertices.Length == 0 || indices.Length == 0 || indices.Length % 3 != 0)
+        {
+            ThrowHelper.ThrowInvalidOperation("Mesh requires vertices and a multiple-of-three index list.");
+        }
+
+        Vertices = vertices;
+        Indices = indices;
+    }
+
+    /// <summary>Triangle count.</summary>
+    public int TriangleCount
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Indices.Length / 3;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(in Mesh3D shape, Vec3 direction) =>
+        Hull3DHelpers.Support(shape.Vertices, direction);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 ComputeCentroid(in Mesh3D shape) => Hull3DHelpers.Centroid(shape.Vertices);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D ComputeBounds(in Mesh3D shape) => Hull3DHelpers.Bounds(shape.Vertices);
+
+    /// <summary>Computes bounding-box mass at <paramref name="density"/> per the web descriptors.</summary>
+    /// <param name="density">Mass per unit volume.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MassData3D ComputeMass(float density) => Hull3DHelpers.Mass(Vertices, density);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(Mesh3D other) => ReferenceEquals(Vertices, other.Vertices) && ReferenceEquals(Indices, other.Indices);
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is Mesh3D other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => Vertices != null ? Vertices.GetHashCode() : 0;
+
+    /// <summary>Determines whether two meshes share their buffers.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Mesh3D left, Mesh3D right) => left.Equals(right);
+
+    /// <summary>Determines whether two meshes differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Mesh3D left, Mesh3D right) => !left.Equals(right);
+}
+
+/// <summary>
+/// Heightfield terrain: a grid of heights over the XZ plane. Narrowphase
+/// resolves over the grid vertices like the web descriptors; best suited to
+/// static scenery. Mass follows the bounding box, like the web.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly struct Heightfield3D : ISupportShape3D<Heightfield3D>, IEquatable<Heightfield3D>
+{
+    /// <summary>Row-major heights; Width by Depth entries.</summary>
+    public readonly float[] Heights;
+
+    /// <summary>Grid columns.</summary>
+    public readonly int Width;
+
+    /// <summary>Grid rows.</summary>
+    public readonly int Depth;
+
+    /// <summary>World units per column.</summary>
+    public readonly float ScaleX;
+
+    /// <summary>World units per height unit.</summary>
+    public readonly float ScaleY;
+
+    /// <summary>World units per row.</summary>
+    public readonly float ScaleZ;
+
+    /// <summary>Creates a heightfield, rejecting malformed grids.</summary>
+    public Heightfield3D(float[] heights, int width, int depth, float scaleX = 1.0f, float scaleY = 1.0f, float scaleZ = 1.0f)
+    {
+        ArgumentNullException.ThrowIfNull(heights);
+        if (width < 2 || depth < 2 || heights.Length != width * depth)
+        {
+            ThrowHelper.ThrowInvalidOperation("Heightfield requires a Width-by-Depth height grid at least two by two.");
+        }
+
+        if (!(scaleX > 0.0f) || !(scaleY > 0.0f) || !(scaleZ > 0.0f))
+        {
+            ThrowHelper.ThrowInvalidOperation("Heightfield scales must be positive.");
+        }
+
+        Heights = heights;
+        Width = width;
+        Depth = depth;
+        ScaleX = scaleX;
+        ScaleY = scaleY;
+        ScaleZ = scaleZ;
+    }
+
+    /// <summary>Grid vertex in local space.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Vec3 Vertex(int x, int z) => new(
+        (x - ((Width - 1) * 0.5f)) * ScaleX,
+        Heights[(z * Width) + x] * ScaleY,
+        (z - ((Depth - 1) * 0.5f)) * ScaleZ);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(in Heightfield3D shape, Vec3 direction)
+    {
+        Vec3 best = shape.Vertex(0, 0);
+        float bestDot = Vec3.Dot(best, direction);
+        for (int z = 0; z < shape.Depth; z++)
+        {
+            for (int x = 0; x < shape.Width; x++)
+            {
+                Vec3 candidate = shape.Vertex(x, z);
+                float dot = Vec3.Dot(candidate, direction);
+                if (dot > bestDot)
+                {
+                    bestDot = dot;
+                    best = candidate;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 ComputeCentroid(in Heightfield3D shape)
+    {
+        Aabb3D bounds = ComputeBounds(shape);
+        return (bounds.Min + bounds.Max) * 0.5f;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D ComputeBounds(in Heightfield3D shape)
+    {
+        Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int z = 0; z < shape.Depth; z++)
+        {
+            for (int x = 0; x < shape.Width; x++)
+            {
+                Vec3 vertex = shape.Vertex(x, z);
+                min = Vec3.Min(min, vertex);
+                max = Vec3.Max(max, vertex);
+            }
+        }
+
+        return new Aabb3D(min, max);
+    }
+
+    /// <summary>Computes bounding-box mass at <paramref name="density"/> per the web descriptors.</summary>
+    /// <param name="density">Mass per unit volume.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MassData3D ComputeMass(float density)
+    {
+        Aabb3D bounds = ComputeBounds(this);
+        Vec3 full = bounds.Max - bounds.Min;
+        float mass = full.X * full.Y * full.Z * density;
+        if (mass <= 0.0f)
+        {
+            return MassData3D.Zero;
+        }
+
+        var diagonal = new Vec3(
+            (mass * ((full.Y * full.Y) + (full.Z * full.Z))) / 12.0f,
+            (mass * ((full.X * full.X) + (full.Z * full.Z))) / 12.0f,
+            (mass * ((full.X * full.X) + (full.Y * full.Y))) / 12.0f);
+        Vec3 inverse = new(
+            diagonal.X > 0.0f ? 1.0f / diagonal.X : 0.0f,
+            diagonal.Y > 0.0f ? 1.0f / diagonal.Y : 0.0f,
+            diagonal.Z > 0.0f ? 1.0f / diagonal.Z : 0.0f);
+        return new MassData3D(mass, 1.0f / mass, diagonal, inverse, (bounds.Min + bounds.Max) * 0.5f);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(Heightfield3D other) =>
+        ReferenceEquals(Heights, other.Heights) && Width == other.Width && Depth == other.Depth;
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is Heightfield3D other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => Heights != null ? Heights.GetHashCode() : 0;
+
+    /// <summary>Determines whether two heightfields share their grid.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Heightfield3D left, Heightfield3D right) => left.Equals(right);
+
+    /// <summary>Determines whether two heightfields differ.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Heightfield3D left, Heightfield3D right) => !left.Equals(right);
+}
+
+/// <summary>Shared vertex-cloud routines behind hull and mesh shapes.</summary>
+internal static class Hull3DHelpers
+{
+    /// <summary>Vertex argmax along a direction.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static Vec3 Support(Vec3[] vertices, Vec3 direction)
+    {
+        Vec3 best = vertices[0];
+        float bestDot = Vec3.Dot(best, direction);
+        for (int i = 1; i < vertices.Length; i++)
+        {
+            float dot = Vec3.Dot(vertices[i], direction);
+            if (dot > bestDot)
+            {
+                bestDot = dot;
+                best = vertices[i];
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Vertex average.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vec3 Centroid(Vec3[] vertices)
+    {
+        Vec3 sum = Vec3.Zero;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            sum += vertices[i];
+        }
+
+        return sum * (1.0f / vertices.Length);
+    }
+
+    /// <summary>Tight vertex bounds.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Aabb3D Bounds(Vec3[] vertices)
+    {
+        Vec3 min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vec3 max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            min = Vec3.Min(min, vertices[i]);
+            max = Vec3.Max(max, vertices[i]);
+        }
+
+        return new Aabb3D(min, max);
+    }
+
+    /// <summary>Bounding-box mass per the web descriptors.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MassData3D Mass(Vec3[] vertices, float density)
+    {
+        Aabb3D bounds = Bounds(vertices);
+        Vec3 full = bounds.Max - bounds.Min;
+        float mass = full.X * full.Y * full.Z * density;
+        if (mass <= 0.0f)
+        {
+            return MassData3D.Zero;
+        }
+
+        var diagonal = new Vec3(
+            (mass * ((full.Y * full.Y) + (full.Z * full.Z))) / 12.0f,
+            (mass * ((full.X * full.X) + (full.Z * full.Z))) / 12.0f,
+            (mass * ((full.X * full.X) + (full.Y * full.Y))) / 12.0f);
+        Vec3 inverse = new(
+            diagonal.X > 0.0f ? 1.0f / diagonal.X : 0.0f,
+            diagonal.Y > 0.0f ? 1.0f / diagonal.Y : 0.0f,
+            diagonal.Z > 0.0f ? 1.0f / diagonal.Z : 0.0f);
+        return new MassData3D(mass, 1.0f / mass, diagonal, inverse, (bounds.Min + bounds.Max) * 0.5f);
+    }
+}
+
+/// <summary>
 /// Binds a canonical local shape to its world frame: rotates the query
 /// direction into the local frame, evaluates the local support, and maps
 /// the witness back. Lets GJK and EPA traverse rotated prisms, cylinders,
