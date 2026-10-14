@@ -31,8 +31,9 @@ internal static class SolverTuning
 public static class ContactSolver
 {
     /// <summary>
-    /// Freezes restitution biases from approach speeds; call once per step
-    /// before the iteration loop.
+    /// Freezes restitution biases from approach speeds and applies carried
+    /// impulses to the velocities, so the iteration loop starts from last
+    /// step's solution instead of zero. Call once per step before iterating.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void InitVelocityConstraints(BodyStore bodies, ShapeStore shapes, Span<Contact3D> contacts)
@@ -52,6 +53,14 @@ public static class ContactSolver
 
             ref BodyState stateA = ref bodies.Slot(contact.BodyA);
             ref BodyState stateB = ref bodies.Slot(contact.BodyB);
+
+            bool awakeA = (stateA.Flags & BodyFlags.Awake) != 0;
+            bool awakeB = (stateB.Flags & BodyFlags.Awake) != 0;
+            float invMassA = awakeA ? stateA.InverseMass : 0.0f;
+            float invMassB = awakeB ? stateB.InverseMass : 0.0f;
+            Vec3 invIA = awakeA ? stateA.InverseInertia : Vec3.Zero;
+            Vec3 invIB = awakeB ? stateB.InverseInertia : Vec3.Zero;
+
             Vec3 comA = stateA.Position + (stateA.Rotation * stateA.LocalCenter);
             Vec3 comB = stateB.Position + (stateB.Rotation * stateB.LocalCenter);
 
@@ -59,17 +68,27 @@ public static class ContactSolver
             ref ShapeRecord recordB = ref shapes.Record(contact.ShapeB);
             float restitution = MathF.Max(recordA.Material.Restitution, recordB.Material.Restitution);
 
+            BuildTangents(manifold.Normal, out Vec3 tangent1, out Vec3 tangent2);
+
             for (int p = 0; p < manifold.Count; p++)
             {
                 ContactPoint3D point = manifold[p];
                 Vec3 rA = point.PositionA - comA;
                 Vec3 rB = point.PositionB - comB;
+
                 Vec3 vA = stateA.LinearVelocity + Vec3.Cross(stateA.AngularVelocity, rA);
                 Vec3 vB = stateB.LinearVelocity + Vec3.Cross(stateB.AngularVelocity, rB);
                 float approach = Vec3.Dot(manifold.Normal, vA - vB);
                 ContactPoint3D updated = point;
                 updated.VelocityBias = approach < -SolverTuning.RestitutionThreshold ? -restitution * approach : 0.0f;
                 manifold.SetPoint(p, updated);
+
+                ApplyNormalImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                    rA, rB, manifold.Normal, point.NormalImpulse);
+                ApplyTangentImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                    rA, rB, tangent1, point.TangentImpulse1);
+                ApplyTangentImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                    rA, rB, tangent2, point.TangentImpulse2);
             }
 
             contact.Manifold = manifold;
@@ -210,7 +229,7 @@ public static class ContactSolver
 
     /// <summary>Builds two orthonormal tangents around a unit normal.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void BuildTangents(Vec3 normal, out Vec3 tangent1, out Vec3 tangent2)
+    internal static void BuildTangents(Vec3 normal, out Vec3 tangent1, out Vec3 tangent2)
     {
         Vec3 reference = MathF.Abs(normal.Y) < 0.99f ? new Vec3(0.0f, 1.0f, 0.0f) : new Vec3(1.0f, 0.0f, 0.0f);
         tangent1 = Vec3.Normalize(Vec3.Cross(normal, reference));

@@ -343,6 +343,7 @@ public static class Penetration3D
 
         Span<Vec3> kept = stackalloc Vec3[4];
         Span<float> keptSep = stackalloc float[4];
+        Span<int> keptCorner = stackalloc int[4];
         int keptCount = 0;
 
         for (int i = 0; i < 4; i++)
@@ -363,6 +364,7 @@ public static class Penetration3D
 
             kept[keptCount] = candidate;
             keptSep[keptCount] = separation;
+            keptCorner[keptCount] = i;
             keptCount++;
         }
 
@@ -384,28 +386,55 @@ public static class Penetration3D
         }
 
         int second = -1;
-        for (int i = 0; i < keptCount; i++)
+        if (keptCount >= 3)
         {
-            if (i != first && (second == -1 || keptSep[i] < keptSep[second]))
+            float bestScore = float.NegativeInfinity;
+            for (int i = 0; i < keptCount; i++)
             {
-                second = i;
+                if (i == first)
+                {
+                    continue;
+                }
+
+                float spread = (kept[i] - kept[first]).LengthSquared();
+                float depthPenalty = (keptSep[i] - keptSep[first]) * 4.0f;
+                float score = spread - (depthPenalty * depthPenalty);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    second = i;
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < keptCount; i++)
+            {
+                if (i != first && (second == -1 || keptSep[i] < keptSep[second]))
+                {
+                    second = i;
+                }
             }
         }
 
-        ContactPoint3D MakePoint(Vec3 incidentPoint, float separation)
+        ContactPoint3D MakePoint(Vec3 incidentPoint, float separation, int corner)
         {
             Vec3 onReference = incidentPoint - (refNormal * separation);
             Vec3 pointA = referenceIsA ? onReference : incidentPoint;
             Vec3 pointB = referenceIsA ? incidentPoint : onReference;
-            return new ContactPoint3D(pointA, pointB, separation, (uint)(0x10 + (refAxis * 4) + incAxis));
+            uint id = (uint)(0x10 + (refAxis * 16) + (incAxis * 4) + corner);
+            return new ContactPoint3D(pointA, pointB, separation, id);
         }
 
         if (second == -1)
         {
-            return Manifold3D.One(normal, MakePoint(kept[first], keptSep[first]));
+            return Manifold3D.One(normal, MakePoint(kept[first], keptSep[first], keptCorner[first]));
         }
 
-        return Manifold3D.Pair(normal, MakePoint(kept[first], keptSep[first]), MakePoint(kept[second], keptSep[second]));
+        return Manifold3D.Pair(
+            normal,
+            MakePoint(kept[first], keptSep[first], keptCorner[first]),
+            MakePoint(kept[second], keptSep[second], keptCorner[second]));
     }
 
     /// <summary>World axis of a frame by index.</summary>
