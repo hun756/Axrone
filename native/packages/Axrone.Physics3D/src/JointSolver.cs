@@ -12,8 +12,11 @@ public static class JointSolver
     private const float PositionBeta = 0.2f;
 
     /// <summary>Runs one velocity sweep over every live joint.</summary>
+    /// <param name="bodies">Body registry.</param>
+    /// <param name="joints">Joint registry.</param>
+    /// <param name="h">Step length; feeds limit Baumgarte biases and motor clamps.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static void SolveVelocityPass(BodyStore bodies, JointStore joints)
+    public static void SolveVelocityPass(BodyStore bodies, JointStore joints, float h)
     {
         ArgumentNullException.ThrowIfNull(bodies);
         ArgumentNullException.ThrowIfNull(joints);
@@ -46,6 +49,16 @@ public static class JointSolver
             }
 
             SolveWeldVelocity(bodies, ref joints.Weld(slot));
+        }
+
+        for (int slot = 0; slot < joints.HingeCapacity; slot++)
+        {
+            if (!joints.IsHingeLive(slot))
+            {
+                continue;
+            }
+
+            SolveHingeVelocity(bodies, ref joints.Hinge(slot), h);
         }
     }
 
@@ -84,6 +97,16 @@ public static class JointSolver
             }
 
             SolveWeldPosition(bodies, ref joints.Weld(slot));
+        }
+
+        for (int slot = 0; slot < joints.HingeCapacity; slot++)
+        {
+            if (!joints.IsHingeLive(slot))
+            {
+                continue;
+            }
+
+            SolveHingePosition(bodies, ref joints.Hinge(slot));
         }
     }
 
@@ -329,12 +352,16 @@ public static class JointSolver
     }
 
     /// <summary>One column of the point-constraint matrix along a basis vector.</summary>
+    /// <remarks>
+    /// The rotational term is (I^-1 (r x e)) x r: the impulse arm crosses
+    /// back after the inertia transform, keeping the diagonal positive.
+    /// </remarks>
     private static Vec3 MatrixColumn(
         float invMassA, float invMassB, Vec3 invIA, Vec3 invIB,
         Quat rotA, Quat rotB, Vec3 rA, Vec3 rB, Vec3 basis)
     {
-        Vec3 angular = Vec3.Cross(rA, ContactSolver.ApplyInverseInertia(rotA, invIA, Vec3.Cross(rA, basis)))
-            + Vec3.Cross(rB, ContactSolver.ApplyInverseInertia(rotB, invIB, Vec3.Cross(rB, basis)));
+        Vec3 angular = Vec3.Cross(ContactSolver.ApplyInverseInertia(rotA, invIA, Vec3.Cross(rA, basis)), rA)
+            + Vec3.Cross(ContactSolver.ApplyInverseInertia(rotB, invIB, Vec3.Cross(rB, basis)), rB);
         return (basis * (invMassA + invMassB)) + angular;
     }
 
@@ -395,5 +422,205 @@ public static class JointSolver
     {
         Vec3 impulse = axis * lambda;
         ApplyPointImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB, rA, rB, impulse);
+    }
+
+    /// <summary>Measures the hinge angle about the world axis from the reference perpendiculars.</summary>
+    private static float HingeAngle(Quat rotA, Quat rotB, Vec3 localPerpA, Vec3 localPerpB, Vec3 worldAxis)
+    {
+        Vec3 u = rotA * localPerpA;
+        Vec3 w = rotB * localPerpB;
+        return MathF.Atan2(Vec3.Dot(Vec3.Cross(u, w), worldAxis), Vec3.Dot(u, w));
+    }
+
+    /// <summary>Builds two orthonormal directions perpendicular to a hinge axis.</summary>
+    private static void HingeTangents(Vec3 axis, out Vec3 t1, out Vec3 t2)
+    {
+        Vec3 reference = MathF.Abs(axis.Y) < 0.99f ? new Vec3(0.0f, 1.0f, 0.0f) : new Vec3(1.0f, 0.0f, 0.0f);
+        t1 = Vec3.Normalize(Vec3.Cross(axis, reference));
+        t2 = Vec3.Cross(axis, t1);
+    }
+
+    private static void SolveHingeVelocity(BodyStore bodies, ref HingeJointData joint, float h)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out float invMassA, out float invMassB, out Vec3 invIA, out Vec3 invIB);
+
+        AnchorFrame(ref stateA, joint.LocalAnchorA, out _, out _, out Vec3 rA);
+        AnchorFrame(ref stateB, joint.LocalAnchorB, out _, out _, out Vec3 rB);
+
+        BuildPointMatrix(invMassA, invMassB, invIA, invIB,
+            stateA.Rotation, stateB.Rotation, rA, rB,
+            out Vec3 col0, out Vec3 col1, out Vec3 col2);
+
+        Vec3 vA = stateA.LinearVelocity + Vec3.Cross(stateA.AngularVelocity, rA);
+        Vec3 vB = stateB.LinearVelocity + Vec3.Cross(stateB.AngularVelocity, rB);
+        Vec3 point = SolveSymmetric3x3(col0, col1, col2, (vA - vB) * -1.0f);
+        joint.PointImpulse += point;
+        ApplyPointImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB, rA, rB, point);
+
+        Vec3 axisA = stateA.Rotation * joint.LocalAxisA;
+        Vec3 axisB = stateB.Rotation * joint.LocalAxisB;
+        HingeTangents(axisA, out Vec3 t1, out Vec3 t2);
+        SolveHingeAxisRow(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axisB, t1, ref joint.AxisImpulse, channel: 0);
+        SolveHingeAxisRow(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axisB, t2, ref joint.AxisImpulse, channel: 1);
+
+        float angle = HingeAngle(stateA.Rotation, stateB.Rotation, joint.LocalPerpA, joint.LocalPerpB, axisA);
+        SolveHingeAngularRows(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axisA, angle, ref joint, h);
+    }
+
+    /// <summary>One axis-alignment row: drives an axis pair back to parallel.</summary>
+    private static void SolveHingeAxisRow(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        Vec3 invIA, Vec3 invIB, Vec3 axisB, Vec3 tangent, ref Vec3 accumulated, int channel)
+    {
+        Vec3 jA = Vec3.Cross(tangent, axisB);
+        Vec3 jB = Vec3.Cross(axisB, tangent);
+        float k = Vec3.Dot(jA, ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, jA))
+            + Vec3.Dot(jB, ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, jB));
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float rate = Vec3.Dot(jA, stateA.AngularVelocity) + Vec3.Dot(jB, stateB.AngularVelocity);
+        float stored = channel == 0 ? accumulated.X : accumulated.Y;
+        float updated = stored + (-rate / k);
+
+        if (channel == 0)
+        {
+            accumulated.X = updated;
+        }
+        else
+        {
+            accumulated.Y = updated;
+        }
+
+        float delta = updated - stored;
+        if (awakeA)
+        {
+            stateA.AngularVelocity += ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, jA * delta);
+        }
+
+        if (awakeB)
+        {
+            stateB.AngularVelocity += ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, jB * delta);
+        }
+    }
+
+    /// <summary>Limit and motor rows around the hinge axis.</summary>
+    private static void SolveHingeAngularRows(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        Vec3 invIA, Vec3 invIB, Vec3 axis, float angle, ref HingeJointData joint, float h)
+    {
+        float k = Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, axis))
+            + Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, axis));
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float rate = Vec3.Dot(axis, stateB.AngularVelocity - stateA.AngularVelocity);
+
+        if (joint.EnableLimit)
+        {
+            float violation = 0.0f;
+            float sign = 0.0f;
+            if (angle < joint.LowerLimit)
+            {
+                violation = joint.LowerLimit - angle;
+                sign = 1.0f;
+            }
+            else if (angle > joint.UpperLimit)
+            {
+                violation = angle - joint.UpperLimit;
+                sign = -1.0f;
+            }
+
+            if (sign != 0.0f)
+            {
+                float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * violation;
+                float lambda = (-(rate * sign) + bias) / k;
+                float updated = MathF.Max(joint.LimitImpulse + lambda, 0.0f);
+                ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, (updated - joint.LimitImpulse) * sign);
+                joint.LimitImpulse = updated;
+            }
+        }
+
+        if (joint.EnableMotor)
+        {
+            float lambda = -((rate - joint.MotorSpeed)) / k;
+            float cap = joint.MaxMotorTorque * h;
+            float updated = Math.Clamp(joint.MotorImpulse + lambda, -cap, cap);
+            ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, updated - joint.MotorImpulse);
+            joint.MotorImpulse = updated;
+        }
+    }
+
+    /// <summary>Applies a spin impulse around the hinge axis: A backward, B forward.</summary>
+    private static void ApplyHingeSpin(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        Vec3 invIA, Vec3 invIB, Vec3 axis, float delta)
+    {
+        if (awakeA)
+        {
+            stateA.AngularVelocity -= ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, axis * delta);
+        }
+
+        if (awakeB)
+        {
+            stateB.AngularVelocity += ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, axis * delta);
+        }
+    }
+
+    private static void SolveHingePosition(BodyStore bodies, ref HingeJointData joint)
+    {
+        var point = new BallSocketJointData
+        {
+            BodyA = joint.BodyA,
+            BodyB = joint.BodyB,
+            LocalAnchorA = joint.LocalAnchorA,
+            LocalAnchorB = joint.LocalAnchorB,
+        };
+        SolveBallSocketPosition(bodies, ref point);
+
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out _, out _, out _, out _);
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        Vec3 axisA = stateA.Rotation * joint.LocalAxisA;
+        Vec3 axisB = stateB.Rotation * joint.LocalAxisB;
+        Vec3 error = Vec3.Cross(axisA, axisB) * (PositionBeta * 0.5f);
+
+        float weightA = awakeA ? 1.0f : 0.0f;
+        float weightB = awakeB ? 1.0f : 0.0f;
+        float total = weightA + weightB;
+        if (awakeA)
+        {
+            stateA.Rotation = RotateCorrection(stateA.Rotation, error * -(weightA / total));
+        }
+
+        if (awakeB)
+        {
+            stateB.Rotation = RotateCorrection(stateB.Rotation, error * (weightB / total));
+        }
+    }
+
+    /// <summary>Rotates an orientation by a small correction vector.</summary>
+    private static Quat RotateCorrection(Quat rotation, Vec3 correction)
+    {
+        float angle = correction.Length();
+        if (angle <= 1e-12f)
+        {
+            return rotation;
+        }
+
+        return (Quat.CreateFromAxisAngle(correction / angle, angle) * rotation).Normalize();
     }
 }

@@ -518,7 +518,7 @@ public sealed class World : IDisposable
 
         for (int iteration = 0; iteration < VelocityIterations; iteration++)
         {
-            JointSolver.SolveVelocityPass(_bodies, _joints);
+            JointSolver.SolveVelocityPass(_bodies, _joints, h);
         }
 
         _bodies.IntegratePositions(h);

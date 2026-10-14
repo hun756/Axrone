@@ -118,4 +118,75 @@ public sealed class Joint3DTests : IDisposable
 
         _world.Joints.Count.Should().Be(0);
     }
+
+    [Fact]
+    public void Hinge_Swings_Freely_AboutAxis()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId door = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachBox(_world.Bodies, _world.Broadphase, door, Vec3.Zero, new Vec3(0.5f, 1.0f, 0.1f));
+        _world.Bodies.SetTransform(door, new Vec3(0.5f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetAngularVelocity(door, new Vec3(0.0f, 3.0f, 0.0f));
+
+        _world.Joints.CreateHinge(
+            _world.Bodies, frame, door,
+            new Vec3(0.0f, 3.0f, 0.0f), new Vec3(-0.5f, 0.0f, 0.0f),
+            new Vec3(0.0f, 1.0f, 0.0f), new Vec3(0.0f, 1.0f, 0.0f));
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        RigidTransform3D transform = _world.Bodies.GetTransform(door);
+        Vec3 hingePoint = transform.TransformPoint(new Vec3(-0.5f, 0.0f, 0.0f));
+        hingePoint.X.Should().BeApproximately(0.0f, 0.15f);
+        hingePoint.Y.Should().BeApproximately(3.0f, 0.15f);
+    }
+
+    [Fact]
+    public void HingeMotor_Spins_AtTargetSpeed()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId wheel = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, wheel, Vec3.Zero, 0.5f);
+        _world.Bodies.SetTransform(wheel, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+
+        _world.Joints.CreateHinge(
+            _world.Bodies, frame, wheel, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(0.0f, 0.0f, 1.0f), new Vec3(0.0f, 0.0f, 1.0f),
+            motorSpeed: 4.0f, maxMotorTorque: 50.0f, enableMotor: true);
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        _world.Bodies.GetAngularVelocity(wheel).Z.Should().BeApproximately(4.0f, 0.5f);
+    }
+
+    [Fact]
+    public void HingeLimit_Stops_AtUpperStop()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId arm = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, arm, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(arm, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetAngularVelocity(arm, new Vec3(0.0f, 0.0f, 10.0f));
+
+        _world.Joints.CreateHinge(
+            _world.Bodies, frame, arm, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(0.0f, 0.0f, 1.0f), new Vec3(0.0f, 0.0f, 1.0f),
+            lowerLimit: -1.0f, upperLimit: 1.0f, enableLimit: true);
+
+        for (int i = 0; i < 240; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        _world.Bodies.GetAngularVelocity(arm).Z.Should().BeLessThan(2.0f);
+    }
 }
