@@ -80,6 +80,59 @@ public static class JointSolver
 
             SolveConeTwistVelocity(bodies, ref joints.ConeTwist(slot), h);
         }
+
+        for (int slot = 0; slot < joints.ConfigurableCapacity; slot++)
+        {
+            if (!joints.IsConfigurableLive(slot))
+            {
+                continue;
+            }
+
+            SolveConfigurableVelocity(bodies, ref joints.Configurable(slot), h);
+        }
+    }
+
+    /// <summary>Applies spring-damper forces once per step; forces do not iterate.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void SolveSpringPass(BodyStore bodies, JointStore joints, float h)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        ArgumentNullException.ThrowIfNull(joints);
+
+        for (int slot = 0; slot < joints.SpringCapacity; slot++)
+        {
+            if (!joints.IsSpringLive(slot))
+            {
+                continue;
+            }
+
+            ref SpringJointData spring = ref joints.Spring(slot);
+            ref BodyState stateA = ref bodies.Slot(spring.BodyA);
+            ref BodyState stateB = ref bodies.Slot(spring.BodyB);
+            InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+                out float invMassA, out float invMassB, out Vec3 invIA, out Vec3 invIB);
+            if (!awakeA && !awakeB)
+            {
+                continue;
+            }
+
+            AnchorFrame(ref stateA, spring.LocalAnchorA, out Vec3 pa, out _, out Vec3 rA);
+            AnchorFrame(ref stateB, spring.LocalAnchorB, out Vec3 pb, out _, out Vec3 rB);
+
+            Vec3 delta = pa - pb;
+            float dist = delta.Length();
+            if (dist < 1e-9f)
+            {
+                continue;
+            }
+
+            Vec3 axis = delta / dist;
+            Vec3 vA = stateA.LinearVelocity + Vec3.Cross(stateA.AngularVelocity, rA);
+            Vec3 vB = stateB.LinearVelocity + Vec3.Cross(stateB.AngularVelocity, rB);
+            float rate = Vec3.Dot(axis, vA - vB);
+            float lambda = -((spring.Stiffness * (dist - spring.RestLength)) + (spring.Damping * rate)) * h;
+            ApplyLinearRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB, rA, rB, axis, lambda);
+        }
     }
 
     /// <summary>Runs one position sweep over every live joint.</summary>
@@ -147,6 +200,16 @@ public static class JointSolver
             }
 
             SolveConeTwistPosition(bodies, ref joints.ConeTwist(slot));
+        }
+
+        for (int slot = 0; slot < joints.ConfigurableCapacity; slot++)
+        {
+            if (!joints.IsConfigurableLive(slot))
+            {
+                continue;
+            }
+
+            SolveConfigurablePosition(bodies, ref joints.Configurable(slot));
         }
     }
 
@@ -936,5 +999,274 @@ public static class JointSolver
                 stateB.Position -= axisA * (excess * invMassB);
             }
         }
+    }
+
+    private static void SolveConfigurableVelocity(BodyStore bodies, ref ConfigurableJointData joint, float h)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out float invMassA, out float invMassB, out Vec3 invIA, out Vec3 invIB);
+
+        AnchorFrame(ref stateA, joint.LocalAnchorA, out Vec3 pa, out _, out Vec3 rA);
+        AnchorFrame(ref stateB, joint.LocalAnchorB, out Vec3 pb, out _, out Vec3 rB);
+        Vec3 span = (pb - pa) - joint.ReferenceTranslation;
+
+        Vec3 axisX = stateA.Rotation * (joint.LocalFrameA * new Vec3(1.0f, 0.0f, 0.0f));
+        Vec3 axisY = stateA.Rotation * (joint.LocalFrameA * new Vec3(0.0f, 1.0f, 0.0f));
+        Vec3 axisZ = stateA.Rotation * (joint.LocalFrameA * new Vec3(0.0f, 0.0f, 1.0f));
+
+        Vec3 linear = joint.LinearImpulse;
+        SolveConfigurableLinearRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+            rA, rB, axisX, span, joint.X, h, ref linear.X);
+        SolveConfigurableLinearRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+            rA, rB, axisY, span, joint.Y, h, ref linear.Y);
+        SolveConfigurableLinearRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+            rA, rB, axisZ, span, joint.Z, h, ref linear.Z);
+        joint.LinearImpulse = linear;
+
+        Quat worldA = stateA.Rotation * joint.LocalFrameA;
+        Quat worldB = stateB.Rotation * joint.LocalFrameB;
+        Quat error = worldA.Conjugate() * worldB * joint.ReferenceRotation.Conjugate();
+        if (error.W < 0.0f)
+        {
+            error = new Quat(error.X * -1.0f, error.Y * -1.0f, error.Z * -1.0f, error.W * -1.0f);
+        }
+
+        Vec3 twist = new Vec3(error.X, error.Y, error.Z) * 2.0f;
+        Vec3 axisW_X = worldA * new Vec3(1.0f, 0.0f, 0.0f);
+        Vec3 axisW_Y = worldA * new Vec3(0.0f, 1.0f, 0.0f);
+        Vec3 axisW_Z = worldA * new Vec3(0.0f, 0.0f, 1.0f);
+        Vec3 angular = joint.AngularImpulse;
+        SolveConfigurableAngularRow(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB,
+            axisW_X, twist, joint.AngularX, h, ref angular.X);
+        SolveConfigurableAngularRow(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB,
+            axisW_Y, twist, joint.AngularY, h, ref angular.Y);
+        SolveConfigurableAngularRow(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB,
+            axisW_Z, twist, joint.AngularZ, h, ref angular.Z);
+        joint.AngularImpulse = angular;
+    }
+
+    /// <summary>One configurable linear row along a reference axis.</summary>
+    private static void SolveConfigurableLinearRow(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        float invMassA, float invMassB, Vec3 invIA, Vec3 invIB,
+        Vec3 rA, Vec3 rB, Vec3 axis, Vec3 span, in JointAxisDef tuning, float h, ref float accumulated)
+    {
+        if (tuning.Mode == JointAxisMode.Free && !tuning.EnableMotor)
+        {
+            return;
+        }
+
+        Vec3 vA = stateA.LinearVelocity + Vec3.Cross(stateA.AngularVelocity, rA);
+        Vec3 vB = stateB.LinearVelocity + Vec3.Cross(stateB.AngularVelocity, rB);
+        float position = Vec3.Dot(axis, span);
+        float rate = Vec3.Dot(axis, vA - vB);
+
+        if (tuning.Mode == JointAxisMode.Locked && !tuning.EnableMotor)
+        {
+            float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * position;
+            SolveAxisSlideRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                rA, rB, axis, rate, bias, ref accumulated,
+                float.NegativeInfinity, float.PositiveInfinity);
+            return;
+        }
+
+        if (tuning.Mode == JointAxisMode.Limited)
+        {
+            float violation = 0.0f;
+            float sign = 0.0f;
+            if (position < tuning.LowerLimit)
+            {
+                violation = tuning.LowerLimit - position;
+                sign = 1.0f;
+            }
+            else if (position > tuning.UpperLimit)
+            {
+                violation = position - tuning.UpperLimit;
+                sign = -1.0f;
+            }
+
+            if (sign != 0.0f)
+            {
+                Vec3 rowAxis = axis * -sign;
+                float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * violation;
+                SolveAxisSlideRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                    rA, rB, rowAxis, -sign * rate, bias, ref accumulated, 0.0f, float.PositiveInfinity);
+            }
+        }
+
+        if (tuning.EnableMotor)
+        {
+            float cap = tuning.MaxForce * h;
+            SolveAxisSlideRow(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB,
+                rA, rB, axis * -1.0f, rate * -1.0f, tuning.MotorVelocity, ref accumulated, -cap, cap);
+        }
+    }
+
+    /// <summary>One configurable angular row about a reference axis.</summary>
+    private static void SolveConfigurableAngularRow(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        Vec3 invIA, Vec3 invIB, Vec3 axis, Vec3 twist, in JointAxisDef tuning, float h, ref float accumulated)
+    {
+        if (tuning.Mode == JointAxisMode.Free && !tuning.EnableMotor)
+        {
+            return;
+        }
+
+        float k = Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, axis))
+            + Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, axis));
+        if (k <= 0.0f)
+        {
+            return;
+        }
+
+        float angle = Vec3.Dot(axis, twist);
+        float rate = Vec3.Dot(axis, stateB.AngularVelocity - stateA.AngularVelocity);
+
+        if (tuning.Mode == JointAxisMode.Locked && !tuning.EnableMotor)
+        {
+            float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * angle;
+            float updated = accumulated + ((bias - rate) / k);
+            ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, updated - accumulated);
+            accumulated = updated;
+            return;
+        }
+
+        if (tuning.Mode == JointAxisMode.Limited)
+        {
+            float violation = 0.0f;
+            float sign = 0.0f;
+            if (angle < tuning.LowerLimit)
+            {
+                violation = tuning.LowerLimit - angle;
+                sign = 1.0f;
+            }
+            else if (angle > tuning.UpperLimit)
+            {
+                violation = angle - tuning.UpperLimit;
+                sign = -1.0f;
+            }
+
+            if (sign != 0.0f)
+            {
+                float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * violation;
+                float lambda = (-(rate * sign) + bias) / k;
+                float updated = MathF.Max(accumulated + lambda, 0.0f);
+                ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, (updated - accumulated) * sign);
+                accumulated = updated;
+            }
+        }
+
+        if (tuning.EnableMotor)
+        {
+            float lambda = -((rate - tuning.MotorVelocity)) / k;
+            float cap = tuning.MaxForce * h;
+            float updated = Math.Clamp(accumulated + lambda, -cap, cap);
+            ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, updated - accumulated);
+            accumulated = updated;
+        }
+    }
+
+    private static void SolveConfigurablePosition(BodyStore bodies, ref ConfigurableJointData joint)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out float invMassA, out float invMassB, out _, out _);
+        if ((!awakeA && !awakeB) || (invMassA + invMassB) <= 0.0f)
+        {
+            return;
+        }
+
+        AnchorFrame(ref stateA, joint.LocalAnchorA, out Vec3 pa, out _, out _);
+        AnchorFrame(ref stateB, joint.LocalAnchorB, out Vec3 pb, out _, out _);
+        Vec3 span = (pb - pa) - joint.ReferenceTranslation;
+
+        Vec3 axisX = stateA.Rotation * (joint.LocalFrameA * new Vec3(1.0f, 0.0f, 0.0f));
+        Vec3 axisY = stateA.Rotation * (joint.LocalFrameA * new Vec3(0.0f, 1.0f, 0.0f));
+        Vec3 axisZ = stateA.Rotation * (joint.LocalFrameA * new Vec3(0.0f, 0.0f, 1.0f));
+
+        Vec3 correction = PositionLinearCorrection(span, axisX, joint.X)
+            + PositionLinearCorrection(span, axisY, joint.Y)
+            + PositionLinearCorrection(span, axisZ, joint.Z);
+        correction *= PositionBeta / (invMassA + invMassB);
+        if (awakeA)
+        {
+            stateA.Position += correction * invMassA;
+        }
+
+        if (awakeB)
+        {
+            stateB.Position -= correction * invMassB;
+        }
+
+        Quat worldA = stateA.Rotation * joint.LocalFrameA;
+        Quat worldB = stateB.Rotation * joint.LocalFrameB;
+        Quat error = worldA.Conjugate() * worldB * joint.ReferenceRotation.Conjugate();
+        if (error.W < 0.0f)
+        {
+            error = new Quat(error.X * -1.0f, error.Y * -1.0f, error.Z * -1.0f, error.W * -1.0f);
+        }
+
+        Vec3 twist = new Vec3(error.X, error.Y, error.Z) * 2.0f;
+        Vec3 spin = PositionAngularCorrection(twist, worldA * new Vec3(1.0f, 0.0f, 0.0f), joint.AngularX)
+            + PositionAngularCorrection(twist, worldA * new Vec3(0.0f, 1.0f, 0.0f), joint.AngularY)
+            + PositionAngularCorrection(twist, worldA * new Vec3(0.0f, 0.0f, 1.0f), joint.AngularZ);
+        spin *= PositionBeta * 0.5f;
+
+        float weightA = awakeA ? 1.0f : 0.0f;
+        float weightB = awakeB ? 1.0f : 0.0f;
+        float total = weightA + weightB;
+        if (total > 0.0f && spin.LengthSquared() > 1e-24f)
+        {
+            float angle = spin.Length();
+            Vec3 axis = spin / angle;
+            if (awakeA)
+            {
+                stateA.Rotation = (Quat.CreateFromAxisAngle(axis * -1.0f, angle * (weightA / total)) * stateA.Rotation).Normalize();
+            }
+
+            if (awakeB)
+            {
+                stateB.Rotation = (Quat.CreateFromAxisAngle(axis, angle * (weightB / total)) * stateB.Rotation).Normalize();
+            }
+        }
+    }
+
+    /// <summary>Position correction of one linear axis toward its stops.</summary>
+    private static Vec3 PositionLinearCorrection(Vec3 span, Vec3 axis, in JointAxisDef tuning)
+    {
+        if (tuning.Mode == JointAxisMode.Free)
+        {
+            return Vec3.Zero;
+        }
+
+        float position = Vec3.Dot(axis, span);
+        if (tuning.Mode == JointAxisMode.Locked)
+        {
+            return axis * position;
+        }
+
+        float clamped = Math.Clamp(position, tuning.LowerLimit, tuning.UpperLimit);
+        return axis * (position - clamped);
+    }
+
+    /// <summary>Position correction of one angular axis toward its stops.</summary>
+    private static Vec3 PositionAngularCorrection(Vec3 twist, Vec3 axis, in JointAxisDef tuning)
+    {
+        if (tuning.Mode == JointAxisMode.Free)
+        {
+            return Vec3.Zero;
+        }
+
+        float angle = Vec3.Dot(axis, twist);
+        if (tuning.Mode == JointAxisMode.Locked)
+        {
+            return axis * angle;
+        }
+
+        float clamped = Math.Clamp(angle, tuning.LowerLimit, tuning.UpperLimit);
+        return axis * (angle - clamped);
     }
 }

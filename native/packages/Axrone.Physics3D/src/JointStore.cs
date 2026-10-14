@@ -258,6 +258,168 @@ internal struct ConeTwistJointData
     public bool Live;
 }
 
+/// <summary>Per-axis motion mode of a configurable joint.</summary>
+public enum JointAxisMode : byte
+{
+    /// <summary>No constraint on this axis.</summary>
+    Free = 0,
+
+    /// <summary>Bilateral lock holding the reference.</summary>
+    Locked = 1,
+
+    /// <summary>Stops with an optional motor.</summary>
+    Limited = 2,
+}
+
+/// <summary>One-axis tuning of a configurable joint: stops plus an optional drive.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct JointAxisDef
+{
+    /// <summary>Motion mode of this axis.</summary>
+    public JointAxisMode Mode;
+
+    /// <summary>Lower stop.</summary>
+    public float LowerLimit;
+
+    /// <summary>Upper stop.</summary>
+    public float UpperLimit;
+
+    /// <summary>Motor target velocity.</summary>
+    public float MotorVelocity;
+
+    /// <summary>Motor force or torque cap.</summary>
+    public float MaxForce;
+
+    /// <summary>Whether the motor drives.</summary>
+    public bool EnableMotor;
+}
+
+/// <summary>Six-degree tuning of a configurable joint: three linear slides plus three twists.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct ConfigurableJointDef
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec3 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec3 LocalAnchorB;
+
+    /// <summary>Reference frame in the first body.</summary>
+    public Quat LocalFrameA;
+
+    /// <summary>Reference frame in the second body.</summary>
+    public Quat LocalFrameB;
+
+    /// <summary>Linear tuning per local axis.</summary>
+    public JointAxisDef X;
+
+    /// <summary>Linear tuning per local axis.</summary>
+    public JointAxisDef Y;
+
+    /// <summary>Linear tuning per local axis.</summary>
+    public JointAxisDef Z;
+
+    /// <summary>Angular tuning per local axis.</summary>
+    public JointAxisDef AngularX;
+
+    /// <summary>Angular tuning per local axis.</summary>
+    public JointAxisDef AngularY;
+
+    /// <summary>Angular tuning per local axis.</summary>
+    public JointAxisDef AngularZ;
+}
+
+/// <summary>Six-degree state: anchors, reference frames, per-axis tuning and impulses.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+internal struct ConfigurableJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec3 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec3 LocalAnchorB;
+
+    /// <summary>Reference orientation in the first body frame.</summary>
+    public Quat LocalFrameA;
+
+    /// <summary>Reference orientation in the second body frame.</summary>
+    public Quat LocalFrameB;
+
+    /// <summary>Linear tuning per axis.</summary>
+    public JointAxisDef X;
+
+    /// <summary>Linear tuning per axis.</summary>
+    public JointAxisDef Y;
+
+    /// <summary>Linear tuning per axis.</summary>
+    public JointAxisDef Z;
+
+    /// <summary>Angular tuning per axis.</summary>
+    public JointAxisDef AngularX;
+
+    /// <summary>Angular tuning per axis.</summary>
+    public JointAxisDef AngularY;
+
+    /// <summary>Angular tuning per axis.</summary>
+    public JointAxisDef AngularZ;
+
+    /// <summary>Accumulated linear impulses per axis.</summary>
+    public Vec3 LinearImpulse;
+
+    /// <summary>Accumulated angular impulses per axis.</summary>
+    public Vec3 AngularImpulse;
+
+    /// <summary>World anchor separation at creation; limited and locked axes hold it.</summary>
+    public Vec3 ReferenceTranslation;
+
+    /// <summary>Relative reference orientation at creation; locked axes hold it.</summary>
+    public Quat ReferenceRotation;
+
+    /// <summary>Whether the slot holds a live joint.</summary>
+    public bool Live;
+}
+
+/// <summary>Spring-damper state: rest length, stiffness, damping and endpoints.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+internal struct SpringJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec3 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec3 LocalAnchorB;
+
+    /// <summary>Unstretched length; pulls together past it, pushes apart below it.</summary>
+    public float RestLength;
+
+    /// <summary>Spring stiffness.</summary>
+    public float Stiffness;
+
+    /// <summary>Damping against separation rate.</summary>
+    public float Damping;
+
+    /// <summary>Whether the slot holds a live joint.</summary>
+    public bool Live;
+}
+
 /// <summary>
 /// Dense segregated store of joints: one packed table per archetype,
 /// kind-tagged identities, stable slots recycled through intrusive stacks.
@@ -304,6 +466,18 @@ public sealed class JointStore
     private int _coneTwistHighWater;
     private int _coneTwistCount;
 
+    private ConfigurableJointData[] _configurable;
+    private int[] _configurableFree;
+    private int _configurableFreeCount;
+    private int _configurableHighWater;
+    private int _configurableCount;
+
+    private SpringJointData[] _spring;
+    private int[] _springFree;
+    private int _springFreeCount;
+    private int _springHighWater;
+    private int _springCount;
+
     /// <summary>Creates a store with room for eight joints per archetype.</summary>
     public JointStore()
     {
@@ -319,13 +493,17 @@ public sealed class JointStore
         _prismaticFree = new int[InitialCapacity];
         _coneTwist = new ConeTwistJointData[InitialCapacity];
         _coneTwistFree = new int[InitialCapacity];
+        _configurable = new ConfigurableJointData[InitialCapacity];
+        _configurableFree = new int[InitialCapacity];
+        _spring = new SpringJointData[InitialCapacity];
+        _springFree = new int[InitialCapacity];
     }
 
     /// <summary>Live joints across all archetypes.</summary>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount + _prismaticCount + _coneTwistCount;
+        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount + _prismaticCount + _coneTwistCount + _configurableCount + _springCount;
     }
 
     /// <summary>Whether <paramref name="id"/> names a live joint.</summary>
@@ -346,8 +524,8 @@ public sealed class JointStore
             JointKind.Hinge => slot < _hinge.Length && _hinge[slot].Live,
             JointKind.Prismatic => slot < _prismatic.Length && _prismatic[slot].Live,
             JointKind.ConeTwist => slot < _coneTwist.Length && _coneTwist[slot].Live,
-            JointKind.Configurable => false,
-            JointKind.Spring => false,
+            JointKind.Configurable => slot < _configurable.Length && _configurable[slot].Live,
+            JointKind.Spring => slot < _spring.Length && _spring[slot].Live,
             _ => false,
         };
     }
@@ -647,6 +825,114 @@ public sealed class JointStore
         return new JointId(JointKind.ConeTwist, (uint)slot);
     }
 
+    /// <summary>Creates a six-degree joint from a tuning definition; wakes both bodies.</summary>
+    /// <param name="bodies">Body registry; both bodies must be live.</param>
+    /// <param name="definition">Anchors, reference frames and per-axis tuning.</param>
+    public JointId CreateConfigurable(BodyStore bodies, in ConfigurableJointDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        bodies.Slot(definition.BodyA);
+        bodies.Slot(definition.BodyB);
+        ValidateAxis(definition.X, nameof(ConfigurableJointDef.X));
+        ValidateAxis(definition.Y, nameof(ConfigurableJointDef.Y));
+        ValidateAxis(definition.Z, nameof(ConfigurableJointDef.Z));
+        ValidateAxis(definition.AngularX, nameof(ConfigurableJointDef.AngularX));
+        ValidateAxis(definition.AngularY, nameof(ConfigurableJointDef.AngularY));
+        ValidateAxis(definition.AngularZ, nameof(ConfigurableJointDef.AngularZ));
+
+        ref BodyState stateARef = ref bodies.Slot(definition.BodyA);
+        ref BodyState stateBRef = ref bodies.Slot(definition.BodyB);
+        Quat frameARef = definition.LocalFrameA.Equals(default(Quat)) ? Quat.Identity : definition.LocalFrameA;
+        Quat frameBRef = definition.LocalFrameB.Equals(default(Quat)) ? Quat.Identity : definition.LocalFrameB;
+        var worldARef = new RigidTransform3D(stateARef.Position, stateARef.Rotation);
+        var worldBRef = new RigidTransform3D(stateBRef.Position, stateBRef.Rotation);
+
+        int slot = AllocateConfigurable();
+        _configurable[slot] = new ConfigurableJointData
+        {
+            BodyA = definition.BodyA,
+            BodyB = definition.BodyB,
+            LocalAnchorA = definition.LocalAnchorA,
+            LocalAnchorB = definition.LocalAnchorB,
+            LocalFrameA = frameARef,
+            LocalFrameB = frameBRef,
+            X = definition.X,
+            Y = definition.Y,
+            Z = definition.Z,
+            AngularX = definition.AngularX,
+            AngularY = definition.AngularY,
+            AngularZ = definition.AngularZ,
+            LinearImpulse = Vec3.Zero,
+            AngularImpulse = Vec3.Zero,
+            ReferenceTranslation = worldBRef.TransformPoint(definition.LocalAnchorB) - worldARef.TransformPoint(definition.LocalAnchorA),
+            ReferenceRotation = (stateARef.Rotation * frameARef).Conjugate() * (stateBRef.Rotation * frameBRef),
+            Live = true,
+        };
+        _configurableCount++;
+        bodies.SetAwake(definition.BodyA, true);
+        bodies.SetAwake(definition.BodyB, true);
+        return new JointId(JointKind.Configurable, (uint)slot);
+    }
+
+    /// <summary>Validates one axis tuning block.</summary>
+    private static void ValidateAxis(in JointAxisDef axis, string name)
+    {
+        if (axis.Mode == JointAxisMode.Limited && axis.LowerLimit > axis.UpperLimit)
+        {
+            ThrowHelper.ThrowInvalidOperation($"{name} lower limit must not exceed the upper limit.");
+        }
+
+        if (axis.EnableMotor && (!(axis.MaxForce >= 0.0f) || float.IsNaN(axis.MaxForce)))
+        {
+            ThrowHelper.ThrowInvalidOperation($"{name} motor cap must not be negative.");
+        }
+    }
+
+    /// <summary>Creates a spring-damper between two body-frame anchors; wakes both bodies.</summary>
+    /// <param name="bodies">Body registry; both bodies must be live.</param>
+    /// <param name="bodyA">First body.</param>
+    /// <param name="bodyB">Second body.</param>
+    /// <param name="localAnchorA">Anchor in the first body frame.</param>
+    /// <param name="localAnchorB">Anchor in the second body frame.</param>
+    /// <param name="restLength">Unstretched length; finite and never negative.</param>
+    /// <param name="stiffness">Spring stiffness; never negative.</param>
+    /// <param name="damping">Damping; never negative.</param>
+    public JointId CreateSpring(
+        BodyStore bodies, BodyId bodyA, BodyId bodyB,
+        Vec3 localAnchorA, Vec3 localAnchorB, float restLength, float stiffness, float damping)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        bodies.Slot(bodyA);
+        bodies.Slot(bodyB);
+
+        if (!(restLength >= 0.0f) || float.IsNaN(restLength) || float.IsInfinity(restLength))
+        {
+            ThrowHelper.ThrowInvalidOperation("Spring rest length must be finite and non-negative.");
+        }
+
+        if (!(stiffness >= 0.0f) || float.IsNaN(stiffness) || !(damping >= 0.0f) || float.IsNaN(damping))
+        {
+            ThrowHelper.ThrowInvalidOperation("Spring stiffness and damping must not be negative.");
+        }
+
+        int slot = AllocateSpring();
+        _spring[slot] = new SpringJointData
+        {
+            BodyA = bodyA,
+            BodyB = bodyB,
+            LocalAnchorA = localAnchorA,
+            LocalAnchorB = localAnchorB,
+            RestLength = restLength,
+            Stiffness = stiffness,
+            Damping = damping,
+            Live = true,
+        };
+        _springCount++;
+        bodies.SetAwake(bodyA, true);
+        bodies.SetAwake(bodyB, true);
+        return new JointId(JointKind.Spring, (uint)slot);
+    }
+
     /// <summary>Drops a joint; its identity dies with it.</summary>
     public void Destroy(JointId id)
     {
@@ -678,10 +964,20 @@ public sealed class JointStore
                 _prismaticFree[_prismaticFreeCount++] = slot;
                 _prismaticCount--;
                 break;
-            default:
+            case JointKind.ConeTwist:
                 _coneTwist[slot] = default;
                 _coneTwistFree[_coneTwistFreeCount++] = slot;
                 _coneTwistCount--;
+                break;
+            case JointKind.Configurable:
+                _configurable[slot] = default;
+                _configurableFree[_configurableFreeCount++] = slot;
+                _configurableCount--;
+                break;
+            default:
+                _spring[slot] = default;
+                _springFree[_springFreeCount++] = slot;
+                _springCount--;
                 break;
         }
     }
@@ -734,6 +1030,22 @@ public sealed class JointStore
             if (_coneTwist[i].Live && (_coneTwist[i].BodyA == bodyId || _coneTwist[i].BodyB == bodyId))
             {
                 Destroy(new JointId(JointKind.ConeTwist, (uint)i));
+            }
+        }
+
+        for (int i = 0; i < _configurable.Length; i++)
+        {
+            if (_configurable[i].Live && (_configurable[i].BodyA == bodyId || _configurable[i].BodyB == bodyId))
+            {
+                Destroy(new JointId(JointKind.Configurable, (uint)i));
+            }
+        }
+
+        for (int i = 0; i < _spring.Length; i++)
+        {
+            if (_spring[i].Live && (_spring[i].BodyA == bodyId || _spring[i].BodyB == bodyId))
+            {
+                Destroy(new JointId(JointKind.Spring, (uint)i));
             }
         }
     }
@@ -790,6 +1102,22 @@ public sealed class JointStore
             }
         }
 
+        for (int i = 0; i < _configurable.Length && count < destination.Length; i++)
+        {
+            if (_configurable[i].Live)
+            {
+                destination[count++] = new JointPair3D(_configurable[i].BodyA, _configurable[i].BodyB);
+            }
+        }
+
+        for (int i = 0; i < _spring.Length && count < destination.Length; i++)
+        {
+            if (_spring[i].Live)
+            {
+                destination[count++] = new JointPair3D(_spring[i].BodyA, _spring[i].BodyB);
+            }
+        }
+
         return count;
     }
 
@@ -811,6 +1139,12 @@ public sealed class JointStore
     /// <summary>Internal table access for the solver; validated.</summary>
     internal ref ConeTwistJointData ConeTwist(int slot) => ref _coneTwist[slot];
 
+    /// <summary>Internal table access for the solver; validated.</summary>
+    internal ref ConfigurableJointData Configurable(int slot) => ref _configurable[slot];
+
+    /// <summary>Internal table access for the solver; validated.</summary>
+    internal ref SpringJointData Spring(int slot) => ref _spring[slot];
+
     /// <summary>Table length for solver iteration.</summary>
     internal int DistanceCapacity => _distance.Length;
 
@@ -829,6 +1163,12 @@ public sealed class JointStore
     /// <summary>Table length for solver iteration.</summary>
     internal int ConeTwistCapacity => _coneTwist.Length;
 
+    /// <summary>Table length for solver iteration.</summary>
+    internal int ConfigurableCapacity => _configurable.Length;
+
+    /// <summary>Table length for solver iteration.</summary>
+    internal int SpringCapacity => _spring.Length;
+
     /// <summary>Whether a distance slot holds a live joint; for solver iteration.</summary>
     internal bool IsDistanceLive(int slot) => _distance[slot].Live;
 
@@ -846,6 +1186,12 @@ public sealed class JointStore
 
     /// <summary>Whether a cone-twist slot holds a live joint; for solver iteration.</summary>
     internal bool IsConeTwistLive(int slot) => _coneTwist[slot].Live;
+
+    /// <summary>Whether a configurable slot holds a live joint; for solver iteration.</summary>
+    internal bool IsConfigurableLive(int slot) => _configurable[slot].Live;
+
+    /// <summary>Whether a spring slot holds a live joint; for solver iteration.</summary>
+    internal bool IsSpringLive(int slot) => _spring[slot].Live;
 
     private int AllocateDistance()
     {
@@ -943,6 +1289,38 @@ public sealed class JointStore
         }
 
         return _coneTwistHighWater++;
+    }
+
+    private int AllocateConfigurable()
+    {
+        if (_configurableFreeCount > 0)
+        {
+            return _configurableFree[--_configurableFreeCount];
+        }
+
+        if (_configurableHighWater >= _configurable.Length)
+        {
+            Array.Resize(ref _configurable, _configurable.Length * 2);
+            Array.Resize(ref _configurableFree, _configurableFree.Length * 2);
+        }
+
+        return _configurableHighWater++;
+    }
+
+    private int AllocateSpring()
+    {
+        if (_springFreeCount > 0)
+        {
+            return _springFree[--_springFreeCount];
+        }
+
+        if (_springHighWater >= _spring.Length)
+        {
+            Array.Resize(ref _spring, _spring.Length * 2);
+            Array.Resize(ref _springFree, _springFree.Length * 2);
+        }
+
+        return _springHighWater++;
     }
 
     /// <summary>Builds a unit perpendicular to an axis.</summary>

@@ -563,6 +563,7 @@ public sealed class World : IDisposable
         }
 
         ContactSolver.SolveVelocity(_bodies, _shapes, _contacts.AsSpan(0, _contactCount), VelocityIterations);
+        JointSolver.SolveSpringPass(_bodies, _joints, h);
 
         for (int iteration = 0; iteration < VelocityIterations; iteration++)
         {

@@ -120,6 +120,118 @@ public sealed class Joint3DTests : IDisposable
     }
 
     [Fact]
+    public void Configurable_LockedAxes_Behave_AsWeld()
+    {
+        BodyId a = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, a, Vec3.Zero, 0.5f);
+        _world.Bodies.SetTransform(a, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+
+        BodyId b = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, b, Vec3.Zero, 0.5f);
+        _world.Bodies.SetTransform(b, new Vec3(2.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetAngularVelocity(b, new Vec3(0.0f, 0.0f, 5.0f));
+
+        var locked = new JointAxisDef { Mode = JointAxisMode.Locked };
+        var definition = new ConfigurableJointDef
+        {
+            BodyA = a,
+            BodyB = b,
+            LocalAnchorA = Vec3.Zero,
+            LocalAnchorB = Vec3.Zero,
+            X = locked,
+            Y = locked,
+            Z = locked,
+            AngularX = locked,
+            AngularY = locked,
+            AngularZ = locked,
+        };
+        _world.Joints.CreateConfigurable(_world.Bodies, definition);
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        Vec3 pa = _world.Bodies.GetTransform(a).Position;
+        Vec3 pb = _world.Bodies.GetTransform(b).Position;
+        (pb - pa - new Vec3(2.0f, 0.0f, 0.0f)).Length().Should().BeLessThan(0.15f);
+
+        Quat qa = _world.Bodies.GetTransform(a).Rotation;
+        Quat qb = _world.Bodies.GetTransform(b).Rotation;
+        Quat relative = qa.Conjugate() * qb;
+        if (relative.W < 0.0f)
+        {
+            relative = new Quat(-relative.X, -relative.Y, -relative.Z, -relative.W);
+        }
+
+        relative.W.Should().BeApproximately(1.0f, 0.05f);
+    }
+
+    [Fact]
+    public void Configurable_PrismaticAxis_Slides_WithLimits()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId slider = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, slider, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(slider, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetLinearVelocity(slider, new Vec3(5.0f, 0.0f, 0.0f));
+
+        var locked = new JointAxisDef { Mode = JointAxisMode.Locked };
+        var free = new JointAxisDef { Mode = JointAxisMode.Free };
+        var slide = new JointAxisDef { Mode = JointAxisMode.Limited, LowerLimit = -1.0f, UpperLimit = 1.0f };
+        var definition = new ConfigurableJointDef
+        {
+            BodyA = frame,
+            BodyB = slider,
+            LocalAnchorA = new Vec3(0.0f, 3.0f, 0.0f),
+            LocalAnchorB = Vec3.Zero,
+            X = slide,
+            Y = locked,
+            Z = locked,
+            AngularX = locked,
+            AngularY = locked,
+            AngularZ = locked,
+        };
+        _world.Joints.CreateConfigurable(_world.Bodies, definition);
+
+        for (int i = 0; i < 240; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        float travel = _world.Bodies.GetTransform(slider).Position.X;
+        travel.Should().BeLessThan(1.3f);
+        _world.Bodies.GetTransform(slider).Position.Y.Should().BeApproximately(3.0f, 0.2f);
+    }
+
+    [Fact]
+    public void Spring_Pulls_Bodies_ToRestLength()
+    {
+        BodyId a = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, a, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(a, new Vec3(-5.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetLinearVelocity(a, Vec3.Zero);
+
+        BodyId b = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, b, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(b, new Vec3(5.0f, 3.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetLinearVelocity(b, Vec3.Zero);
+
+        _world.Joints.CreateSpring(_world.Bodies, a, b, Vec3.Zero, Vec3.Zero,
+            restLength: 2.0f, stiffness: 20.0f, damping: 2.0f);
+
+        for (int i = 0; i < 600; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        Vec3 pa = _world.Bodies.GetTransform(a).Position;
+        Vec3 pb = _world.Bodies.GetTransform(b).Position;
+        (pb - pa).Length().Should().BeApproximately(2.0f, 0.5f);
+    }
+
+    [Fact]
     public void Hinge_Swings_Freely_AboutAxis()
     {
         BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
