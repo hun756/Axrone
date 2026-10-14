@@ -140,12 +140,32 @@ public readonly struct WorldDef
 }
 
 /// <summary>
-/// Pair lifecycle notice: a shape pair started or stopped overlapping. Events
-/// accumulate across the step and clear at the start of the next one; read
-/// them after <see cref="World.Step"/>.
+/// Pair lifecycle notice: a shape pair started, persisted or stopped
+/// overlapping. Events accumulate across the step and clear at the start of
+/// the next one; read them after <see cref="World.Step"/>.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct ContactEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, bool Began);
+public readonly record struct ContactEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, ContactEventType Type);
+
+/// <summary>Lifecycle phase of a contact event.</summary>
+public enum ContactEventType : byte
+{
+    /// <summary>A new overlap appeared this step.</summary>
+    Began = 0,
+
+    /// <summary>An overlap persisted from the previous step.</summary>
+    Stay = 1,
+
+    /// <summary>A previous overlap is gone.</summary>
+    Ended = 2,
+}
+
+/// <summary>Closest-point hit: the surface point nearest a query.</summary>
+/// <param name="Shape">The shape hit.</param>
+/// <param name="Body">The owning body.</param>
+/// <param name="Point">Closest surface point in world space.</param>
+/// <param name="Distance">Distance from the query point.</param>
+public readonly record struct ClosestPointHit3D(ShapeId Shape, BodyId Body, Vec3 Point, float Distance);
 
 /// <summary>
 /// Simulation world: owns bodies, shapes and the broadphase tree, and runs
@@ -419,6 +439,109 @@ public sealed class World : IDisposable
         }
 
         return written;
+    }
+
+    /// <summary>Casts a ray and returns only the closest hit.</summary>
+    /// <param name="ray">The ray.</param>
+    /// <param name="maxDistance">The furthest hit kept.</param>
+    /// <param name="hit">The closest hit when one exists.</param>
+    /// <returns><see langword="true"/> when anything was hit.</returns>
+    public bool RaycastClosest(in Ray3D ray, float maxDistance, out RaycastHit3D hit)
+    {
+        Span<RaycastHit3D> buffer = stackalloc RaycastHit3D[1];
+        if (Raycast(in ray, maxDistance, buffer) == 0)
+        {
+            hit = default;
+            return false;
+        }
+
+        hit = buffer[0];
+        return true;
+    }
+
+    /// <summary>Finds the surface points nearest a query point; hits sort by ascending distance.</summary>
+    /// <param name="point">The query point.</param>
+    /// <param name="maxDistance">The furthest surface kept.</param>
+    /// <param name="hits">The destination; truncated when full.</param>
+    /// <returns>The hits written.</returns>
+    public int QueryPoint(Vec3 point, float maxDistance, Span<ClosestPointHit3D> hits)
+    {
+        ThrowIfDisposed();
+
+        if (!(maxDistance >= 0.0f) || float.IsNaN(maxDistance))
+        {
+            ThrowHelper.ThrowInvalidOperation("Query distance must not be negative.");
+        }
+
+        var margin = new Vec3(maxDistance, maxDistance, maxDistance);
+        var volume = new Aabb3D(point - margin, point + margin);
+
+        Span<SpatialItemId> candidates = stackalloc SpatialItemId[128];
+        int candidateCount = Math.Min(_tree.QueryOverlaps(volume, candidates), candidates.Length);
+
+        var probe = new Sphere3(point, 0.0f);
+        int written = 0;
+        for (int i = 0; i < candidateCount && written < hits.Length; i++)
+        {
+            ShapeId shapeId = _tree.GetUserData(candidates[i]);
+            if (!_shapes.IsValid(shapeId))
+            {
+                continue;
+            }
+
+            AnyCollider collider = AnyCollider.FromRecord(in _shapes.Record(shapeId), _shapes.GetWorldFrame(shapeId));
+            bool separated = Gjk3D.ComputeDistance(probe, collider, out float distance, out _, out Vec3 surface);
+            Vec3 hitPoint;
+            float hitDistance;
+            if (!separated)
+            {
+                hitPoint = point;
+                hitDistance = 0.0f;
+            }
+            else
+            {
+                if (distance > maxDistance)
+                {
+                    continue;
+                }
+
+                hitPoint = surface;
+                hitDistance = distance;
+            }
+
+            var found = new ClosestPointHit3D(shapeId, _shapes.GetBody(shapeId), hitPoint, hitDistance);
+            int slot = written;
+            while (slot > 0 && hits[slot - 1].Distance > distance)
+            {
+                hits[slot] = hits[slot - 1];
+                slot--;
+            }
+
+            hits[slot] = found;
+            written++;
+        }
+
+        return written;
+    }
+
+    /// <summary>Rebases the world by an offset for floating-origin rendering; exact translation.</summary>
+    /// <param name="offset">Subtracted from every body position.</param>
+    public void ShiftOrigin(Vec3 offset)
+    {
+        ThrowIfDisposed();
+
+        for (int slot = 0; slot < _bodies.SlotCapacity; slot++)
+        {
+            if (!_bodies.IsSlotLive(slot))
+            {
+                continue;
+            }
+
+            BodyId bodyId = BodyId.FromIndex(slot);
+            ref BodyState body = ref _bodies.Slot(bodyId);
+            body.Position -= offset;
+            _shapes.SyncBody(_bodies, _tree, bodyId);
+        }
     }
 
     /// <summary>Advances the simulation by <paramref name="dt"/> seconds.</summary>
@@ -945,14 +1068,18 @@ public sealed class World : IDisposable
         }
     }
 
-    /// <summary>Diffs the confirmed contact sets into begin/end events.</summary>
+    /// <summary>Diffs the confirmed contact sets into begin/stay/end events.</summary>
     private void PublishContactEvents()
     {
         for (int i = 0; i < _contactCount; i++)
         {
             if (!ContainsPair(_stepPairs, _stepPairCount, _contacts[i].ShapeA, _contacts[i].ShapeB))
             {
-                PushEvent(_contacts[i].ShapeA, _contacts[i].ShapeB, began: true);
+                PushEvent(_contacts[i].ShapeA, _contacts[i].ShapeB, ContactEventType.Began);
+            }
+            else
+            {
+                PushEvent(_contacts[i].ShapeA, _contacts[i].ShapeB, ContactEventType.Stay);
             }
         }
 
@@ -960,7 +1087,7 @@ public sealed class World : IDisposable
         {
             if (!ContainsPair(_contacts, _contactCount, _stepPairs[j].First, _stepPairs[j].Second))
             {
-                PushEvent(_stepPairs[j].First, _stepPairs[j].Second, began: false);
+                PushEvent(_stepPairs[j].First, _stepPairs[j].Second, ContactEventType.Ended);
             }
         }
     }
@@ -994,7 +1121,7 @@ public sealed class World : IDisposable
     }
 
     /// <summary>Appends a pair event, growing the buffer on demand.</summary>
-    private void PushEvent(ShapeId shapeA, ShapeId shapeB, bool began)
+    private void PushEvent(ShapeId shapeA, ShapeId shapeB, ContactEventType type)
     {
         if (!_shapes.IsValid(shapeA) || !_shapes.IsValid(shapeB))
         {
@@ -1008,7 +1135,7 @@ public sealed class World : IDisposable
 
         BodyId bodyA = _shapes.GetBody(shapeA);
         BodyId bodyB = _shapes.GetBody(shapeB);
-        _events[_eventCount++] = new ContactEvent(shapeA, shapeB, bodyA, bodyB, began);
+        _events[_eventCount++] = new ContactEvent(shapeA, shapeB, bodyA, bodyB, type);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

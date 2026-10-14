@@ -50,7 +50,7 @@ public sealed class World3DTests : IDisposable
             _world.Step(1.0f / 60.0f);
             for (int e = 0; e < _world.ContactEventCount; e++)
             {
-                if (_world.GetContactEvent(e).Began)
+                if (_world.GetContactEvent(e).Type == ContactEventType.Began)
                 {
                     began = true;
                 }
@@ -65,7 +65,7 @@ public sealed class World3DTests : IDisposable
         bool ended = false;
         for (int e = 0; e < _world.ContactEventCount; e++)
         {
-            if (!_world.GetContactEvent(e).Began)
+            if (_world.GetContactEvent(e).Type == ContactEventType.Ended)
             {
                 ended = true;
             }
@@ -127,5 +127,65 @@ public sealed class World3DTests : IDisposable
 
         count.Should().Be(1);
         results[0].Should().Be(shape);
+    }
+
+    [Fact]
+    public void StayEvent_Fires_WhileContactPersists()
+    {
+        BodyId ground = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+        _world.Shapes.AttachBox(_world.Bodies, _world.Broadphase, ground,
+            new Vec3(0.0f, -1.0f, 0.0f), new Vec3(10.0f, 1.0f, 10.0f), isSensor: true);
+
+        BodyId ball = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, ball, Vec3.Zero, 0.5f);
+        _world.Bodies.SetTransform(ball, new Vec3(0.0f, 0.4f, 0.0f), Quat.Identity);
+
+        _world.Step(1.0f / 60.0f);
+        bool began = false;
+        for (int e = 0; e < _world.ContactEventCount; e++)
+        {
+            began |= _world.GetContactEvent(e).Type == ContactEventType.Began;
+        }
+
+        began.Should().BeTrue();
+
+        _world.Bodies.SetTransform(ball, new Vec3(0.0f, 0.4f, 0.0f), Quat.Identity);
+        _world.Step(1.0f / 60.0f);
+        bool stayed = false;
+        for (int e = 0; e < _world.ContactEventCount; e++)
+        {
+            stayed |= _world.GetContactEvent(e).Type == ContactEventType.Stay;
+        }
+
+        stayed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void QueryPoint_Finds_NearestSurface()
+    {
+        BodyId ball = _world.Bodies.Create(new BodyDef());
+        ShapeId shape = _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, ball, Vec3.Zero, 0.5f);
+        _world.Step(1.0f / 60.0f);
+
+        Span<ClosestPointHit3D> hits = stackalloc ClosestPointHit3D[8];
+        int count = _world.QueryPoint(new Vec3(0.0f, 2.0f, 0.0f), 10.0f, hits);
+
+        count.Should().Be(1);
+        hits[0].Shape.Should().Be(shape);
+        hits[0].Distance.Should().BeApproximately(1.5f, 0.05f);
+        hits[0].Point.Y.Should().BeApproximately(0.5f, 0.05f);
+    }
+
+    [Fact]
+    public void ShiftOrigin_Translates_BodiesExactly()
+    {
+        BodyId ball = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, ball, Vec3.Zero, 0.5f);
+        _world.Bodies.SetTransform(ball, new Vec3(100.0f, 0.0f, 0.0f), Quat.Identity);
+        _world.Step(1.0f / 60.0f);
+
+        _world.ShiftOrigin(new Vec3(100.0f, 0.0f, 0.0f));
+
+        _world.Bodies.GetTransform(ball).Position.X.Should().BeApproximately(0.0f, 1e-4f);
     }
 }
