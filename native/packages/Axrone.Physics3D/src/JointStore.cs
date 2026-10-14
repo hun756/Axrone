@@ -199,6 +199,65 @@ internal struct PrismaticJointData
     public bool Live;
 }
 
+/// <summary>Swing-cone state: point coincidence, cone stops, twist stops and a twist motor.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+internal struct ConeTwistJointData
+{
+    /// <summary>First body.</summary>
+    public BodyId BodyA;
+
+    /// <summary>Second body.</summary>
+    public BodyId BodyB;
+
+    /// <summary>Anchor in the first body frame.</summary>
+    public Vec3 LocalAnchorA;
+
+    /// <summary>Anchor in the second body frame.</summary>
+    public Vec3 LocalAnchorB;
+
+    /// <summary>Twist axis in the first body frame.</summary>
+    public Vec3 LocalAxisA;
+
+    /// <summary>Twist axis in the second body frame.</summary>
+    public Vec3 LocalAxisB;
+
+    /// <summary>Reference perpendicular in the first body frame for twist measurement.</summary>
+    public Vec3 LocalPerpA;
+
+    /// <summary>Reference perpendicular in the second body frame.</summary>
+    public Vec3 LocalPerpB;
+
+    /// <summary>Swing cone half-angle in radians.</summary>
+    public float SwingSpan;
+
+    /// <summary>Twist range in radians, centered on the reference.</summary>
+    public float TwistSpan;
+
+    /// <summary>Twist motor target speed in radians per second.</summary>
+    public float MotorSpeed;
+
+    /// <summary>Twist motor torque cap.</summary>
+    public float MaxMotorTorque;
+
+    /// <summary>Whether the twist motor drives.</summary>
+    public bool EnableMotor;
+
+    /// <summary>Accumulated point impulse.</summary>
+    public Vec3 PointImpulse;
+
+    /// <summary>Accumulated swing-correction impulse (two rows).</summary>
+    public Vec3 SwingImpulse;
+
+    /// <summary>Accumulated twist-limit impulse.</summary>
+    public float TwistLimitImpulse;
+
+    /// <summary>Accumulated twist-motor impulse.</summary>
+    public float TwistMotorImpulse;
+
+    /// <summary>Whether the slot holds a live joint.</summary>
+    public bool Live;
+}
+
 /// <summary>
 /// Dense segregated store of joints: one packed table per archetype,
 /// kind-tagged identities, stable slots recycled through intrusive stacks.
@@ -239,6 +298,12 @@ public sealed class JointStore
     private int _prismaticHighWater;
     private int _prismaticCount;
 
+    private ConeTwistJointData[] _coneTwist;
+    private int[] _coneTwistFree;
+    private int _coneTwistFreeCount;
+    private int _coneTwistHighWater;
+    private int _coneTwistCount;
+
     /// <summary>Creates a store with room for eight joints per archetype.</summary>
     public JointStore()
     {
@@ -252,13 +317,15 @@ public sealed class JointStore
         _hingeFree = new int[InitialCapacity];
         _prismatic = new PrismaticJointData[InitialCapacity];
         _prismaticFree = new int[InitialCapacity];
+        _coneTwist = new ConeTwistJointData[InitialCapacity];
+        _coneTwistFree = new int[InitialCapacity];
     }
 
     /// <summary>Live joints across all archetypes.</summary>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount + _prismaticCount;
+        get => _distanceCount + _ballSocketCount + _weldCount + _hingeCount + _prismaticCount + _coneTwistCount;
     }
 
     /// <summary>Whether <paramref name="id"/> names a live joint.</summary>
@@ -278,6 +345,9 @@ public sealed class JointStore
             JointKind.Weld => slot < _weld.Length && _weld[slot].Live,
             JointKind.Hinge => slot < _hinge.Length && _hinge[slot].Live,
             JointKind.Prismatic => slot < _prismatic.Length && _prismatic[slot].Live,
+            JointKind.ConeTwist => slot < _coneTwist.Length && _coneTwist[slot].Live,
+            JointKind.Configurable => false,
+            JointKind.Spring => false,
             _ => false,
         };
     }
@@ -511,6 +581,72 @@ public sealed class JointStore
         return new JointId(JointKind.Prismatic, (uint)slot);
     }
 
+    /// <summary>Creates a swing-cone joint with twist stops and an optional twist motor; wakes both bodies.</summary>
+    /// <param name="bodies">Body registry; both bodies must be live.</param>
+    /// <param name="bodyA">First body.</param>
+    /// <param name="bodyB">Second body.</param>
+    /// <param name="localAnchorA">Anchor in the first body frame.</param>
+    /// <param name="localAnchorB">Anchor in the second body frame.</param>
+    /// <param name="localAxisA">Twist axis in the first body frame; must be a unit vector.</param>
+    /// <param name="localAxisB">Twist axis in the second body frame; must be a unit vector.</param>
+    /// <param name="swingSpan">Swing cone half-angle in radians; never negative.</param>
+    /// <param name="twistSpan">Twist range in radians centered on the reference; never negative.</param>
+    /// <param name="motorSpeed">Twist motor target speed in radians per second.</param>
+    /// <param name="maxMotorTorque">Twist motor torque cap.</param>
+    /// <param name="enableMotor">Whether the twist motor drives.</param>
+    public JointId CreateConeTwist(
+        BodyStore bodies, BodyId bodyA, BodyId bodyB,
+        Vec3 localAnchorA, Vec3 localAnchorB, Vec3 localAxisA, Vec3 localAxisB,
+        float swingSpan = 0.5f, float twistSpan = 0.5f,
+        float motorSpeed = 0.0f, float maxMotorTorque = 0.0f, bool enableMotor = false)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+        bodies.Slot(bodyA);
+        bodies.Slot(bodyB);
+
+        if (MathF.Abs(localAxisA.LengthSquared() - 1.0f) > 1e-4f || MathF.Abs(localAxisB.LengthSquared() - 1.0f) > 1e-4f)
+        {
+            ThrowHelper.ThrowInvalidOperation("Cone-twist axes must be unit vectors.");
+        }
+
+        if (swingSpan < 0.0f || float.IsNaN(swingSpan) || twistSpan < 0.0f || float.IsNaN(twistSpan))
+        {
+            ThrowHelper.ThrowInvalidOperation("Cone-twist spans must not be negative.");
+        }
+
+        if (enableMotor && (!(maxMotorTorque >= 0.0f) || float.IsNaN(maxMotorTorque)))
+        {
+            ThrowHelper.ThrowInvalidOperation("Cone-twist motor torque cap must not be negative.");
+        }
+
+        int slot = AllocateConeTwist();
+        _coneTwist[slot] = new ConeTwistJointData
+        {
+            BodyA = bodyA,
+            BodyB = bodyB,
+            LocalAnchorA = localAnchorA,
+            LocalAnchorB = localAnchorB,
+            LocalAxisA = localAxisA,
+            LocalAxisB = localAxisB,
+            LocalPerpA = Perpendicular(localAxisA),
+            LocalPerpB = Perpendicular(localAxisB),
+            SwingSpan = swingSpan,
+            TwistSpan = twistSpan,
+            MotorSpeed = motorSpeed,
+            MaxMotorTorque = maxMotorTorque,
+            EnableMotor = enableMotor,
+            PointImpulse = Vec3.Zero,
+            SwingImpulse = Vec3.Zero,
+            TwistLimitImpulse = 0.0f,
+            TwistMotorImpulse = 0.0f,
+            Live = true,
+        };
+        _coneTwistCount++;
+        bodies.SetAwake(bodyA, true);
+        bodies.SetAwake(bodyB, true);
+        return new JointId(JointKind.ConeTwist, (uint)slot);
+    }
+
     /// <summary>Drops a joint; its identity dies with it.</summary>
     public void Destroy(JointId id)
     {
@@ -537,10 +673,15 @@ public sealed class JointStore
                 _hingeFree[_hingeFreeCount++] = slot;
                 _hingeCount--;
                 break;
-            default:
+            case JointKind.Prismatic:
                 _prismatic[slot] = default;
                 _prismaticFree[_prismaticFreeCount++] = slot;
                 _prismaticCount--;
+                break;
+            default:
+                _coneTwist[slot] = default;
+                _coneTwistFree[_coneTwistFreeCount++] = slot;
+                _coneTwistCount--;
                 break;
         }
     }
@@ -585,6 +726,14 @@ public sealed class JointStore
             if (_prismatic[i].Live && (_prismatic[i].BodyA == bodyId || _prismatic[i].BodyB == bodyId))
             {
                 Destroy(new JointId(JointKind.Prismatic, (uint)i));
+            }
+        }
+
+        for (int i = 0; i < _coneTwist.Length; i++)
+        {
+            if (_coneTwist[i].Live && (_coneTwist[i].BodyA == bodyId || _coneTwist[i].BodyB == bodyId))
+            {
+                Destroy(new JointId(JointKind.ConeTwist, (uint)i));
             }
         }
     }
@@ -633,6 +782,14 @@ public sealed class JointStore
             }
         }
 
+        for (int i = 0; i < _coneTwist.Length && count < destination.Length; i++)
+        {
+            if (_coneTwist[i].Live)
+            {
+                destination[count++] = new JointPair3D(_coneTwist[i].BodyA, _coneTwist[i].BodyB);
+            }
+        }
+
         return count;
     }
 
@@ -651,6 +808,9 @@ public sealed class JointStore
     /// <summary>Internal table access for the solver; validated.</summary>
     internal ref PrismaticJointData Prismatic(int slot) => ref _prismatic[slot];
 
+    /// <summary>Internal table access for the solver; validated.</summary>
+    internal ref ConeTwistJointData ConeTwist(int slot) => ref _coneTwist[slot];
+
     /// <summary>Table length for solver iteration.</summary>
     internal int DistanceCapacity => _distance.Length;
 
@@ -666,6 +826,9 @@ public sealed class JointStore
     /// <summary>Table length for solver iteration.</summary>
     internal int PrismaticCapacity => _prismatic.Length;
 
+    /// <summary>Table length for solver iteration.</summary>
+    internal int ConeTwistCapacity => _coneTwist.Length;
+
     /// <summary>Whether a distance slot holds a live joint; for solver iteration.</summary>
     internal bool IsDistanceLive(int slot) => _distance[slot].Live;
 
@@ -680,6 +843,9 @@ public sealed class JointStore
 
     /// <summary>Whether a prismatic slot holds a live joint; for solver iteration.</summary>
     internal bool IsPrismaticLive(int slot) => _prismatic[slot].Live;
+
+    /// <summary>Whether a cone-twist slot holds a live joint; for solver iteration.</summary>
+    internal bool IsConeTwistLive(int slot) => _coneTwist[slot].Live;
 
     private int AllocateDistance()
     {
@@ -761,6 +927,22 @@ public sealed class JointStore
         }
 
         return _prismaticHighWater++;
+    }
+
+    private int AllocateConeTwist()
+    {
+        if (_coneTwistFreeCount > 0)
+        {
+            return _coneTwistFree[--_coneTwistFreeCount];
+        }
+
+        if (_coneTwistHighWater >= _coneTwist.Length)
+        {
+            Array.Resize(ref _coneTwist, _coneTwist.Length * 2);
+            Array.Resize(ref _coneTwistFree, _coneTwistFree.Length * 2);
+        }
+
+        return _coneTwistHighWater++;
     }
 
     /// <summary>Builds a unit perpendicular to an axis.</summary>

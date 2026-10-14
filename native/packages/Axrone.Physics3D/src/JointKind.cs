@@ -17,4 +17,13 @@ public enum JointKind : byte
 
     /// <summary>Slide along one axis.</summary>
     Prismatic = 4,
+
+    /// <summary>Swing cone with twist stops.</summary>
+    ConeTwist = 5,
+
+    /// <summary>Per-axis locked, limited or driven motion.</summary>
+    Configurable = 6,
+
+    /// <summary>Force-based spring-damper along an axis pair.</summary>
+    Spring = 7,
 }

@@ -70,6 +70,16 @@ public static class JointSolver
 
             SolvePrismaticVelocity(bodies, ref joints.Prismatic(slot), h);
         }
+
+        for (int slot = 0; slot < joints.ConeTwistCapacity; slot++)
+        {
+            if (!joints.IsConeTwistLive(slot))
+            {
+                continue;
+            }
+
+            SolveConeTwistVelocity(bodies, ref joints.ConeTwist(slot), h);
+        }
     }
 
     /// <summary>Runs one position sweep over every live joint.</summary>
@@ -127,6 +137,16 @@ public static class JointSolver
             }
 
             SolvePrismaticPosition(bodies, ref joints.Prismatic(slot));
+        }
+
+        for (int slot = 0; slot < joints.ConeTwistCapacity; slot++)
+        {
+            if (!joints.IsConeTwistLive(slot))
+            {
+                continue;
+            }
+
+            SolveConeTwistPosition(bodies, ref joints.ConeTwist(slot));
         }
     }
 
@@ -572,10 +592,25 @@ public static class JointSolver
         }
     }
 
-    /// <summary>Limit and motor rows around the hinge axis.</summary>
+    /// <summary>Limit and motor rows around a twist axis.</summary>
     private static void SolveHingeAngularRows(
         ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
         Vec3 invIA, Vec3 invIB, Vec3 axis, float angle, ref HingeJointData joint, float h)
+    {
+        SolveTwistLimitMotor(
+            ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, angle,
+            joint.LowerLimit, joint.UpperLimit, joint.EnableLimit,
+            joint.MotorSpeed, joint.MaxMotorTorque, joint.EnableMotor,
+            ref joint.LimitImpulse, ref joint.MotorImpulse, h);
+    }
+
+    /// <summary>Twist stops with a centered range plus an optional speed motor around an axis.</summary>
+    private static void SolveTwistLimitMotor(
+        ref BodyState stateA, ref BodyState stateB, bool awakeA, bool awakeB,
+        Vec3 invIA, Vec3 invIB, Vec3 axis, float angle,
+        float lowerLimit, float upperLimit, bool enableLimit,
+        float motorSpeed, float maxMotorTorque, bool enableMotor,
+        ref float limitImpulse, ref float motorImpulse, float h)
     {
         float k = Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateA.Rotation, invIA, axis))
             + Vec3.Dot(axis, ContactSolver.ApplyInverseInertia(stateB.Rotation, invIB, axis));
@@ -586,18 +621,18 @@ public static class JointSolver
 
         float rate = Vec3.Dot(axis, stateB.AngularVelocity - stateA.AngularVelocity);
 
-        if (joint.EnableLimit)
+        if (enableLimit)
         {
             float violation = 0.0f;
             float sign = 0.0f;
-            if (angle < joint.LowerLimit)
+            if (angle < lowerLimit)
             {
-                violation = joint.LowerLimit - angle;
+                violation = lowerLimit - angle;
                 sign = 1.0f;
             }
-            else if (angle > joint.UpperLimit)
+            else if (angle > upperLimit)
             {
-                violation = angle - joint.UpperLimit;
+                violation = angle - upperLimit;
                 sign = -1.0f;
             }
 
@@ -605,19 +640,19 @@ public static class JointSolver
             {
                 float bias = (PositionBeta / MathF.Max(h, 1e-6f)) * violation;
                 float lambda = (-(rate * sign) + bias) / k;
-                float updated = MathF.Max(joint.LimitImpulse + lambda, 0.0f);
-                ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, (updated - joint.LimitImpulse) * sign);
-                joint.LimitImpulse = updated;
+                float updated = MathF.Max(limitImpulse + lambda, 0.0f);
+                ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, (updated - limitImpulse) * sign);
+                limitImpulse = updated;
             }
         }
 
-        if (joint.EnableMotor)
+        if (enableMotor)
         {
-            float lambda = -((rate - joint.MotorSpeed)) / k;
-            float cap = joint.MaxMotorTorque * h;
-            float updated = Math.Clamp(joint.MotorImpulse + lambda, -cap, cap);
-            ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, updated - joint.MotorImpulse);
-            joint.MotorImpulse = updated;
+            float lambda = -((rate - motorSpeed)) / k;
+            float cap = maxMotorTorque * h;
+            float updated = Math.Clamp(motorImpulse + lambda, -cap, cap);
+            ApplyHingeSpin(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axis, updated - motorImpulse);
+            motorImpulse = updated;
         }
     }
 
@@ -672,6 +707,73 @@ public static class JointSolver
         }
 
         return (Quat.CreateFromAxisAngle(correction / angle, angle) * rotation).Normalize();
+    }
+
+    private static void SolveConeTwistVelocity(BodyStore bodies, ref ConeTwistJointData joint, float h)
+    {
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out float invMassA, out float invMassB, out Vec3 invIA, out Vec3 invIB);
+
+        AnchorFrame(ref stateA, joint.LocalAnchorA, out _, out _, out Vec3 rA);
+        AnchorFrame(ref stateB, joint.LocalAnchorB, out _, out _, out Vec3 rB);
+
+        BuildPointMatrix(invMassA, invMassB, invIA, invIB,
+            stateA.Rotation, stateB.Rotation, rA, rB,
+            out Vec3 col0, out Vec3 col1, out Vec3 col2);
+
+        Vec3 vA = stateA.LinearVelocity + Vec3.Cross(stateA.AngularVelocity, rA);
+        Vec3 vB = stateB.LinearVelocity + Vec3.Cross(stateB.AngularVelocity, rB);
+        Vec3 point = SolveSymmetric3x3(col0, col1, col2, (vA - vB) * -1.0f);
+        joint.PointImpulse += point;
+        ApplyPointImpulse(ref stateA, ref stateB, awakeA, awakeB, invMassA, invMassB, invIA, invIB, rA, rB, point);
+
+        Vec3 axisA = stateA.Rotation * joint.LocalAxisA;
+        Vec3 axisB = stateB.Rotation * joint.LocalAxisB;
+        float swing = MathF.Acos(Math.Clamp(Vec3.Dot(axisA, axisB), -1.0f, 1.0f));
+        if (swing > joint.SwingSpan)
+        {
+            HingeTangents(axisA, out Vec3 t1, out Vec3 t2);
+            SolveAxisPair(ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axisB, t1, t2, ref joint.SwingImpulse);
+        }
+
+        float twist = HingeAngle(stateA.Rotation, stateB.Rotation, joint.LocalPerpA, joint.LocalPerpB, axisA);
+        float halfTwist = joint.TwistSpan * 0.5f;
+        SolveTwistLimitMotor(
+            ref stateA, ref stateB, awakeA, awakeB, invIA, invIB, axisA, twist,
+            -halfTwist, halfTwist, true,
+            joint.MotorSpeed, joint.MaxMotorTorque, joint.EnableMotor,
+            ref joint.TwistLimitImpulse, ref joint.TwistMotorImpulse, h);
+    }
+
+    private static void SolveConeTwistPosition(BodyStore bodies, ref ConeTwistJointData joint)
+    {
+        var point = new BallSocketJointData
+        {
+            BodyA = joint.BodyA,
+            BodyB = joint.BodyB,
+            LocalAnchorA = joint.LocalAnchorA,
+            LocalAnchorB = joint.LocalAnchorB,
+        };
+        SolveBallSocketPosition(bodies, ref point);
+
+        ref BodyState stateA = ref bodies.Slot(joint.BodyA);
+        ref BodyState stateB = ref bodies.Slot(joint.BodyB);
+        InverseMasses(ref stateA, ref stateB, out bool awakeA, out bool awakeB,
+            out _, out _, out _, out _);
+        if (!awakeA && !awakeB)
+        {
+            return;
+        }
+
+        Vec3 axisA = stateA.Rotation * joint.LocalAxisA;
+        Vec3 axisB = stateB.Rotation * joint.LocalAxisB;
+        float swing = MathF.Acos(Math.Clamp(Vec3.Dot(axisA, axisB), -1.0f, 1.0f));
+        if (swing > joint.SwingSpan)
+        {
+            CorrectAxisAlignment(bodies, joint.BodyA, joint.BodyB, axisA, axisB);
+        }
     }
 
     private static void SolvePrismaticVelocity(BodyStore bodies, ref PrismaticJointData joint, float h)

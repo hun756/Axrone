@@ -261,4 +261,52 @@ public sealed class Joint3DTests : IDisposable
         travel.Should().BeLessThan(1.3f);
         _world.Bodies.GetLinearVelocity(slider).X.Should().BeLessThan(0.5f);
     }
+
+    [Fact]
+    public void ConeTwist_Holds_SwingInsideCone()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId limb = _world.Bodies.Create(new BodyDef());
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, limb, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(limb, new Vec3(0.0f, 2.0f, 0.0f), Quat.Identity);
+        _world.Bodies.SetAngularVelocity(limb, new Vec3(3.0f, 0.0f, 0.0f));
+
+        _world.Joints.CreateConeTwist(
+            _world.Bodies, frame, limb, new Vec3(0.0f, 3.0f, 0.0f), new Vec3(0.0f, 1.0f, 0.0f),
+            new Vec3(0.0f, -1.0f, 0.0f), new Vec3(0.0f, -1.0f, 0.0f),
+            swingSpan: 0.4f, twistSpan: 0.4f);
+
+        for (int i = 0; i < 240; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        RigidTransform3D transform = _world.Bodies.GetTransform(limb);
+        Vec3 anchor = transform.TransformPoint(new Vec3(0.0f, 1.0f, 0.0f));
+        (anchor - new Vec3(0.0f, 3.0f, 0.0f)).Length().Should().BeLessThan(0.2f);
+    }
+
+    [Fact]
+    public void ConeTwistMotor_Spins_AboutTwistAxis()
+    {
+        BodyId frame = _world.Bodies.Create(new BodyDef { Type = BodyType.Static });
+
+        BodyId rotor = _world.Bodies.Create(new BodyDef { GravityScale = 0.0f });
+        _world.Shapes.AttachSphere(_world.Bodies, _world.Broadphase, rotor, Vec3.Zero, 0.3f);
+        _world.Bodies.SetTransform(rotor, new Vec3(0.0f, 3.0f, 0.0f), Quat.Identity);
+
+        _world.Joints.CreateConeTwist(
+            _world.Bodies, frame, rotor, new Vec3(0.0f, 3.0f, 0.0f), Vec3.Zero,
+            new Vec3(0.0f, 0.0f, 1.0f), new Vec3(0.0f, 0.0f, 1.0f),
+            swingSpan: 0.05f, twistSpan: 20.0f,
+            motorSpeed: 3.0f, maxMotorTorque: 50.0f, enableMotor: true);
+
+        for (int i = 0; i < 120; i++)
+        {
+            _world.Step(1.0f / 60.0f);
+        }
+
+        _world.Bodies.GetAngularVelocity(rotor).Z.Should().BeApproximately(3.0f, 0.5f);
+    }
 }
