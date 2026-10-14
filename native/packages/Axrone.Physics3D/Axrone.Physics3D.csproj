@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Physics3D</RootNamespace>
+    <AssemblyName>Axrone.Physics3D</AssemblyName>
+    <Description>3D rigid-body physics for the Axrone engine: broadphase, narrowphase, solver and islands over the primitives owned by Axrone.Geometry.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Operator overloads need named alternatives — the identity casts
+         are the documented API surface. RawValue and FromRaw already cover the
+         shapes that need an expression form. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on stateless tag structs — identifier tags carry no state
+         to compare; an elementwise Equals would be surface nobody should call. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Physics3D.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
