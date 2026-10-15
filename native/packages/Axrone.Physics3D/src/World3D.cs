@@ -764,7 +764,7 @@ public sealed class World : IDisposable
         {
             AnyCollider colliderA = AnyCollider.FromRecord(in recordA, _shapes.GetWorldFrame(shapeA));
             AnyCollider colliderB = AnyCollider.FromRecord(in recordB, _shapes.GetWorldFrame(shapeB));
-            if (!Epa3D.ComputePenetration(in colliderA, in colliderB, out Manifold3D epa))
+            if (!Epa3D.ComputePenetration(colliderA, colliderB, out Manifold3D epa))
             {
                 return false;
             }

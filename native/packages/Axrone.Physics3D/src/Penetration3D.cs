@@ -25,7 +25,7 @@ public readonly struct TransformedBox : ISupportShape3D<TransformedBox>, IEquata
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in TransformedBox shape, Vec3 direction)
+    public static Vec3 Support(in TransformedBox shape, in Vec3 direction)
     {
         Vec3 localDirection = shape.Frame.Rotation.Conjugate() * direction;
         Vec3 localSupport = Box3.Support(shape.Local, localDirection);
@@ -842,7 +842,7 @@ public readonly struct AnyCollider : ISupportShape3D<AnyCollider>, IEquatable<An
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in AnyCollider shape, Vec3 direction)
+    public static Vec3 Support(in AnyCollider shape, in Vec3 direction)
     {
         Vec3 localDirection = shape.Frame.Rotation.Conjugate() * direction;
         Vec3 local = shape.Kind switch

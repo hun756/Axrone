@@ -21,12 +21,19 @@
     <NoWarn>$(NoWarn);CA2225</NoWarn>
     <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
-    <!-- CA1815: Equals on stateless tag structs — identifier tags carry no state
-         to compare; an elementwise Equals would be surface nobody should call. -->
+    <!-- CA1815: Equals on stateless structs — identifier tags and stateless
+         policy/observer structs carry no state to compare; elementwise
+         Equals would be surface nobody should call. -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
     <!-- CA1000: Static members on generic types — the oriented support bindings
          expose the shape contract statically by design; instances never dispatch. -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1034: Nested types — the simplex struct enumerator is an intentional
+         zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1822: Mark members as static — the stage-0 builder entry stays an
+         instance method so the fluent chain reads left to right. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

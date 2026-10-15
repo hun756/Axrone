@@ -27,11 +27,11 @@ public static class Epa3D
     /// The normal points from the second shape toward the first.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static bool ComputePenetration<TA, TB>(in TA shapeA, in TB shapeB, out Manifold3D manifold)
-        where TA : ISupportShape3D<TA>
-        where TB : ISupportShape3D<TB>
+    public static bool ComputePenetration<TA, TB>(TA shapeA, TB shapeB, out Manifold3D manifold)
+        where TA : ISupportShape3D<TA>, allows ref struct
+        where TB : ISupportShape3D<TB>, allows ref struct
     {
-        Span<SimplexKernel3D.Vertex> captured = stackalloc SimplexKernel3D.Vertex[4];
+        Span<SimplexVertex> captured = stackalloc SimplexVertex[4];
         if (!Gjk3D.TryCaptureOverlap(in shapeA, in shapeB, captured, out int capturedCount) || capturedCount != 4)
         {
             if (Gjk3D.ComputeDistance(in shapeA, in shapeB, out _, out Vec3 pointA, out Vec3 pointB))
@@ -47,7 +47,7 @@ public static class Epa3D
             return true;
         }
 
-        Span<SimplexKernel3D.Vertex> vertices = stackalloc SimplexKernel3D.Vertex[MaxVertices];
+        Span<SimplexVertex> vertices = stackalloc SimplexVertex[MaxVertices];
         for (int i = 0; i < 4; i++)
         {
             vertices[i] = captured[i];
@@ -112,7 +112,7 @@ public static class Epa3D
                 break;
             }
 
-            vertices[vertexCount] = new SimplexKernel3D.Vertex(support, supportA, supportB);
+            vertices[vertexCount] = new SimplexVertex(support, supportA, supportB);
             int fresh = vertexCount;
             vertexCount++;
 
@@ -180,12 +180,12 @@ public static class Epa3D
             }
         }
 
-        Vec3 witnessA = (vertices[closestA].PointA * closestWa)
-            + (vertices[closestB].PointA * closestWb)
-            + (vertices[closestC].PointA * closestWc);
-        Vec3 witnessB = (vertices[closestA].PointB * closestWa)
-            + (vertices[closestB].PointB * closestWb)
-            + (vertices[closestC].PointB * closestWc);
+        Vec3 witnessA = (vertices[closestA].WitnessA * closestWa)
+            + (vertices[closestB].WitnessA * closestWb)
+            + (vertices[closestC].WitnessA * closestWc);
+        Vec3 witnessB = (vertices[closestA].WitnessB * closestWa)
+            + (vertices[closestB].WitnessB * closestWb)
+            + (vertices[closestC].WitnessB * closestWc);
         var contact = new ContactPoint3D(witnessA, witnessB, -depth, 0u);
         manifold = Manifold3D.One(normal * -1.0f, contact);
         return true;
@@ -193,7 +193,7 @@ public static class Epa3D
 
     /// <summary>Adds a face oriented away from the opposite vertex.</summary>
     private static void AddFace(
-        Span<SimplexKernel3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
+        Span<SimplexVertex> vertices, Span<Face> faces, ref int faceCount,
         int a, int b, int c, int opposite)
     {
         Vec3 ab = vertices[b].Difference - vertices[a].Difference;
@@ -217,7 +217,7 @@ public static class Epa3D
 
     /// <summary>Adds a horizon face oriented away from the polytope interior.</summary>
     private static void AddOrientedFace(
-        Span<SimplexKernel3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
+        Span<SimplexVertex> vertices, Span<Face> faces, ref int faceCount,
         int a, int b, int fresh, Vec3 interior)
     {
         Vec3 ab = vertices[b].Difference - vertices[a].Difference;

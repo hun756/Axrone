@@ -247,7 +247,7 @@ public static class ShapeRaycast3D
     public static bool RaySupport<TShape>(
         in Ray3D ray, float maxDistance, in TShape shape,
         out float distance, out Vec3 normal)
-        where TShape : ISupportShape3D<TShape>
+        where TShape : ISupportShape3D<TShape>, allows ref struct
     {
         float traveled = 0.0f;
         for (int iteration = 0; iteration < 32; iteration++)

@@ -1,25 +1,6 @@
 namespace Axrone.Physics3D;
 
 /// <summary>
-/// Support-mapping contract of a 3D collider: the furthest point, centroid and
-/// bounds, all reachable without a virtual call so GJK-style traversals close
-/// over the shape type.
-/// </summary>
-/// <typeparam name="TSelf">The shape type itself.</typeparam>
-public interface ISupportShape3D<TSelf>
-    where TSelf : ISupportShape3D<TSelf>
-{
-    /// <summary>Returns the point of the shape furthest along <paramref name="direction"/>.</summary>
-    static abstract Vec3 Support(in TSelf shape, Vec3 direction);
-
-    /// <summary>Returns the volume centroid of the shape.</summary>
-    static abstract Vec3 ComputeCentroid(in TSelf shape);
-
-    /// <summary>Returns the tight bounds of the shape.</summary>
-    static abstract Aabb3D ComputeBounds(in TSelf shape);
-}
-
-/// <summary>
 /// Mass properties of a shape at unit-agnostic density scale: mass, diagonal
 /// of the body-frame inertia tensor with its inverse (zero for static or
 /// zero-mass bodies so the solver never divides), and the centroid they are
@@ -65,7 +46,7 @@ public readonly struct Sphere3 : ISupportShape3D<Sphere3>, IEquatable<Sphere3>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Sphere3 shape, Vec3 direction)
+    public static Vec3 Support(in Sphere3 shape, in Vec3 direction)
     {
         if (direction.LengthSquared() < 1e-12f)
         {
@@ -152,7 +133,7 @@ public readonly struct Box3 : ISupportShape3D<Box3>, IEquatable<Box3>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Box3 shape, Vec3 direction) => new(
+    public static Vec3 Support(in Box3 shape, in Vec3 direction) => new(
         shape.Center.X + (direction.X >= 0.0f ? shape.HalfExtents.X : -shape.HalfExtents.X),
         shape.Center.Y + (direction.Y >= 0.0f ? shape.HalfExtents.Y : -shape.HalfExtents.Y),
         shape.Center.Z + (direction.Z >= 0.0f ? shape.HalfExtents.Z : -shape.HalfExtents.Z));
@@ -291,7 +272,7 @@ public readonly struct Capsule3 : ISupportShape3D<Capsule3>, IEquatable<Capsule3
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Capsule3 shape, Vec3 direction)
+    public static Vec3 Support(in Capsule3 shape, in Vec3 direction)
     {
         float d0 = Vec3.Dot(shape.P0, direction);
         Vec3 base_ = d0 >= Vec3.Dot(shape.P1, direction) ? shape.P0 : shape.P1;
@@ -399,7 +380,7 @@ public readonly struct Cylinder3 : ISupportShape3D<Cylinder3>, IEquatable<Cylind
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Cylinder3 shape, Vec3 direction)
+    public static Vec3 Support(in Cylinder3 shape, in Vec3 direction)
     {
         Vec3 axis = shape.AxisVector;
         float axial = Vec3.Dot(direction, axis);
@@ -527,7 +508,7 @@ public readonly struct Cone3 : ISupportShape3D<Cone3>, IEquatable<Cone3>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Cone3 shape, Vec3 direction)
+    public static Vec3 Support(in Cone3 shape, in Vec3 direction)
     {
         Vec3 axis = shape.AxisVector;
         float axial = Vec3.Dot(direction, axis);
@@ -630,7 +611,7 @@ public readonly struct Hull3D : ISupportShape3D<Hull3D>, IEquatable<Hull3D>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Hull3D shape, Vec3 direction) => Hull3DHelpers.Support(shape.Vertices, direction);
+    public static Vec3 Support(in Hull3D shape, in Vec3 direction) => Hull3DHelpers.Support(shape.Vertices, direction);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -701,7 +682,7 @@ public readonly struct Mesh3D : ISupportShape3D<Mesh3D>, IEquatable<Mesh3D>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Mesh3D shape, Vec3 direction) =>
+    public static Vec3 Support(in Mesh3D shape, in Vec3 direction) =>
         Hull3DHelpers.Support(shape.Vertices, direction);
 
     /// <inheritdoc/>
@@ -793,7 +774,7 @@ public readonly struct Heightfield3D : ISupportShape3D<Heightfield3D>, IEquatabl
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in Heightfield3D shape, Vec3 direction)
+    public static Vec3 Support(in Heightfield3D shape, in Vec3 direction)
     {
         Vec3 best = shape.Vertex(0, 0);
         float bestDot = Vec3.Dot(best, direction);
@@ -967,8 +948,8 @@ internal static class Hull3DHelpers
 /// </summary>
 /// <typeparam name="TShape">The canonical local shape type.</typeparam>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct OrientedShape<TShape> : ISupportShape3D<OrientedShape<TShape>>, IEquatable<OrientedShape<TShape>>
-    where TShape : ISupportShape3D<TShape>
+public readonly ref struct OrientedShape<TShape> : ISupportShape3D<OrientedShape<TShape>>
+    where TShape : ISupportShape3D<TShape>, allows ref struct
 {
     /// <summary>Canonical local shape.</summary>
     public readonly TShape Local;
@@ -986,7 +967,7 @@ public readonly struct OrientedShape<TShape> : ISupportShape3D<OrientedShape<TSh
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec3 Support(in OrientedShape<TShape> shape, Vec3 direction)
+    public static Vec3 Support(in OrientedShape<TShape> shape, in Vec3 direction)
     {
         Vec3 localDirection = shape.Frame.Rotation.Conjugate() * direction;
         Vec3 localSupport = TShape.Support(shape.Local, localDirection);
@@ -1018,23 +999,4 @@ public readonly struct OrientedShape<TShape> : ISupportShape3D<OrientedShape<TSh
 
         return new Aabb3D(min, max);
     }
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(OrientedShape<TShape> other) =>
-        EqualityComparer<TShape>.Default.Equals(Local, other.Local) && Frame == other.Frame;
-
-    /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is OrientedShape<TShape> other && Equals(other);
-
-    /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Local, Frame);
-
-    /// <summary>Determines whether two bindings match.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator ==(OrientedShape<TShape> left, OrientedShape<TShape> right) => left.Equals(right);
-
-    /// <summary>Determines whether two bindings differ.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator !=(OrientedShape<TShape> left, OrientedShape<TShape> right) => !left.Equals(right);
 }
