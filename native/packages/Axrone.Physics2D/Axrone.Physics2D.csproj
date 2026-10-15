@@ -28,6 +28,12 @@
          Task.Yield and carries no captured-context dependency; the awaits stay bare so the
          drain behaves identically on the worker thread and on a pooled caller. -->
     <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- CA1034: Nested types — the simplex struct enumerator is an intentional
+         zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1822: Mark members as static — the stage-0 builder entry stays an
+         instance method so the fluent chain reads left to right. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

@@ -402,7 +402,7 @@ public sealed partial class DynamicAabbTree2D<TUserData, TStrategy, TMetrics>
                 if (node.IsLeaf())
                 {
                     TUserData data = PayloadOf(node.ItemId)!;
-                    KnnResult<TUserData> item = new(node.ItemId, data, new DistanceSquared(nodeDistSq));
+                    KnnResult<TUserData> item = new(node.ItemId, data, new Geometry.DistanceSquared(nodeDistSq));
 
                     if (heapCount < results.Length)
                     {

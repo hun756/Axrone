@@ -882,8 +882,8 @@ public static class Narrowphase2D
     /// <summary>Single-point fallback for pairs without an analytic clip: EPA normal, depth and witnesses.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool EvaluateEpaFallback<TA, TB>(in TA shapeA, in TB shapeB, out ContactManifold manifold)
-        where TA : ISupportShape2D<TA>
-        where TB : ISupportShape2D<TB>
+        where TA : ISupportShape2D<TA>, allows ref struct
+        where TB : ISupportShape2D<TB>, allows ref struct
     {
         if (!Epa2D.ComputePenetration(in shapeA, in shapeB, out Vec2 normal, out float depth, out Vec2 pointA, out Vec2 pointB))
         {

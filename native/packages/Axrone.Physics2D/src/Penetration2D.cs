@@ -40,8 +40,8 @@ public static class Epa2D
         out float depth,
         out Vec2 pointA,
         out Vec2 pointB)
-        where TA : ISupportShape2D<TA>
-        where TB : ISupportShape2D<TB>
+        where TA : ISupportShape2D<TA>, allows ref struct
+        where TB : ISupportShape2D<TB>, allows ref struct
     {
         Vec2 centroidA = TA.ComputeCentroid(in shapeA);
         Vec2 centroidB = TB.ComputeCentroid(in shapeB);
@@ -145,8 +145,8 @@ public static class Epa2D
         out float depth,
         out Vec2 pointA,
         out Vec2 pointB)
-        where TA : ISupportShape2D<TA>
-        where TB : ISupportShape2D<TB>
+        where TA : ISupportShape2D<TA>, allows ref struct
+        where TB : ISupportShape2D<TB>, allows ref struct
     {
         Span<SimplexKernel2D.Vertex> pool = stackalloc SimplexKernel2D.Vertex[10];
         int poolCount = 0;
@@ -205,8 +205,8 @@ public static class Epa2D
         Vec2 direction,
         Span<SimplexKernel2D.Vertex> pool,
         ref int poolCount)
-        where TA : ISupportShape2D<TA>
-        where TB : ISupportShape2D<TB>
+        where TA : ISupportShape2D<TA>, allows ref struct
+        where TB : ISupportShape2D<TB>, allows ref struct
     {
         if (poolCount >= pool.Length)
         {
@@ -309,8 +309,8 @@ public static class Epa2D
         out float depth,
         out Vec2 pointA,
         out Vec2 pointB)
-        where TA : ISupportShape2D<TA>
-        where TB : ISupportShape2D<TB>
+        where TA : ISupportShape2D<TA>, allows ref struct
+        where TB : ISupportShape2D<TB>, allows ref struct
     {
         Vec2 bestNormal = new(1.0f, 0.0f);
         float bestDistance = 0.0f;
