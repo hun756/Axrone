@@ -6,7 +6,7 @@ namespace Axrone.Physics2D;
 /// monomorphizes one solver per pair with no virtual dispatch; witness points
 /// travel alongside every simplex vertex, so the answer carries both the
 /// distance and where it is attained. Simplex reduction runs on the shared
-/// <see cref="Simplex2D"/> primitives.
+/// <see cref="SimplexKernel2D"/> primitives.
 /// </summary>
 public static class Gjk2D
 {
@@ -43,12 +43,12 @@ public static class Gjk2D
             direction = new Vec2(1.0f, 0.0f);
         }
 
-        Span<Simplex2D.Vertex> simplex = stackalloc Simplex2D.Vertex[3];
+        Span<SimplexKernel2D.Vertex> simplex = stackalloc SimplexKernel2D.Vertex[3];
         int count = 0;
 
         Vec2 firstA = TA.Support(in shapeA, direction);
         Vec2 firstB = TB.Support(in shapeB, direction * -1.0f);
-        simplex[count++] = new Simplex2D.Vertex(firstA - firstB, firstA, firstB);
+        simplex[count++] = new SimplexKernel2D.Vertex(firstA - firstB, firstA, firstB);
 
         float bestDistSq = float.PositiveInfinity;
         Vec2 bestA = firstA;
@@ -73,7 +73,7 @@ public static class Gjk2D
             }
 
             bestDistSq = distSq;
-            Simplex2D.Vertex first = simplex[0];
+            SimplexKernel2D.Vertex first = simplex[0];
             if (count == 1)
             {
                 bestA = first.PointA;
@@ -81,14 +81,14 @@ public static class Gjk2D
             }
             else
             {
-                Simplex2D.Vertex second = simplex[1];
+                SimplexKernel2D.Vertex second = simplex[1];
                 bestA = (first.PointA * w1) + (second.PointA * w2);
                 bestB = (first.PointB * w1) + (second.PointB * w2);
             }
 
             Vec2 supportA = TA.Support(in shapeA, search);
             Vec2 supportB = TB.Support(in shapeB, search * -1.0f);
-            Simplex2D.Vertex candidate = new(supportA - supportB, supportA, supportB);
+            SimplexKernel2D.Vertex candidate = new(supportA - supportB, supportA, supportB);
 
             bool duplicate = false;
             for (int i = 0; i < count; i++)
@@ -116,7 +116,7 @@ public static class Gjk2D
 
     /// <summary>Reduces the simplex to its closest feature, reporting weights for witness blending.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void Solve(Span<Simplex2D.Vertex> simplex, ref int count, out Vec2 closest, out Vec2 search, out float w1, out float w2)
+    private static void Solve(Span<SimplexKernel2D.Vertex> simplex, ref int count, out Vec2 closest, out Vec2 search, out float w1, out float w2)
     {
         if (count == 1)
         {
@@ -150,18 +150,18 @@ public static class Gjk2D
 
     /// <summary>Closest point on edge (u, v) with reduction to the winning feature.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolveEdge(in Simplex2D.Vertex u, in Simplex2D.Vertex v, out Vec2 closest, out float w1, out float w2) =>
-        Simplex2D.ClosestOnEdge(in u, in v, out closest, out w1, out w2);
+    private static void SolveEdge(in SimplexKernel2D.Vertex u, in SimplexKernel2D.Vertex v, out Vec2 closest, out float w1, out float w2) =>
+        SimplexKernel2D.ClosestOnEdge(in u, in v, out closest, out w1, out w2);
 
     /// <summary>Reduces a triangle to its closest vertex or edge; origin inside means overlap.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void SolveTriangle(Span<Simplex2D.Vertex> simplex, ref int count, out Vec2 closest, out float w1, out float w2)
+    private static void SolveTriangle(Span<SimplexKernel2D.Vertex> simplex, ref int count, out Vec2 closest, out float w1, out float w2)
     {
-        Simplex2D.Vertex a = simplex[0];
-        Simplex2D.Vertex b = simplex[1];
-        Simplex2D.Vertex c = simplex[2];
+        SimplexKernel2D.Vertex a = simplex[0];
+        SimplexKernel2D.Vertex b = simplex[1];
+        SimplexKernel2D.Vertex c = simplex[2];
 
-        if (Simplex2D.IsVertexClosest(a.Difference, b.Difference, c.Difference))
+        if (SimplexKernel2D.IsVertexClosest(a.Difference, b.Difference, c.Difference))
         {
             simplex[0] = a;
             SolveEdge(a, a, out closest, out w1, out w2);
@@ -169,7 +169,7 @@ public static class Gjk2D
             return;
         }
 
-        if (Simplex2D.IsVertexClosest(b.Difference, a.Difference, c.Difference))
+        if (SimplexKernel2D.IsVertexClosest(b.Difference, a.Difference, c.Difference))
         {
             simplex[0] = b;
             SolveEdge(b, b, out closest, out w1, out w2);
@@ -177,7 +177,7 @@ public static class Gjk2D
             return;
         }
 
-        if (Simplex2D.IsVertexClosest(c.Difference, a.Difference, b.Difference))
+        if (SimplexKernel2D.IsVertexClosest(c.Difference, a.Difference, b.Difference))
         {
             simplex[0] = c;
             SolveEdge(c, c, out closest, out w1, out w2);
@@ -185,7 +185,7 @@ public static class Gjk2D
             return;
         }
 
-        if (Simplex2D.OriginInTriangle(a.Difference, b.Difference, c.Difference))
+        if (SimplexKernel2D.OriginInTriangle(a.Difference, b.Difference, c.Difference))
         {
             closest = Vec2.Zero;
             w1 = 1.0f;
@@ -196,8 +196,8 @@ public static class Gjk2D
         }
 
         float bestDistSq = float.PositiveInfinity;
-        Simplex2D.Vertex bestU = a;
-        Simplex2D.Vertex bestV = b;
+        SimplexKernel2D.Vertex bestU = a;
+        SimplexKernel2D.Vertex bestV = b;
         float bestW1 = 0.5f;
         float bestW2 = 0.5f;
 
@@ -216,11 +216,11 @@ public static class Gjk2D
     /// <summary>Keeps the closest of the candidate edge and the running best.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void TryEdge(
-        in Simplex2D.Vertex u,
-        in Simplex2D.Vertex v,
+        in SimplexKernel2D.Vertex u,
+        in SimplexKernel2D.Vertex v,
         ref float bestDistSq,
-        ref Simplex2D.Vertex bestU,
-        ref Simplex2D.Vertex bestV,
+        ref SimplexKernel2D.Vertex bestU,
+        ref SimplexKernel2D.Vertex bestV,
         ref float bestW1,
         ref float bestW2)
     {

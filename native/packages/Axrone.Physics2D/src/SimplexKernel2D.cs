@@ -1,12 +1,12 @@
 namespace Axrone.Physics2D;
 
 /// <summary>
-/// Shared 2D simplex machinery for GJK and EPA: difference vertices with
-/// witness pairs plus the closest-feature primitives both algorithms reduce
-/// through. Internal because the witness layouts are an implementation detail;
-/// the public surface is <see cref="Gjk2D"/> and the penetration queries.
+/// Closest-feature primitives over Minkowski-difference simplices in 2D,
+/// shared by the EPA ring. Internal because the witness layouts are an
+/// implementation detail; the public surface is <see cref="Gjk2D"/> and the
+/// penetration queries.
 /// </summary>
-internal static class Simplex2D
+internal static class SimplexKernel2D
 {
     /// <summary>One Minkowski-difference vertex with its witness pair.</summary>
     internal readonly struct Vertex

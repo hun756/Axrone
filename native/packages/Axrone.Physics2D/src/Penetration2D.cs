@@ -52,12 +52,12 @@ public static class Epa2D
             direction = new Vec2(1.0f, 0.0f);
         }
 
-        Span<Simplex2D.Vertex> ring = stackalloc Simplex2D.Vertex[RingCapacity];
+        Span<SimplexKernel2D.Vertex> ring = stackalloc SimplexKernel2D.Vertex[RingCapacity];
         int count = 0;
 
         Vec2 firstA = TA.Support(in shapeA, direction);
         Vec2 firstB = TB.Support(in shapeB, direction * -1.0f);
-        ring[count++] = new Simplex2D.Vertex(firstA - firstB, firstA, firstB);
+        ring[count++] = new SimplexKernel2D.Vertex(firstA - firstB, firstA, firstB);
 
         float bestSepSq = float.PositiveInfinity;
 
@@ -74,29 +74,29 @@ public static class Epa2D
             }
             else
             {
-                Simplex2D.Vertex a = ring[0];
-                Simplex2D.Vertex b = ring[1];
-                Simplex2D.Vertex c = ring[2];
+                SimplexKernel2D.Vertex a = ring[0];
+                SimplexKernel2D.Vertex b = ring[1];
+                SimplexKernel2D.Vertex c = ring[2];
 
-                if (Simplex2D.IsVertexClosest(a.Difference, b.Difference, c.Difference))
+                if (SimplexKernel2D.IsVertexClosest(a.Difference, b.Difference, c.Difference))
                 {
                     ring[0] = a;
                     closest = a.Difference;
                     count = 1;
                 }
-                else if (Simplex2D.IsVertexClosest(b.Difference, a.Difference, c.Difference))
+                else if (SimplexKernel2D.IsVertexClosest(b.Difference, a.Difference, c.Difference))
                 {
                     ring[0] = b;
                     closest = b.Difference;
                     count = 1;
                 }
-                else if (Simplex2D.IsVertexClosest(c.Difference, a.Difference, b.Difference))
+                else if (SimplexKernel2D.IsVertexClosest(c.Difference, a.Difference, b.Difference))
                 {
                     ring[0] = c;
                     closest = c.Difference;
                     count = 1;
                 }
-                else if (Simplex2D.OriginInTriangle(a.Difference, b.Difference, c.Difference))
+                else if (SimplexKernel2D.OriginInTriangle(a.Difference, b.Difference, c.Difference))
                 {
                     OrderRing(ring, ref count);
                     return Expand(in shapeA, in shapeB, ring, ref count, out normal, out depth, out pointA, out pointB);
@@ -124,7 +124,7 @@ public static class Epa2D
             Vec2 search = closest * -1.0f;
             Vec2 supportA = TA.Support(in shapeA, search);
             Vec2 supportB = TB.Support(in shapeB, search * -1.0f);
-            ring[count++] = new Simplex2D.Vertex(supportA - supportB, supportA, supportB);
+            ring[count++] = new SimplexKernel2D.Vertex(supportA - supportB, supportA, supportB);
         }
 
         return NoContact(out normal, out depth, out pointA, out pointB);
@@ -139,7 +139,7 @@ public static class Epa2D
     private static bool ResolveDegenerate<TA, TB>(
         in TA shapeA,
         in TB shapeB,
-        Span<Simplex2D.Vertex> ring,
+        Span<SimplexKernel2D.Vertex> ring,
         int count,
         out Vec2 normal,
         out float depth,
@@ -148,7 +148,7 @@ public static class Epa2D
         where TA : ISupportShape2D<TA>
         where TB : ISupportShape2D<TB>
     {
-        Span<Simplex2D.Vertex> pool = stackalloc Simplex2D.Vertex[10];
+        Span<SimplexKernel2D.Vertex> pool = stackalloc SimplexKernel2D.Vertex[10];
         int poolCount = 0;
         for (int i = 0; i < count && poolCount < 10; i++)
         {
@@ -172,7 +172,7 @@ public static class Epa2D
         AddProbe(in shapeA, in shapeB, new Vec2(0.0f, 1.0f), pool, ref poolCount);
         AddProbe(in shapeA, in shapeB, new Vec2(0.0f, -1.0f), pool, ref poolCount);
 
-        Span<Simplex2D.Vertex> triangle = stackalloc Simplex2D.Vertex[3];
+        Span<SimplexKernel2D.Vertex> triangle = stackalloc SimplexKernel2D.Vertex[3];
         for (int i = 0; i < poolCount; i++)
         {
             for (int j = i + 1; j < poolCount; j++)
@@ -182,7 +182,7 @@ public static class Epa2D
                     triangle[0] = pool[i];
                     triangle[1] = pool[j];
                     triangle[2] = pool[k];
-                    if (Simplex2D.OriginInTriangle(triangle[0].Difference, triangle[1].Difference, triangle[2].Difference))
+                    if (SimplexKernel2D.OriginInTriangle(triangle[0].Difference, triangle[1].Difference, triangle[2].Difference))
                     {
                         triangle.CopyTo(ring);
                         int ordered = 3;
@@ -203,7 +203,7 @@ public static class Epa2D
         in TA shapeA,
         in TB shapeB,
         Vec2 direction,
-        Span<Simplex2D.Vertex> pool,
+        Span<SimplexKernel2D.Vertex> pool,
         ref int poolCount)
         where TA : ISupportShape2D<TA>
         where TB : ISupportShape2D<TB>
@@ -215,7 +215,7 @@ public static class Epa2D
 
         Vec2 supportA = TA.Support(in shapeA, direction);
         Vec2 supportB = TB.Support(in shapeB, direction * -1.0f);
-        pool[poolCount++] = new Simplex2D.Vertex(supportA - supportB, supportA, supportB);
+        pool[poolCount++] = new SimplexKernel2D.Vertex(supportA - supportB, supportA, supportB);
     }
 
     /// <summary>Separated shapes: default outputs, no contact.</summary>
@@ -229,9 +229,9 @@ public static class Epa2D
     }
 
     /// <summary>Reduces a 2-vertex ring, keeping both endpoints on an interior closest edge.</summary>
-    private static int ReduceEdge(Span<Simplex2D.Vertex> ring, out Vec2 closest)
+    private static int ReduceEdge(Span<SimplexKernel2D.Vertex> ring, out Vec2 closest)
     {
-        Simplex2D.ClosestOnEdge(in ring[0], in ring[1], out closest, out float w1, out float w2);
+        SimplexKernel2D.ClosestOnEdge(in ring[0], in ring[1], out closest, out float w1, out float w2);
         if (w1 == 1.0f)
         {
             return 1;
@@ -247,16 +247,16 @@ public static class Epa2D
     }
 
     /// <summary>Reduces a non-containing triangle to its closest edge.</summary>
-    private static int ReduceToBestEdge(Span<Simplex2D.Vertex> ring)
+    private static int ReduceToBestEdge(Span<SimplexKernel2D.Vertex> ring)
     {
         float bestDistSq = float.PositiveInfinity;
         int bestEdge = 0;
 
         for (int i = 0; i < 3; i++)
         {
-            Simplex2D.Vertex u = ring[i];
-            Simplex2D.Vertex v = ring[(i + 1) % 3];
-            Simplex2D.ClosestOnEdge(in u, in v, out Vec2 closest, out _, out _);
+            SimplexKernel2D.Vertex u = ring[i];
+            SimplexKernel2D.Vertex v = ring[(i + 1) % 3];
+            SimplexKernel2D.ClosestOnEdge(in u, in v, out Vec2 closest, out _, out _);
             float distSq = closest.LengthSquared();
             if (distSq < bestDistSq)
             {
@@ -271,7 +271,7 @@ public static class Epa2D
     }
 
     /// <summary>Orders three vertices counter-clockwise around their centroid for ring expansion.</summary>
-    private static void OrderRing(Span<Simplex2D.Vertex> ring, ref int count)
+    private static void OrderRing(Span<SimplexKernel2D.Vertex> ring, ref int count)
     {
         Vec2 center = (ring[0].Difference + ring[1].Difference + ring[2].Difference) * (1.0f / 3.0f);
 
@@ -303,7 +303,7 @@ public static class Epa2D
     private static bool Expand<TA, TB>(
         in TA shapeA,
         in TB shapeB,
-        Span<Simplex2D.Vertex> ring,
+        Span<SimplexKernel2D.Vertex> ring,
         ref int count,
         out Vec2 normal,
         out float depth,
@@ -326,8 +326,8 @@ public static class Epa2D
 
             for (int i = 0; i < count; i++)
             {
-                Simplex2D.Vertex u = ring[i];
-                Simplex2D.Vertex v = ring[(i + 1) % count];
+                SimplexKernel2D.Vertex u = ring[i];
+                SimplexKernel2D.Vertex v = ring[(i + 1) % count];
                 Vec2 edge = v.Difference - u.Difference;
 
                 float edgeLengthSq = edge.LengthSquared();
@@ -363,8 +363,8 @@ public static class Epa2D
             float penetration = Vec2.Dot(supportDifference, minNormal) - minDistance;
             if (penetration <= ConvergenceTolerance)
             {
-                Simplex2D.Vertex u = ring[minEdge];
-                Simplex2D.Vertex v = ring[(minEdge + 1) % count];
+                SimplexKernel2D.Vertex u = ring[minEdge];
+                SimplexKernel2D.Vertex v = ring[(minEdge + 1) % count];
                 BlendWitnesses(in u, in v, out pointA, out pointB);
                 normal = minNormal;
                 depth = minDistance;
@@ -386,7 +386,7 @@ public static class Epa2D
                 ring[i] = ring[i - 1];
             }
 
-            ring[minEdge + 1] = new Simplex2D.Vertex(supportDifference, supportA, supportB);
+            ring[minEdge + 1] = new SimplexKernel2D.Vertex(supportDifference, supportA, supportB);
             count++;
         }
 
@@ -407,7 +407,7 @@ public static class Epa2D
     }
 
     /// <summary>Blends witness pairs along an edge by projection.</summary>
-    private static void BlendWitnesses(in Simplex2D.Vertex u, in Simplex2D.Vertex v, out Vec2 pointA, out Vec2 pointB)
+    private static void BlendWitnesses(in SimplexKernel2D.Vertex u, in SimplexKernel2D.Vertex v, out Vec2 pointA, out Vec2 pointB)
     {
         Vec2 edge = v.Difference - u.Difference;
         float denom = Vec2.Dot(edge, edge);
