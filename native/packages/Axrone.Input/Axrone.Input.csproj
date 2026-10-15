@@ -31,6 +31,18 @@
     <!-- CA1711: Type name ends in 'Queue' — queue is the documented
          transport vocabulary for the event channel. -->
     <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1051: Visible instance fields — input state and binding structs
+         are explicit wire-layout payloads, not encapsulation boundaries. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — input errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1819: Properties returning arrays — context definitions carry
+         fixed binding tables by design; the engine copies them on register. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
