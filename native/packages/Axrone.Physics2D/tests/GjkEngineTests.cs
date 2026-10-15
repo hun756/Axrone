@@ -13,8 +13,8 @@ public class GjkEngineTests
         var a = new Circle2(new Vec2(0.0f, 0.0f), 1.0f);
         var b = new Circle2(new Vec2(2.01f, 0.0f), 1.0f);
 
-        GjkResult fast = GjkEngine2D.ComputeDistance<Circle2, Circle2, FastGjkPolicy, NullGjkObserver>(a, b);
-        GjkResult precise = GjkEngine2D.ComputeDistance<Circle2, Circle2, HighPrecisionGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult fast = Gjk2D.ComputeDistance<Circle2, Circle2, FastGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult precise = Gjk2D.ComputeDistance<Circle2, Circle2, HighPrecisionGjkPolicy, NullGjkObserver>(a, b);
 
         fast.IsDisjoint.Should().BeTrue();
         precise.IsDisjoint.Should().BeTrue();
@@ -29,7 +29,7 @@ public class GjkEngineTests
         var a = new Circle2(new Vec2(0.0f, 0.0f), 1.0f);
         var b = new Circle2(new Vec2(1.0f, 0.0f), 1.0f);
 
-        GjkResult result = GjkEngine2D.ComputeDistance<Circle2, Circle2, StandardGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult result = Gjk2D.ComputeDistance<Circle2, Circle2, StandardGjkPolicy, NullGjkObserver>(a, b);
 
         result.IsOverlapping.Should().BeTrue();
         result.Distance.Should().Be(Distance.Zero);
@@ -42,7 +42,7 @@ public class GjkEngineTests
         var b = new Circle2(new Vec2(5.0f, 0.0f), 1.0f);
 
         TelemetryGjkObserver.TelemetryState = new GjkTelemetryState();
-        GjkResult result = GjkEngine2D.ComputeDistance<Circle2, Circle2, StandardGjkPolicy, TelemetryGjkObserver>(a, b);
+        GjkResult result = Gjk2D.ComputeDistance<Circle2, Circle2, StandardGjkPolicy, TelemetryGjkObserver>(a, b);
 
         result.IsDisjoint.Should().BeTrue();
         TelemetryGjkObserver.TelemetryState.TotalQueries.Should().Be(1);

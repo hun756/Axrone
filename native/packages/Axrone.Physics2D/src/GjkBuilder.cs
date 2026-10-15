@@ -103,5 +103,5 @@ public readonly ref struct GjkConfiguredQuery<TShapeA, TShapeB, TPolicy, TObserv
     /// <summary>Executes the configured query.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public GjkResult Execute() =>
-        GjkEngine2D.ComputeDistance<TShapeA, TShapeB, TPolicy, TObserver>(_shapeA, _shapeB, IterationLimitOverride);
+        Gjk2D.ComputeDistance<TShapeA, TShapeB, TPolicy, TObserver>(_shapeA, _shapeB, IterationLimitOverride);
 }

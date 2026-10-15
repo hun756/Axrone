@@ -1,13 +1,13 @@
 namespace Axrone.Physics3D;
 
 /// <summary>
-/// Zero-allocation, fully monomorphized Gilbert-Johnson-Keerthi (GJK) 3D distance and collision engine.
+/// Zero-allocation, fully monomorphized Gilbert-Johnson-Keerthi (GJK) 3D distance and collision query.
 /// Convergence tolerances, iteration budgets and observability inject through
 /// compile-time policies, so each shape pair plus policy mix monomorphizes
 /// into its own traversal with no virtual dispatch. Tetrahedral reduction
 /// follows the shared kernel predicates.
 /// </summary>
-public static class GjkEngine3D
+public static class Gjk3D
 {
     /// <summary>
     /// Executes the monomorphized GJK distance query between any two support-mapped shapes.
@@ -27,6 +27,37 @@ public static class GjkEngine3D
     {
         Span<SimplexVertex> captured = stackalloc SimplexVertex[4];
         return Core<TShapeA, TShapeB, TPolicy, TObserver>(shapeA, shapeB, false, captured, out _, out _, out _, out _, iterationLimit);
+    }
+
+    /// <summary>
+    /// Computes the distance between two shapes plus the attaining witness
+    /// points. Returns <see langword="true"/> when the shapes are disjoint;
+    /// touching or overlapping shapes report distance zero and
+    /// <see langword="false"/>. Standard policy with diagnostics elided.
+    /// </summary>
+    /// <param name="shapeA">The first shape.</param>
+    /// <param name="shapeB">The second shape.</param>
+    /// <param name="distance">Non-negative separation; zero on contact or overlap.</param>
+    /// <param name="pointA">Witness on the first shape.</param>
+    /// <param name="pointB">Witness on the second shape.</param>
+    /// <typeparam name="TA">First shape type.</typeparam>
+    /// <typeparam name="TB">Second shape type.</typeparam>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static bool ComputeDistance<TA, TB>(
+        in TA shapeA,
+        in TB shapeB,
+        out float distance,
+        out Vec3 pointA,
+        out Vec3 pointB)
+        where TA : ISupportShape3D<TA>, allows ref struct
+        where TB : ISupportShape3D<TB>, allows ref struct
+    {
+        GjkResult result = ComputeDistance<TA, TB, StandardGjkPolicy, NullGjkObserver>(
+            shapeA, shapeB);
+        distance = result.Distance.Value.Value;
+        pointA = result.WitnessPointA;
+        pointB = result.WitnessPointB;
+        return result.IsDisjoint;
     }
 
     /// <summary>
@@ -58,6 +89,23 @@ public static class GjkEngine3D
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Runs the traversal capturing the enclosing tetrahedron on overlap for
+    /// EPA expansion under the standard policy. Returns <see langword="true"/>
+    /// with four simplex vertices when the shapes overlap.
+    /// </summary>
+    internal static bool TryCaptureOverlap<TA, TB>(
+        in TA shapeA,
+        in TB shapeB,
+        Span<SimplexVertex> simplex,
+        out int count)
+        where TA : ISupportShape3D<TA>, allows ref struct
+        where TB : ISupportShape3D<TB>, allows ref struct
+    {
+        return TryCaptureTetrahedron<TA, TB, StandardGjkPolicy>(
+            shapeA, shapeB, simplex, out count);
     }
 
     /// <summary>Shared traversal: distance by default, tetrahedron capture for EPA on demand.</summary>

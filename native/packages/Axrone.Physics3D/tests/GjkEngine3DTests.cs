@@ -13,8 +13,8 @@ public class GjkEngine3DTests
         var a = new Sphere3(Vec3.Zero, 1.0f);
         var b = new Sphere3(new Vec3(2.01f, 0.0f, 0.0f), 1.0f);
 
-        GjkResult fast = GjkEngine3D.ComputeDistance<Sphere3, Sphere3, FastGjkPolicy, NullGjkObserver>(a, b);
-        GjkResult precise = GjkEngine3D.ComputeDistance<Sphere3, Sphere3, HighPrecisionGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult fast = Gjk3D.ComputeDistance<Sphere3, Sphere3, FastGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult precise = Gjk3D.ComputeDistance<Sphere3, Sphere3, HighPrecisionGjkPolicy, NullGjkObserver>(a, b);
 
         fast.IsDisjoint.Should().BeTrue();
         precise.IsDisjoint.Should().BeTrue();
@@ -28,7 +28,7 @@ public class GjkEngine3DTests
         var a = new Sphere3(Vec3.Zero, 1.0f);
         var b = new Sphere3(new Vec3(1.0f, 0.0f, 0.0f), 1.0f);
 
-        GjkResult result = GjkEngine3D.ComputeDistance<Sphere3, Sphere3, StandardGjkPolicy, NullGjkObserver>(a, b);
+        GjkResult result = Gjk3D.ComputeDistance<Sphere3, Sphere3, StandardGjkPolicy, NullGjkObserver>(a, b);
 
         result.IsOverlapping.Should().BeTrue();
         result.Distance.Should().Be(Distance.Zero);
@@ -41,7 +41,7 @@ public class GjkEngine3DTests
         var b = new Sphere3(new Vec3(5.0f, 0.0f, 0.0f), 1.0f);
 
         TelemetryGjkObserver.TelemetryState = new GjkTelemetryState();
-        GjkResult result = GjkEngine3D.ComputeDistance<Sphere3, Sphere3, StandardGjkPolicy, TelemetryGjkObserver>(a, b);
+        GjkResult result = Gjk3D.ComputeDistance<Sphere3, Sphere3, StandardGjkPolicy, TelemetryGjkObserver>(a, b);
 
         result.IsDisjoint.Should().BeTrue();
         TelemetryGjkObserver.TelemetryState.TotalQueries.Should().Be(1);
@@ -104,7 +104,7 @@ public class GjkEngine3DTests
             new Cylinder3(new Vec3(0.0f, 0.8f, 0.0f), 0.5f, 1.0f, ShapeAxis3D.Y), RigidTransform3D.Identity);
 
         Span<SimplexVertex> simplex = stackalloc SimplexVertex[4];
-        bool captured = GjkEngine3D.TryCaptureTetrahedron<OrientedShape<Cylinder3>, OrientedShape<Cylinder3>, StandardGjkPolicy>(
+        bool captured = Gjk3D.TryCaptureTetrahedron<OrientedShape<Cylinder3>, OrientedShape<Cylinder3>, StandardGjkPolicy>(
             lower, upper, simplex, out int count);
 
         captured.Should().BeTrue();
