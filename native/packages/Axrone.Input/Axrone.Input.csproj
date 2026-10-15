@@ -19,6 +19,18 @@
     <NoWarn>$(NoWarn);CA1028</NoWarn>
     <!-- CA1008: Key carries Silk.NET codes with no zero member; Unknown (-1) is the sentinel. -->
     <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA2225: Implicit operators need named alternatives — the nominal
+         From/round-trip members already cover expression forms. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1000: Static members on generic types — the typestate builder
+         exposes policy selection statically by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy and sink structs carry
+         no state to compare; elementwise Equals would be unused surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1711: Type name ends in 'Queue' — queue is the documented
+         transport vocabulary for the event channel. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
