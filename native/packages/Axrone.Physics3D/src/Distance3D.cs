@@ -6,7 +6,7 @@ namespace Axrone.Physics3D;
 /// monomorphizes one solver per pair with no virtual dispatch; witness points
 /// travel alongside every simplex vertex, so the answer carries both the
 /// distance and where it is attained. Simplex reduction runs on the shared
-/// <see cref="Simplex3D"/> primitives.
+/// <see cref="SimplexKernel3D"/> primitives.
 /// </summary>
 public static class Gjk3D
 {
@@ -34,7 +34,7 @@ public static class Gjk3D
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
-        Span<Simplex3D.Vertex> captured = stackalloc Simplex3D.Vertex[4];
+        Span<SimplexKernel3D.Vertex> captured = stackalloc SimplexKernel3D.Vertex[4];
         return Core(in shapeA, in shapeB, false, captured, out _, out distance, out pointA, out pointB);
     }
 
@@ -44,7 +44,7 @@ public static class Gjk3D
     /// vertices when the shapes overlap.
     /// </summary>
     internal static bool TryCaptureOverlap<TA, TB>(
-        in TA shapeA, in TB shapeB, Span<Simplex3D.Vertex> simplex, out int count)
+        in TA shapeA, in TB shapeB, Span<SimplexKernel3D.Vertex> simplex, out int count)
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
@@ -60,7 +60,7 @@ public static class Gjk3D
         }
 
         return count == 4
-            && Simplex3D.TetrahedronContainsOrigin(
+            && SimplexKernel3D.TetrahedronContainsOrigin(
                 simplex[0].Difference, simplex[1].Difference, simplex[2].Difference, simplex[3].Difference);
     }
 
@@ -70,7 +70,7 @@ public static class Gjk3D
     /// supports repeat before enclosure.
     /// </summary>
     private static bool ExpandToTetrahedron<TA, TB>(
-        in TA shapeA, in TB shapeB, Span<Simplex3D.Vertex> simplex, ref int count)
+        in TA shapeA, in TB shapeB, Span<SimplexKernel3D.Vertex> simplex, ref int count)
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
@@ -133,7 +133,7 @@ public static class Gjk3D
     /// <summary>Adds a Minkowski support vertex along a direction.</summary>
     private static void AddSupport<TA, TB>(
         in TA shapeA, in TB shapeB, Vec3 direction,
-        Span<Simplex3D.Vertex> simplex, ref int count)
+        Span<SimplexKernel3D.Vertex> simplex, ref int count)
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
@@ -144,13 +144,13 @@ public static class Gjk3D
 
         Vec3 supportA = TA.Support(in shapeA, direction);
         Vec3 supportB = TB.Support(in shapeB, direction * -1.0f);
-        simplex[count++] = new Simplex3D.Vertex(supportA - supportB, supportA, supportB);
+        simplex[count++] = new SimplexKernel3D.Vertex(supportA - supportB, supportA, supportB);
     }
 
     /// <summary>Shared traversal: distance by default, tetrahedron capture for EPA on demand.</summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static bool Core<TA, TB>(
-        in TA shapeA, in TB shapeB, bool capture, Span<Simplex3D.Vertex> captured, out int capturedCount,
+        in TA shapeA, in TB shapeB, bool capture, Span<SimplexKernel3D.Vertex> captured, out int capturedCount,
         out float distance, out Vec3 pointA, out Vec3 pointB)
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
@@ -164,13 +164,13 @@ public static class Gjk3D
             direction = new Vec3(1.0f, 0.0f, 0.0f);
         }
 
-        Span<Simplex3D.Vertex> simplex = stackalloc Simplex3D.Vertex[4];
+        Span<SimplexKernel3D.Vertex> simplex = stackalloc SimplexKernel3D.Vertex[4];
         Span<float> weights = stackalloc float[3];
         int count = 0;
 
         Vec3 firstA = TA.Support(in shapeA, direction);
         Vec3 firstB = TB.Support(in shapeB, direction * -1.0f);
-        simplex[count++] = new Simplex3D.Vertex(firstA - firstB, firstA, firstB);
+        simplex[count++] = new SimplexKernel3D.Vertex(firstA - firstB, firstA, firstB);
 
         float bestDistSq = float.PositiveInfinity;
         Vec3 bestA = firstA;
@@ -223,7 +223,7 @@ public static class Gjk3D
             Vec3 search = closest * -1.0f;
             Vec3 supportA = TA.Support(in shapeA, search);
             Vec3 supportB = TB.Support(in shapeB, search * -1.0f);
-            var candidate = new Simplex3D.Vertex(supportA - supportB, supportA, supportB);
+            var candidate = new SimplexKernel3D.Vertex(supportA - supportB, supportA, supportB);
 
             bool duplicate = false;
             for (int i = 0; i < count; i++)
@@ -261,8 +261,8 @@ public static class Gjk3D
 
     /// <summary>Copies the boundary simplex for EPA bootstrap on capture runs.</summary>
     private static void FinishCapture(
-        Span<Simplex3D.Vertex> simplex, int count,
-        Span<Simplex3D.Vertex> captured, out int capturedCount)
+        Span<SimplexKernel3D.Vertex> simplex, int count,
+        Span<SimplexKernel3D.Vertex> captured, out int capturedCount)
     {
         capturedCount = 0;
         int copy = Math.Min(count, captured.Length);
@@ -276,7 +276,7 @@ public static class Gjk3D
 
     /// <summary>Reduces the simplex to its closest feature; returns true on containment (overlap).</summary>
     /// <returns><see langword="true"/> when the origin is enclosed; the caller reports overlap.</returns>
-    private static bool Reduce(Span<Simplex3D.Vertex> simplex, ref int count, Span<float> weights, out Vec3 closest)
+    private static bool Reduce(Span<SimplexKernel3D.Vertex> simplex, ref int count, Span<float> weights, out Vec3 closest)
     {
         if (count == 1)
         {
@@ -287,7 +287,7 @@ public static class Gjk3D
 
         if (count == 2)
         {
-            Simplex3D.ClosestOnEdge(in simplex[0], in simplex[1], out closest, out float w1, out float w2);
+            SimplexKernel3D.ClosestOnEdge(in simplex[0], in simplex[1], out closest, out float w1, out float w2);
             if (w1 == 1.0f)
             {
                 count = 1;
@@ -305,7 +305,7 @@ public static class Gjk3D
 
         if (count == 3)
         {
-            Simplex3D.ClosestOnTriangle(
+            SimplexKernel3D.ClosestOnTriangle(
                 simplex[0].Difference, simplex[1].Difference, simplex[2].Difference,
                 out closest, out float wa, out float wb, out float wc);
             weights[0] = wa;
@@ -320,23 +320,23 @@ public static class Gjk3D
         Vec3 c = simplex[2].Difference;
         Vec3 d = simplex[3].Difference;
 
-        if (Simplex3D.TetrahedronContainsOrigin(a, b, c, d))
+        if (SimplexKernel3D.TetrahedronContainsOrigin(a, b, c, d))
         {
             closest = Vec3.Zero;
             return true;
         }
 
-        if (Simplex3D.OutsideFace(a, b, c, d))
+        if (SimplexKernel3D.OutsideFace(a, b, c, d))
         {
             count = 3;
         }
-        else if (Simplex3D.OutsideFace(a, c, d, b))
+        else if (SimplexKernel3D.OutsideFace(a, c, d, b))
         {
             simplex[1] = simplex[2];
             simplex[2] = simplex[3];
             count = 3;
         }
-        else if (Simplex3D.OutsideFace(a, d, b, c))
+        else if (SimplexKernel3D.OutsideFace(a, d, b, c))
         {
             simplex[2] = simplex[1];
             simplex[1] = simplex[3];
@@ -349,7 +349,7 @@ public static class Gjk3D
             count = 3;
         }
 
-        Simplex3D.ClosestOnTriangle(
+        SimplexKernel3D.ClosestOnTriangle(
             simplex[0].Difference, simplex[1].Difference, simplex[2].Difference,
             out closest, out float ta, out float tb, out float tc);
         weights[0] = ta;
@@ -360,7 +360,7 @@ public static class Gjk3D
     }
 
     /// <summary>Drops zero-weight vertices of a triangle reduction so the simplex stays minimal.</summary>
-    private static void CompactTriangle(Span<Simplex3D.Vertex> simplex, ref int count, float wa, float wb, float wc)
+    private static void CompactTriangle(Span<SimplexKernel3D.Vertex> simplex, ref int count, float wa, float wb, float wc)
     {
         if (wa == 0.0f)
         {

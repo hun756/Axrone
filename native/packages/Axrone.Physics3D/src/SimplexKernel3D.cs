@@ -5,7 +5,7 @@ namespace Axrone.Physics3D;
 /// Edge and triangle reductions follow Ericson's region tests; the
 /// tetrahedron test reports containment, which GJK treats as overlap.
 /// </summary>
-internal static class Simplex3D
+internal static class SimplexKernel3D
 {
     /// <summary>One simplex vertex: the difference point plus its witnesses on each shape.</summary>
     /// <param name="Difference">Support of A minus support of B.</param>

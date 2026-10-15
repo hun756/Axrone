@@ -31,7 +31,7 @@ public static class Epa3D
         where TA : ISupportShape3D<TA>
         where TB : ISupportShape3D<TB>
     {
-        Span<Simplex3D.Vertex> captured = stackalloc Simplex3D.Vertex[4];
+        Span<SimplexKernel3D.Vertex> captured = stackalloc SimplexKernel3D.Vertex[4];
         if (!Gjk3D.TryCaptureOverlap(in shapeA, in shapeB, captured, out int capturedCount) || capturedCount != 4)
         {
             if (Gjk3D.ComputeDistance(in shapeA, in shapeB, out _, out Vec3 pointA, out Vec3 pointB))
@@ -47,7 +47,7 @@ public static class Epa3D
             return true;
         }
 
-        Span<Simplex3D.Vertex> vertices = stackalloc Simplex3D.Vertex[MaxVertices];
+        Span<SimplexKernel3D.Vertex> vertices = stackalloc SimplexKernel3D.Vertex[MaxVertices];
         for (int i = 0; i < 4; i++)
         {
             vertices[i] = captured[i];
@@ -95,7 +95,7 @@ public static class Epa3D
             Vec3 support = supportA - supportB;
             float advance = Vec3.Dot(support, face.Normal) - face.Offset;
 
-            Simplex3D.ClosestOnTriangle(
+            SimplexKernel3D.ClosestOnTriangle(
                 vertices[face.A].Difference, vertices[face.B].Difference, vertices[face.C].Difference,
                 out _, out float wa, out float wb, out float wc);
             normal = face.Normal;
@@ -112,7 +112,7 @@ public static class Epa3D
                 break;
             }
 
-            vertices[vertexCount] = new Simplex3D.Vertex(support, supportA, supportB);
+            vertices[vertexCount] = new SimplexKernel3D.Vertex(support, supportA, supportB);
             int fresh = vertexCount;
             vertexCount++;
 
@@ -193,7 +193,7 @@ public static class Epa3D
 
     /// <summary>Adds a face oriented away from the opposite vertex.</summary>
     private static void AddFace(
-        Span<Simplex3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
+        Span<SimplexKernel3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
         int a, int b, int c, int opposite)
     {
         Vec3 ab = vertices[b].Difference - vertices[a].Difference;
@@ -217,7 +217,7 @@ public static class Epa3D
 
     /// <summary>Adds a horizon face oriented away from the polytope interior.</summary>
     private static void AddOrientedFace(
-        Span<Simplex3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
+        Span<SimplexKernel3D.Vertex> vertices, Span<Face> faces, ref int faceCount,
         int a, int b, int fresh, Vec3 interior)
     {
         Vec3 ab = vertices[b].Difference - vertices[a].Difference;
