@@ -15,7 +15,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     private readonly InputVector2ActionDefinition?[] _vectorDefs;
     private readonly List<ContextEntry> _contexts = new();
     private readonly Dictionary<UserId, InputUserDefinition> _users = new();
-    private readonly List<Action<InputActionCallbackContext<TSchema>>> _callbacks = new();
+    private readonly List<SubscriptionEntry> _subscriptions = new();
     private readonly ConsumedControls _consumed = new();
     private readonly List<InputTextEntry> _text = new();
     private InputSnapshot _snapshot;
@@ -177,7 +177,38 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
-        _callbacks.Add(callback);
+        _subscriptions.Add(new SubscriptionEntry(callback, null, null));
+    }
+
+    /// <summary>Subscribes to one action's transitions.</summary>
+    /// <param name="callback">Callback to invoke.</param>
+    /// <param name="action">Action to listen to.</param>
+    public void Subscribe(Action<InputActionCallbackContext<TSchema>> callback, TSchema action)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(callback);
+        _subscriptions.Add(new SubscriptionEntry(callback, action, null));
+    }
+
+    /// <summary>Subscribes to selected phases.</summary>
+    /// <param name="callback">Callback to invoke.</param>
+    /// <param name="phases">Phases to listen to.</param>
+    public void Subscribe(Action<InputActionCallbackContext<TSchema>> callback, params InputActionPhase[] phases)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(callback);
+        _subscriptions.Add(new SubscriptionEntry(callback, null, phases));
+    }
+
+    /// <summary>Subscribes to one action's selected phases.</summary>
+    /// <param name="callback">Callback to invoke.</param>
+    /// <param name="action">Action to listen to.</param>
+    /// <param name="phases">Phases to listen to.</param>
+    public void Subscribe(Action<InputActionCallbackContext<TSchema>> callback, TSchema action, params InputActionPhase[] phases)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(callback);
+        _subscriptions.Add(new SubscriptionEntry(callback, action, phases));
     }
 
     /// <summary>Unsubscribes a callback.</summary>
@@ -185,7 +216,13 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     public void Unsubscribe(Action<InputActionCallbackContext<TSchema>> callback)
     {
         ThrowIfDisposed();
-        _callbacks.Remove(callback);
+        for (int i = _subscriptions.Count - 1; i >= 0; i--)
+        {
+            if (_subscriptions[i].Callback == callback)
+            {
+                _subscriptions.RemoveAt(i);
+            }
+        }
     }
 
     /// <summary>Releases engine state.</summary>
@@ -197,7 +234,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         _disposed = true;
-        _callbacks.Clear();
+        _subscriptions.Clear();
         _contexts.Clear();
         _users.Clear();
         _text.Clear();
@@ -252,5 +289,24 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         {
             ThrowHelper.ThrowDisposed();
         }
+    }
+
+    /// <summary>Filtered subscription entry.</summary>
+    /// <param name="callback">Callback to invoke.</param>
+    /// <param name="action">Action filter, or any action.</param>
+    /// <param name="phases">Phase filter, or all phases.</param>
+    private sealed class SubscriptionEntry(
+        Action<InputActionCallbackContext<TSchema>> callback,
+        TSchema? action,
+        InputActionPhase[]? phases)
+    {
+        /// <summary>Callback to invoke.</summary>
+        public readonly Action<InputActionCallbackContext<TSchema>> Callback = callback;
+
+        /// <summary>Action filter.</summary>
+        public readonly TSchema? Action = action;
+
+        /// <summary>Phase filter.</summary>
+        public readonly InputActionPhase[]? Phases = phases;
     }
 }

@@ -206,15 +206,26 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         in InputAxisState axis,
         in InputVector2State vector)
     {
-        if (_callbacks.Count == 0)
+        if (_subscriptions.Count == 0)
         {
             return;
         }
 
         var payload = new InputActionCallbackContext<TSchema>(action, phase, kind, button, axis, vector);
-        for (int i = 0; i < _callbacks.Count; i++)
+        for (int i = 0; i < _subscriptions.Count; i++)
         {
-            _callbacks[i](payload);
+            SubscriptionEntry entry = _subscriptions[i];
+            if (entry.Action.HasValue && !entry.Action.Value.Equals(action))
+            {
+                continue;
+            }
+
+            if (entry.Phases is { Length: > 0 } phases && Array.IndexOf(phases, phase) < 0)
+            {
+                continue;
+            }
+
+            entry.Callback(payload);
         }
     }
 
