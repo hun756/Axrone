@@ -115,6 +115,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         _contexts.Add(entry);
+        entry.CaptureDefaults();
         _contexts.Sort(static (a, b) =>
         {
             int order = b.Priority.CompareTo(a.Priority);

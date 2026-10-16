@@ -7,6 +7,7 @@ namespace Axrone.Input;
 internal sealed class ContextEntry
 {
     private readonly InputBinding[][] _bindings;
+    private readonly InputBinding[][] _defaults;
     private readonly InputButtonSlot?[] _buttonSlots;
     private readonly InputAxisSlot?[] _axisSlots;
     private readonly InputVector2Slot?[] _vectorSlots;
@@ -30,6 +31,7 @@ internal sealed class ContextEntry
         UserId = userId;
         Capture = capture;
         _bindings = new InputBinding[actionCount][];
+        _defaults = new InputBinding[actionCount][];
         _buttonSlots = new InputButtonSlot[actionCount];
         _axisSlots = new InputAxisSlot[actionCount];
         _vectorSlots = new InputVector2Slot[actionCount];
@@ -40,6 +42,7 @@ internal sealed class ContextEntry
         for (int i = 0; i < actionCount; i++)
         {
             _bindings[i] = [];
+            _defaults[i] = [];
         }
     }
 
@@ -64,6 +67,28 @@ internal sealed class ContextEntry
     /// <summary>Bindings for an action.</summary>
     /// <param name="index">Action index.</param>
     public InputBinding[] GetBindings(int index) => _bindings[index];
+
+    /// <summary>Snapshots current bindings as defaults.</summary>
+    public void CaptureDefaults()
+    {
+        for (int i = 0; i < _bindings.Length; i++)
+        {
+            _defaults[i] = (InputBinding[])_bindings[i].Clone();
+        }
+    }
+
+    /// <summary>Restores one action's default bindings.</summary>
+    /// <param name="index">Action index.</param>
+    public void ResetBindings(int index) => SetBindings(index, _defaults[index]);
+
+    /// <summary>Restores every action's default bindings.</summary>
+    public void ResetAllBindings()
+    {
+        for (int i = 0; i < _bindings.Length; i++)
+        {
+            SetBindings(i, _defaults[i]);
+        }
+    }
 
     /// <summary>Replaces bindings for an action.</summary>
     /// <param name="index">Action index.</param>

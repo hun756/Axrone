@@ -58,8 +58,47 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         return completed;
     }
 
-    /// <summary>Replaces one binding slot in a context.</summary>
+    /// <summary>Reads current bindings for an action.</summary>
     /// <param name="contextId">Context identity.</param>
+    /// <param name="action">Action value.</param>
+    public InputBinding[] GetBindings(ContextId contextId, TSchema action)
+    {
+        ThrowIfDisposed();
+        ContextEntry? context = FindContext(contextId);
+        if (context is null)
+        {
+            ThrowHelper.ThrowContextError("input.invalid-context", "No context with the given id is registered.");
+        }
+
+        return (InputBinding[])context.GetBindings(ToIndex(action)).Clone();
+    }
+
+    /// <summary>Restores default bindings for one action or all actions.</summary>
+    /// <param name="contextId">Context identity.</param>
+    /// <param name="action">Action value, or every action when null.</param>
+    /// <returns><see langword="true"/> when the context exists.</returns>
+    public bool ResetBindings(ContextId contextId, TSchema? action = null)
+    {
+        ThrowIfDisposed();
+        ContextEntry? context = FindContext(contextId);
+        if (context is null)
+        {
+            return false;
+        }
+
+        if (action.HasValue)
+        {
+            context.ResetBindings(ToIndex(action.Value));
+        }
+        else
+        {
+            context.ResetAllBindings();
+        }
+
+        return true;
+    }
+
+    /// <summary>Replaces one binding slot in a context.</summary>    /// <param name="contextId">Context identity.</param>
     /// <param name="action">Action value.</param>
     /// <param name="slot">Binding slot index.</param>
     /// <param name="binding">New binding.</param>
