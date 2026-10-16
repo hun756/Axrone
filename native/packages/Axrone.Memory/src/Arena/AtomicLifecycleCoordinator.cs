@@ -24,10 +24,10 @@ internal sealed class AtomicLifecycleCoordinator
             int state = (int)(current >> 32);
             uint leases = (uint)(current & LeaseMask);
 
-            if (state == StateFaulted)
+            ExceptionDispatchInfo? fault = Volatile.Read(ref _terminalFault);
+            if (fault is not null)
             {
-                Volatile.Read(ref _terminalFault)?.Throw();
-                ThrowHelper.ThrowLifecycleTerminated();
+                fault.Throw();
             }
 
             if (state >= StateCompleting)
@@ -155,18 +155,19 @@ internal sealed class AtomicLifecycleCoordinator
 
     public bool IsActive => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) == StateActive;
     public bool IsCompleted => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) >= StateCompleting;
-    public bool IsFaulted => ((int)(Volatile.Read(ref _stateAndLeases) >> 32)) == StateFaulted;
+    public bool IsFaulted => Volatile.Read(ref _terminalFault) is not null;
     public uint ActiveLeaseCount => (uint)(Volatile.Read(ref _stateAndLeases) & LeaseMask);
     public Exception? TerminalException => Volatile.Read(ref _terminalFault)?.SourceException;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ThrowIfTerminated()
     {
-        int state = (int)(Volatile.Read(ref _stateAndLeases) >> 32);
-        if (state == StateFaulted)
+        ExceptionDispatchInfo? fault = Volatile.Read(ref _terminalFault);
+        if (fault is not null)
         {
-            Volatile.Read(ref _terminalFault)?.Throw();
+            fault.Throw();
         }
+        int state = (int)(Volatile.Read(ref _stateAndLeases) >> 32);
         if (state == StateDisposed)
         {
             ThrowHelper.ThrowObjectDisposed("AtomicLifecycleCoordinator");
