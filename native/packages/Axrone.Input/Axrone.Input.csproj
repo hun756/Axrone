@@ -53,6 +53,7 @@
     <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
     <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+    <ProjectReference Include="../Axrone.Event/Axrone.Event.csproj" />
   </ItemGroup>
 
   <ItemGroup Label="SilkDependencies">
