@@ -217,17 +217,47 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         }
     }
 
-    /// <summary>Marks every binding control of a capturing context consumed.</summary>
+    /// <summary>Marks every actuated binding control of a capturing context consumed.</summary>
     /// <param name="context">Capturing context.</param>
     private void CaptureAll(ContextEntry context)
     {
+        ResolveUser(context.UserId, out InputUserDefinition? user);
+        byte slot = GamepadSlot(user);
         for (int a = 0; a < _actionCount; a++)
         {
             InputBinding[] bindings = context.GetBindings(a);
             for (int i = 0; i < bindings.Length; i++)
             {
-                InputBindingResolver.MarkConsumed(bindings[i], _consumed);
+                if (Contributes(bindings[i], slot))
+                {
+                    InputBindingResolver.MarkConsumed(bindings[i], _consumed);
+                }
             }
+        }
+    }
+
+    /// <summary>Whether a binding currently actuates above the zero threshold.</summary>
+    /// <param name="binding">Binding to test.</param>
+    /// <param name="gamepadSlot">Gamepad slot override.</param>
+    private bool Contributes(in InputBinding binding, byte gamepadSlot)
+    {
+        switch (binding.Kind)
+        {
+            case BindingKind.Vector2Directional:
+            case BindingKind.DualAxis:
+                if (InputBindingResolver.TryResolveVector2(_snapshot, binding, _consumed, gamepadSlot, out Vector2 vector))
+                {
+                    return MathF.Abs(vector.X) > InputProcessor.Epsilon || MathF.Abs(vector.Y) > InputProcessor.Epsilon;
+                }
+
+                return false;
+            default:
+                if (InputBindingResolver.TryResolveScalar(_snapshot, binding, _consumed, gamepadSlot, out float scalar))
+                {
+                    return MathF.Abs(scalar) > InputProcessor.Epsilon;
+                }
+
+                return false;
         }
     }
 
