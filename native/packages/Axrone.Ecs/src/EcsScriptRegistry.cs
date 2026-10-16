@@ -28,14 +28,22 @@ public static class ScriptRegistry
     /// <summary>Registers a component type.</summary>
     public static ScriptMetadata Register<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
-        T>() => Register(typeof(T));
+        T>()
+        where T : unmanaged => Register(typeof(T));
 
-    /// <summary>Registers a component type.</summary>
+    /// <summary>Registers a component type. Only unmanaged component types
+    /// are accepted; classes, interfaces and managed structs are rejected.</summary>
     public static ScriptMetadata Register(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
         Type componentType)
     {
         ArgumentNullException.ThrowIfNull(componentType);
+        if (!IsUnmanagedComponent(componentType))
+        {
+            throw new EcsConfigurationException(
+                "ecs.invalid-script",
+                $"Type '{componentType.Name}' is not an unmanaged component type.");
+        }
 
         object[] attributes = componentType.GetCustomAttributes(typeof(ScriptAttribute), false);
         ScriptAttribute? attribute = attributes.Length > 0 ? (ScriptAttribute)attributes[0] : null;
@@ -179,6 +187,42 @@ public static class ScriptRegistry
             _dependencies.Clear();
             _properties.Clear();
         }
+    }
+
+    /// <summary>Whether a runtime type qualifies as an unmanaged component.</summary>
+    private static bool IsUnmanagedComponent(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
+        Type type)
+    {
+        if (!type.IsValueType)
+        {
+            return false;
+        }
+
+        if (type.IsPrimitive || type.IsEnum || type.IsGenericTypeDefinition)
+        {
+            return type.IsPrimitive || type.IsEnum;
+        }
+
+        foreach (FieldInfo field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            Type fieldType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
+            if (fieldType.IsPointer)
+            {
+                return false;
+            }
+
+            // FieldType carries no member annotations: the root call is guarded by
+            // Register's annotations, nested types resolve from runtime metadata.
+#pragma warning disable IL2072
+            if (!IsUnmanagedComponent(fieldType))
+#pragma warning restore IL2072
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Lists property metadata for a type, base types first.</summary>
