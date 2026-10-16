@@ -5,7 +5,7 @@ namespace Axrone.Ecs;
 /// diagnostics. Structural operations serialize on one gate; component reads
 /// go straight to columns.
 /// </summary>
-public sealed class World : IDisposable
+public sealed partial class World : IDisposable
 {
     private readonly ArchetypeGraph _archetypes = new();
     private readonly EntityStore _entities;
@@ -230,6 +230,14 @@ public sealed class World : IDisposable
     {
         Interlocked.Increment(ref _frameCount);
     }
+
+    /// <summary>Opens a single-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query1<T1> Query<T1>() where T1 : unmanaged => new(this);
+
+    /// <summary>Opens a two-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query2<T1, T2> Query<T1, T2>() where T1 : unmanaged where T2 : unmanaged => new(this);
 
     /// <inheritdoc/>
     public void Dispose()
