@@ -61,6 +61,16 @@ public sealed class AudioListenerException(AudioListenerId listenerId, string me
 public sealed class AudioAssetException(string message) : AudioException("audio.invalid-clip", message);
 
 /// <summary>
+/// Output driver failure.
+/// </summary>
+public sealed class AudioDriverException(string operation, string detail)
+    : AudioException("audio.driver-failure", $"{operation} failed: {detail}")
+{
+    /// <summary>Failing operation.</summary>
+    public string Operation { get; } = operation;
+}
+
+/// <summary>
 /// Centralized audio throw helpers; throwing paths stay out of hot methods.
 /// </summary>
 internal static class AudioThrowHelper
@@ -99,4 +109,9 @@ internal static class AudioThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowAsset(string message) => throw new AudioAssetException(message);
+
+    /// <summary>Throws an audio driver error.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDriver(string operation, string detail) => throw new AudioDriverException(operation, detail);
 }
