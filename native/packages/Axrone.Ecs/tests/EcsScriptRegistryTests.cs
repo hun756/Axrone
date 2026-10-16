@@ -94,6 +94,34 @@ public sealed class EcsScriptRegistryTests : IDisposable
         ScriptRegistry.GetAll().Should().HaveCount(2);
     }
 
+    [Fact]
+    public void Properties_Collected_From_Fields()
+    {
+        ScriptRegistry.Register<EcsVolumeComponent>();
+
+        ScriptRegistry.GetProperties(typeof(EcsVolumeComponent)).Should().ContainSingle();
+        ScriptRegistry.TryGetProperty(typeof(EcsVolumeComponent), "Volume", out PropertyMetadata? volume).Should().BeTrue();
+        volume!.Label.Should().Be("Volume");
+        volume.Min.Should().Be(0.0);
+        volume.Max.Should().Be(1.0);
+        volume.Serializable.Should().BeTrue();
+        ScriptRegistry.TryGetProperty(typeof(EcsVolumeComponent), "Missing", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void SetProperties_Replaces_Wholesale()
+    {
+        ScriptRegistry.Register<EcsVolumeComponent>();
+        ScriptRegistry.SetProperties(typeof(EcsVolumeComponent), [
+            new PropertyMetadata("Volume", "Level", null, PropertyTypes.Number, null, null, true, true, 0.0, 2.0, 0.1),
+        ]);
+
+        ScriptRegistry.GetProperties(typeof(EcsVolumeComponent)).Should().ContainSingle();
+        ScriptRegistry.TryGetProperty(typeof(EcsVolumeComponent), "Volume", out PropertyMetadata? volume).Should().BeTrue();
+        volume!.Label.Should().Be("Level");
+        volume.Max.Should().Be(2.0);
+    }
+
     [Script(Dependencies = new[] { typeof(EcsCircularB) })]
     internal struct EcsCircularA
     {
@@ -102,5 +130,14 @@ public sealed class EcsScriptRegistryTests : IDisposable
     [Script(Dependencies = new[] { typeof(EcsCircularA) })]
     internal struct EcsCircularB
     {
+    }
+
+    [Script]
+    internal struct EcsVolumeComponent
+    {
+        [Property(Label = "Volume", Type = PropertyTypes.Number, Min = 0.0, Max = 1.0, Step = 0.01)]
+        public float Volume;
+
+        public EcsVolumeComponent(float volume) => Volume = volume;
     }
 }
