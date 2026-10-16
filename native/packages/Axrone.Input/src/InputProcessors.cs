@@ -139,4 +139,45 @@ public static class InputProcessor
         float clamped = length < lo ? lo : (length > hi ? hi : length);
         return value / length * clamped;
     }
+
+    /// <summary>Applies binding gain, negation, deadzone and processors to a scalar.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ApplyBindingScalar(float value, in InputBinding binding)
+    {
+        float scaled = value * binding.Scale;
+        if (binding.Invert)
+        {
+            scaled = -scaled;
+        }
+
+        if (binding.Deadzone > 0.0f && MathF.Abs(scaled) < binding.Deadzone)
+        {
+            scaled = 0.0f;
+        }
+
+        return ApplyScalar(ApplyScalar(scaled, binding.Processor0), binding.Processor1);
+    }
+
+    /// <summary>Applies binding gain, negation, deadzone, normalization and processors to a vector.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector2 ApplyBindingVector2(Vector2 value, in InputBinding binding)
+    {
+        Vector2 scaled = value * binding.Scale;
+        if (binding.Invert)
+        {
+            scaled = -scaled;
+        }
+
+        if (binding.Deadzone > 0.0f)
+        {
+            scaled = DeadzoneVector2(scaled, binding.Deadzone);
+        }
+
+        if (binding.Normalize)
+        {
+            scaled = NormalizeVector2(scaled);
+        }
+
+        return ApplyVector2(ApplyVector2(scaled, binding.Processor0), binding.Processor1);
+    }
 }
