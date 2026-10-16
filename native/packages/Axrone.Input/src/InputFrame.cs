@@ -28,6 +28,26 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
         get => _current;
     }
 
+    /// <summary>Writes a polled full gamepad frame into the current snapshot.</summary>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <param name="buttons">Button bits in engine numbering.</param>
+    /// <param name="axes">Up to six axis positions.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void SetGamepadFrame(byte slot, uint buttons, ReadOnlySpan<float> axes)
+    {
+        if (slot >= 4)
+        {
+            return;
+        }
+
+        GetGamepadButtons(ref _current, slot) = buttons;
+        int count = axes.Length < 6 ? axes.Length : 6;
+        for (int i = 0; i < count; i++)
+        {
+            _current.GamepadAxes[(slot * 6) + i] = axes[i];
+        }
+    }
+
     /// <summary>Typed characters drained this frame.</summary>
     public IReadOnlyList<char> FrameText => _frameText;
 
@@ -458,6 +478,14 @@ public sealed class InputFrameCoordinator : IInputStateQuery, IDisposable
 
     /// <summary>Debounced state for the current frame.</summary>
     public InputSnapshot CurrentSnapshot => _impl.CurrentSnapshot;
+
+    /// <summary>Writes a polled full gamepad frame into the current snapshot.</summary>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <param name="buttons">Button bits in engine numbering.</param>
+    /// <param name="axes">Up to six axis positions.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetGamepadFrame(byte slot, uint buttons, ReadOnlySpan<float> axes) =>
+        _impl.SetGamepadFrame(slot, buttons, axes);
 
     /// <summary>Typed characters drained this frame.</summary>
     public IReadOnlyList<char> FrameText => _impl.FrameText;
