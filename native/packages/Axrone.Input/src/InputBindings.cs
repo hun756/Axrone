@@ -93,18 +93,52 @@ public readonly record struct InputControlPath(
             ReadOnlySpan<char> sub = path.Slice(6);
             if (sub.StartsWith("contact/", StringComparison.OrdinalIgnoreCase))
             {
-                ReadOnlySpan<char> idSpan = sub.Slice(8);
-                if (idSpan.Equals("any", StringComparison.OrdinalIgnoreCase))
+                if (TryParseTouchSelector(sub.Slice(8), out ushort contact))
                 {
-                    result = new InputControlPath(DeviceKind.Touch, ControlType.Contact, 255, 0);
+                    result = new InputControlPath(DeviceKind.Touch, ControlType.Contact, contact, 0);
                     return true;
                 }
 
-                if (ushort.TryParse(idSpan, out ushort contactId))
+                return false;
+            }
+
+            if (sub.StartsWith("position/", StringComparison.OrdinalIgnoreCase))
+            {
+                ReadOnlySpan<char> rest = sub.Slice(9);
+                int slash = rest.IndexOf('/');
+                if (slash <= 0)
                 {
-                    result = new InputControlPath(DeviceKind.Touch, ControlType.Contact, contactId, 0);
-                    return true;
+                    return false;
                 }
+
+                byte channel = rest.Slice(0, slash).Equals("x", StringComparison.OrdinalIgnoreCase) ? (byte)0
+                    : rest.Slice(0, slash).Equals("y", StringComparison.OrdinalIgnoreCase) ? (byte)1
+                    : (byte)255;
+                if (channel == 255 || !TryParseTouchSelector(rest.Slice(slash + 1), out ushort selector))
+                {
+                    return false;
+                }
+
+                result = new InputControlPath(DeviceKind.Touch, ControlType.Position, selector, channel);
+                return true;
+            }
+
+            if (sub.Equals("count", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Touch, ControlType.Count, 0, 0);
+                return true;
+            }
+
+            if (sub.Equals("pinch", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Touch, ControlType.Pinch, 0, 0);
+                return true;
+            }
+
+            if (sub.Equals("pinch-delta", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Touch, ControlType.Pinch, 0, 1);
+                return true;
             }
 
             return false;
@@ -149,8 +183,29 @@ public readonly record struct InputControlPath(
             new(DeviceKind.Gamepad, ControlType.Axis, (ushort)axis, channel);
     }
 
-    /// <summary>Maps a key name to its code; zero when unknown.</summary>
+    /// <summary>Parses a touch selector: any (255), primary (254) or a slot.</summary>
+    /// <param name="span">Selector text.</param>
+    /// <param name="selector">Parsed selector.</param>
+    /// <returns><see langword="true"/> when well-formed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryParseTouchSelector(ReadOnlySpan<char> span, out ushort selector)
+    {
+        if (span.Equals("any", StringComparison.OrdinalIgnoreCase))
+        {
+            selector = 255;
+            return true;
+        }
+
+        if (span.Equals("primary", StringComparison.OrdinalIgnoreCase))
+        {
+            selector = 254;
+            return true;
+        }
+
+        return ushort.TryParse(span, out selector);
+    }
+
+    /// <summary>Maps a key name to its code; zero when unknown.</summary>    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ushort MapKeyNameToCode(ReadOnlySpan<char> span)
     {
         if (span.Length == 1)

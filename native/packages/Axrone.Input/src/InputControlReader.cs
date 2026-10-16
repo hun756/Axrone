@@ -37,25 +37,68 @@ public static class InputControlReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float ReadTouch(in InputSnapshot snapshot, in InputControlPath path)
     {
-        if (path.Type != ControlType.Contact)
+        switch (path.Type)
         {
-            return 0.0f;
-        }
-
-        if (path.Index == 255)
-        {
-            for (int i = 0; i < 8; i++)
-            {
-                if (snapshot.TouchContacts[i].Active)
+            case ControlType.Contact:
                 {
-                    return 1.0f;
+                    int slot = ResolveTouch(in snapshot, path.Index);
+                    return slot >= 0 ? 1.0f : 0.0f;
                 }
-            }
 
-            return 0.0f;
+            case ControlType.Position:
+                {
+                    int slot = ResolveTouch(in snapshot, path.Index);
+                    if (slot < 0)
+                    {
+                        return 0.0f;
+                    }
+
+                    TouchContact contact = snapshot.TouchContacts[slot];
+                    return path.SubIndex == 0 ? contact.X : contact.Y;
+                }
+
+            case ControlType.Count:
+                {
+                    int count = 0;
+                    for (int i = 0; i < 8; i++)
+                    {
+                        if (snapshot.TouchContacts[i].Active)
+                        {
+                            count++;
+                        }
+                    }
+
+                    return count;
+                }
+
+            case ControlType.Pinch:
+                return path.SubIndex == 0 ? snapshot.TouchPinch : snapshot.TouchPinchDelta;
+
+            default:
+                return 0.0f;
+        }
+    }
+
+    /// <summary>Resolves a touch selector to a slot, or -1.</summary>
+    /// <param name="snapshot">Debounced frame state.</param>
+    /// <param name="selector">255 any, 254 primary, else slot.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ResolveTouch(in InputSnapshot snapshot, ushort selector)
+    {
+        if (selector < 8)
+        {
+            return snapshot.TouchContacts[selector].Active ? selector : -1;
         }
 
-        return path.Index < 8 && snapshot.TouchContacts[path.Index].Active ? 1.0f : 0.0f;
+        for (int i = 0; i < 8; i++)
+        {
+            if (snapshot.TouchContacts[i].Active)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Reads mouse controls.</summary>
