@@ -22,13 +22,18 @@ public static class ScriptRegistry
     private static readonly Dictionary<string, ScriptRegistration> _byName = new(StringComparer.Ordinal);
     private static readonly Dictionary<Type, ScriptMetadata> _byType = new();
     private static readonly Dictionary<Type, HashSet<Type>> _dependencies = new();
+    private static readonly Dictionary<Type, Dictionary<string, PropertyMetadata>> _properties = new();
     private static readonly Lock _gate = new();
 
     /// <summary>Registers a component type.</summary>
-    public static ScriptMetadata Register<T>() => Register(typeof(T));
+    public static ScriptMetadata Register<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
+        T>() => Register(typeof(T));
 
     /// <summary>Registers a component type.</summary>
-    public static ScriptMetadata Register(Type componentType)
+    public static ScriptMetadata Register(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
+        Type componentType)
     {
         ArgumentNullException.ThrowIfNull(componentType);
 
@@ -74,6 +79,7 @@ public static class ScriptRegistry
 
             _byName[name] = new ScriptRegistration(metadata, componentType);
             _byType[componentType] = metadata;
+            CollectPropertyMetadata(componentType);
             if (dependencies.Length > 0)
             {
                 _dependencies[componentType] = new HashSet<Type>(dependencies);
@@ -171,6 +177,100 @@ public static class ScriptRegistry
             _byName.Clear();
             _byType.Clear();
             _dependencies.Clear();
+            _properties.Clear();
+        }
+    }
+
+    /// <summary>Lists property metadata for a type, base types first.</summary>
+    public static IReadOnlyList<PropertyMetadata> GetProperties(Type componentType)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        lock (_gate)
+        {
+            return _properties.TryGetValue(componentType, out Dictionary<string, PropertyMetadata>? stored)
+                ? new List<PropertyMetadata>(stored.Values)
+                : [];
+        }
+    }
+
+    /// <summary>Looks up one property by field name.</summary>
+    public static bool TryGetProperty(Type componentType, string propertyKey, out PropertyMetadata? metadata)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        ArgumentException.ThrowIfNullOrEmpty(propertyKey);
+        lock (_gate)
+        {
+            metadata = null;
+            return _properties.TryGetValue(componentType, out Dictionary<string, PropertyMetadata>? stored) &&
+                stored.TryGetValue(propertyKey, out metadata);
+        }
+    }
+
+    /// <summary>Replaces property metadata wholesale.</summary>
+    public static void SetProperties(Type componentType, IReadOnlyList<PropertyMetadata> metadata)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        ArgumentNullException.ThrowIfNull(metadata);
+        lock (_gate)
+        {
+            Dictionary<string, PropertyMetadata> next = new(StringComparer.Ordinal);
+            foreach (PropertyMetadata entry in metadata)
+            {
+                next[entry.PropertyKey] = entry;
+            }
+
+            _properties[componentType] = next;
+        }
+    }
+
+    private static void CollectPropertyMetadata(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
+        Type componentType)
+    {
+        Dictionary<string, PropertyMetadata> collected = new(StringComparer.Ordinal);
+        CollectChain(componentType, collected);
+        _properties[componentType] = collected;
+    }
+
+    private static void CollectChain(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
+        Type? current,
+        Dictionary<string, PropertyMetadata> collected)
+    {
+        if (current == null || current == typeof(object) || current == typeof(ValueType))
+        {
+            return;
+        }
+
+        // Type.BaseType carries no member annotations: roots stay alive through
+        // explicit Register calls, so the residual AOT caveat is limited to
+        // private fields on unreferenced base classes.
+#pragma warning disable IL2072
+        CollectChain(current.BaseType, collected);
+#pragma warning restore IL2072
+
+        foreach (FieldInfo field in current.GetFields(
+            BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            object[] attributes = field.GetCustomAttributes(typeof(PropertyAttribute), false);
+            if (attributes.Length == 0)
+            {
+                continue;
+            }
+
+            PropertyAttribute attribute = (PropertyAttribute)attributes[0];
+            collected[field.Name] = new PropertyMetadata(
+                field.Name,
+                attribute.Label,
+                attribute.Description,
+                attribute.Type,
+                attribute.ClrType,
+                attribute.DefaultValue,
+                attribute.Serializable,
+                attribute.Visible,
+                attribute.Min,
+                attribute.Max,
+                attribute.Step);
         }
     }
 
