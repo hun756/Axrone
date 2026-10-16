@@ -27,6 +27,12 @@
     <!-- CA1032: Standard exception ctors — ECS errors carry coded
          (code, message) payloads instead of free-form messages. -->
     <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1028: byte-backed ECS enums — wire-sized discriminants
+         matching the lookup and command encoding, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on transient structs — lookup outcomes are consumed
+         by kind switch, never compared; elementwise Equals is dead surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
