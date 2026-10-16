@@ -33,6 +33,9 @@
     <!-- CA1815: Equals on transient structs — lookup outcomes are consumed
          by kind switch, never compared; elementwise Equals is dead surface. -->
     <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1819: Properties returning arrays — attribute arguments only
+         support arrays for dependency and tag lists. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
