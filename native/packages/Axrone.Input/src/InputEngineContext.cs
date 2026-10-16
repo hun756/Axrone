@@ -58,6 +58,9 @@ internal sealed class ContextEntry
     /// <summary>Capture mode.</summary>
     public ContextCaptureMode Capture { get; }
 
+    /// <summary>Registration order; breaks priority ties.</summary>
+    public ulong Sequence { get; set; }
+
     /// <summary>Bindings for an action.</summary>
     /// <param name="index">Action index.</param>
     public InputBinding[] GetBindings(int index) => _bindings[index];

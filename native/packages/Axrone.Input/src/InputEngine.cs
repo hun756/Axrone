@@ -22,6 +22,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     private InputCompositionState _composition;
     private bool _focused = true;
     private bool _disposed;
+    private ulong _sequence;
 
     /// <summary>Creates an engine for the given action set.</summary>
     public InputEngine()
@@ -99,6 +100,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         var entry = new ContextEntry(definition.Id, definition.Priority, definition.Enabled, definition.UserId, definition.Capture, _actionCount);
+        entry.Sequence = _sequence++;
         for (int i = 0; i < _actionCount; i++)
         {
             entry.EnsureSlot(i, _kinds[i], _buttonDefs[i], _axisDefs[i], _vectorDefs[i]);
@@ -109,7 +111,11 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         _contexts.Add(entry);
-        _contexts.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+        _contexts.Sort(static (a, b) =>
+        {
+            int order = b.Priority.CompareTo(a.Priority);
+            return order != 0 ? order : a.Sequence.CompareTo(b.Sequence);
+        });
     }
 
     /// <summary>Registers a user.</summary>
