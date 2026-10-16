@@ -95,6 +95,19 @@ public sealed class EcsScriptRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Register_Rejects_NonComponents()
+    {
+        _ = new EcsScriptClass();
+        Action registerClass = () => ScriptRegistry.Register(typeof(EcsScriptClass));
+        Action registerInterface = () => ScriptRegistry.Register(typeof(EcsScriptInterface));
+        Action registerManaged = () => ScriptRegistry.Register(typeof(EcsManagedStruct));
+
+        registerClass.Should().Throw<EcsConfigurationException>().WithMessage("*unmanaged component*");
+        registerInterface.Should().Throw<EcsConfigurationException>().WithMessage("*unmanaged component*");
+        registerManaged.Should().Throw<EcsConfigurationException>().WithMessage("*unmanaged component*");
+    }
+
+    [Fact]
     public void Properties_Collected_From_Fields()
     {
         ScriptRegistry.Register<EcsVolumeComponent>();
@@ -139,5 +152,25 @@ public sealed class EcsScriptRegistryTests : IDisposable
         public float Volume;
 
         public EcsVolumeComponent(float volume) => Volume = volume;
+    }
+
+    [Script]
+    internal sealed class EcsScriptClass
+    {
+        public EcsScriptClass()
+        {
+        }
+    }
+
+    internal interface EcsScriptInterface
+    {
+    }
+
+    [Script]
+    internal struct EcsManagedStruct
+    {
+        public string Name;
+
+        public EcsManagedStruct(string name) => Name = name;
     }
 }
