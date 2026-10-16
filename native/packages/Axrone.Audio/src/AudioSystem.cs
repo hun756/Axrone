@@ -105,7 +105,7 @@ public sealed class AudioSystem : IDisposable, IAsyncDisposable
             AudioThrowHelper.ThrowDisposed(nameof(AudioSystem));
         }
 
-        if (Interlocked.CompareExchange(ref _systemStatus, (int)AudioSystemStatus.Suspended, (int)AudioSystemStatus.Running) == (int)AudioSystemStatus.Suspended)
+        if (Interlocked.CompareExchange(ref _systemStatus, (int)AudioSystemStatus.Running, (int)AudioSystemStatus.Suspended) == (int)AudioSystemStatus.Suspended)
         {
             _counters.IncrementLifecycle();
             _observability.Dispatch(AudioEventType.SystemResumed, 0U);
