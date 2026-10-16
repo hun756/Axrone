@@ -98,6 +98,100 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         return true;
     }
 
+    /// <summary>Patches one control path inside a binding.</summary>
+    /// <param name="contextId">Context identity.</param>
+    /// <param name="action">Action value.</param>
+    /// <param name="index">Binding index.</param>
+    /// <param name="slot">Slot name: control, negative, positive, up, down, left, right, x or y.</param>
+    /// <param name="path">New control address.</param>
+    /// <returns><see langword="true"/> when patched.</returns>
+    public bool TryPatchBinding(ContextId contextId, TSchema action, int index, string slot, in InputControlPath path)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrEmpty(slot);
+        ContextEntry? context = FindContext(contextId);
+        if (context is null)
+        {
+            return false;
+        }
+
+        int actionIndex = ToIndex(action);
+        InputBinding[] current = context.GetBindings(actionIndex);
+        if ((uint)index >= (uint)current.Length)
+        {
+            return false;
+        }
+
+        if (!TryPatch(current[index], slot, path, out InputBinding patched))
+        {
+            return false;
+        }
+
+        current[index] = patched;
+        context.SetBindings(actionIndex, current);
+        return true;
+    }
+
+    /// <summary>Rebuilds a binding with one replaced path.</summary>
+    /// <param name="binding">Binding to patch.</param>
+    /// <param name="slot">Slot name.</param>
+    /// <param name="path">New control address.</param>
+    /// <param name="patched">Patched binding.</param>
+    /// <returns><see langword="true"/> when the slot fits the binding kind.</returns>
+    private static bool TryPatch(in InputBinding binding, string slot, in InputControlPath path, out InputBinding patched)
+    {
+        patched = binding;
+        switch (binding.Kind)
+        {
+            case BindingKind.Control when slot.Equals("control", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, path, binding.Path1, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.Axis when slot.Equals("negative", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, path, binding.Path1, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.Axis when slot.Equals("positive", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, binding.Path0, path, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.Vector2Directional when slot.Equals("up", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, path, binding.Path1, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.Vector2Directional when slot.Equals("down", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, binding.Path0, path, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.Vector2Directional when slot.Equals("left", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, binding.Path0, binding.Path1, path, binding.Path3);
+                return true;
+            case BindingKind.Vector2Directional when slot.Equals("right", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, binding.Path0, binding.Path1, binding.Path2, path);
+                return true;
+            case BindingKind.DualAxis when slot.Equals("x", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, path, binding.Path1, binding.Path2, binding.Path3);
+                return true;
+            case BindingKind.DualAxis when slot.Equals("y", StringComparison.OrdinalIgnoreCase):
+                patched = WithPaths(binding, binding.Path0, path, binding.Path2, binding.Path3);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Rebuilds a binding with replaced paths.</summary>
+    /// <param name="binding">Source binding.</param>
+    /// <param name="p0">First control.</param>
+    /// <param name="p1">Second control.</param>
+    /// <param name="p2">Third control.</param>
+    /// <param name="p3">Fourth control.</param>
+    private static InputBinding WithPaths(
+        in InputBinding binding,
+        in InputControlPath p0,
+        in InputControlPath p1,
+        in InputControlPath p2,
+        in InputControlPath p3) =>
+        new(binding.Kind, p0, p1, p2, p3,
+            binding.Modifiers, binding.ExactModifiers, binding.Consume,
+            binding.Scale, binding.Invert, binding.Deadzone, binding.Normalize,
+            binding.Processor0, binding.Processor1);
+
     /// <summary>Replaces one binding slot in a context.</summary>    /// <param name="contextId">Context identity.</param>
     /// <param name="action">Action value.</param>
     /// <param name="slot">Binding slot index.</param>
