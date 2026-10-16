@@ -127,6 +127,23 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
                 frameText.Add((char)evt.KeyCode);
                 break;
 
+            case RawInputType.TouchStart:
+            case RawInputType.TouchMove:
+                if (evt.KeyCode < 8)
+                {
+                    snapshot.TouchContacts[evt.KeyCode] = new TouchContact { Active = true, X = evt.ValueX, Y = evt.ValueY };
+                }
+
+                break;
+
+            case RawInputType.TouchEnd:
+                if (evt.KeyCode < 8)
+                {
+                    snapshot.TouchContacts[evt.KeyCode] = default;
+                }
+
+                break;
+
             case RawInputType.None:
             default:
                 break;

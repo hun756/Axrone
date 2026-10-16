@@ -285,4 +285,32 @@ public struct InputSnapshot
 
     /// <summary>Gamepad axes, row-major per slot.</summary>
     public GamepadAxesStorage GamepadAxes;
+
+    /// <summary>Touch contacts, up to eight concurrent.</summary>
+    public TouchContactStorage TouchContacts;
+}
+
+/// <summary>
+/// One touch contact: activity plus position.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct TouchContact
+{
+    /// <summary>Whether the contact is down.</summary>
+    public bool Active;
+
+    /// <summary>Contact X.</summary>
+    public float X;
+
+    /// <summary>Contact Y.</summary>
+    public float Y;
+}
+
+/// <summary>
+/// Touch-contact storage: eight slots.
+/// </summary>
+[InlineArray(8)]
+public struct TouchContactStorage
+{
+    private TouchContact _element0;
 }
