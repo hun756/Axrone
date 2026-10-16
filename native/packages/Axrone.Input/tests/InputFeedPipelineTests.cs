@@ -85,4 +85,32 @@ public class InputFeedPipelineTests
         engine.TryGetAxis("gameplay", TestAction.Move, out InputAxisState state).Should().BeTrue();
         state.Value.Should().Be(1.0f);
     }
+
+    [Fact]
+    public void Feed_Touch_Any_Reaches_Button()
+    {
+        using var coordinator = new InputFrameCoordinator();
+        using var engine = new InputEngine<TestAction>();
+
+        InputControlPath.TryParse("touch/contact/any", out InputControlPath any).Should().BeTrue();
+        engine.SetButtonDefinition(TestAction.Fire, new InputButtonActionDefinition());
+        engine.RegisterUser(new InputUserDefinition { Id = UserId.System });
+        engine.RegisterContext(new InputContextDefinition<TestAction>
+        {
+            Id = "gameplay",
+            BindingsByAction = [[InputBinding.Control(any)], [], []],
+        });
+
+        coordinator.RingBuffer.FeedTouch(2, TouchPhase.Start, 100.0f, 200.0f).Should().BeTrue();
+        InputPipeline.PumpFrame(coordinator, engine, 16.0f);
+
+        engine.TryGetButton("gameplay", TestAction.Fire, out InputButtonState down).Should().BeTrue();
+        down.Value.Should().BeTrue();
+
+        coordinator.RingBuffer.FeedTouch(2, TouchPhase.End, 100.0f, 200.0f).Should().BeTrue();
+        InputPipeline.PumpFrame(coordinator, engine, 16.0f);
+
+        engine.TryGetButton("gameplay", TestAction.Fire, out InputButtonState up).Should().BeTrue();
+        up.Value.Should().BeFalse();
+    }
 }
