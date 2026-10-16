@@ -18,6 +18,15 @@
     <InternalsVisibleTo Include="Axrone.Audio.Ecs.Tests" />
   </ItemGroup>
 
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1051: Visible instance fields — ECS components are mutable
+         column data by design, matching transform component precedent. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1815: Equals on link structs — single-id payloads compare by
+         record-structural default only where used; custom Equals is dead surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Axrone.Audio/Axrone.Audio.csproj" />
     <ProjectReference Include="../Axrone.Ecs/Axrone.Ecs.csproj" />
