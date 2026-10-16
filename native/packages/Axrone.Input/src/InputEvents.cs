@@ -46,6 +46,9 @@ public enum RawInputType : byte
 
     /// <summary>Touch contact ended or cancelled.</summary>
     TouchEnd = 13,
+
+    /// <summary>Gamepad connection changed.</summary>
+    GamepadConnection = 14,
 }
 
 /// <summary>
@@ -265,6 +268,14 @@ public readonly struct RawInputEvent : IEquatable<RawInputEvent>
             TouchPhase.End or TouchPhase.Cancel => RawInputType.TouchEnd,
             _ => RawInputType.TouchStart,
         }, DeviceIndex.Primary, contactId, x, y);
+
+    /// <summary>Creates a gamepad-connection event.</summary>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <param name="connected">Whether connected.</param>
+    /// <param name="timestamp">Sample time.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RawInputEvent CreateGamepadConnection(byte slot, bool connected, InputTimestamp timestamp) =>
+        new(timestamp, RawInputType.GamepadConnection, (DeviceIndex)slot, 0, connected ? 1.0f : 0.0f, 0.0f);
 
     /// <summary>Deconstructs the event fields.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

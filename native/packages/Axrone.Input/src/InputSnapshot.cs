@@ -289,6 +289,9 @@ public struct InputSnapshot
     /// <summary>Touch contacts, up to eight concurrent.</summary>
     public TouchContactStorage TouchContacts;
 
+    /// <summary>Gamepad connection bitmask over four slots.</summary>
+    public uint GamepadConnectedMask;
+
     /// <summary>Pinch distance between the first two contacts.</summary>
     public float TouchPinch;
 

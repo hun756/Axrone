@@ -194,6 +194,26 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
 
                 break;
 
+            case RawInputType.GamepadConnection:
+                if (evt.Device.Value < 4)
+                {
+                    if (evt.ValueX != 0.0f)
+                    {
+                        snapshot.GamepadConnectedMask |= 1u << evt.Device.Value;
+                    }
+                    else
+                    {
+                        snapshot.GamepadConnectedMask &= ~(1u << evt.Device.Value);
+                        GetGamepadButtons(ref snapshot, evt.Device.Value) = 0;
+                        for (int axis = 0; axis < 6; axis++)
+                        {
+                            snapshot.GamepadAxes[(evt.Device.Value * 6) + axis] = 0.0f;
+                        }
+                    }
+                }
+
+                break;
+
             case RawInputType.None:
             default:
                 break;

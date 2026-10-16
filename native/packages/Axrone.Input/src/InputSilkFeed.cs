@@ -152,4 +152,18 @@ public static class SilkInputFeed
         ArgumentNullException.ThrowIfNull(buffer);
         return buffer.TryEnqueue(RawInputEvent.CreateTouch(contactId, phase, x, y, InputTimestamp.Now()));
     }
+
+    /// <summary>Feeds a gamepad connection change.</summary>
+    /// <param name="buffer">Transport queue.</param>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <param name="connected">Whether connected.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool FeedGamepadConnection<TBackoff, TMetrics>(
+        this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte slot, bool connected)
+        where TBackoff : struct, IBackoffPolicy
+        where TMetrics : struct, IInputMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        return buffer.TryEnqueue(RawInputEvent.CreateGamepadConnection(slot, connected, InputTimestamp.Now()));
+    }
 }
