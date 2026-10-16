@@ -76,6 +76,36 @@ public class InputEngineFacadeTests
     }
 
     [Fact]
+    public void Unsubscribe_Removes_All_Registrations()
+    {
+        using var engine = new InputEngine<TestAction>();
+        InputControlPath.TryParse("keyboard/space", out InputControlPath space).Should().BeTrue();
+        engine.SetButtonDefinition(TestAction.Fire, new InputButtonActionDefinition());
+        engine.RegisterUser(new InputUserDefinition { Id = UserId.System });
+        engine.RegisterContext(new InputContextDefinition<TestAction>
+        {
+            Id = "gameplay",
+            BindingsByAction = [[InputBinding.Control(space)], [], []],
+        });
+
+        int calls = 0;
+        Action<InputActionCallbackContext<TestAction>> callback = _ => calls++;
+        engine.Subscribe(callback);
+        engine.Subscribe(callback, TestAction.Fire);
+
+        var snapshot = new InputSnapshot();
+        snapshot.Keys.Set(32);
+        engine.SetSnapshot(snapshot);
+        engine.Update(16.0f);
+        calls.Should().Be(2);
+
+        engine.Unsubscribe(callback);
+        engine.SetSnapshot(new InputSnapshot());
+        engine.Update(16.0f);
+        calls.Should().Be(2);
+    }
+
+    [Fact]
     public void Binding_Management_Reads_Patches_Resets()
     {
         using var engine = new InputEngine<TestAction>();
