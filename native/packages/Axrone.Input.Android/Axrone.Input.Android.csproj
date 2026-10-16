@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Input.Android</RootNamespace>
+    <AssemblyName>Axrone.Input.Android</AssemblyName>
+    <Description>Android backend for the Axrone input system: KeyEvent/MotionEvent maps plus the view glue.</Description>
+    <!-- The net10.0-android leg needs the Android workload and only builds
+         with -p:AxroneEnableAndroid=true on a workload machine. The portable
+         mapping core always builds on net10.0. -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(AxroneEnableAndroid)' == 'true'">$(TargetFrameworks);net10.0-android</TargetFrameworks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Input/Axrone.Input.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="src/AndroidInputView.cs" />
+    <Compile Include="src/AndroidInputView.cs" Condition="'$(TargetFramework)' == 'net10.0-android'" />
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>
