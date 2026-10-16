@@ -101,6 +101,16 @@ public readonly struct ExponentialSpinBackoff : IBackoffPolicy
     private readonly TimeSpan _maxDelay;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="ExponentialSpinBackoff"/> struct
+    /// with default bounds. Declared explicitly because <c>new()</c> on a struct
+    /// without one yields default state and skips all-optional constructors.
+    /// </summary>
+    public ExponentialSpinBackoff()
+        : this(64, 8, 10.0)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ExponentialSpinBackoff"/> struct.
     /// </summary>
     /// <param name="maxAttempts">The maximum number of attempts to space.</param>

@@ -10,6 +10,8 @@
     <Project Path="packages/Axrone.Hash/tests/Axrone.Hash.Tests.csproj" />
     <Project Path="packages/Axrone.Input/Axrone.Input.csproj" />
     <Project Path="packages/Axrone.Input/tests/Axrone.Input.Tests.csproj" />
+    <Project Path="packages/Axrone.Input.Android/Axrone.Input.Android.csproj" />
+    <Project Path="packages/Axrone.Input.Android/tests/Axrone.Input.Android.Tests.csproj" />
     <Project Path="packages/Axrone.Memory/Axrone.Memory.csproj" />
     <Project Path="packages/Axrone.Memory/tests/Axrone.Memory.Tests.csproj" />
     <Project Path="packages/Axrone.Numeric/Axrone.Numeric.csproj" />
