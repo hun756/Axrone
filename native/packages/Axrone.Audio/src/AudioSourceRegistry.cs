@@ -1,0 +1,171 @@
+namespace Axrone.Audio;
+
+/// <summary>
+/// Source registration: tuning plus clip and bus bindings.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct AudioSourceDefinition(
+    AudioBusId BusId = default,
+    AudioClipId ClipId = default,
+    float Volume = 1.0f,
+    bool Muted = false,
+    bool Loop = false,
+    bool Autoplay = false,
+    float PlaybackRate = 1.0f,
+    float DetuneCents = 0.0f,
+    float Pan = 0.0f,
+    AudioSpatialization Spatial = default);
+
+/// <summary>
+/// Slot-indexed source store with one active voice per source.
+/// </summary>
+public sealed class AudioSourceRegistry
+{
+    private struct SourceEntry
+    {
+        public AudioSourceDefinition Definition;
+        public AudioPlaybackHandle ActiveHandle;
+        public bool IsRegistered;
+    }
+
+    private readonly SourceEntry[] _sources;
+    private readonly AudioPlaybackRuntime _runtime;
+    private readonly AudioObservabilityRuntime _observability;
+    private readonly Lock _gate = new();
+    private readonly int _maxSources;
+    private int _transientIdCounter = 10_000_000;
+
+    /// <summary>Creates a registry.</summary>
+    public AudioSourceRegistry(
+        int maxSources,
+        AudioPlaybackRuntime runtime,
+        AudioObservabilityRuntime observability)
+    {
+        _maxSources = maxSources;
+        _sources = new SourceEntry[maxSources];
+        _runtime = runtime;
+        _observability = observability;
+    }
+
+    /// <summary>Registers or replaces a source; autoplays when requested.</summary>
+    public void Upsert(AudioSourceId id, in AudioSourceDefinition definition)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx >= (uint)_maxSources)
+            {
+                AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source id exceeds registry bounds.");
+            }
+
+            _sources[idx].Definition = definition;
+            _sources[idx].IsRegistered = true;
+
+            _observability.Counters.IncrementSourceMutations();
+            _observability.Dispatch(AudioEventType.SourceUpserted, id.Value);
+
+            if (definition.Autoplay && definition.ClipId.IsValid)
+            {
+                Play(id, new AudioSourcePlayRequest());
+            }
+        }
+    }
+
+    /// <summary>Plays a source, replacing its active voice.</summary>
+    public AudioPlaybackHandle Play(AudioSourceId id, in AudioSourcePlayRequest request)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx >= (uint)_maxSources || !_sources[idx].IsRegistered)
+            {
+                AudioThrowHelper.ThrowSource(id, "Source is not registered.");
+            }
+
+            ref SourceEntry entry = ref _sources[idx];
+            if (entry.ActiveHandle.IsValid && request.Replace)
+            {
+                entry.ActiveHandle.Stop();
+            }
+
+            if (!entry.Definition.ClipId.IsValid)
+            {
+                AudioThrowHelper.ThrowSource(id, "No clip is bound to the source.");
+            }
+
+            AudioSourceDefinition definition = entry.Definition;
+            AudioSpatialization spatial = definition.Spatial;
+            entry.ActiveHandle = _runtime.AllocateVoice(
+                id,
+                definition.ClipId,
+                definition.BusId,
+                in request,
+                in spatial,
+                definition.Loop,
+                definition.Volume,
+                definition.PlaybackRate,
+                definition.DetuneCents);
+
+            return entry.ActiveHandle;
+        }
+    }
+
+    /// <summary>Plays a clip without registration.</summary>
+    public AudioPlaybackHandle PlayOneShot(AudioClipId clipId, in AudioSpatialization spatial, float volume = 1.0f)
+    {
+        uint transient = (uint)Interlocked.Increment(ref _transientIdCounter);
+        AudioSourceId sid = new(transient);
+        AudioSourcePlayRequest req = new(Volume: volume);
+
+        return _runtime.AllocateVoice(
+            sid,
+            clipId,
+            AudioBusId.Master,
+            in req,
+            in spatial,
+            false,
+            volume,
+            1.0f,
+            0.0f);
+    }
+
+    /// <summary>Pauses a source.</summary>
+    public void Pause(AudioSourceId id)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx < (uint)_maxSources && _sources[idx].IsRegistered)
+            {
+                _sources[idx].ActiveHandle.Pause();
+            }
+        }
+    }
+
+    /// <summary>Resumes a source.</summary>
+    public void Resume(AudioSourceId id)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx < (uint)_maxSources && _sources[idx].IsRegistered)
+            {
+                _sources[idx].ActiveHandle.Resume();
+            }
+        }
+    }
+
+    /// <summary>Stops a source.</summary>
+    public void Stop(AudioSourceId id)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx < (uint)_maxSources && _sources[idx].IsRegistered)
+            {
+                _sources[idx].ActiveHandle.Stop();
+                _sources[idx].ActiveHandle = AudioPlaybackHandle.Invalid;
+            }
+        }
+    }
+}
