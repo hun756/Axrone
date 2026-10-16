@@ -119,4 +119,132 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
             int order = b.Priority.CompareTo(a.Priority);
             return order != 0 ? order : a.Sequence.CompareTo(b.Sequence);
         });
+
+    /// <summary>Reads a user registration.</summary>
+    /// <param name="id">User identity.</param>
+    /// <param name="user">User registration.</param>
+    /// <returns><see langword="true"/> when the user exists.</returns>
+    public bool TryGetUser(UserId id, out InputUserDefinition? user)
+    {
+        ThrowIfDisposed();
+        return _users.TryGetValue(id, out user);
+    }
+
+    /// <summary>Registers or replaces a user.</summary>
+    /// <param name="definition">User registration.</param>
+    public void UpsertUser(InputUserDefinition definition)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(definition);
+        _users[definition.Id] = definition;
+    }
+
+    /// <summary>Removes a user.</summary>
+    /// <param name="id">User identity.</param>
+    /// <returns><see langword="true"/> when removed.</returns>
+    public bool RemoveUser(UserId id)
+    {
+        ThrowIfDisposed();
+        return _users.Remove(id);
+    }
+
+    /// <summary>Enables or disables a user.</summary>
+    /// <param name="id">User identity.</param>
+    /// <param name="enabled">Whether the user evaluates.</param>
+    /// <returns><see langword="true"/> when the user exists.</returns>
+    public bool SetUserEnabled(UserId id, bool enabled)
+    {
+        ThrowIfDisposed();
+        if (!_users.TryGetValue(id, out InputUserDefinition? user))
+        {
+            return false;
+        }
+
+        _users[id] = new InputUserDefinition
+        {
+            Id = user.Id,
+            Enabled = enabled,
+            OwnsKeyboard = user.OwnsKeyboard,
+            OwnsMouse = user.OwnsMouse,
+            OwnsTouch = user.OwnsTouch,
+            AssignedGamepadMask = user.AssignedGamepadMask,
+        };
+        return true;
+    }
+
+    /// <summary>Assigns a gamepad slot, stealing it from any other owner.</summary>
+    /// <param name="id">User identity.</param>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <returns><see langword="true"/> when the user exists and the slot is valid.</returns>
+    public bool AssignGamepad(UserId id, byte slot)
+    {
+        ThrowIfDisposed();
+        if (slot >= 4 || !_users.TryGetValue(id, out InputUserDefinition? user))
+        {
+            return false;
+        }
+
+        uint bit = 1u << slot;
+        foreach (UserId other in new List<UserId>(_users.Keys))
+        {
+            if (!other.Equals(id) && (_users[other].AssignedGamepadMask & bit) != 0)
+            {
+                InputUserDefinition current = _users[other];
+                _users[other] = new InputUserDefinition
+                {
+                    Id = current.Id,
+                    Enabled = current.Enabled,
+                    OwnsKeyboard = current.OwnsKeyboard,
+                    OwnsMouse = current.OwnsMouse,
+                    OwnsTouch = current.OwnsTouch,
+                    AssignedGamepadMask = current.AssignedGamepadMask & ~bit,
+                };
+            }
+        }
+
+        _users[id] = new InputUserDefinition
+        {
+            Id = user.Id,
+            Enabled = user.Enabled,
+            OwnsKeyboard = user.OwnsKeyboard,
+            OwnsMouse = user.OwnsMouse,
+            OwnsTouch = user.OwnsTouch,
+            AssignedGamepadMask = user.AssignedGamepadMask | bit,
+        };
+        return true;
+    }
+
+    /// <summary>Releases a gamepad slot from its owner.</summary>
+    /// <param name="slot">Gamepad slot.</param>
+    /// <returns><see langword="true"/> when a slot was released.</returns>
+    public bool ReleaseGamepad(byte slot)
+    {
+        ThrowIfDisposed();
+        if (slot >= 4)
+        {
+            return false;
+        }
+
+        uint bit = 1u << slot;
+        bool released = false;
+        foreach (UserId other in new List<UserId>(_users.Keys))
+        {
+            if ((_users[other].AssignedGamepadMask & bit) != 0)
+            {
+                InputUserDefinition current = _users[other];
+                _users[other] = new InputUserDefinition
+                {
+                    Id = current.Id,
+                    Enabled = current.Enabled,
+                    OwnsKeyboard = current.OwnsKeyboard,
+                    OwnsMouse = current.OwnsMouse,
+                    OwnsTouch = current.OwnsTouch,
+                    AssignedGamepadMask = current.AssignedGamepadMask & ~bit,
+                };
+                released = true;
+            }
+        }
+
+        return released;
+    }
 }
