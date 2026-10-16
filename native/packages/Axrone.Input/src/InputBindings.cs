@@ -270,17 +270,40 @@ public readonly record struct InputControlPath(
 
         if (span.Equals("shift", StringComparison.OrdinalIgnoreCase))
         {
-            return 16;
+            return 340;
         }
 
         if (span.Equals("ctrl", StringComparison.OrdinalIgnoreCase) || span.Equals("control", StringComparison.OrdinalIgnoreCase))
         {
-            return 17;
+            return 341;
         }
 
         if (span.Equals("alt", StringComparison.OrdinalIgnoreCase))
         {
-            return 18;
+            return 342;
+        }
+
+        if (span.Equals("super", StringComparison.OrdinalIgnoreCase) || span.Equals("meta", StringComparison.OrdinalIgnoreCase))
+        {
+            return 343;
+        }
+
+        if (span.Length == 2 && (span[0] == 'F' || span[0] == 'f'))
+        {
+            char digit = span[1];
+            if (digit >= '1' && digit <= '9')
+            {
+                return (ushort)(289 + (digit - '0'));
+            }
+        }
+
+        if (span.Length == 3 && (span[0] == 'F' || span[0] == 'f') && span[1] == '1')
+        {
+            char digit = span[2];
+            if (digit >= '0' && digit <= '2')
+            {
+                return (ushort)(299 + (digit - '0'));
+            }
         }
 
         if (span.Equals("up", StringComparison.OrdinalIgnoreCase))
