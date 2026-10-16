@@ -189,10 +189,6 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
             _contexts.Add(entry);
         }
 
-        _contexts.Sort(static (a, b) =>
-        {
-            int order = b.Priority.CompareTo(a.Priority);
-            return order != 0 ? order : a.Sequence.CompareTo(b.Sequence);
-        });
+        SortContexts();
     }
 }

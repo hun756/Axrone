@@ -50,7 +50,7 @@ internal sealed class ContextEntry
     public ContextId Id { get; }
 
     /// <summary>Conflict priority.</summary>
-    public PriorityLevel Priority { get; }
+    public PriorityLevel Priority { get; set; }
 
     /// <summary>Whether the context evaluates.</summary>
     public bool Enabled { get; set; }

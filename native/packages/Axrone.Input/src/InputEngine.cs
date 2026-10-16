@@ -117,11 +117,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
 
         _contexts.Add(entry);
         entry.CaptureDefaults();
-        _contexts.Sort(static (a, b) =>
-        {
-            int order = b.Priority.CompareTo(a.Priority);
-            return order != 0 ? order : a.Sequence.CompareTo(b.Sequence);
-        });
+        SortContexts();
     }
 
     /// <summary>Registers a user.</summary>
