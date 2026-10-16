@@ -33,6 +33,9 @@
     <!-- CA1028: byte-backed audio enums — wire-sized discriminants
          matching the event and state encoding, intentional. -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1000: Static members on generic types — the typestate builder
+         exposes stage selection statically by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
