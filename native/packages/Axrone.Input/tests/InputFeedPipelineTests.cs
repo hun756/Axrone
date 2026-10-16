@@ -83,6 +83,28 @@ public class InputFeedPipelineTests
         InputPipeline.PumpFrame(coordinator, engine, 16.0f);
 
         engine.TryGetAxis("gameplay", TestAction.Move, out InputAxisState state).Should().BeTrue();
+        state.Value.Should().Be(3.0f);
+    }
+
+    [Fact]
+    public void Axis_Explicit_Clamp_Applies()
+    {
+        using var coordinator = new InputFrameCoordinator();
+        using var engine = new InputEngine<TestAction>();
+
+        InputControlPath.TryParse("mouse/move/x", out InputControlPath moveX).Should().BeTrue();
+        engine.SetAxisDefinition(TestAction.Move, new InputAxisActionDefinition { ClampMin = -1.0f, ClampMax = 1.0f });
+        engine.RegisterUser(new InputUserDefinition { Id = UserId.System });
+        engine.RegisterContext(new InputContextDefinition<TestAction>
+        {
+            Id = "gameplay",
+            BindingsByAction = [[], [InputBinding.Control(moveX)], []],
+        });
+
+        coordinator.RingBuffer.FeedMouseMove(3.0f, 0.0f).Should().BeTrue();
+        InputPipeline.PumpFrame(coordinator, engine, 16.0f);
+
+        engine.TryGetAxis("gameplay", TestAction.Move, out InputAxisState state).Should().BeTrue();
         state.Value.Should().Be(1.0f);
     }
 

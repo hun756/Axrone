@@ -164,10 +164,10 @@ public sealed class InputAxisActionDefinition
     }
 
     /// <summary>Clamp minimum.</summary>
-    public float ClampMin { get; init; } = -1.0f;
+    public float ClampMin { get; init; } = float.NegativeInfinity;
 
     /// <summary>Clamp maximum.</summary>
-    public float ClampMax { get; init; } = 1.0f;
+    public float ClampMax { get; init; } = float.PositiveInfinity;
 
     /// <summary>Contributor combine mode.</summary>
     public AxisCombineMode Combine { get; init; } = AxisCombineMode.Latest;
