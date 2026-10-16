@@ -6,10 +6,13 @@ internal sealed class FakeAudioDriver : IAudioDriver
     public int OpenCalls;
     public int CloseCalls;
     public int BufferDataCalls;
+    public int BufferDataFloatCalls;
     public int QueueCalls;
     public int PlayCalls;
     public int StopCalls;
+    public bool SupportsFloat;
     public readonly List<short> Uploaded = new();
+    public readonly List<float> UploadedFloat = new();
     public readonly Queue<uint> Processed = new();
     public AudioDriverSourceState State = AudioDriverSourceState.Playing;
     private uint _nextBuffer = 1;
@@ -54,6 +57,23 @@ internal sealed class FakeAudioDriver : IAudioDriver
         {
             Uploaded.Add(sample);
         }
+    }
+
+    public void BufferDataFloat(uint buffer, ReadOnlySpan<float> interleavedStereo, int frequency)
+    {
+        _ = buffer;
+        _ = frequency;
+        BufferDataFloatCalls++;
+        foreach (float sample in interleavedStereo)
+        {
+            UploadedFloat.Add(sample);
+        }
+    }
+
+    public bool IsExtensionPresent(string name)
+    {
+        _ = name;
+        return SupportsFloat;
     }
 
     public void QueueBuffers(uint source, uint[] buffers)
@@ -165,5 +185,28 @@ public sealed class OpenALOutputBackendTests : IDisposable
         _backend.Stop();
         _backend.Stop();
         _driver.CloseCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public void FloatPath_Used_When_Supported()
+    {
+        _driver.SupportsFloat = true;
+        using var backend = new OpenALOutputBackend(_system, _driver, blockFrames: 64, bufferCount: 2);
+        backend.Start();
+        _driver.BufferDataFloatCalls.Should().Be(2);
+        _driver.BufferDataCalls.Should().Be(0);
+        _driver.UploadedFloat.Should().NotBeEmpty();
+        backend.Stop();
+    }
+
+    [Fact]
+    public void ShortPath_Used_When_FloatUnsupported()
+    {
+        _driver.SupportsFloat = false;
+        using var backend = new OpenALOutputBackend(_system, _driver, blockFrames: 64, bufferCount: 2, preferFloat: true);
+        backend.Start();
+        _driver.BufferDataCalls.Should().Be(2);
+        _driver.BufferDataFloatCalls.Should().Be(0);
+        backend.Stop();
     }
 }
