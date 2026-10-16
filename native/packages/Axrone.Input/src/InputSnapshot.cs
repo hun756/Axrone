@@ -288,6 +288,12 @@ public struct InputSnapshot
 
     /// <summary>Touch contacts, up to eight concurrent.</summary>
     public TouchContactStorage TouchContacts;
+
+    /// <summary>Pinch distance between the first two contacts.</summary>
+    public float TouchPinch;
+
+    /// <summary>Pinch distance change this frame.</summary>
+    public float TouchPinchDelta;
 }
 
 /// <summary>

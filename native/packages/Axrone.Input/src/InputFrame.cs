@@ -15,6 +15,7 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     private readonly List<char> _frameText = new();
     private InputSnapshot _current;
     private InputSnapshot _previous;
+    private float _previousPinch;
     private int _isDisposed;
 
     /// <summary>Transport queue feeding this coordinator.</summary>
@@ -66,6 +67,55 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
                 ApplyEvent(ref _current, batch[i], _frameText);
             }
         }
+
+        ComputePinch();
+    }
+
+    /// <summary>Derives pinch distance and delta from the first two contacts.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private void ComputePinch()
+    {
+        int found = 0;
+        float x0 = 0.0f;
+        float y0 = 0.0f;
+        float x1 = 0.0f;
+        float y1 = 0.0f;
+        for (int i = 0; i < 8 && found < 2; i++)
+        {
+            TouchContact contact = _current.TouchContacts[i];
+            if (!contact.Active)
+            {
+                continue;
+            }
+
+            if (found == 0)
+            {
+                x0 = contact.X;
+                y0 = contact.Y;
+            }
+            else
+            {
+                x1 = contact.X;
+                y1 = contact.Y;
+            }
+
+            found++;
+        }
+
+        if (found < 2)
+        {
+            _current.TouchPinch = 0.0f;
+            _current.TouchPinchDelta = 0.0f;
+            _previousPinch = 0.0f;
+            return;
+        }
+
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float distance = MathF.Sqrt((dx * dx) + (dy * dy));
+        _current.TouchPinch = distance;
+        _current.TouchPinchDelta = distance - _previousPinch;
+        _previousPinch = distance;
     }
 
     /// <summary>Folds one raw event into a snapshot.</summary>
