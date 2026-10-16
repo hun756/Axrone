@@ -52,6 +52,9 @@ public enum ControlType : byte
 
     /// <summary>Active contact count.</summary>
     Count = 8,
+
+    /// <summary>Gamepad connection.</summary>
+    Connected = 9,
 }
 
 /// <summary>

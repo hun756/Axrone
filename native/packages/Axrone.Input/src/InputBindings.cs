@@ -19,6 +19,7 @@ public readonly record struct InputControlPath(
     public static bool TryParse(ReadOnlySpan<char> path, out InputControlPath result)
     {
         result = default;
+        byte gamepadFlags = 0;
         if (path.IsEmpty)
         {
             return false;
@@ -147,6 +148,31 @@ public readonly record struct InputControlPath(
         if (path.StartsWith("gamepad/", StringComparison.OrdinalIgnoreCase))
         {
             ReadOnlySpan<char> sub = path.Slice(8);
+            byte flags = 0;
+            int selectorSlash = sub.IndexOf('/');
+            if (selectorSlash > 0)
+            {
+                ReadOnlySpan<char> selector = sub.Slice(0, selectorSlash);
+                if (selector.Equals("any", StringComparison.OrdinalIgnoreCase))
+                {
+                    flags = 0xC0;
+                    sub = sub.Slice(selectorSlash + 1);
+                }
+                else if (selector.Length == 1 && selector[0] >= '0' && selector[0] <= '3')
+                {
+                    flags = (byte)(0x80 | (selector[0] - '0'));
+                    sub = sub.Slice(selectorSlash + 1);
+                }
+            }
+
+            gamepadFlags = flags;
+
+            if (sub.Equals("connected", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Gamepad, ControlType.Connected, 0, 0, gamepadFlags);
+                return true;
+            }
+
             if (sub.Equals("south", StringComparison.OrdinalIgnoreCase)) { result = Button(GamepadButton.South); return true; }
             if (sub.Equals("east", StringComparison.OrdinalIgnoreCase)) { result = Button(GamepadButton.East); return true; }
             if (sub.Equals("west", StringComparison.OrdinalIgnoreCase)) { result = Button(GamepadButton.West); return true; }
@@ -176,11 +202,11 @@ public readonly record struct InputControlPath(
 
         return false;
 
-        static InputControlPath Button(GamepadButton name) =>
-            new(DeviceKind.Gamepad, ControlType.Button, (ushort)name, 0);
+        InputControlPath Button(GamepadButton name) =>
+            new(DeviceKind.Gamepad, ControlType.Button, (ushort)name, 0, gamepadFlags);
 
-        static InputControlPath Axis(GamepadAxis axis, byte channel) =>
-            new(DeviceKind.Gamepad, ControlType.Axis, (ushort)axis, channel);
+        InputControlPath Axis(GamepadAxis axis, byte channel) =>
+            new(DeviceKind.Gamepad, ControlType.Axis, (ushort)axis, channel, gamepadFlags);
     }
 
     /// <summary>Parses a touch selector: any (255), primary (254) or a slot.</summary>

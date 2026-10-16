@@ -129,17 +129,42 @@ public static class InputControlReader
     }
 
     /// <summary>Reads gamepad controls in engine numbering.</summary>
+    /// <param name="snapshot">Debounced frame state.</param>
+    /// <param name="path">Canonical control address.</param>
+    /// <param name="slot">Gamepad slot override for default paths.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float ReadGamepad(in InputSnapshot snapshot, in InputControlPath path, byte slot)
     {
-        if (slot >= 4)
+        bool any = (path.Flags & 0xC0) == 0xC0;
+        if ((path.Flags & 0x80) != 0 && !any)
         {
-            return 0.0f;
+            slot = (byte)(path.Flags & 0x03);
+        }
+
+        if (path.Type == ControlType.Connected)
+        {
+            if (any)
+            {
+                return snapshot.GamepadConnectedMask != 0 ? 1.0f : 0.0f;
+            }
+
+            return slot < 4 && ((snapshot.GamepadConnectedMask >> slot) & 1u) != 0 ? 1.0f : 0.0f;
         }
 
         if (path.Type == ControlType.Button)
         {
             if (path.Index >= 32)
+            {
+                return 0.0f;
+            }
+
+            if (any)
+            {
+                return ((snapshot.GamepadButtons0 | snapshot.GamepadButtons1
+                    | snapshot.GamepadButtons2 | snapshot.GamepadButtons3) >> path.Index & 1u) != 0 ? 1.0f : 0.0f;
+            }
+
+            if (slot >= 4)
             {
                 return 0.0f;
             }
@@ -157,6 +182,26 @@ public static class InputControlReader
         if (path.Type == ControlType.Axis)
         {
             if (path.Index >= 6)
+            {
+                return 0.0f;
+            }
+
+            if (any)
+            {
+                float best = 0.0f;
+                for (byte s = 0; s < 4; s++)
+                {
+                    float value = snapshot.GamepadAxes[(s * 6) + path.Index];
+                    if (MathF.Abs(value) > MathF.Abs(best))
+                    {
+                        best = value;
+                    }
+                }
+
+                return best;
+            }
+
+            if (slot >= 4)
             {
                 return 0.0f;
             }
