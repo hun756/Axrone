@@ -21,6 +21,8 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
 
         float dt = deltaMs < 0.0f ? 0.0f : deltaMs;
         _consumed.Clear();
+        AdvanceRebind(dt);
+        FeedRebind();
 
         for (int c = 0; c < _contexts.Count; c++)
         {
