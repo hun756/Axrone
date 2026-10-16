@@ -176,7 +176,7 @@ public static class InputProcessor
             scaled = DeadzoneVector2(scaled, binding.Deadzone);
         }
 
-        if (binding.Normalize)
+        if (binding.Normalize && scaled.Length() > 1.0f)
         {
             scaled = NormalizeVector2(scaled);
         }

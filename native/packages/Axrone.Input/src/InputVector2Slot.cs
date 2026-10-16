@@ -66,7 +66,7 @@ public sealed class InputVector2Slot
             value = Vector2.Zero;
         }
 
-        if (_definition.Normalize && value != Vector2.Zero)
+        if (_definition.Normalize && value.Length() > 1.0f)
         {
             value = Vector2.Normalize(value);
         }
