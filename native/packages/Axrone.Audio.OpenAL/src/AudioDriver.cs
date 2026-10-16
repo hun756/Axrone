@@ -48,6 +48,12 @@ public interface IAudioDriver : IDisposable
     /// <summary>Uploads interleaved stereo 16-bit frames.</summary>
     void BufferDataShort(uint buffer, ReadOnlySpan<short> interleavedStereo, int frequency);
 
+    /// <summary>Uploads interleaved stereo float frames; requires AL_EXT_float32.</summary>
+    void BufferDataFloat(uint buffer, ReadOnlySpan<float> interleavedStereo, int frequency);
+
+    /// <summary>Whether an extension is present.</summary>
+    bool IsExtensionPresent(string name);
+
     /// <summary>Queues buffers on a source.</summary>
     void QueueBuffers(uint source, uint[] buffers);
 

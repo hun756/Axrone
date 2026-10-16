@@ -128,6 +128,24 @@ public sealed unsafe class SilkAudioDriver : IAudioDriver
     }
 
     /// <inheritdoc/>
+    public void BufferDataFloat(uint buffer, ReadOnlySpan<float> interleavedStereo, int frequency)
+    {
+        fixed (float* ptr = interleavedStereo)
+        {
+            _al.BufferData(buffer, (BufferFormat)0x10011, ptr, interleavedStereo.Length * sizeof(float), frequency);
+        }
+
+        CheckError("BufferData");
+    }
+
+    /// <inheritdoc/>
+    public bool IsExtensionPresent(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        return _al.IsExtensionPresent(name);
+    }
+
+    /// <inheritdoc/>
     public void QueueBuffers(uint source, uint[] buffers)
     {
         ArgumentNullException.ThrowIfNull(buffers);

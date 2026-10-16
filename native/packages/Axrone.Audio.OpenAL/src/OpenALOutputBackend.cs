@@ -17,6 +17,8 @@ public sealed class OpenALOutputBackend : IDisposable
     private readonly short[] _shortBlock;
     private readonly uint[] _buffers;
     private readonly uint[] _scratch;
+    private readonly bool _preferFloat;
+    private bool _useFloat;
     private uint _source;
     private Thread? _pump;
     private ManualResetEventSlim? _stop;
@@ -31,12 +33,14 @@ public sealed class OpenALOutputBackend : IDisposable
     /// <param name="frequency">Output sample rate in Hz.</param>
     /// <param name="blockFrames">Frames per rendered block.</param>
     /// <param name="bufferCount">Queued buffers, at least two.</param>
+    /// <param name="preferFloat">Probe AL_EXT_float32 and upload float when present.</param>
     public OpenALOutputBackend(
         AudioSystem system,
         IAudioDriver driver,
         int frequency = 48000,
         int blockFrames = 512,
-        int bufferCount = 4)
+        int bufferCount = 4,
+        bool preferFloat = true)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(driver);
@@ -48,6 +52,7 @@ public sealed class OpenALOutputBackend : IDisposable
         _driver = driver;
         _frequency = frequency;
         _blockFrames = blockFrames;
+        _preferFloat = preferFloat;
         _floatBlock = new float[blockFrames * 2];
         _shortBlock = new short[blockFrames * 2];
         _buffers = new uint[bufferCount];
@@ -65,6 +70,7 @@ public sealed class OpenALOutputBackend : IDisposable
         }
 
         _driver.Open(deviceName, _frequency);
+        _useFloat = _preferFloat && _driver.IsExtensionPresent("AL_EXT_float32");
 
         uint[] handles = _driver.GenBuffers(_buffers.Length);
         Array.Copy(handles, _buffers, handles.Length);
@@ -165,6 +171,12 @@ public sealed class OpenALOutputBackend : IDisposable
     {
         Span<float> block = _floatBlock;
         _system.ProcessAudioRenderBlock(block);
+
+        if (_useFloat)
+        {
+            _driver.BufferDataFloat(buffer, block, _frequency);
+            return;
+        }
 
         for (int i = 0; i < block.Length; i++)
         {
