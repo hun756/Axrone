@@ -36,25 +36,29 @@ public sealed unsafe class SilkAudioDriver : IAudioDriver
         }
 
         _device = _alc.OpenDevice(deviceName);
-        CheckError("OpenDevice");
         if (_device == null)
         {
             throw new AudioDriverException("OpenDevice", "No audio device available.");
         }
 
+        CheckContextError("OpenDevice");
+
         _context = _alc.CreateContext(_device, null);
-        CheckError("CreateContext");
         if (_context == null)
         {
             Close();
             throw new AudioDriverException("CreateContext", "Context creation failed.");
         }
 
+        CheckContextError("CreateContext");
+
         if (!_alc.MakeContextCurrent(_context))
         {
             Close();
             throw new AudioDriverException("MakeContextCurrent", "Context activation failed.");
         }
+
+        CheckContextError("MakeContextCurrent");
 
         _ = frequency;
     }
@@ -236,6 +240,20 @@ public sealed unsafe class SilkAudioDriver : IAudioDriver
     {
         AudioError error = _al.GetError();
         if (error != AudioError.NoError)
+        {
+            throw new AudioDriverException(operation, error.ToString());
+        }
+    }
+
+    private void CheckContextError(string operation)
+    {
+        if (_device == null)
+        {
+            return;
+        }
+
+        ContextError error = _alc.GetError(_device);
+        if (error != ContextError.NoError)
         {
             throw new AudioDriverException(operation, error.ToString());
         }
