@@ -54,6 +54,10 @@ public sealed class InputButtonSlot
             }
 
             has = true;
+            if (_bindings[i].Consume || _definition.Consume)
+            {
+                InputBindingResolver.MarkConsumed(_bindings[i], consumed);
+            }
         }
 
         if (!has)
@@ -65,10 +69,6 @@ public sealed class InputButtonSlot
         float processed = InputProcessor.ApplyBindingScalar(
             InputProcessor.ApplyScalar(InputProcessor.ApplyScalar(raw, _definition.Processor0), _definition.Processor1), used);
         InputInteraction.Update(ref _state, processed, deltaMs, _definition.Interaction, _definition.PressPoint, release);
-        if (used.Consume || _definition.Consume)
-        {
-            InputBindingResolver.MarkConsumed(used, consumed);
-        }
     }
 
     /// <summary>Clears gesture state.</summary>

@@ -31,8 +31,6 @@ public sealed class InputVector2Slot
     {
         Vector2 combined = Vector2.Zero;
         bool has = false;
-        InputBinding lastUsed = default;
-        bool lastHas = false;
 
         for (int i = 0; i < _bindings.Length; i++)
         {
@@ -42,10 +40,18 @@ public sealed class InputVector2Slot
             }
 
             Vector2 processed = InputProcessor.ApplyBindingVector2(candidate, _bindings[i]);
-            combined = _definition.Combine == Vector2CombineMode.Sum && has ? combined + processed : processed;
+            if (MathF.Abs(processed.X) <= InputProcessor.Epsilon && MathF.Abs(processed.Y) <= InputProcessor.Epsilon)
+            {
+                continue;
+            }
+
+            combined = _definition.Combine == Vector2CombineMode.Sum && has ? combined + processed
+                : !has ? processed : combined;
             has = true;
-            lastUsed = _bindings[i];
-            lastHas = true;
+            if (_bindings[i].Consume || _definition.Consume)
+            {
+                InputBindingResolver.MarkConsumed(_bindings[i], consumed);
+            }
         }
 
         if (!has)
@@ -68,11 +74,6 @@ public sealed class InputVector2Slot
         value = InputProcessor.ApplyVector2(
             InputProcessor.ApplyVector2(value, _definition.Processor0), _definition.Processor1);
         InputInteraction.UpdateVector2(ref _state, value);
-
-        if (lastHas && (lastUsed.Consume || _definition.Consume))
-        {
-            InputBindingResolver.MarkConsumed(lastUsed, consumed);
-        }
     }
 
     /// <summary>Clears state.</summary>

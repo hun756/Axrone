@@ -31,8 +31,6 @@ public sealed class InputAxisSlot
     {
         float combined = 0.0f;
         bool has = false;
-        InputBinding lastUsed = default;
-        bool lastHas = false;
 
         for (int i = 0; i < _bindings.Length; i++)
         {
@@ -42,6 +40,11 @@ public sealed class InputAxisSlot
             }
 
             float processed = InputProcessor.ApplyBindingScalar(candidate, _bindings[i]);
+            if (MathF.Abs(processed) <= InputProcessor.Epsilon)
+            {
+                continue;
+            }
+
             switch (_definition.Combine)
             {
                 case AxisCombineMode.Sum:
@@ -55,13 +58,19 @@ public sealed class InputAxisSlot
 
                     break;
                 default:
-                    combined = processed;
+                    if (!has)
+                    {
+                        combined = processed;
+                    }
+
                     break;
             }
 
             has = true;
-            lastUsed = _bindings[i];
-            lastHas = true;
+            if (_bindings[i].Consume || _definition.Consume)
+            {
+                InputBindingResolver.MarkConsumed(_bindings[i], consumed);
+            }
         }
 
         if (!has)
@@ -81,11 +90,6 @@ public sealed class InputAxisSlot
         value = value < lo ? lo : (value > hi ? hi : value);
         value = InputProcessor.ApplyScalar(InputProcessor.ApplyScalar(value, _definition.Processor0), _definition.Processor1);
         InputInteraction.UpdateAxis(ref _state, value);
-
-        if (lastHas && (lastUsed.Consume || _definition.Consume))
-        {
-            InputBindingResolver.MarkConsumed(lastUsed, consumed);
-        }
     }
 
     /// <summary>Clears state.</summary>
