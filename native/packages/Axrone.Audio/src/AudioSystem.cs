@@ -64,7 +64,8 @@ public sealed class AudioSystem : IDisposable, IAsyncDisposable
         int maxVoices = 64,
         int maxSources = 1024,
         int maxBuses = 128,
-        int clipCacheCapacity = 512)
+        int clipCacheCapacity = 512,
+        int outputSampleRate = 48000)
     {
         _counters = new CacheAlignedDiagnosticsCounters();
         _observability = new AudioObservabilityRuntime(_counters);
@@ -77,7 +78,8 @@ public sealed class AudioSystem : IDisposable, IAsyncDisposable
             _busMixer,
             _clipStore,
             _listenerRegistry,
-            _observability);
+            _observability,
+            outputSampleRate);
 
         _sourceRegistry = new AudioSourceRegistry(maxSources, _playbackRuntime, _observability);
     }

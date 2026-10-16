@@ -115,8 +115,12 @@ public sealed class AudioPlaybackRuntime : IDisposable
     private readonly AudioObservabilityRuntime _observability;
     private readonly Lock _gate = new();
     private readonly int _maxVoices;
+    private readonly int _outputSampleRate;
     private uint _sequenceCounter = 1U;
     private int _disposed;
+
+    /// <summary>Output sample rate in Hz; voices resample to this.</summary>
+    public int OutputSampleRate => _outputSampleRate;
 
     /// <summary>Creates a runtime.</summary>
     public AudioPlaybackRuntime(
@@ -124,14 +128,17 @@ public sealed class AudioPlaybackRuntime : IDisposable
         AudioBusRegistry busMixer,
         AudioClipStore clipStore,
         AudioListenerRegistry listenerRegistry,
-        AudioObservabilityRuntime observability)
+        AudioObservabilityRuntime observability,
+        int outputSampleRate = 48000)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(outputSampleRate);
         _maxVoices = maxVoices;
         _voices = new HardwareVoiceSlot[maxVoices];
         _busMixer = busMixer;
         _clipStore = clipStore;
         _listenerRegistry = listenerRegistry;
         _observability = observability;
+        _outputSampleRate = outputSampleRate;
     }
 
     /// <summary>Allocates a voice, evicting the quietest when full.</summary>
@@ -177,9 +184,17 @@ public sealed class AudioPlaybackRuntime : IDisposable
             float pitchCents = (request.DetuneCents ?? 0.0f) + baseDetune;
             float detuneMultiplier = MathF.Pow(2.0f, pitchCents / 1200.0f);
             float rate = Math.Max(0.01f, (request.PlaybackRate ?? 1.0f) * baseRate);
-            voice.StepRate = rate * detuneMultiplier;
+            float resampleRatio = 1.0f;
+            int clipRate = 0;
+            if (_clipStore.TryGet(clipId, out AudioClipRecord? clipForRate))
+            {
+                clipRate = clipForRate.SampleRate;
+                resampleRatio = clipRate > 0 ? (float)clipRate / _outputSampleRate : 1.0f;
+            }
 
-            voice.ReadIndex = request.OffsetSeconds.HasValue ? request.OffsetSeconds.Value * 48000.0 : 0.0;
+            voice.StepRate = rate * detuneMultiplier * resampleRatio;
+
+            voice.ReadIndex = request.OffsetSeconds.HasValue ? request.OffsetSeconds.Value * clipRate : 0.0;
             voice.DurationRemaining = request.DurationSeconds ?? float.MaxValue;
             voice.Spatial = spatial;
             voice.IsActive = true;
