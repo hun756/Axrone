@@ -271,4 +271,119 @@ public static class InputInteraction
 
         state.Phase = state.TapSequenceCount > 0 ? InputActionPhase.Started : InputActionPhase.None;
     }
+
+    /// <summary>Updates press-with-repeat; down and each interval tick give Performed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void UpdateRepeat(
+        ref InputButtonState state,
+        float raw,
+        float deltaMs,
+        in InteractionSettings settings,
+        float pressPoint = 0.5f,
+        float releasePoint = 0.5f)
+    {
+        bool previous = state.Value;
+        bool actuated = ResolveActuated(previous, raw, pressPoint, releasePoint);
+
+        state.PreviousValue = previous;
+        state.Value = actuated;
+        state.RawValue = raw;
+        state.Pressed = !previous && actuated;
+        state.Released = previous && !actuated;
+        state.HoldTriggered = false;
+        state.TapTriggered = false;
+        state.MultiTapTriggered = false;
+        state.RepeatTriggered = false;
+
+        if (state.Pressed)
+        {
+            state.HeldDurationMs = 0.0f;
+            state.RepeatCount = 1;
+            state.RepeatTriggered = true;
+            state.Phase = InputActionPhase.Performed;
+            return;
+        }
+
+        if (state.Released || !actuated)
+        {
+            state.HeldDurationMs = 0.0f;
+            state.Phase = state.Released ? InputActionPhase.Canceled : InputActionPhase.None;
+            return;
+        }
+
+        state.HeldDurationMs += deltaMs;
+        if (settings.IntervalMs <= 0.0f || state.HeldDurationMs < settings.DurationMs)
+        {
+            state.Phase = InputActionPhase.Started;
+            return;
+        }
+
+        float nextAt = settings.DurationMs + ((state.RepeatCount - 1) * settings.IntervalMs);
+        if (state.HeldDurationMs >= nextAt)
+        {
+            state.RepeatCount++;
+            state.RepeatTriggered = true;
+            state.Phase = InputActionPhase.Performed;
+        }
+        else
+        {
+            state.Phase = InputActionPhase.Started;
+        }
+    }
+
+    /// <summary>Dispatches to the configured gesture.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Update(
+        ref InputButtonState state,
+        float raw,
+        float deltaMs,
+        in InteractionSettings settings,
+        float pressPoint = 0.5f,
+        float releasePoint = 0.5f)
+    {
+        switch (settings.Type)
+        {
+            case InputInteractionType.Hold:
+                UpdateHold(ref state, raw, deltaMs, settings, pressPoint, releasePoint);
+                break;
+            case InputInteractionType.Tap:
+                UpdateTap(ref state, raw, deltaMs, settings, pressPoint, releasePoint);
+                break;
+            case InputInteractionType.MultiTap:
+                UpdateMultiTap(ref state, raw, deltaMs, settings, pressPoint, releasePoint);
+                break;
+            case InputInteractionType.Repeat:
+                UpdateRepeat(ref state, raw, deltaMs, settings, pressPoint, releasePoint);
+                break;
+            default:
+                UpdatePress(ref state, raw, deltaMs, pressPoint, releasePoint);
+                break;
+        }
+    }
+
+    /// <summary>Commits a scalar reading with delta and phase.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void UpdateAxis(ref InputAxisState state, float value)
+    {
+        state.PreviousValue = state.Value;
+        state.Value = value;
+        state.Delta = state.Value - state.PreviousValue;
+        state.Phase = state.Delta != 0.0f ? InputActionPhase.Changed
+            : state.Value != 0.0f ? InputActionPhase.Performed
+            : InputActionPhase.None;
+    }
+
+    /// <summary>Commits a vector reading with delta, magnitude and phase.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void UpdateVector2(ref InputVector2State state, Vector2 value)
+    {
+        state.PreviousValue = state.Value;
+        state.PreviousMagnitude = state.Magnitude;
+        state.Value = value;
+        state.Magnitude = value.Length();
+        state.Delta = state.Value - state.PreviousValue;
+        state.Phase = state.Delta != Vector2.Zero ? InputActionPhase.Changed
+            : state.Magnitude != 0.0f ? InputActionPhase.Performed
+            : InputActionPhase.None;
+    }
 }
