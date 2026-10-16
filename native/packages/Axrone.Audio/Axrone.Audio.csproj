@@ -30,6 +30,9 @@
     <!-- CA1720: Identifier contains type name — 'Pointer' is standard
          naming for native pointer access. -->
     <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1028: byte-backed audio enums — wire-sized discriminants
+         matching the event and state encoding, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
