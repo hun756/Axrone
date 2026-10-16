@@ -2,8 +2,8 @@ namespace Axrone.Input;
 
 /// <summary>
 /// Button action slot: resolves its bindings to one raw scalar and commits
-/// the gesture. Latest contributing binding wins; processors run after
-/// composition.
+/// the gesture. The largest-magnitude contributor wins; processors run after
+/// composition. Near-zero contributors are skipped.
 /// </summary>
 public sealed class InputButtonSlot
 {
@@ -31,28 +31,40 @@ public sealed class InputButtonSlot
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Evaluate(in InputSnapshot snapshot, ConsumedControls consumed, byte gamepadSlot, float deltaMs)
     {
+        float release = InputButtonActionDefinition.EffectiveReleasePoint(_definition);
         float raw = 0.0f;
         bool has = false;
         InputBinding used = default;
         for (int i = 0; i < _bindings.Length; i++)
         {
-            if (InputBindingResolver.TryResolveScalar(snapshot, _bindings[i], consumed, gamepadSlot, out float candidate))
+            if (!InputBindingResolver.TryResolveScalar(snapshot, _bindings[i], consumed, gamepadSlot, out float candidate))
+            {
+                continue;
+            }
+
+            if (MathF.Abs(candidate) <= InputProcessor.Epsilon)
+            {
+                continue;
+            }
+
+            if (!has || MathF.Abs(candidate) > MathF.Abs(raw))
             {
                 raw = candidate;
                 used = _bindings[i];
-                has = true;
             }
+
+            has = true;
         }
 
         if (!has)
         {
-            InputInteraction.Update(ref _state, 0.0f, deltaMs, _definition.Interaction, _definition.PressPoint, _definition.ReleasePoint);
+            InputInteraction.Update(ref _state, 0.0f, deltaMs, _definition.Interaction, _definition.PressPoint, release);
             return;
         }
 
         float processed = InputProcessor.ApplyBindingScalar(
             InputProcessor.ApplyScalar(InputProcessor.ApplyScalar(raw, _definition.Processor0), _definition.Processor1), used);
-        InputInteraction.Update(ref _state, processed, deltaMs, _definition.Interaction, _definition.PressPoint, _definition.ReleasePoint);
+        InputInteraction.Update(ref _state, processed, deltaMs, _definition.Interaction, _definition.PressPoint, release);
         if (used.Consume || _definition.Consume)
         {
             InputBindingResolver.MarkConsumed(used, consumed);

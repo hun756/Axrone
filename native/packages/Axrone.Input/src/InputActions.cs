@@ -124,12 +124,19 @@ public sealed class InputButtonActionDefinition
         init => field = value is < 0f or > 1f ? ThrowHelper.ThrowArgumentOutOfRange<float>(nameof(value)) : value;
     } = 0.5f;
 
-    /// <summary>Release threshold in [0, 1].</summary>
+    /// <summary>Release threshold in [0, 1]. NaN follows half the press point.</summary>
     public float ReleasePoint
     {
         get => field;
-        init => field = value is < 0f or > 1f ? ThrowHelper.ThrowArgumentOutOfRange<float>(nameof(value)) : value;
-    } = 0.5f;
+        init => field = float.IsNaN(value) ? value
+            : value is < 0f or > 1f ? ThrowHelper.ThrowArgumentOutOfRange<float>(nameof(value)) : value;
+    } = float.NaN;
+
+    /// <summary>Resolves the effective release threshold.</summary>
+    /// <param name="definition">Button tuning.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float EffectiveReleasePoint(InputButtonActionDefinition definition) =>
+        float.IsNaN(definition.ReleasePoint) ? definition.PressPoint * 0.5f : definition.ReleasePoint;
 
     /// <summary>Gesture tuning.</summary>
     public InteractionSettings Interaction { get; init; } = new(InputInteractionType.Press);

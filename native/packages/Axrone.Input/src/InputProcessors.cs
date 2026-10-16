@@ -6,6 +6,9 @@ namespace Axrone.Input;
 /// </summary>
 public static class InputProcessor
 {
+    /// <summary>Zero threshold for contributor contributions.</summary>
+    internal const float Epsilon = 0.00001f;
+
     /// <summary>Applies one processor to a scalar reading.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float ApplyScalar(float value, in ProcessorConfiguration processor)
