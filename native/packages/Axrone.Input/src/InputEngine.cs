@@ -232,6 +232,8 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         _disposed = true;
+        _rebind?.Cancel(RebindCancelReason.Disposed);
+        _rebind = null;
         _subscriptions.Clear();
         _contexts.Clear();
         _users.Clear();
