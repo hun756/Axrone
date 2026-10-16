@@ -211,21 +211,24 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
         node.TryCancel(ct);
     };
 
-    [StructLayout(LayoutKind.Explicit, Size = 128)]
+    // Sequential with trailing size (explicit layout is illegal on generic
+    // types): the 128-byte size keeps the producer and consumer zones on
+    // isolated cache lines.
+    [StructLayout(LayoutKind.Sequential, Size = 128)]
     private struct ProducerHotZone
     {
-        [FieldOffset(0)] public long Sequence;
-        [FieldOffset(8)] public int InFlightOperations;
-        [FieldOffset(12)] public int State;
+        public long Sequence;
+        public int InFlightOperations;
+        public int State;
     }
 
-    [StructLayout(LayoutKind.Explicit, Size = 128)]
+    [StructLayout(LayoutKind.Sequential, Size = 128)]
     private struct ConsumerHotZone
     {
-        [FieldOffset(0)] public long FreeHeadTagged;
-        [FieldOffset(8)] public long WaitersHeadTagged;
-        [FieldOffset(16)] public int ActiveWaitersCount;
-        [FieldOffset(20)] public int DrainSignaled;
+        public long FreeHeadTagged;
+        public long WaitersHeadTagged;
+        public int ActiveWaitersCount;
+        public int DrainSignaled;
     }
 
     internal sealed class RegistrationSlot
