@@ -22,6 +22,7 @@ public static class InputBindingResolver
         byte gamepadSlot,
         out float value)
     {
+        ArgumentNullException.ThrowIfNull(consumed);
         value = 0.0f;
         if (!InputControlReader.ModifiersSatisfied(
             InputControlReader.ReadModifiers(snapshot), binding.Modifiers, binding.ExactModifiers))
@@ -68,6 +69,7 @@ public static class InputBindingResolver
         byte gamepadSlot,
         out Vector2 value)
     {
+        ArgumentNullException.ThrowIfNull(consumed);
         value = Vector2.Zero;
         if (!InputControlReader.ModifiersSatisfied(
             InputControlReader.ReadModifiers(snapshot), binding.Modifiers, binding.ExactModifiers))
@@ -119,6 +121,7 @@ public static class InputBindingResolver
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void MarkConsumed(in InputBinding binding, ConsumedControls consumed)
     {
+        ArgumentNullException.ThrowIfNull(consumed);
         switch (binding.Kind)
         {
             case BindingKind.Control:
