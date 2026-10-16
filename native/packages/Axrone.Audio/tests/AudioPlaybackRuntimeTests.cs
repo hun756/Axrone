@@ -149,4 +149,74 @@ public sealed class AudioPlaybackRuntimeTests : IDisposable
         small.AllocateVoice(new AudioSourceId(2U), clip, AudioBusId.Master, new AudioSourcePlayRequest(), AudioSpatialization.Default2D, true, 1.0f, 1.0f, 0.0f).IsValid.Should().BeTrue();
         small.AllocateVoice(new AudioSourceId(3U), clip, AudioBusId.Master, new AudioSourcePlayRequest(), AudioSpatialization.Default2D, true, 1.0f, 1.0f, 0.0f).IsValid.Should().BeTrue();
     }
+
+    [Fact]
+    public void ForeignRate_Clip_Preserves_Pitch_And_Length()
+    {
+        const int clipRate = 44100;
+        const int frames = 4410;
+        var memory = new NativeAudioMemory(clipRate, 1, frames);
+        Span<float> span = memory.AsSpan();
+        for (int i = 0; i < frames; i++)
+        {
+            span[i] = MathF.Sin(2.0f * MathF.PI * 440.0f * i / clipRate);
+        }
+
+        var record = new AudioClipRecord(new AudioClipId(77U), memory);
+        AudioClipId clip = _clips.Register(record);
+
+        _runtime.AllocateVoice(
+            new AudioSourceId(9U), clip, AudioBusId.Master, new AudioSourcePlayRequest(),
+            AudioSpatialization.Default2D, false, 1.0f, 1.0f, 0.0f);
+
+        var output = new List<float>();
+        Span<float> block = stackalloc float[512];
+        for (int i = 0; i < 40; i++)
+        {
+            _runtime.ProcessGraph(block);
+            foreach (float sample in block)
+            {
+                output.Add(sample);
+            }
+        }
+
+        int firstSound = output.FindIndex(v => MathF.Abs(v) > 0.01f);
+        int lastSound = output.FindLastIndex(v => MathF.Abs(v) > 0.01f);
+        int soundedFrames = (lastSound - firstSound) / 2;
+        soundedFrames.Should().BeInRange(4300, 5300);
+
+        float measured = MeasureFrequency(output, firstSound, 48000);
+        measured.Should().BeApproximately(440.0f, 15.0f);
+
+        record.Dispose();
+    }
+
+    private static float MeasureFrequency(List<float> interleaved, int startFrame, int sampleRate)
+    {
+        int crossings = 0;
+        int firstCross = -1;
+        int lastCross = -1;
+        for (int f = startFrame + 1; f < startFrame + 4800 && f * 2 + 1 < interleaved.Count; f++)
+        {
+            float prev = interleaved[(f - 1) * 2];
+            float cur = interleaved[f * 2];
+            if (prev <= 0.0f && cur > 0.0f)
+            {
+                if (firstCross < 0)
+                {
+                    firstCross = f;
+                }
+
+                lastCross = f;
+                crossings++;
+            }
+        }
+
+        if (crossings < 2)
+        {
+            return 0.0f;
+        }
+
+        return sampleRate * (crossings - 1) / (float)(lastCross - firstCross);
+    }
 }
