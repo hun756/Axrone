@@ -48,6 +48,12 @@ internal static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowDisposed() =>
         throw new InputDisposedError();
+
+    /// <summary>Throws a snapshot validation error.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotError(string code, string message) =>
+        throw new InputSnapshotError(code, message);
 }
 
 /// <summary>
@@ -83,3 +89,8 @@ public sealed class InputRebindingError(string code, string message) : InputExce
 /// Use after engine disposal.
 /// </summary>
 public sealed class InputDisposedError() : InputException("input.disposed", "The input engine has already been disposed.");
+
+/// <summary>
+/// Malformed system snapshot.
+/// </summary>
+public sealed class InputSnapshotError(string code, string message) : InputException(code, message);
