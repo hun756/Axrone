@@ -66,8 +66,8 @@ public sealed class InputButtonSlot
             return;
         }
 
-        float processed = InputProcessor.ApplyBindingScalar(
-            InputProcessor.ApplyScalar(InputProcessor.ApplyScalar(raw, _definition.Processor0), _definition.Processor1), used);
+        float processed = MathF.Abs(InputProcessor.ApplyBindingScalar(
+            InputProcessor.ApplyScalar(InputProcessor.ApplyScalar(raw, _definition.Processor0), _definition.Processor1), used));
         InputInteraction.Update(ref _state, processed, deltaMs, _definition.Interaction, _definition.PressPoint, release);
     }
 
