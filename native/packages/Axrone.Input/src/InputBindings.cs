@@ -74,6 +74,16 @@ public readonly record struct InputControlPath(
                 result = new InputControlPath(DeviceKind.Mouse, ControlType.Wheel, 0, 1);
                 return true;
             }
+            else if (sub.Equals("position/x", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Mouse, ControlType.Position, 0, 0);
+                return true;
+            }
+            else if (sub.Equals("position/y", StringComparison.OrdinalIgnoreCase))
+            {
+                result = new InputControlPath(DeviceKind.Mouse, ControlType.Position, 0, 1);
+                return true;
+            }
 
             return false;
         }

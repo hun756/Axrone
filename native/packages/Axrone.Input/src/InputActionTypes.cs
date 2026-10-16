@@ -43,6 +43,15 @@ public enum ControlType : byte
 
     /// <summary>Touch contact.</summary>
     Contact = 5,
+
+    /// <summary>Absolute position.</summary>
+    Position = 6,
+
+    /// <summary>Pinch distance or delta.</summary>
+    Pinch = 7,
+
+    /// <summary>Active contact count.</summary>
+    Count = 8,
 }
 
 /// <summary>

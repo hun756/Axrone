@@ -77,6 +77,11 @@ public static class InputControlReader
             return path.SubIndex == 0 ? snapshot.ScrollDeltaX : snapshot.ScrollDeltaY;
         }
 
+        if (path.Type == ControlType.Position)
+        {
+            return path.SubIndex == 0 ? snapshot.MouseX : snapshot.MouseY;
+        }
+
         return 0.0f;
     }
 
