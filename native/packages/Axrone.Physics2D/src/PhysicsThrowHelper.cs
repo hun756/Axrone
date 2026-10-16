@@ -114,4 +114,60 @@ internal static class ThrowHelper
     {
         throw new ArgumentException("Polygon vertices must be finite.", "vertices");
     }
+
+    /// <summary>
+    /// Rejects a negative distance metric; distances live in non-negative space.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNegativeDistance() =>
+        throw new ArgumentOutOfRangeException("distance", "Distance metric cannot be strictly negative.");
+
+    /// <summary>
+    /// Rejects a zero GJK iteration limit; the traversal needs at least one step.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidIterationLimit() =>
+        throw new ArgumentOutOfRangeException("limit", "GJK iteration limit must be strictly positive.");
+
+    /// <summary>
+    /// Rejects a zero GJK iteration limit; the traversal needs at least one step.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T ThrowInvalidIterationLimit<T>() =>
+        throw new ArgumentOutOfRangeException("limit", "GJK iteration limit must be strictly positive.");
+
+    /// <summary>
+    /// Rejects simplex overflow past the planar capacity of three vertices.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSimplexOverflow() =>
+        throw new InvalidOperationException("2D Simplex capacity exceeded (maximum planar capacity is 3 vertices).");
+
+    /// <summary>
+    /// Rejects an unreachable simplex state during reduction.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSimplexInvalidState() =>
+        throw new InvalidOperationException("Invalid simplex state encountered during reduction.");
+
+    /// <summary>
+    /// Rejects a convex polygon with fewer than three vertices.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowConvexPolygonTooFewVertices() =>
+        throw new ArgumentException("A convex polygon must contain at least 3 vertices.", "vertices");
+
+    /// <summary>
+    /// Rejects an unreachable discriminated-union discriminant.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T ThrowUnreachable<T>() =>
+        throw new InvalidOperationException("Unreachable state encountered in exhaustive discriminated union match.");
 }

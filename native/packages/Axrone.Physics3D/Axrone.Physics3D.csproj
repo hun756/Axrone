@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Physics3D</RootNamespace>
+    <AssemblyName>Axrone.Physics3D</AssemblyName>
+    <Description>3D rigid-body physics for the Axrone engine: broadphase, narrowphase, solver and islands over the primitives owned by Axrone.Geometry.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Operator overloads need named alternatives — the identity casts
+         are the documented API surface. RawValue and FromRaw already cover the
+         shapes that need an expression form. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1028: byte-backed status enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on stateless structs — identifier tags and stateless
+         policy/observer structs carry no state to compare; elementwise
+         Equals would be surface nobody should call. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — the oriented support bindings
+         expose the shape contract statically by design; instances never dispatch. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1034: Nested types — the simplex struct enumerator is an intentional
+         zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1822: Mark members as static — the stage-0 builder entry stays an
+         instance method so the fluent chain reads left to right. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Physics3D.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

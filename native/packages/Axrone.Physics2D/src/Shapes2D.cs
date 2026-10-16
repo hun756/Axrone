@@ -1,26 +1,6 @@
 namespace Axrone.Physics2D;
 
 /// <summary>
-/// Support-mapping contract of a 2D collider: the furthest point, centroid and
-/// bounds, all reachable without a virtual call so GJK-style traversals close
-/// over the shape type. Deliberately free of an <c>unmanaged</c> constraint:
-/// array-backed shapes (polygons) implement this alongside flat ones.
-/// </summary>
-/// <typeparam name="TSelf">The shape type itself.</typeparam>
-public interface ISupportShape2D<TSelf>
-    where TSelf : ISupportShape2D<TSelf>
-{
-    /// <summary>Returns the point of the shape furthest along <paramref name="direction"/>.</summary>
-    static abstract Vec2 Support(in TSelf shape, Vec2 direction);
-
-    /// <summary>Returns the area centroid of the shape.</summary>
-    static abstract Vec2 ComputeCentroid(in TSelf shape);
-
-    /// <summary>Returns the tight bounds of the shape.</summary>
-    static abstract Aabb2D ComputeBounds(in TSelf shape);
-}
-
-/// <summary>
 /// Mass properties of a shape at unit-agnostic density scale: mass, inertia
 /// about the centroid, their inverses (zero for static/zero-mass bodies so
 /// the solver never divides), and the centroid they are measured from.
@@ -59,7 +39,7 @@ public readonly struct Circle2 : ISupportShape2D<Circle2>, IEquatable<Circle2>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec2 Support(in Circle2 shape, Vec2 direction)
+    public static Vec2 Support(in Circle2 shape, in Vec2 direction)
     {
         if (direction.LengthSquared() < 1e-12f)
         {
@@ -147,7 +127,7 @@ public readonly struct Capsule2D : ISupportShape2D<Capsule2D>, IEquatable<Capsul
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec2 Support(in Capsule2D shape, Vec2 direction)
+    public static Vec2 Support(in Capsule2D shape, in Vec2 direction)
     {
         Vec2 offset = MathF.Abs(direction.X) + MathF.Abs(direction.Y) < 1e-12f
             ? Vec2.Zero
@@ -267,7 +247,7 @@ public readonly struct Edge2D : ISupportShape2D<Edge2D>, IEquatable<Edge2D>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec2 Support(in Edge2D shape, Vec2 direction) =>
+    public static Vec2 Support(in Edge2D shape, in Vec2 direction) =>
         Vec2.Dot(shape.P0, direction) >= Vec2.Dot(shape.P1, direction) ? shape.P0 : shape.P1;
 
     /// <inheritdoc/>
@@ -485,7 +465,7 @@ public readonly struct Polygon2D : ISupportShape2D<Polygon2D>, IEquatable<Polygo
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static Vec2 Support(in Polygon2D shape, Vec2 direction)
+    public static Vec2 Support(in Polygon2D shape, in Vec2 direction)
     {
         ReadOnlySpan<Vec2> vertices = shape.Vertices;
         Vec2 best = vertices[0];
