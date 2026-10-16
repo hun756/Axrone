@@ -79,7 +79,7 @@ public readonly record struct AudioSpatialization(
         AudioSpatialMode.ThreeDimensional,
         Vector3.Zero,
         -Vector3.UnitZ,
-        new AudioSpatialAttenuation());
+        new AudioSpatialAttenuation(AudioDistanceModel.Inverse));
 }
 
 /// <summary>
