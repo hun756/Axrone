@@ -213,23 +213,26 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
             return false;
         }
 
-        if (slot.Value < current.Length)
+        InputBinding[] candidate = (InputBinding[])current.Clone();
+        if (slot.Value < candidate.Length)
         {
-            current[slot.Value] = binding;
-            context.SetBindings(index, current);
-            return true;
+            candidate[slot.Value] = binding;
+        }
+        else if (slot.Value == candidate.Length)
+        {
+            var grown = new InputBinding[candidate.Length + 1];
+            Array.Copy(candidate, grown, candidate.Length);
+            grown[candidate.Length] = binding;
+            candidate = grown;
+        }
+        else
+        {
+            return false;
         }
 
-        if (slot.Value == current.Length)
-        {
-            var grown = new InputBinding[current.Length + 1];
-            Array.Copy(current, grown, current.Length);
-            grown[current.Length] = binding;
-            context.SetBindings(index, grown);
-            return true;
-        }
-
-        return false;
+        ValidateAll(_kinds[index], candidate);
+        context.SetBindings(index, candidate);
+        return true;
     }
 
     /// <summary>Advances engine time and polls the rebind timeout.</summary>

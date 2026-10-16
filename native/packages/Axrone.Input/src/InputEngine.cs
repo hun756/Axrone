@@ -110,6 +110,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
             entry.EnsureSlot(i, _kinds[i], _buttonDefs[i], _axisDefs[i], _vectorDefs[i]);
             if (i < definition.BindingsByAction.Length)
             {
+                ValidateAll(_kinds[i], definition.BindingsByAction[i]);
                 entry.SetBindings(i, definition.BindingsByAction[i]);
             }
         }
@@ -253,6 +254,20 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         }
 
         return index;
+    }
+
+    /// <summary>Validates every binding or throws.</summary>
+    /// <param name="kind">Action value shape.</param>
+    /// <param name="bindings">Bindings to validate.</param>
+    private static void ValidateAll(ActionKind kind, InputBinding[] bindings)
+    {
+        for (int i = 0; i < bindings.Length; i++)
+        {
+            if (!InputBindingValidator.TryValidate(kind, bindings[i], out string? error))
+            {
+                ThrowHelper.ThrowConfigError("input.invalid-binding", error ?? "Invalid binding.");
+            }
+        }
     }
 
     /// <summary>Finds a context by id.</summary>
