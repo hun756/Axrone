@@ -29,6 +29,7 @@
   <ItemGroup Label="RenderDependencies">
     <PackageVersion Include="Silk.NET.OpenGL" Version="$(SilkNetVersion)" />
     <PackageVersion Include="Silk.NET.Core" Version="$(SilkNetVersion)" />
+    <PackageVersion Include="Silk.NET.Input" Version="$(SilkNetVersion)" />
     <PackageVersion Include="Moq" Version="$(MoqVersion)" />
   </ItemGroup>
 

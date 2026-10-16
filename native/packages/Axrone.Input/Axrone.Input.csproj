@@ -54,6 +54,10 @@
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
   </ItemGroup>
 
+  <ItemGroup Label="SilkDependencies">
+    <PackageReference Include="Silk.NET.Input" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />
