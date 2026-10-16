@@ -29,6 +29,39 @@ public static class InputProcessor
         return ApplyScalar(ApplyScalar(value, first), second);
     }
 
+    /// <summary>Applies one processor to a vector reading.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector2 ApplyVector2(Vector2 value, in ProcessorConfiguration processor)
+    {
+        return processor.Kind switch
+        {
+            InputProcessorKind.None => value,
+            InputProcessorKind.Scale => value * processor.Param1,
+            InputProcessorKind.Invert => -value,
+            InputProcessorKind.Clamp => new Vector2(
+                ClampScalar(value.X, processor.Param1, processor.Param2),
+                ClampScalar(value.Y, processor.Param1, processor.Param2)),
+            InputProcessorKind.Deadzone => DeadzoneVector2(value, processor.Param1),
+            InputProcessorKind.Curve => new Vector2(
+                CurveScalar(value.X, processor.Param1, processor.Flag),
+                CurveScalar(value.Y, processor.Param1, processor.Flag)),
+            InputProcessorKind.ScaleVector2 => new Vector2(value.X * processor.Param1, value.Y * processor.Param2),
+            InputProcessorKind.InvertVector2 => new Vector2(
+                processor.Param1 != 0.0f ? -value.X : value.X,
+                processor.Param2 != 0.0f ? -value.Y : value.Y),
+            InputProcessorKind.NormalizeVector2 => NormalizeVector2(value),
+            InputProcessorKind.ClampMagnitude => ClampMagnitude(value, processor.Param1, processor.Param2),
+            _ => value,
+        };
+    }
+
+    /// <summary>Applies two processors in order.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector2 ApplyVector2(Vector2 value, in ProcessorConfiguration first, in ProcessorConfiguration second)
+    {
+        return ApplyVector2(ApplyVector2(value, first), second);
+    }
+
     /// <summary>Clamps with swapped bounds tolerated.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float ClampScalar(float value, float min, float max)
@@ -67,5 +100,43 @@ public static class InputProcessor
         }
 
         return value <= 0.0f ? 0.0f : MathF.Pow(value, exponent);
+    }
+
+    /// <summary>Radial deadzone for sticks.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector2 DeadzoneVector2(Vector2 value, float threshold)
+    {
+        float length = value.Length();
+        if (length < threshold || threshold >= 1.0f || length <= float.Epsilon)
+        {
+            return Vector2.Zero;
+        }
+
+        float scaled = (length - threshold) / (1.0f - threshold);
+        return value / length * MathF.Min(scaled, 1.0f);
+    }
+
+    /// <summary>Normalizes; zero stays zero.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector2 NormalizeVector2(Vector2 value)
+    {
+        float length = value.Length();
+        return length <= float.Epsilon ? Vector2.Zero : value / length;
+    }
+
+    /// <summary>Clamps the magnitude into [min, max].</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector2 ClampMagnitude(Vector2 value, float min, float max)
+    {
+        float length = value.Length();
+        if (length <= float.Epsilon)
+        {
+            return Vector2.Zero;
+        }
+
+        float lo = min <= max ? min : max;
+        float hi = min <= max ? max : min;
+        float clamped = length < lo ? lo : (length > hi ? hi : length);
+        return value / length * clamped;
     }
 }
