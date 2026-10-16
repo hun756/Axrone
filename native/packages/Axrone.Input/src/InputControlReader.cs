@@ -90,4 +90,43 @@ public static class InputControlReader
 
         return 0.0f;
     }
+
+    /// <summary>Reads held modifier keys as flags.</summary>
+    /// <param name="snapshot">Debounced frame state.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static InputModifiers ReadModifiers(in InputSnapshot snapshot)
+    {
+        InputModifiers modifiers = InputModifiers.None;
+        if (snapshot.Keys.IsSet(340) || snapshot.Keys.IsSet(344))
+        {
+            modifiers |= InputModifiers.Shift;
+        }
+
+        if (snapshot.Keys.IsSet(341) || snapshot.Keys.IsSet(345))
+        {
+            modifiers |= InputModifiers.Control;
+        }
+
+        if (snapshot.Keys.IsSet(342) || snapshot.Keys.IsSet(346))
+        {
+            modifiers |= InputModifiers.Alt;
+        }
+
+        if (snapshot.Keys.IsSet(343) || snapshot.Keys.IsSet(347))
+        {
+            modifiers |= InputModifiers.Meta;
+        }
+
+        return modifiers;
+    }
+
+    /// <summary>Whether required modifiers satisfy the binding gate.</summary>
+    /// <param name="held">Currently held modifiers.</param>
+    /// <param name="required">Modifiers the binding demands.</param>
+    /// <param name="exact">Whether held modifiers must match exactly.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool ModifiersSatisfied(InputModifiers held, InputModifiers required, bool exact)
+    {
+        return exact ? held == required : (held & required) == required;
+    }
 }
