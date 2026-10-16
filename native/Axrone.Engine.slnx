@@ -2,6 +2,8 @@
   <Folder Name="/packages/">
     <Project Path="packages/Axrone.Audio/Axrone.Audio.csproj" />
     <Project Path="packages/Axrone.Audio/tests/Axrone.Audio.Tests.csproj" />
+    <Project Path="packages/Axrone.Audio.OpenAL/Axrone.Audio.OpenAL.csproj" />
+    <Project Path="packages/Axrone.Audio.OpenAL/tests/Axrone.Audio.OpenAL.Tests.csproj" />
     <Project Path="packages/Axrone.Batching/Axrone.Batching.csproj" />
     <Project Path="packages/Axrone.Batching/tests/Axrone.Batching.Tests.csproj" />
     <Project Path="packages/Axrone.Collections/Axrone.Collections.csproj" />
