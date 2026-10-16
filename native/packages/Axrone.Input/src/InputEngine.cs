@@ -134,6 +134,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         _focused = focused;
         if (!focused)
         {
+            _snapshot = default;
             ResetAll();
         }
     }
