@@ -16,6 +16,8 @@ public static class InputProcessor
             InputProcessorKind.Scale => value * processor.Param1,
             InputProcessorKind.Invert => -value,
             InputProcessorKind.Clamp => ClampScalar(value, processor.Param1, processor.Param2),
+            InputProcessorKind.Deadzone => DeadzoneScalar(value, processor.Param1),
+            InputProcessorKind.Curve => CurveScalar(value, processor.Param1, processor.Flag),
             _ => value,
         };
     }
@@ -34,5 +36,36 @@ public static class InputProcessor
         float lo = min <= max ? min : max;
         float hi = min <= max ? max : min;
         return value < lo ? lo : (value > hi ? hi : value);
+    }
+
+    /// <summary>Zeroes below threshold, rescales the remainder to [0, 1].</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float DeadzoneScalar(float value, float threshold)
+    {
+        float abs = MathF.Abs(value);
+        if (abs < threshold || threshold >= 1.0f)
+        {
+            return 0.0f;
+        }
+
+        float scaled = (abs - threshold) / (1.0f - threshold);
+        return MathF.CopySign(scaled, value);
+    }
+
+    /// <summary>Power curve; keeps the sign when requested.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float CurveScalar(float value, float exponent, bool keepSign)
+    {
+        if (exponent <= 0.0f)
+        {
+            return value;
+        }
+
+        if (keepSign)
+        {
+            return MathF.CopySign(MathF.Pow(MathF.Abs(value), exponent), value);
+        }
+
+        return value <= 0.0f ? 0.0f : MathF.Pow(value, exponent);
     }
 }
