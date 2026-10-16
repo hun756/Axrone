@@ -19,6 +19,13 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     /// <summary>Transport queue feeding this coordinator.</summary>
     public LockFreeInputRingBuffer<TBackoff, TMetrics> RingBuffer => _ringBuffer;
 
+    /// <summary>Debounced state for the current frame.</summary>
+    public InputSnapshot CurrentSnapshot
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _current;
+    }
+
     /// <summary>Creates a coordinator with the given queue capacity.</summary>
     public InputFrameCoordinator(QueueCapacity capacity)
     {
@@ -347,6 +354,9 @@ public sealed class InputFrameCoordinator : IInputStateQuery, IDisposable
 
     /// <summary>Transport queue feeding this coordinator.</summary>
     public LockFreeInputRingBuffer<AdaptiveBackoff, NullMetricsPolicy> RingBuffer => _impl.RingBuffer;
+
+    /// <summary>Debounced state for the current frame.</summary>
+    public InputSnapshot CurrentSnapshot => _impl.CurrentSnapshot;
 
     /// <summary>Creates a coordinator with a raw slot count.</summary>
     /// <param name="queueCapacity">Power-of-two slot count.</param>
