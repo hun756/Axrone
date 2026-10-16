@@ -31,6 +31,7 @@
     <PackageVersion Include="Silk.NET.Core" Version="$(SilkNetVersion)" />
     <PackageVersion Include="Silk.NET.Input" Version="$(SilkNetVersion)" />
     <PackageVersion Include="Silk.NET.Input.Common" Version="$(SilkNetVersion)" />
+    <PackageVersion Include="Silk.NET.OpenAL" Version="$(SilkNetVersion)" />
     <PackageVersion Include="Moq" Version="$(MoqVersion)" />
   </ItemGroup>
 
