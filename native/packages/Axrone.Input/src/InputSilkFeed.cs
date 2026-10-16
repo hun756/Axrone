@@ -136,4 +136,20 @@ public static class SilkInputFeed
         ArgumentNullException.ThrowIfNull(buffer);
         return buffer.TryEnqueue(RawInputEvent.CreateGamepadAxis((DeviceIndex)slot, axis, value, InputTimestamp.Now()));
     }
+
+    /// <summary>Feeds a touch-contact transition.</summary>
+    /// <param name="buffer">Transport queue.</param>
+    /// <param name="contactId">Contact slot.</param>
+    /// <param name="phase">Contact phase.</param>
+    /// <param name="x">Contact X.</param>
+    /// <param name="y">Contact Y.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool FeedTouch<TBackoff, TMetrics>(
+        this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte contactId, TouchPhase phase, float x, float y)
+        where TBackoff : struct, IBackoffPolicy
+        where TMetrics : struct, IInputMetricsSink
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        return buffer.TryEnqueue(RawInputEvent.CreateTouch(contactId, phase, x, y, InputTimestamp.Now()));
+    }
 }

@@ -24,10 +24,38 @@ public static class InputControlReader
             case DeviceKind.Gamepad:
                 return ReadGamepad(in snapshot, path, gamepadSlot);
             case DeviceKind.Touch:
+                return ReadTouch(in snapshot, path);
             case DeviceKind.None:
             default:
                 return 0.0f;
         }
+    }
+
+    /// <summary>Reads touch contacts as 0/1.</summary>
+    /// <param name="snapshot">Debounced frame state.</param>
+    /// <param name="path">Canonical control address.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float ReadTouch(in InputSnapshot snapshot, in InputControlPath path)
+    {
+        if (path.Type != ControlType.Contact)
+        {
+            return 0.0f;
+        }
+
+        if (path.Index == 255)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                if (snapshot.TouchContacts[i].Active)
+                {
+                    return 1.0f;
+                }
+            }
+
+            return 0.0f;
+        }
+
+        return path.Index < 8 && snapshot.TouchContacts[path.Index].Active ? 1.0f : 0.0f;
     }
 
     /// <summary>Reads mouse controls.</summary>

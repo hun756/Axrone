@@ -167,6 +167,38 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         }
 
         FeedRebindGamepads();
+        FeedRebindTouch();
+    }
+
+    /// <summary>Feeds touch contacts to the active session.</summary>
+    private void FeedRebindTouch()
+    {
+        if (_rebind is null || !_rebind.IsActive)
+        {
+            return;
+        }
+
+        bool any = false;
+        for (int contact = 0; contact < 8; contact++)
+        {
+            if (!_snapshot.TouchContacts[contact].Active)
+            {
+                continue;
+            }
+
+            any = true;
+            var path = new InputControlPath(DeviceKind.Touch, ControlType.Contact, (ushort)contact, 0);
+            if (OfferRebindCandidate(path, 1.0f))
+            {
+                return;
+            }
+        }
+
+        if (any)
+        {
+            var anyPath = new InputControlPath(DeviceKind.Touch, ControlType.Contact, 255, 0);
+            OfferRebindCandidate(anyPath, 1.0f);
+        }
     }
 
     /// <summary>Feeds gamepad controls to the active session.</summary>
