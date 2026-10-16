@@ -37,6 +37,15 @@ public enum RawInputType : byte
 
     /// <summary>Gamepad axis moved.</summary>
     GamepadAxis = 10,
+
+    /// <summary>Touch contact started.</summary>
+    TouchStart = 11,
+
+    /// <summary>Touch contact moved.</summary>
+    TouchMove = 12,
+
+    /// <summary>Touch contact ended or cancelled.</summary>
+    TouchEnd = 13,
 }
 
 /// <summary>
@@ -241,6 +250,21 @@ public readonly struct RawInputEvent : IEquatable<RawInputEvent>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static RawInputEvent CreateGamepadAxis(DeviceIndex device, byte axisIndex, float position, InputTimestamp timestamp) =>
         new(timestamp, RawInputType.GamepadAxis, device, axisIndex, position, 0.0f);
+
+    /// <summary>Creates a touch-contact event.</summary>
+    /// <param name="contactId">Contact slot.</param>
+    /// <param name="phase">Contact phase.</param>
+    /// <param name="x">Contact X.</param>
+    /// <param name="y">Contact Y.</param>
+    /// <param name="timestamp">Sample time.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RawInputEvent CreateTouch(byte contactId, TouchPhase phase, float x, float y, InputTimestamp timestamp) =>
+        new(timestamp, phase switch
+        {
+            TouchPhase.Move => RawInputType.TouchMove,
+            TouchPhase.End or TouchPhase.Cancel => RawInputType.TouchEnd,
+            _ => RawInputType.TouchStart,
+        }, DeviceIndex.Primary, contactId, x, y);
 
     /// <summary>Deconstructs the event fields.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
