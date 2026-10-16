@@ -70,4 +70,87 @@ public class InputInteractionTests
         InputInteraction.UpdateHold(ref state, 1.0f, 100.0f, settings);
         state.Phase.Should().Be(InputActionPhase.Performed);
     }
+
+    [Fact]
+    public void Tap_Quick_Release_Performs()
+    {
+        var state = new InputButtonState();
+        var settings = new InteractionSettings(Type: InputInteractionType.Tap, DurationMs: 400.0f);
+
+        InputInteraction.UpdateTap(ref state, 1.0f, 100.0f, settings);
+        InputInteraction.UpdateTap(ref state, 1.0f, 100.0f, settings);
+        InputInteraction.UpdateTap(ref state, 0.0f, 100.0f, settings);
+        state.TapTriggered.Should().BeTrue();
+        state.Phase.Should().Be(InputActionPhase.Performed);
+    }
+
+    [Fact]
+    public void Tap_Overtime_Cancels()
+    {
+        var state = new InputButtonState();
+        var settings = new InteractionSettings(Type: InputInteractionType.Tap, DurationMs: 200.0f);
+
+        InputInteraction.UpdateTap(ref state, 1.0f, 100.0f, settings);
+        InputInteraction.UpdateTap(ref state, 1.0f, 150.0f, settings);
+        InputInteraction.UpdateTap(ref state, 1.0f, 150.0f, settings);
+        state.Phase.Should().Be(InputActionPhase.Canceled);
+    }
+
+    [Fact]
+    public void MultiTap_Double_Completes()
+    {
+        var state = new InputButtonState();
+        var settings = new InteractionSettings(Type: InputInteractionType.MultiTap, DurationMs: 400.0f, TapCount: 2, MaxDelayMs: 300.0f);
+
+        InputInteraction.UpdateMultiTap(ref state, 1.0f, 50.0f, settings);
+        InputInteraction.UpdateMultiTap(ref state, 0.0f, 50.0f, settings);
+        state.Phase.Should().Be(InputActionPhase.Started);
+        InputInteraction.UpdateMultiTap(ref state, 1.0f, 50.0f, settings);
+        InputInteraction.UpdateMultiTap(ref state, 0.0f, 50.0f, settings);
+        state.MultiTapTriggered.Should().BeTrue();
+        state.Phase.Should().Be(InputActionPhase.Performed);
+    }
+
+    [Fact]
+    public void MultiTap_Gap_Expiry_Cancels()
+    {
+        var state = new InputButtonState();
+        var settings = new InteractionSettings(Type: InputInteractionType.MultiTap, DurationMs: 400.0f, TapCount: 2, MaxDelayMs: 100.0f);
+
+        InputInteraction.UpdateMultiTap(ref state, 1.0f, 50.0f, settings);
+        InputInteraction.UpdateMultiTap(ref state, 0.0f, 50.0f, settings);
+        InputInteraction.UpdateMultiTap(ref state, 0.0f, 150.0f, settings);
+        state.Phase.Should().Be(InputActionPhase.Canceled);
+    }
+
+    [Fact]
+    public void Repeat_Ticks_On_Interval()
+    {
+        var state = new InputButtonState();
+        var settings = new InteractionSettings(Type: InputInteractionType.Repeat, DurationMs: 200.0f, IntervalMs: 100.0f);
+
+        InputInteraction.UpdateRepeat(ref state, 1.0f, 16.0f, settings);
+        state.RepeatTriggered.Should().BeTrue();
+        state.RepeatCount.Should().Be(1);
+
+        InputInteraction.UpdateRepeat(ref state, 1.0f, 100.0f, settings);
+        state.RepeatTriggered.Should().BeFalse();
+        InputInteraction.UpdateRepeat(ref state, 1.0f, 100.0f, settings);
+        state.RepeatTriggered.Should().BeTrue();
+        state.RepeatCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void Trackers_Report_Delta_And_Phase()
+    {
+        var axis = new InputAxisState();
+        InputInteraction.UpdateAxis(ref axis, 0.5f);
+        axis.Delta.Should().Be(0.5f);
+        axis.Phase.Should().Be(InputActionPhase.Changed);
+
+        var vec = new InputVector2State();
+        InputInteraction.UpdateVector2(ref vec, new System.Numerics.Vector2(1.0f, 0.0f));
+        vec.Magnitude.Should().BeApproximately(1.0f, 1e-5f);
+        vec.Phase.Should().Be(InputActionPhase.Changed);
+    }
 }
