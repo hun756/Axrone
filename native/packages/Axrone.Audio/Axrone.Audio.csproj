@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Audio</RootNamespace>
+    <AssemblyName>Axrone.Audio</AssemblyName>
+    <Description>Audio bus mixer, spatialization, clip store and SIMD voice mixing for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Implicit operators need named alternatives — the nominal
+         From/round-trip members already cover expression forms. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy structs carry
+         no state to compare; elementwise Equals would be unused surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1032: Standard exception ctors — audio errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Audio.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
