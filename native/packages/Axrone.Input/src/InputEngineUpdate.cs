@@ -23,6 +23,7 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         _consumed.Clear();
         AdvanceRebind(dt);
         FeedRebind();
+        _frame++;
 
         for (int c = 0; c < _contexts.Count; c++)
         {

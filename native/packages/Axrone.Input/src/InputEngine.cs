@@ -23,6 +23,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     private bool _focused = true;
     private bool _disposed;
     private ulong _sequence;
+    private ulong _frame;
 
     /// <summary>Creates an engine for the given action set.</summary>
     public InputEngine()
@@ -36,6 +37,9 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
 
     /// <summary>Whether the window is focused.</summary>
     public bool Focused => _focused;
+
+    /// <summary>Evaluated frame count.</summary>
+    public ulong Frame => _frame;
 
     /// <summary>Pending typed text this frame.</summary>
     public IReadOnlyList<InputTextEntry> Text => _text;
