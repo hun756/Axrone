@@ -12,6 +12,7 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     where TMetrics : struct, IInputMetricsSink
 {
     private readonly LockFreeInputRingBuffer<TBackoff, TMetrics> _ringBuffer;
+    private readonly List<char> _frameText = new();
     private InputSnapshot _current;
     private InputSnapshot _previous;
     private int _isDisposed;
@@ -25,6 +26,9 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _current;
     }
+
+    /// <summary>Typed characters drained this frame.</summary>
+    public IReadOnlyList<char> FrameText => _frameText;
 
     /// <summary>Creates a coordinator with the given queue capacity.</summary>
     public InputFrameCoordinator(QueueCapacity capacity)
@@ -50,6 +54,7 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
         _current.MouseDeltaY = 0.0f;
         _current.ScrollDeltaX = 0.0f;
         _current.ScrollDeltaY = 0.0f;
+        _frameText.Clear();
 
         Span<RawInputEvent> batch = stackalloc RawInputEvent[128];
         int read;
@@ -58,14 +63,17 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
         {
             for (int i = 0; i < read; i++)
             {
-                ApplyEvent(ref _current, batch[i]);
+                ApplyEvent(ref _current, batch[i], _frameText);
             }
         }
     }
 
     /// <summary>Folds one raw event into a snapshot.</summary>
+    /// <param name="snapshot">Snapshot to update.</param>
+    /// <param name="evt">Raw event to fold.</param>
+    /// <param name="frameText">Typed characters collected this frame.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    private static void ApplyEvent(ref InputSnapshot snapshot, in RawInputEvent evt)
+    private static void ApplyEvent(ref InputSnapshot snapshot, in RawInputEvent evt, List<char> frameText)
     {
         switch (evt.EventType)
         {
@@ -116,6 +124,9 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
                 break;
 
             case RawInputType.KeyChar:
+                frameText.Add((char)evt.KeyCode);
+                break;
+
             case RawInputType.None:
             default:
                 break;
@@ -357,6 +368,9 @@ public sealed class InputFrameCoordinator : IInputStateQuery, IDisposable
 
     /// <summary>Debounced state for the current frame.</summary>
     public InputSnapshot CurrentSnapshot => _impl.CurrentSnapshot;
+
+    /// <summary>Typed characters drained this frame.</summary>
+    public IReadOnlyList<char> FrameText => _impl.FrameText;
 
     /// <summary>Creates a coordinator with a raw slot count.</summary>
     /// <param name="queueCapacity">Power-of-two slot count.</param>
