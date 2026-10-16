@@ -179,7 +179,7 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
 
         for (byte slot = 0; slot < 4; slot++)
         {
-            ushort buttons = slot switch
+            uint buttons = slot switch
             {
                 0 => _snapshot.GamepadButtons0,
                 1 => _snapshot.GamepadButtons1,
@@ -187,9 +187,9 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
                 _ => _snapshot.GamepadButtons3,
             };
 
-            for (int button = 0; button < 16; button++)
+            for (int button = 0; button < 18; button++)
             {
-                if (((buttons >> button) & 1) == 0)
+                if (((buttons >> button) & 1u) == 0)
                 {
                     continue;
                 }

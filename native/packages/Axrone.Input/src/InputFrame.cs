@@ -133,29 +133,30 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
         }
     }
 
-    /// <summary>Sets or clears a gamepad button bit.</summary>
+    /// <summary>Sets or clears a gamepad button bit in engine numbering.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void SetGamepadButton(ref InputSnapshot snapshot, DeviceIndex deviceIndex, ushort buttonCode, bool down)
     {
-        if (deviceIndex.Value >= 4 || buttonCode >= 16)
+        if (deviceIndex.Value >= 4 || buttonCode >= 32)
         {
             return;
         }
 
-        ref ushort buttons = ref GetGamepadButtons(ref snapshot, deviceIndex.Value);
-        ushort mask = (ushort)(1U << buttonCode);        if (down)
+        ref uint buttons = ref GetGamepadButtons(ref snapshot, deviceIndex.Value);
+        uint mask = 1u << buttonCode;
+        if (down)
         {
             buttons |= mask;
         }
         else
         {
-            buttons &= (ushort)~mask;
+            buttons &= ~mask;
         }
     }
 
     /// <summary>Selects the button word for a gamepad slot.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ref ushort GetGamepadButtons(ref InputSnapshot snapshot, byte slot)
+    private static ref uint GetGamepadButtons(ref InputSnapshot snapshot, byte slot)
     {
         if (slot == 0)
         {
@@ -301,31 +302,33 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool IsGamepadButtonDown(DeviceIndex gamepad, ButtonName name)
     {
-        if (gamepad.Value >= 4 || (uint)name >= 16)
+        ushort code = InputControlReader.MapSilkButton((ushort)name);
+        if (gamepad.Value >= 4 || code >= 32)
         {
             return false;
         }
 
-        ushort buttons = ReadGamepadButtons(in _current, gamepad.Value);
-        return (buttons & (1U << (int)name)) != 0;
+        uint buttons = ReadGamepadButtons(in _current, gamepad.Value);
+        return (buttons & (1u << code)) != 0;
     }
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public bool IsGamepadButtonPressed(DeviceIndex gamepad, ButtonName name)
     {
-        if (gamepad.Value >= 4 || (uint)name >= 16)
+        ushort code = InputControlReader.MapSilkButton((ushort)name);
+        if (gamepad.Value >= 4 || code >= 32)
         {
             return false;
         }
 
-        uint bit = 1U << (int)name;
+        uint bit = 1u << code;
         return ((ReadGamepadButtons(in _current, gamepad.Value) & ~ReadGamepadButtons(in _previous, gamepad.Value)) & bit) != 0;
     }
 
     /// <summary>Reads a gamepad button word from a snapshot.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ushort ReadGamepadButtons(in InputSnapshot snapshot, byte slot) => slot switch
+    private static uint ReadGamepadButtons(in InputSnapshot snapshot, byte slot) => slot switch
     {
         0 => snapshot.GamepadButtons0,
         1 => snapshot.GamepadButtons1,

@@ -253,19 +253,17 @@ public struct InputSnapshot
     /// <summary>Mouse button bits.</summary>
     public ushort MouseButtons;
 
-    /// <summary>Gamepad button bits, slot zero.</summary>
-    public ushort GamepadButtons0;
+    /// <summary>Gamepad button bits in engine numbering, slot zero.</summary>
+    public uint GamepadButtons0;
 
-    /// <summary>Gamepad button bits, slot one.</summary>
-    public ushort GamepadButtons1;
+    /// <summary>Gamepad button bits in engine numbering, slot one.</summary>
+    public uint GamepadButtons1;
 
-    /// <summary>Gamepad button bits, slot two.</summary>
-    public ushort GamepadButtons2;
+    /// <summary>Gamepad button bits in engine numbering, slot two.</summary>
+    public uint GamepadButtons2;
 
-    /// <summary>Gamepad button bits, slot three.</summary>
-    public ushort GamepadButtons3;
-
-    private ushort _padding;
+    /// <summary>Gamepad button bits in engine numbering, slot three.</summary>
+    public uint GamepadButtons3;
 
     /// <summary>Pointer X.</summary>
     public float MouseX;

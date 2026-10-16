@@ -63,19 +63,19 @@ public static class InputControlReader
 
         if (path.Type == ControlType.Button)
         {
-            if (path.Index >= 16)
+            if (path.Index >= 32)
             {
                 return 0.0f;
             }
 
-            ushort buttons = slot switch
+            uint buttons = slot switch
             {
                 0 => snapshot.GamepadButtons0,
                 1 => snapshot.GamepadButtons1,
                 2 => snapshot.GamepadButtons2,
                 _ => snapshot.GamepadButtons3,
             };
-            return ((buttons >> path.Index) & 1) != 0 ? 1.0f : 0.0f;
+            return ((buttons >> path.Index) & 1u) != 0 ? 1.0f : 0.0f;
         }
 
         if (path.Type == ControlType.Axis)
@@ -91,8 +91,24 @@ public static class InputControlReader
         return 0.0f;
     }
 
-    /// <summary>Reads held modifier keys as flags.</summary>
-    /// <param name="snapshot">Debounced frame state.</param>
+    /// <summary>Maps Silk button codes to engine numbering.</summary>
+    /// <param name="silk">Silk button code.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static ushort MapSilkButton(ushort silk) => silk switch
+    {
+        6 => 8,
+        7 => 9,
+        8 => 16,
+        9 => 10,
+        10 => 11,
+        11 => 12,
+        12 => 15,
+        13 => 13,
+        14 => 14,
+        _ => silk,
+    };
+
+    /// <summary>Reads held modifier keys as flags.</summary>    /// <param name="snapshot">Debounced frame state.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static InputModifiers ReadModifiers(in InputSnapshot snapshot)
     {
