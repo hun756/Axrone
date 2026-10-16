@@ -191,7 +191,7 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         }
     }
 
-    /// <summary>Raises callbacks for one committed action.</summary>
+    /// <summary>Publishes one committed action to hub subscribers.</summary>
     /// <param name="action">Action value.</param>
     /// <param name="phase">Committed phase.</param>
     /// <param name="kind">Value shape.</param>
@@ -206,27 +206,8 @@ public sealed partial class InputEngine<TSchema> where TSchema : unmanaged, Enum
         in InputAxisState axis,
         in InputVector2State vector)
     {
-        if (_subscriptions.Count == 0)
-        {
-            return;
-        }
-
         var payload = new InputActionCallbackContext<TSchema>(action, phase, kind, button, axis, vector);
-        for (int i = 0; i < _subscriptions.Count; i++)
-        {
-            SubscriptionEntry entry = _subscriptions[i];
-            if (entry.Action.HasValue && !entry.Action.Value.Equals(action))
-            {
-                continue;
-            }
-
-            if (entry.Phases is { Length: > 0 } phases && Array.IndexOf(phases, phase) < 0)
-            {
-                continue;
-            }
-
-            entry.Callback(payload);
-        }
+        _hub.Publish(in payload);
     }
 
     /// <summary>Marks every actuated binding control of a capturing context consumed.</summary>

@@ -15,7 +15,13 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     private readonly InputVector2ActionDefinition?[] _vectorDefs;
     private readonly List<ContextEntry> _contexts = new();
     private readonly Dictionary<UserId, InputUserDefinition> _users = new();
-    private readonly List<SubscriptionEntry> _subscriptions = new();
+    private readonly Dictionary<
+        Action<InputActionCallbackContext<TSchema>>,
+        List<Axrone.Event.Hub.SubscriptionToken>> _tokens = new();
+    private readonly Axrone.Event.Hub.EventHub<
+        InputActionCallbackContext<TSchema>,
+        Axrone.Event.Hub.AdaptiveBackoff,
+        Axrone.Event.Hub.NullMetricsSink> _hub;
     private readonly ConsumedControls _consumed = new();
     private readonly List<InputTextEntry> _text = new();
     private InputSnapshot _snapshot;
@@ -33,6 +39,15 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         _buttonDefs = new InputButtonActionDefinition?[_actionCount];
         _axisDefs = new InputAxisActionDefinition?[_actionCount];
         _vectorDefs = new InputVector2ActionDefinition?[_actionCount];
+        _hub = new Axrone.Event.Hub.EventHub<
+            InputActionCallbackContext<TSchema>,
+            Axrone.Event.Hub.AdaptiveBackoff,
+            Axrone.Event.Hub.NullMetricsSink>(new Axrone.Event.Hub.EventHubOptions
+            {
+                MaxSubscribers = 32,
+                WaiterPoolCapacity = 8,
+                PinnedRingCapacity = 64,
+            });
     }
 
     /// <summary>Whether the window is focused.</summary>
@@ -175,7 +190,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
-        _subscriptions.Add(new SubscriptionEntry(callback, null, null));
+        AddSubscription(callback, null, null);
     }
 
     /// <summary>Subscribes to one action's transitions.</summary>
@@ -185,7 +200,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
-        _subscriptions.Add(new SubscriptionEntry(callback, action, null));
+        AddSubscription(callback, action, null);
     }
 
     /// <summary>Subscribes to selected phases.</summary>
@@ -195,7 +210,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
-        _subscriptions.Add(new SubscriptionEntry(callback, null, phases));
+        AddSubscription(callback, null, phases);
     }
 
     /// <summary>Subscribes to one action's selected phases.</summary>
@@ -206,7 +221,27 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
-        _subscriptions.Add(new SubscriptionEntry(callback, action, phases));
+        AddSubscription(callback, action, phases);
+    }
+
+    /// <summary>Registers a hub subscription and tracks its token.</summary>
+    /// <param name="callback">Callback to invoke.</param>
+    /// <param name="action">Action filter, or any action when null.</param>
+    /// <param name="phases">Phase filter, or all phases when null.</param>
+    private void AddSubscription(
+        Action<InputActionCallbackContext<TSchema>> callback,
+        TSchema? action,
+        InputActionPhase[]? phases)
+    {
+        Axrone.Event.Hub.SubscriptionToken token =
+            _hub.Subscribe(new InputActionDispatch<TSchema>(callback, action, phases));
+        if (!_tokens.TryGetValue(callback, out List<Axrone.Event.Hub.SubscriptionToken>? tokens))
+        {
+            tokens = new List<Axrone.Event.Hub.SubscriptionToken>();
+            _tokens[callback] = tokens;
+        }
+
+        tokens.Add(token);
     }
 
     /// <summary>Unsubscribes a callback.</summary>
@@ -214,12 +249,14 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
     public void Unsubscribe(Action<InputActionCallbackContext<TSchema>> callback)
     {
         ThrowIfDisposed();
-        for (int i = _subscriptions.Count - 1; i >= 0; i--)
+        if (!_tokens.Remove(callback, out List<Axrone.Event.Hub.SubscriptionToken>? tokens))
         {
-            if (_subscriptions[i].Callback == callback)
-            {
-                _subscriptions.RemoveAt(i);
-            }
+            return;
+        }
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            _hub.Unsubscribe(tokens[i]);
         }
     }
 
@@ -234,7 +271,8 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         _disposed = true;
         _rebind?.Cancel(RebindCancelReason.Disposed);
         _rebind = null;
-        _subscriptions.Clear();
+        _tokens.Clear();
+        _hub.Dispose();
         _contexts.Clear();
         _users.Clear();
         _text.Clear();
@@ -303,24 +341,5 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         {
             ThrowHelper.ThrowDisposed();
         }
-    }
-
-    /// <summary>Filtered subscription entry.</summary>
-    /// <param name="callback">Callback to invoke.</param>
-    /// <param name="action">Action filter, or any action.</param>
-    /// <param name="phases">Phase filter, or all phases.</param>
-    private sealed class SubscriptionEntry(
-        Action<InputActionCallbackContext<TSchema>> callback,
-        TSchema? action,
-        InputActionPhase[]? phases)
-    {
-        /// <summary>Callback to invoke.</summary>
-        public readonly Action<InputActionCallbackContext<TSchema>> Callback = callback;
-
-        /// <summary>Action filter.</summary>
-        public readonly TSchema? Action = action;
-
-        /// <summary>Phase filter.</summary>
-        public readonly InputActionPhase[]? Phases = phases;
     }
 }
