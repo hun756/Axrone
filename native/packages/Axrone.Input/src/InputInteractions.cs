@@ -150,7 +150,7 @@ public static class InputInteraction
         if (actuated)
         {
             state.HeldDurationMs += deltaMs;
-            if (state.HeldDurationMs > settings.DurationMs)
+            if (state.HeldDurationMs > settings.TapDurationMs)
             {
                 state.TapTriggered = false;
                 state.Phase = InputActionPhase.Canceled;
@@ -165,7 +165,7 @@ public static class InputInteraction
 
         if (state.Released)
         {
-            if (state.HeldDurationMs <= settings.DurationMs)
+            if (state.HeldDurationMs <= settings.TapDurationMs)
             {
                 state.TapTriggered = true;
                 state.TapSequenceCount = 1;
@@ -220,10 +220,10 @@ public static class InputInteraction
         if (actuated)
         {
             state.HeldDurationMs += deltaMs;
-            state.Phase = state.HeldDurationMs > settings.DurationMs
+            state.Phase = state.HeldDurationMs > settings.TapDurationMs
                 ? InputActionPhase.Canceled
                 : InputActionPhase.Started;
-            if (state.HeldDurationMs > settings.DurationMs)
+            if (state.HeldDurationMs > settings.TapDurationMs)
             {
                 state.TapSequenceCount = 0;
             }
@@ -233,7 +233,7 @@ public static class InputInteraction
 
         if (state.Released)
         {
-            if (state.HeldDurationMs <= settings.DurationMs)
+            if (state.HeldDurationMs <= settings.TapDurationMs)
             {
                 state.TapSequenceCount++;
                 state.TimeSinceLastTapMs = 0.0f;

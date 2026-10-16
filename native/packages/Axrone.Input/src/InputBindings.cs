@@ -269,7 +269,8 @@ public readonly record struct InteractionSettings(
     HoldMode Mode = HoldMode.Once,
     int TapCount = 2,
     float MaxDelayMs = 300f,
-    float IntervalMs = 60f);
+    float IntervalMs = 60f,
+    float TapDurationMs = 250f);
 
 /// <summary>
 /// One action binding: up to four controls composed into a value, with
