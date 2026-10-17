@@ -38,6 +38,11 @@ function err<E>(error: E): Result<never, E> {
 
 const OK_VOID: Result<void, never> = Object.freeze({ ok: true, value: undefined });
 
+const EMPTY_UNDERFLOW: Result<never, StackUnderflowError> = Object.freeze({
+    ok: false,
+    error: new StackUnderflowError(),
+});
+
 class StackUnderflowError extends Error {
     readonly _tag = "StackUnderflowError" as const;
     constructor() {
@@ -262,7 +267,7 @@ export class ChunkedStack<T> {
         }
         const size = this._size;
         if (size === 0) {
-            return err(new StackUnderflowError());
+            return EMPTY_UNDERFLOW as Result<T, StackUnderflowError>;
         }
         const targetIdx = (size - 1) | 0;
         const chunkIdx = targetIdx >>> CHUNK_SHIFT;
@@ -313,7 +318,7 @@ export class ChunkedStack<T> {
         }
         const size = this._size;
         if (size === 0) {
-            return err(new StackUnderflowError());
+            return EMPTY_UNDERFLOW as Result<T, StackUnderflowError>;
         }
         const targetIdx = (size - 1) | 0;
         const chunkIdx = targetIdx >>> CHUNK_SHIFT;
