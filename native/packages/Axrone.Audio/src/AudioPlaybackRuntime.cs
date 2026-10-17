@@ -492,6 +492,25 @@ public sealed class AudioPlaybackRuntime : IDisposable
         }
     }
 
+    /// <summary>Pushes fresh spatialization into a live voice by source.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryUpdateSpatial(AudioSourceId sourceId, in AudioSpatialization spatial)
+    {
+        lock (_gate)
+        {
+            for (int i = 0; i < _maxVoices; i++)
+            {
+                if (_voices[i].IsActive && _voices[i].SourceId == sourceId)
+                {
+                    _voices[i].Spatial = spatial;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int FindVoiceIndex(in AudioPlaybackHandle handle)
     {
