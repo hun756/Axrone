@@ -9,6 +9,8 @@ export {
     createNodeId,
 } from './stack';
 
+export { ChunkedStack } from './chunked-stack';
+
 export type {
     StackCapacity,
     StackSize,
