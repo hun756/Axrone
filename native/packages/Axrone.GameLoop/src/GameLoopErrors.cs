@@ -164,6 +164,11 @@ internal static class GameLoopThrowHelper
     public static void ThrowInvalidCapacity(int value) =>
         throw new GameLoopConfigurationException("loop.invalid-capacity", $"Capacity {value} must be positive.");
 
+    /// <summary>Throws when the loop is used after disposal.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDisposed(string entity) => throw new GameLoopDisposedException($"'{entity}' has already been disposed.");
+
     /// <summary>Throws for a duplicate system.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
