@@ -296,6 +296,17 @@ export class ChunkedStack<T> {
         return this._chunks[chunkIdx]![slotIdx] as T;
     }
 
+    peekUnsafe(): T | undefined {
+        const size = this._size;
+        if (size === 0) {
+            return undefined;
+        }
+        const targetIdx = (size - 1) | 0;
+        const chunkIdx = targetIdx >>> CHUNK_SHIFT;
+        const slotIdx = targetIdx & CHUNK_MASK;
+        return this._chunks[chunkIdx]![slotIdx] as T;
+    }
+
     tryPeek(): Result<T, StackUnderflowError | StackDisposedError> {
         if (this._lifecycle !== LIFECYCLE_ACTIVE) {
             return err(new StackDisposedError(this.id, this._disposedReason));
