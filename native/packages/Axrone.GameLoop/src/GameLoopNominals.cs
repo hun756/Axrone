@@ -292,9 +292,9 @@ public readonly record struct SystemPriority(int Value) :
     /// <summary>Low priority.</summary>
     public static SystemPriority Low => new(-100);
 
-    /// <summary>Compares descending: higher priority sorts first.</summary>
+    /// <summary>Compares ascending by value; registries sort descending explicitly.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(SystemPriority other) => other.Value.CompareTo(Value);
+    public int CompareTo(SystemPriority other) => Value.CompareTo(other.Value);
 
     /// <summary>Determines whether the left priority sorts after the right one.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
