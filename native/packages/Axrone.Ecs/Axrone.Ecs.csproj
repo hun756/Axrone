@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Ecs</RootNamespace>
+    <AssemblyName>Axrone.Ecs</AssemblyName>
+    <Description>Archetype Entity-Component-System with chunk queries and policy-monomorphized jobs for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Implicit operators need named alternatives — the nominal
+         comparison surface is complete without them. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1051: Visible instance fields — mask words and transition caches
+         are explicit wire-layout payloads, not encapsulation boundaries. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — ECS errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1028: byte-backed ECS enums — wire-sized discriminants
+         matching the lookup and command encoding, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on transient structs — lookup outcomes are consumed
+         by kind switch, never compared; elementwise Equals is dead surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1819: Properties returning arrays — attribute arguments only
+         support arrays for dependency and tag lists. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Ecs.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
