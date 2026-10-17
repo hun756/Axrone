@@ -13,10 +13,10 @@ using Axrone.Utility.Backoff;
 /// <typeparam name="TMetrics">Queue telemetry sink.</typeparam>
 public sealed class LockFreeInputRingBuffer<TBackoff, TMetrics> :
     IInputEventQueue, IAsyncDisposable
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
     where TMetrics : struct, IInputMetricsSink
 {
-    private readonly VyukovBoundedBatchQueue<RawInputEvent, BackoffAdapter<TBackoff>> _inner;
+    private readonly VyukovBoundedBatchQueue<RawInputEvent, TBackoff> _inner;
     private int _completed;
     private int _disposed;
 
@@ -27,7 +27,7 @@ public sealed class LockFreeInputRingBuffer<TBackoff, TMetrics> :
     public LockFreeInputRingBuffer(QueueCapacity capacity)
     {
         Capacity = capacity;
-        _inner = new VyukovBoundedBatchQueue<RawInputEvent, BackoffAdapter<TBackoff>>(
+        _inner = new VyukovBoundedBatchQueue<RawInputEvent, TBackoff>(
             new BufferCapacity(capacity.Value));
     }
 
@@ -121,24 +121,4 @@ public sealed class LockFreeInputRingBuffer<TBackoff, TMetrics> :
 
     /// <summary>Finalizer releases the queue when Dispose was skipped.</summary>
     ~LockFreeInputRingBuffer() => Dispose();
-
-    /// <summary>
-    /// Bridges the input backoff policy to the shared spin-backoff contract.
-    /// </summary>
-    /// <typeparam name="TPolicy">Input contention backoff policy.</typeparam>
-    private readonly struct BackoffAdapter<TPolicy> : ISpinBackoff
-        where TPolicy : struct, IBackoffPolicy
-    {
-        /// <inheritdoc/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Initialize(out int state) => state = 0;
-
-        /// <inheritdoc/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Advance(ref int state) => TPolicy.SpinOnce(ref state);
-
-        /// <inheritdoc/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Reset(ref int state) => state = 0;
-    }
 }

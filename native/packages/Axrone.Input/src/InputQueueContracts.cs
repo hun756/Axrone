@@ -40,15 +40,6 @@ public interface IAsyncDrainable
 }
 
 /// <summary>
-/// Contention backoff for lock-free loops. Monomorphized, no vtable.
-/// </summary>
-public interface IBackoffPolicy
-{
-    /// <summary>Backs off once, advancing the iteration cursor.</summary>
-    static abstract void SpinOnce(ref int iteration);
-}
-
-/// <summary>
 /// Zero-cost queue telemetry. Monomorphized, no vtable.
 /// </summary>
 public interface IInputMetricsSink
@@ -147,18 +138,22 @@ public readonly record struct QueueCapacity :
 /// <summary>
 /// Adaptive backoff: spins with growth, then yields.
 /// </summary>
-public readonly struct AdaptiveBackoff : IBackoffPolicy
+public readonly struct AdaptiveBackoff : ISpinBackoff
 {
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Initialize(out int state) => state = 0;
+
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void SpinOnce(ref int iteration)
+    public static void Advance(ref int state)
     {
-        iteration++;
-        if ((uint)iteration <= 10)
+        state++;
+        if ((uint)state <= 10)
         {
-            Thread.SpinWait(1 << iteration);
+            Thread.SpinWait(1 << state);
         }
-        else if ((uint)iteration <= 20)
+        else if ((uint)state <= 20)
         {
             Thread.SpinWait(1024);
         }
@@ -167,20 +162,32 @@ public readonly struct AdaptiveBackoff : IBackoffPolicy
             Thread.Yield();
         }
     }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Reset(ref int state) => state = 0;
 }
 
 /// <summary>
 /// Minimal fixed-spin backoff for short critical sections.
 /// </summary>
-public readonly struct SpinWaitBackoff : IBackoffPolicy
+public readonly struct SpinWaitBackoff : ISpinBackoff
 {
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void SpinOnce(ref int iteration)
+    public static void Initialize(out int state) => state = 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Advance(ref int state)
     {
-        iteration++;
+        state++;
         Thread.SpinWait(4);
     }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Reset(ref int state) => state = 0;
 }
 
 /// <summary>

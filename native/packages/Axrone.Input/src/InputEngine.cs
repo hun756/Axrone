@@ -20,7 +20,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         List<Axrone.Event.Hub.SubscriptionToken>> _tokens = new();
     private readonly Axrone.Event.Hub.EventHub<
         InputActionCallbackContext<TSchema>,
-        Axrone.Event.Hub.AdaptiveBackoff,
+        Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
         Axrone.Event.Hub.NullMetricsSink> _hub;
     private readonly ConsumedControls _consumed = new();
     private readonly List<InputTextEntry> _text = new();
@@ -41,7 +41,7 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
         _vectorDefs = new InputVector2ActionDefinition?[_actionCount];
         _hub = new Axrone.Event.Hub.EventHub<
             InputActionCallbackContext<TSchema>,
-            Axrone.Event.Hub.AdaptiveBackoff,
+            Axrone.Utility.Backoff.SpinPolicies.AdaptiveSpinBackoff,
             Axrone.Event.Hub.NullMetricsSink>(new Axrone.Event.Hub.EventHubOptions
             {
                 MaxSubscribers = 32,

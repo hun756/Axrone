@@ -8,7 +8,7 @@ namespace Axrone.Input;
 /// <typeparam name="TBackoff">Queue contention backoff policy.</typeparam>
 /// <typeparam name="TMetrics">Queue telemetry sink.</typeparam>
 public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery, IDisposable
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
     where TMetrics : struct, IInputMetricsSink
 {
     private readonly LockFreeInputRingBuffer<TBackoff, TMetrics> _ringBuffer;
