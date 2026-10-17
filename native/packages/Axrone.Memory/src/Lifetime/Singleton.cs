@@ -21,7 +21,7 @@ public class Singleton<T, TFactory, TBackoff, TDiagnostics> :
     IAsyncDisposable
     where T : class
     where TFactory : struct, ISingletonFactory<T>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, IDelayPolicy
     where TDiagnostics : struct, ISingletonDiagnostics
 {
     private readonly TBackoff _backoff;

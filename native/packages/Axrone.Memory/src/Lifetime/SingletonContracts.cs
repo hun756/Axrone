@@ -14,10 +14,10 @@ public interface ISingletonFactory<out T>
 }
 
 /// <summary>
-/// Policy controlling how the engine spaces retry and drain-wait attempts. Implementations
-/// must be mutable-free structs so the engine can store them without aliasing hazards.
+/// Delay policy controlling how the engine spaces retry and drain-wait
+/// attempts. Time-based (delays), unlike spin backoffs used in hot loops.
 /// </summary>
-public interface IBackoffPolicy
+public interface IDelayPolicy
 {
     /// <summary>Gets the maximum number of attempts the policy will space before giving up.</summary>
     int MaxAttempts { get; }
