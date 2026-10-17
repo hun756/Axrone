@@ -19,6 +19,20 @@ public readonly record struct AudioSourceDefinition(
     AudioSpatialization Spatial = default,
     float StartOffsetSeconds = 0.0f) : IDescriptor<AudioSourceDefinition>
 {
+    /// <summary>Flat-stereo default.</summary>
+    public static AudioSourceDefinition Default => new(
+        default,
+        default,
+        1.0f,
+        false,
+        false,
+        false,
+        1.0f,
+        0.0f,
+        0.0f,
+        AudioSpatialization.Default2D,
+        0.0f);
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Validate(in AudioSourceDefinition descriptor)
