@@ -1,14 +1,33 @@
 namespace Axrone.Audio;
 
 /// <summary>
-/// Listener transform descriptor.
+/// Listener tuning descriptor. Unmanaged and positional-compatible:
+/// the first four parameters keep their order so existing call sites
+/// compile unchanged. Occlusion layers collapse to a 32-bit mask and
+/// the string ambient clip becomes an <see cref="AudioClipId"/>; managed
+/// metadata stays out and arrives with the asset round.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public readonly record struct AudioListenerDescriptor(
     Vector3 Position = default,
     Vector3 Forward = default,
     Vector3 Up = default,
-    float GlobalVolume = 1.0f)
+    float GlobalVolume = 1.0f,
+    float DopplerFactor = 1.0f,
+    AudioSpeakerMode SpeakerMode = AudioSpeakerMode.Stereo,
+    int SampleRate = 48000,
+    int DspBufferSize = 1024,
+    int RealVoices = 32,
+    int VirtualVoices = 128,
+    AudioVirtualVoiceBehavior VirtualVoiceBehavior = AudioVirtualVoiceBehavior.PlaySilent,
+    AudioHrtfPlugin HrtfPlugin = AudioHrtfPlugin.None,
+    AudioOcclusionMode OcclusionMode = AudioOcclusionMode.RaycastDiffraction,
+    uint OcclusionMask = 0xC9U,
+    AudioReverbPreset ReverbPreset = AudioReverbPreset.Off,
+    float ReverbLevel = 0.0f,
+    AudioClipId AmbientClip = default,
+    float AmbientVolume = 0.5f,
+    bool FollowCamera = true)
 {
     /// <summary>Origin-facing listener at unity gain.</summary>
     public static AudioListenerDescriptor Default => new(
