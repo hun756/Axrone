@@ -1,5 +1,4 @@
-declare const __brand: unique symbol;
-type Brand<T, B> = T & { readonly [__brand]: B };
+import { type Brand, ok, err, type Result } from '@axrone/utility';
 
 type StackCapacity = Brand<number, "StackCapacity">;
 type StackId = Brand<string, "StackId">;
@@ -23,25 +22,6 @@ function generateStackId(): StackId {
     assertStackId(candidate);
     return candidate;
 }
-
-type Result<T, E> =
-    | { readonly ok: true; readonly value: T }
-    | { readonly ok: false; readonly error: E };
-
-function ok<T>(value: T): Result<T, never> {
-    return { ok: true, value };
-}
-
-function err<E>(error: E): Result<never, E> {
-    return { ok: false, error };
-}
-
-const OK_VOID: Result<void, never> = Object.freeze({ ok: true, value: undefined });
-
-const EMPTY_UNDERFLOW: Result<never, StackUnderflowError> = Object.freeze({
-    ok: false,
-    error: new StackUnderflowError(),
-});
 
 class StackUnderflowError extends Error {
     readonly _tag = "StackUnderflowError" as const;
@@ -155,7 +135,11 @@ function allocatePackedChunk<T>(): (T | undefined)[] {
     return chunk;
 }
 
-export class ChunkedStack<T> {
+const OK_VOID: Result<void, never> = ok();
+
+const EMPTY_UNDERFLOW: Result<never, StackUnderflowError> = err(new StackUnderflowError());
+
+export class Stack<T> {
     readonly id: StackId;
     private _chunks: (T | undefined)[][];
     private _chunkCount: number;
@@ -515,20 +499,20 @@ export class ChunkedStack<T> {
         throw new StackDisposedError(this.id, this._disposedReason);
     }
 
-    static create<T>(): ChunkedStack<T> {
+    static create<T>(): Stack<T> {
         const capacity = Number.MAX_SAFE_INTEGER;
         assertStackCapacity(capacity);
-        return new ChunkedStack<T>(
+        return new Stack<T>(
             generateStackId(),
             capacity,
             MonomorphicNoOpMetricsSink
         );
     }
 
-    static from<T>(items: readonly T[]): ChunkedStack<T> {
+    static from<T>(items: readonly T[]): Stack<T> {
         const capacity = Number.MAX_SAFE_INTEGER;
         assertStackCapacity(capacity);
-        const stack = new ChunkedStack<T>(
+        const stack = new Stack<T>(
             generateStackId(),
             capacity,
             MonomorphicNoOpMetricsSink
