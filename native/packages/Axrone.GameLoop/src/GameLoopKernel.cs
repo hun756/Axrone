@@ -395,6 +395,68 @@ public sealed class GameLoopKernel<TState, TClock, TSpiral, TError> : IDisposabl
         }
     }
 
+    /// <summary>Captures a versioned snapshot.</summary>
+    public GameLoopSnapshot<TState> CaptureSnapshot(in TState state)
+    {
+        if (Status == GameLoopStatus.Disposed)
+        {
+            GameLoopThrowHelper.ThrowDisposed(nameof(GameLoopKernel<TState, TClock, TSpiral, TError>));
+        }
+
+        return new GameLoopSnapshot<TState>(
+            SnapshotVersion.Initial,
+            Status,
+            state,
+            Frame,
+            Elapsed,
+            GameTime.FromMilliseconds(Volatile.Read(ref _storage.AccumulatorMilliseconds)),
+            FixedStep,
+            MaxDelta,
+            MaxSubSteps,
+            TimeScale,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    }
+
+    /// <summary>Restores a snapshot, pausing first when running.</summary>
+    public void RestoreSnapshot(in GameLoopSnapshot<TState> snapshot, out TState restoredState)
+    {
+        if (Status == GameLoopStatus.Disposed)
+        {
+            GameLoopThrowHelper.ThrowDisposed(nameof(GameLoopKernel<TState, TClock, TSpiral, TError>));
+        }
+
+        lock (_transitionGate)
+        {
+            TransitionToPaused();
+
+            restoredState = snapshot.State;
+            Volatile.Write(ref _storage.FrameNumber, snapshot.Frame.Value);
+            Volatile.Write(ref _storage.ElapsedMilliseconds, snapshot.Elapsed.TotalMilliseconds);
+            Volatile.Write(ref _storage.AccumulatorMilliseconds, snapshot.Accumulator.TotalMilliseconds);
+            Volatile.Write(ref _storage.FixedStepMilliseconds, snapshot.FixedDelta.TotalMilliseconds);
+            Volatile.Write(ref _storage.MaxDeltaMilliseconds, snapshot.MaxDelta.TotalMilliseconds);
+            Volatile.Write(ref _storage.MaxSubStepsAllowed, snapshot.MaxSubSteps);
+            Volatile.Write(ref _storage.TimeScaleMultiplier, snapshot.TimeScale.Value);
+            _storage.LastTimestampMilliseconds = TClock.Now().TotalMilliseconds;
+
+            switch (snapshot.Status)
+            {
+                case GameLoopStatus.Running:
+                    TransitionToRunning();
+                    break;
+                case GameLoopStatus.Paused:
+                    Volatile.Write(ref _storage.AtomicStatus, (int)GameLoopStatus.Paused);
+                    break;
+                case GameLoopStatus.Stopped:
+                case GameLoopStatus.Idle:
+                    Volatile.Write(ref _storage.AtomicStatus, (int)snapshot.Status);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
