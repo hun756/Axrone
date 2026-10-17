@@ -1,5 +1,7 @@
 namespace Axrone.Audio;
 
+using Axrone.Utility.Descriptors;
+
 /// <summary>
 /// Distance attenuation model.
 /// </summary>
@@ -51,7 +53,51 @@ public readonly record struct AudioSpatialAttenuation(
     float RefDistance = 1.0f,
     float MaxDistance = 10000.0f,
     float RolloffFactor = 1.0f,
-    float MinGain = 0.0f);
+    float MinGain = 0.0f) : IDescriptor<AudioSpatialAttenuation>
+{
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in AudioSpatialAttenuation descriptor)
+    {
+        if (descriptor.Model is not
+            (AudioDistanceModel.None or
+            AudioDistanceModel.Linear or
+            AudioDistanceModel.Inverse or
+            AudioDistanceModel.Exponential))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation model is unknown.");
+        }
+
+        if (!float.IsFinite(descriptor.RefDistance) || descriptor.RefDistance <= 0.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation reference distance must be positive and finite.");
+        }
+
+        if (!float.IsFinite(descriptor.MaxDistance) || descriptor.MaxDistance <= 0.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation max distance must be positive and finite.");
+        }
+
+        if (descriptor.MaxDistance < descriptor.RefDistance)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation max distance must not be below the reference distance.");
+        }
+
+        if (!float.IsFinite(descriptor.RolloffFactor))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation rolloff factor must be finite.");
+        }
+
+        if (!float.IsFinite(descriptor.MinGain) || descriptor.MinGain < 0.0f || descriptor.MinGain > 1.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Attenuation minimum gain must be in [0, 1].");
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in AudioSpatialAttenuation descriptor) => descriptor.ToString();
+}
 
 /// <summary>
 /// Full spatialization descriptor for one voice.
@@ -65,7 +111,7 @@ public readonly record struct AudioSpatialization(
     AudioPanningModel PanningModel = AudioPanningModel.EqualPower,
     float ConeInnerAngle = 360.0f,
     float ConeOuterAngle = 360.0f,
-    float ConeOuterGain = 0.0f)
+    float ConeOuterGain = 0.0f) : IDescriptor<AudioSpatialization>
 {
     /// <summary>Flat stereo default.</summary>
     public static AudioSpatialization Default2D => new(
@@ -80,6 +126,58 @@ public readonly record struct AudioSpatialization(
         Vector3.Zero,
         -Vector3.UnitZ,
         new AudioSpatialAttenuation(AudioDistanceModel.Inverse));
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in AudioSpatialization descriptor)
+    {
+        if (descriptor.Mode is not (AudioSpatialMode.TwoDimensional or AudioSpatialMode.ThreeDimensional))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization mode is unknown.");
+        }
+
+        if (!float.IsFinite(descriptor.Position.X) || !float.IsFinite(descriptor.Position.Y) || !float.IsFinite(descriptor.Position.Z))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization position must be finite.");
+        }
+
+        if (!float.IsFinite(descriptor.Orientation.X) || !float.IsFinite(descriptor.Orientation.Y) || !float.IsFinite(descriptor.Orientation.Z))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization orientation must be finite.");
+        }
+
+        if (descriptor.PanningModel is not (AudioPanningModel.EqualPower or AudioPanningModel.Linear))
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization panning model is unknown.");
+        }
+
+        if (!float.IsFinite(descriptor.ConeInnerAngle) || descriptor.ConeInnerAngle < 0.0f || descriptor.ConeInnerAngle > 360.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization cone inner angle must be in [0, 360].");
+        }
+
+        if (!float.IsFinite(descriptor.ConeOuterAngle) || descriptor.ConeOuterAngle < 0.0f || descriptor.ConeOuterAngle > 360.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization cone outer angle must be in [0, 360].");
+        }
+
+        if (descriptor.ConeOuterAngle < descriptor.ConeInnerAngle)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization cone outer angle must not be below the inner angle.");
+        }
+
+        if (!float.IsFinite(descriptor.ConeOuterGain) || descriptor.ConeOuterGain < 0.0f || descriptor.ConeOuterGain > 1.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Spatialization cone outer gain must be in [0, 1].");
+        }
+
+        AudioSpatialAttenuation attenuation = descriptor.Attenuation;
+        AudioSpatialAttenuation.Validate(in attenuation);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in AudioSpatialization descriptor) => descriptor.ToString();
 }
 
 /// <summary>

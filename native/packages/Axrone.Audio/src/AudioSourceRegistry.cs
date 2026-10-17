@@ -1,5 +1,7 @@
 namespace Axrone.Audio;
 
+using Axrone.Utility.Descriptors;
+
 /// <summary>
 /// Source registration: tuning plus clip and bus bindings.
 /// </summary>
@@ -15,7 +17,45 @@ public readonly record struct AudioSourceDefinition(
     float DetuneCents = 0.0f,
     float Pan = 0.0f,
     AudioSpatialization Spatial = default,
-    float StartOffsetSeconds = 0.0f);
+    float StartOffsetSeconds = 0.0f) : IDescriptor<AudioSourceDefinition>
+{
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in AudioSourceDefinition descriptor)
+    {
+        if (!float.IsFinite(descriptor.Volume) || descriptor.Volume < 0.0f || descriptor.Volume > 4.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source volume must be in [0, 4].");
+        }
+
+        if (!float.IsFinite(descriptor.PlaybackRate) || descriptor.PlaybackRate < 0.25f || descriptor.PlaybackRate > 4.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source playback rate must be in [0.25, 4].");
+        }
+
+        if (!float.IsFinite(descriptor.DetuneCents) || descriptor.DetuneCents < -1200.0f || descriptor.DetuneCents > 1200.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source detune must be in [-1200, 1200] cents.");
+        }
+
+        if (!float.IsFinite(descriptor.Pan) || descriptor.Pan < -1.0f || descriptor.Pan > 1.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source pan must be in [-1, 1].");
+        }
+
+        if (!float.IsFinite(descriptor.StartOffsetSeconds) || descriptor.StartOffsetSeconds < 0.0f)
+        {
+            AudioThrowHelper.ThrowConfig("audio.invalid-source", "Source start offset must be non-negative and finite.");
+        }
+
+        AudioSpatialization spatial = descriptor.Spatial;
+        AudioSpatialization.Validate(in spatial);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in AudioSourceDefinition descriptor) => descriptor.ToString();
+}
 
 /// <summary>
 /// Slot-indexed source store with one active voice per source.
