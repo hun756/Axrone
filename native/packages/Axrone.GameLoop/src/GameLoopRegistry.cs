@@ -5,7 +5,7 @@ namespace Axrone.GameLoop;
 /// per-phase dispatch with policy-driven error handling.
 /// </summary>
 /// <typeparam name="TState">Frame state type.</typeparam>
-public sealed class SystemRegistry<TState> where TState : struct
+public sealed class SystemRegistry<TState> : IDisposable where TState : struct
 {
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     public struct RegisteredNode
@@ -175,10 +175,12 @@ public sealed class SystemRegistry<TState> where TState : struct
         }
     }
 
+    /// <inheritdoc/>
+    public void Dispose() => Clear();
+
     /// <summary>Whether a system is registered.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains(SystemId id)
-    {
+    public bool Contains(SystemId id)    {
         ReadOnlySpan<RegisteredNode> span = _nodes.AsSpan(0, Volatile.Read(ref _count));
         for (int i = 0; i < span.Length; i++)
         {
