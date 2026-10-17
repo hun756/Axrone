@@ -1,131 +1,27 @@
 import { type Brand, ok, err, type Result } from '@axrone/utility';
-
-type StackCapacity = Brand<number, "StackCapacity">;
-type StackId = Brand<string, "StackId">;
-
-function assertStackCapacity(value: number): asserts value is StackCapacity {
-    if (!Number.isSafeInteger(value) || value <= 0) {
-        throw new RangeError(`Capacity must be a positive safe integer. Received: ${value}`);
-    }
-}
-
-function assertStackId(value: string): asserts value is StackId {
-    if (value.length === 0) {
-        throw new RangeError("Stack identifier cannot be empty.");
-    }
-}
-
-let globalStackSequence = 0;
-function generateStackId(): StackId {
-    globalStackSequence = (globalStackSequence + 1) | 0;
-    const candidate = `stk_${Date.now().toString(36)}_${globalStackSequence.toString(36)}`;
-    assertStackId(candidate);
-    return candidate;
-}
-
-class StackUnderflowError extends Error {
-    readonly _tag = "StackUnderflowError" as const;
-    constructor() {
-        super("Stack underflow: cannot pop or peek from an empty stack.");
-        this.name = "StackUnderflowError";
-    }
-}
-
-class StackOverflowError extends Error {
-    readonly _tag = "StackOverflowError" as const;
-    readonly limit: number;
-    constructor(limit: number) {
-        super(`Stack overflow: maximum capacity ${limit} reached.`);
-        this.name = "StackOverflowError";
-        this.limit = limit;
-    }
-}
-
-class StackDisposedError extends Error {
-    readonly _tag = "StackDisposedError" as const;
-    readonly id: StackId;
-    readonly cause: Error | undefined;
-    constructor(id: StackId, cause?: Error | undefined) {
-        super(`Stack '${id}' is disposed and cannot process operations.`);
-        this.name = "StackDisposedError";
-        this.id = id;
-        this.cause = cause;
-    }
-}
-
-class StackAbortError extends Error {
-    readonly _tag = "StackAbortError" as const;
-    readonly reason: unknown;
-    constructor(reason: unknown) {
-        super(`Stack operation was aborted: ${String(reason)}`);
-        this.name = "StackAbortError";
-        this.reason = reason;
-    }
-}
-
-type StackError =
-    | StackUnderflowError
-    | StackOverflowError
-    | StackDisposedError
-    | StackAbortError;
-
-const LIFECYCLE_ACTIVE = 0 as const;
-const LIFECYCLE_DISPOSED = 1 as const;
-type Lifecycle = typeof LIFECYCLE_ACTIVE | typeof LIFECYCLE_DISPOSED;
-
-interface IStackMetricsSink {
-    onPush(): void;
-    onPop(): void;
-    onChunkAllocated(): void;
-    onChunkDeallocated(): void;
-}
-
-const MonomorphicNoOpMetricsSink: Readonly<IStackMetricsSink> = Object.freeze({
-    onPush(): void {},
-    onPop(): void {},
-    onChunkAllocated(): void {},
-    onChunkDeallocated(): void {},
-});
-
-const ITERATOR_DONE: IteratorReturnResult<undefined> = Object.freeze({
-    done: true,
-    value: undefined,
-});
-
-class ChunkedStackIterator<T> implements Iterator<T> {
-    private readonly _chunks: readonly (readonly (T | undefined)[])[];
-    private _cursor: number;
-
-    constructor(
-        chunks: readonly (readonly (T | undefined)[])[],
-        size: number
-    ) {
-        this._chunks = chunks;
-        this._cursor = (size - 1) | 0;
-    }
-
-    next(): IteratorResult<T> {
-        const cursor = this._cursor;
-        if (cursor < 0) {
-            return ITERATOR_DONE;
-        }
-        this._cursor = (cursor - 1) | 0;
-        const chunkIdx = cursor >>> 6;
-        const slotIdx = cursor & 63;
-        const chunk = this._chunks[chunkIdx];
-        if (chunk === undefined) {
-            return ITERATOR_DONE;
-        }
-        const value = chunk[slotIdx] as T;
-        return { done: false, value };
-    }
-}
-
-const CHUNK_SIZE = 64 as const;
-const CHUNK_MASK = 63 as const;
-const CHUNK_SHIFT = 6 as const;
-const MAX_POOLED_CHUNKS = 4 as const;
-const HYSTERESIS_THRESHOLD = 2 as const;
+import {
+    type StackCapacity,
+    type StackId,
+    assertStackCapacity,
+    generateStackId,
+    LIFECYCLE_ACTIVE,
+    LIFECYCLE_DISPOSED,
+    type Lifecycle,
+    type IStackMetricsSink,
+    MonomorphicNoOpMetricsSink,
+    CHUNK_SIZE,
+    CHUNK_MASK,
+    CHUNK_SHIFT,
+    MAX_POOLED_CHUNKS,
+    HYSTERESIS_THRESHOLD,
+} from './types';
+import {
+    StackUnderflowError,
+    StackOverflowError,
+    StackDisposedError,
+    StackAbortError,
+} from './errors';
+import { ChunkedStackIterator } from './iterator';
 
 function allocatePackedChunk<T>(): (T | undefined)[] {
     const chunk: (T | undefined)[] = new Array(CHUNK_SIZE);
@@ -136,7 +32,6 @@ function allocatePackedChunk<T>(): (T | undefined)[] {
 }
 
 const OK_VOID: Result<void, never> = ok();
-
 const EMPTY_UNDERFLOW: Result<never, StackUnderflowError> = err(new StackUnderflowError());
 
 export class Stack<T> {
