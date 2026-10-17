@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.GameLoop</RootNamespace>
+    <AssemblyName>Axrone.GameLoop</AssemblyName>
+    <Description>Fixed-step game loop with phase systems, spiral mitigation and snapshots for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Implicit operators need named alternatives — the nominal
+         comparison surface is complete without them. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1051: Visible instance fields — explicit-layout payloads and
+         phase context fields are intentional wire layouts. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — game-loop errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1028: byte-backed game-loop enums — wire-sized discriminants
+         matching the phase and state encoding, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.GameLoop.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
