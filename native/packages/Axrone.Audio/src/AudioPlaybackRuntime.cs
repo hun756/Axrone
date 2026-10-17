@@ -460,6 +460,38 @@ public sealed class AudioPlaybackRuntime : IDisposable
         return victim;
     }
 
+    /// <summary>Reads an active voice state.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetState(in AudioPlaybackHandle handle, out AudioPlaybackState state)
+    {
+        lock (_gate)
+        {
+            int idx = FindVoiceIndex(in handle);
+            if (idx < 0)
+            {
+                state = AudioPlaybackState.Stopped;
+                return false;
+            }
+
+            state = _voices[idx].State;
+            return _voices[idx].IsActive;
+        }
+    }
+
+    /// <summary>Pushes fresh spatialization into a live voice.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void UpdateSpatial(in AudioPlaybackHandle handle, in AudioSpatialization spatial)
+    {
+        lock (_gate)
+        {
+            int idx = FindVoiceIndex(in handle);
+            if (idx >= 0)
+            {
+                _voices[idx].Spatial = spatial;
+            }
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int FindVoiceIndex(in AudioPlaybackHandle handle)
     {

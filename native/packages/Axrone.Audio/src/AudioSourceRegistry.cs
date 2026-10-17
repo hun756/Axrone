@@ -14,7 +14,8 @@ public readonly record struct AudioSourceDefinition(
     float PlaybackRate = 1.0f,
     float DetuneCents = 0.0f,
     float Pan = 0.0f,
-    AudioSpatialization Spatial = default);
+    AudioSpatialization Spatial = default,
+    float StartOffsetSeconds = 0.0f);
 
 /// <summary>
 /// Slot-indexed source store with one active voice per source.
@@ -127,6 +128,23 @@ public sealed class AudioSourceRegistry
             volume,
             1.0f,
             0.0f);
+    }
+
+    /// <summary>Reads the committed playback state.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetPlaybackState(AudioSourceId id, out AudioPlaybackState state)
+    {
+        lock (_gate)
+        {
+            uint idx = id.Value;
+            if (idx >= (uint)_maxSources || !_sources[idx].IsRegistered)
+            {
+                state = AudioPlaybackState.Stopped;
+                return false;
+            }
+
+            return _runtime.TryGetState(in _sources[idx].ActiveHandle, out state);
+        }
     }
 
     /// <summary>Pauses a source.</summary>
