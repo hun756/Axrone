@@ -30,6 +30,12 @@
     <!-- CA1028: byte-backed game-loop enums — wire-sized discriminants
          matching the phase and state encoding, intentional. -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy structs carry
+         no state to compare; elementwise Equals would be unused surface. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — policy monomorphization
+         exposes static abstracts on generic structs by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
