@@ -21,14 +21,13 @@ public sealed class LockFreeInputRingBuffer<TBackoff, TMetrics> :
     private int _disposed;
 
     /// <summary>Queue capacity.</summary>
-    public QueueCapacity Capacity { get; }
+    public BufferCapacity Capacity { get; }
 
     /// <summary>Creates a queue with the given capacity.</summary>
-    public LockFreeInputRingBuffer(QueueCapacity capacity)
+    public LockFreeInputRingBuffer(BufferCapacity capacity)
     {
         Capacity = capacity;
-        _inner = new VyukovBoundedBatchQueue<RawInputEvent, TBackoff>(
-            new BufferCapacity(capacity.Value));
+        _inner = new VyukovBoundedBatchQueue<RawInputEvent, TBackoff>(capacity);
     }
 
     /// <inheritdoc/>

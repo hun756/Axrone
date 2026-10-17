@@ -1,5 +1,7 @@
 namespace Axrone.Input;
 
+using Axrone.Collections;
+
 /// <summary>
 /// Writes one event without blocking.
 /// </summary>
@@ -65,7 +67,7 @@ public interface IInputEventQueue :
     IDisposable
 {
     /// <summary>Queue capacity.</summary>
-    QueueCapacity Capacity { get; }
+    BufferCapacity Capacity { get; }
 
     /// <summary>Enqueues an event; <see langword="false"/> when full or completed.</summary>
     bool TryEnqueue(in RawInputEvent evt);
@@ -76,63 +78,6 @@ public interface IInputEventQueue :
     /// <summary>Rejects further writes; readers drain what remains.</summary>
     /// <param name="failure">Optional terminal error.</param>
     void Complete(Exception? failure = null);
-}
-
-/// <summary>
-/// Power-of-two queue capacity with its index mask.
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct QueueCapacity :
-    IComparable<QueueCapacity>,
-    IComparisonOperators<QueueCapacity, QueueCapacity, bool>
-{
-    /// <summary>Slot count.</summary>
-    public uint Value { get; }
-
-    /// <summary>Index mask (capacity minus one).</summary>
-    public uint Mask { get; }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private QueueCapacity(uint value)
-    {
-        Value = value;
-        Mask = value - 1;
-    }
-
-    /// <summary>Creates a capacity; must be a power of two, at least two.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static QueueCapacity Create(uint powerOfTwoCapacity)
-    {
-        if (powerOfTwoCapacity < 2 || (powerOfTwoCapacity & (powerOfTwoCapacity - 1)) != 0)
-        {
-            ThrowHelper.ThrowMustBePowerOfTwo();
-        }
-        return new QueueCapacity(powerOfTwoCapacity);
-    }
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(QueueCapacity other) => Value.CompareTo(other.Value);
-
-    /// <summary>Determines whether the left capacity is smaller.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(QueueCapacity left, QueueCapacity right) => left.Value < right.Value;
-
-    /// <summary>Determines whether the left capacity is larger.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(QueueCapacity left, QueueCapacity right) => left.Value > right.Value;
-
-    /// <summary>Determines whether the left capacity is smaller or equal.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(QueueCapacity left, QueueCapacity right) => left.Value <= right.Value;
-
-    /// <summary>Determines whether the left capacity is larger or equal.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(QueueCapacity left, QueueCapacity right) => left.Value >= right.Value;
-
-    /// <summary>Unwraps the slot count.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator uint(QueueCapacity capacity) => capacity.Value;
 }
 
 /// <summary>

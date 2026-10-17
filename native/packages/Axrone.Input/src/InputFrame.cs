@@ -52,7 +52,7 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     public IReadOnlyList<char> FrameText => _frameText;
 
     /// <summary>Creates a coordinator with the given queue capacity.</summary>
-    public InputFrameCoordinator(QueueCapacity capacity)
+    public InputFrameCoordinator(BufferCapacity capacity)
     {
         _ringBuffer = new LockFreeInputRingBuffer<TBackoff, TMetrics>(capacity);
         _current = default;
@@ -62,7 +62,7 @@ public sealed class InputFrameCoordinator<TBackoff, TMetrics> : IInputStateQuery
     /// <summary>Creates a coordinator with a raw slot count.</summary>
     /// <param name="queueCapacity">Power-of-two slot count.</param>
     public InputFrameCoordinator(uint queueCapacity = 4096)
-        : this(QueueCapacity.Create(queueCapacity))
+        : this(new BufferCapacity(queueCapacity))
     {
     }
 
