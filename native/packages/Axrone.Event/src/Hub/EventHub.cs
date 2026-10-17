@@ -1,5 +1,8 @@
 namespace Axrone.Event.Hub;
 
+using Axrone.Utility.Backoff;
+using Axrone.Utility.Backoff.SpinPolicies;
+
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
 
@@ -196,7 +199,7 @@ internal sealed class FilteredConsumer<TEvent, TConsumer, TFilter> : IEventConsu
 }
 
 public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>, IEventHub<TEvent>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, ISpinBackoff
     where TMetricsSink : struct, IEventMetricsSink
 {
     private const int StatusActive = 0;
@@ -611,14 +614,14 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
         TMetricsSink.OnDrainPhaseStarted();
 
         Volatile.Write(ref _consumer.DrainSignaled, 1);
-        int spinCycles = 0;
+        TBackoff.Initialize(out int spinCycles);
 
         while (Volatile.Read(ref _producer.InFlightOperations) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (spinCycles < _options.SpinCyclesBudget)
             {
-                TBackoff.Step(ref spinCycles);
+                TBackoff.Advance(ref spinCycles);
             }
             else
             {
@@ -931,7 +934,7 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
     }
 }
 
-public sealed class EventHub<TEvent> : EventHub<TEvent, AdaptiveBackoff, NullMetricsSink>
+public sealed class EventHub<TEvent> : EventHub<TEvent, AdaptiveSpinBackoff, NullMetricsSink>
 {
     public EventHub() : base(new EventHubOptions()) { }
     public EventHub(EventHubOptions options) : base(options) { }
