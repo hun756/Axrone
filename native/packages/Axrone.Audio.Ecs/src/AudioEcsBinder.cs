@@ -119,8 +119,7 @@ public sealed class AudioEcsBinder : IDisposable
             }
 
             AudioListenerRef link = _world.GetComponent<AudioListenerRef>(entity);
-            _system.Listeners.Upsert(link.ListenerId, new AudioListenerDescriptor(
-                Vector3.Zero, Vector3.UnitZ, Vector3.UnitY, 1.0f));
+            _system.Listeners.Upsert(link.ListenerId, link.ToDescriptor());
             if (link.Active)
             {
                 _system.Listeners.SetActive(link.ListenerId);
@@ -164,8 +163,7 @@ public sealed class AudioEcsBinder : IDisposable
 
             foreach ((Entity _, AudioListenerRef link) in listeners)
             {
-                _system.Listeners.Upsert(link.ListenerId, new AudioListenerDescriptor(
-                    Vector3.Zero, Vector3.UnitZ, Vector3.UnitY, 1.0f));
+                _system.Listeners.Upsert(link.ListenerId, link.ToDescriptor());
                 if (link.Active)
                 {
                     _system.Listeners.SetActive(link.ListenerId);
