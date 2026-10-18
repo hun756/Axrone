@@ -10,3 +10,4 @@ global using System.Runtime.InteropServices;
 global using System.Runtime.Intrinsics;
 global using System.Threading;
 global using Axrone.Utility.Internal;
+global using Axrone.Utility.Slots;
