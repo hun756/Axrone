@@ -3,48 +3,6 @@ namespace Axrone.Geometry;
 using System.Globalization;
 
 /// <summary>
-/// Slot index into an octree item pool. The zero slot is live storage, so the
-/// invalid sentinel is the maximum value rather than a negative.
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct SlotIndex(uint Value) : IComparable<SlotIndex>
-{
-    /// <summary>Invalid sentinel; never a live item slot.</summary>
-    public static SlotIndex Invalid => new(uint.MaxValue);
-
-    /// <summary>Whether this index addresses a live item slot.</summary>
-    public bool IsValid
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Value != uint.MaxValue;
-    }
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public int CompareTo(SlotIndex other) => Value.CompareTo(other.Value);
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
-
-    /// <summary>Determines whether the left index sorts before the right one.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(SlotIndex left, SlotIndex right) => left.Value < right.Value;
-
-    /// <summary>Determines whether the left index sorts after the right one.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(SlotIndex left, SlotIndex right) => left.Value > right.Value;
-
-    /// <summary>Determines whether the left index sorts at or before the right one.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(SlotIndex left, SlotIndex right) => left.Value <= right.Value;
-
-    /// <summary>Determines whether the left index sorts at or after the right one.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(SlotIndex left, SlotIndex right) => left.Value >= right.Value;
-}
-
-/// <summary>
 /// Allocation epoch of an octree item slot, bumped every time the slot is
 /// recycled. A handle pairs a slot with the epoch observed at insert, so a
 /// handle held across a remove/realloc cycle no longer matches.
