@@ -1,5 +1,5 @@
 import type { IStackMetricsSink } from './types';
-import { ObjectPool, type ObjectPoolOptions } from '../pool';
+import { ObjectPool, type ObjectPoolOptions } from '../../pool';
 
 export interface ChunkPoolOptions<T>
     extends Omit<ObjectPoolOptions<(T | undefined)[]>, 'factory'> {
@@ -54,16 +54,20 @@ export class ChunkPool<T> {
         this._pool.clear();
     }
 
-    get size(): number {
-        return this._pool.size;
-    }
-
     get available(): number {
-        return this._pool.available;
+        return this._pool.getAvailableCount();
     }
 
-    dispose(): void {
-        this._pool.dispose();
+    get allocated(): number {
+        return this._pool.getAllocatedCount();
+    }
+
+    get total(): number {
+        return this._pool.getTotalCount();
+    }
+
+    [Symbol.dispose](): void {
+        this._pool[Symbol.dispose]();
     }
 }
 
@@ -102,8 +106,8 @@ export class StackChunkPoolAdapter<T> {
         this._pool.clear();
     }
 
-    dispose(): void {
+    [Symbol.dispose](): void {
         this.clear();
-        this._pool.dispose();
+        this._pool[Symbol.dispose]();
     }
 }
