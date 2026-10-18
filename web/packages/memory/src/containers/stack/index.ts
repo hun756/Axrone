@@ -25,3 +25,4 @@ export {
     MAX_POOLED_CHUNKS,
     HYSTERESIS_THRESHOLD,
 } from './types';
+export { ChunkPool, StackChunkPoolAdapter, type ChunkPoolOptions } from './pool-adapter';
