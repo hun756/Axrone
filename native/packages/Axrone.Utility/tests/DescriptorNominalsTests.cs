@@ -10,6 +10,8 @@ public class DescriptorNominalTests
     public void SlotIndex_Sentinel_And_Ordering()
     {
         SlotIndex.Invalid.Value.Should().Be(uint.MaxValue);
+        SlotIndex.Invalid.IsValid.Should().BeFalse();
+        new SlotIndex(0U).IsValid.Should().BeTrue();
         var a = new SlotIndex(0U);
         a.CompareTo(new SlotIndex(1U)).Should().BeNegative();
         var b = new SlotIndex(1U);
