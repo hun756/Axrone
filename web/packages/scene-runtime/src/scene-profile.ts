@@ -12,6 +12,10 @@ import {
     get3DSceneRuntimeProfile,
 } from './scene-3d-profile';
 import {
+    SCENE_MIXED_RUNTIME_PROFILE_ID,
+    getMixedSceneRuntimeProfile,
+} from './scene-mixed-profile';
+import {
     DEFAULT_SCENE_RUNTIME_PROFILE_ID,
     getDefaultSceneRuntimeProfile,
 } from './scene-full-profile';
@@ -32,9 +36,11 @@ export {
     DEFAULT_SCENE_RUNTIME_PROFILE_ID,
     SCENE_2D_RUNTIME_PROFILE_ID,
     SCENE_3D_RUNTIME_PROFILE_ID,
+    SCENE_MIXED_RUNTIME_PROFILE_ID,
     getCoreSceneRuntimeProfile,
     get2DSceneRuntimeProfile,
     get3DSceneRuntimeProfile,
+    getMixedSceneRuntimeProfile,
     getDefaultSceneRuntimeProfile,
 };
 
