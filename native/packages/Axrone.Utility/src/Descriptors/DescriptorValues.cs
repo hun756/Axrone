@@ -14,6 +14,9 @@ public enum DescriptorStatus : ushort
 
     /// <summary>Slot is suspended.</summary>
     Suspended = 3,
+
+    /// <summary>Slot is released but retained by live leases; frees on last release.</summary>
+    Retired = 4,
 }
 
 /// <summary>

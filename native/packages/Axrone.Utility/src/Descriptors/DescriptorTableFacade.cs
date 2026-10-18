@@ -48,6 +48,13 @@ public sealed class DescriptorTable<TDescriptor> : IDisposable, IAsyncDisposable
     public bool TryFree(in DescriptorHandle<TDescriptor> handle) =>
         _core.TryFree(in handle);
 
+    /// <summary>Borrows a live slot as a stack-bound lease.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryBorrow(
+        in DescriptorHandle<TDescriptor> handle,
+        out DescriptorLease<TDescriptor, AdaptiveSpinBackoff, NullMetricsSink> lease) =>
+        _core.TryBorrow(in handle, out lease);
+
     /// <summary>Reclaims a batch.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int FreeBatch(params ReadOnlySpan<DescriptorHandle<TDescriptor>> handles) =>
