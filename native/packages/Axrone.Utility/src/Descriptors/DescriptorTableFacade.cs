@@ -58,6 +58,19 @@ public sealed class DescriptorTable<TDescriptor> : IDisposable, IAsyncDisposable
     public bool TryGet(in DescriptorHandle<TDescriptor> handle, out TDescriptor descriptor) =>
         _core.TryGet(in handle, out descriptor);
 
+    /// <summary>Copies the payload with its observed status, failing on torn reads.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TrySnapshot(in DescriptorHandle<TDescriptor> handle, out DescriptorSnapshot<TDescriptor> snapshot) =>
+        _core.TrySnapshot(in handle, out snapshot);
+
+    /// <summary>Allocates a run of descriptors, stopping at the first failure.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int AllocateBatch(
+        Span<DescriptorHandle<TDescriptor>> outHandles,
+        ReadOnlySpan<TDescriptor> descriptors,
+        ushort flags = 0) =>
+        _core.AllocateBatch(outHandles, descriptors, flags);
+
     /// <summary>Zero-copy readonly reference.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref readonly TDescriptor GetRef(in DescriptorHandle<TDescriptor> handle) =>

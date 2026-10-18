@@ -48,3 +48,22 @@ public readonly record struct AcquisitionResult<TDescriptor>(DescriptorHandle<TD
         ? string.Create(CultureInfo.InvariantCulture, $"Acquired({Handle})")
         : string.Create(CultureInfo.InvariantCulture, $"Rejected({Status})");
 }
+
+/// <summary>
+/// Point-in-time copy of a live slot: the handle, the descriptor payload
+/// and the status observed. The table validates the control word before
+/// and after the copy, so torn reads report failure instead of half data.
+/// </summary>
+public readonly record struct DescriptorSnapshot<TDescriptor>(
+    DescriptorHandle<TDescriptor> Handle,
+    TDescriptor Descriptor,
+    DescriptorStatus Status)
+    where TDescriptor : unmanaged
+{
+    /// <summary>Whether the snapshot carries a live payload.</summary>
+    public bool IsLive
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Handle.IsValid && Status != DescriptorStatus.Free;
+    }
+}

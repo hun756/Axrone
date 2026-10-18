@@ -312,6 +312,55 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         return false;
     }
 
+    /// <summary>Copies the payload with its observed status, failing on torn reads.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe bool TrySnapshot(in DescriptorHandle<TDescriptor> handle, out DescriptorSnapshot<TDescriptor> snapshot)
+    {
+        if (handle.SlotIndex < _capacity && handle.IsValid)
+        {
+            long before = Volatile.Read(ref ControlWord(handle.SlotIndex));
+            UnpackControlWord(before, out uint generation, out ushort status, out _);
+
+            if (generation == handle.Generation && status != (ushort)DescriptorStatus.Free)
+            {
+                TDescriptor descriptor = DescriptorAt(handle.SlotIndex);
+                long after = Volatile.Read(ref ControlWord(handle.SlotIndex));
+
+                if (before == after)
+                {
+                    snapshot = new DescriptorSnapshot<TDescriptor>(handle, descriptor, (DescriptorStatus)status);
+                    return true;
+                }
+            }
+        }
+
+        snapshot = default;
+        return false;
+    }
+
+    /// <summary>Allocates a run of descriptors, stopping at the first failure.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public unsafe int AllocateBatch(
+        Span<DescriptorHandle<TDescriptor>> outHandles,
+        ReadOnlySpan<TDescriptor> descriptors,
+        ushort flags = 0)
+    {
+        int limit = Math.Min(descriptors.Length, outHandles.Length);
+        int acquired = 0;
+
+        for (int i = 0; i < limit; i++)
+        {
+            if (!TryAllocate(in descriptors[i], out outHandles[i], flags))
+            {
+                break;
+            }
+
+            acquired++;
+        }
+
+        return acquired;
+    }
+
     /// <summary>Zero-copy readonly reference into table memory.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public unsafe ref readonly TDescriptor GetRef(in DescriptorHandle<TDescriptor> handle)
