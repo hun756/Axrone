@@ -16,6 +16,13 @@ public readonly record struct SlotIndex(uint Value) :
         get => new(uint.MaxValue);
     }
 
+    /// <summary>Whether the index addresses a live slot.</summary>
+    public bool IsValid
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Value != uint.MaxValue;
+    }
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int CompareTo(SlotIndex other) => Value.CompareTo(other.Value);
