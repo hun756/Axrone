@@ -56,12 +56,8 @@ public sealed class DescriptorTableOptions
         get => field;
         init
         {
-            if (value == 0 || (value & (value - 1)) != 0)
-            {
-                ThrowHelper.ThrowInvalidCapacity((int)value);
-            }
-
-            field = value;
+            // Single validation source: the shared nominal owns the pow2 rule.
+            field = new TableCapacity(value).Value;
         }
     } = 1024;
 }

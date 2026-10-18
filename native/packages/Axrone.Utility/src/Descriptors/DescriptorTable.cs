@@ -47,6 +47,13 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         get => _capacity;
     }
 
+    /// <summary>Index mask for power-of-two capacities.</summary>
+    public uint Mask
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _mask;
+    }
+
     /// <summary>Live descriptors.</summary>
     public long ActiveCount
     {
@@ -161,6 +168,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             }
             else if (diff < 0)
             {
+                _metrics.OnExhausted();
                 handle = DescriptorHandle<TDescriptor>.Invalid;
                 return false;
             }
@@ -177,6 +185,33 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
     {
         Unsafe.SkipInit(out TDescriptor descriptor);
         return TryAllocate(in descriptor, out handle, flags);
+    }
+
+    /// <summary>Allocates a slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe AcquisitionResult<TDescriptor> TryAcquire(in TDescriptor descriptor, ushort flags = 0)
+    {
+        if (_lifecycleState.Value != StateActive)
+        {
+            return AcquisitionResult<TDescriptor>.Terminated();
+        }
+
+        if (TryAllocate(in descriptor, out DescriptorHandle<TDescriptor> handle, flags))
+        {
+            return AcquisitionResult<TDescriptor>.Ok(handle);
+        }
+
+        return _lifecycleState.Value != StateActive
+            ? AcquisitionResult<TDescriptor>.Terminated()
+            : AcquisitionResult<TDescriptor>.Exhausted();
+    }
+
+    /// <summary>Allocates an uninitialized slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe AcquisitionResult<TDescriptor> TryAcquire(ushort flags = 0)
+    {
+        Unsafe.SkipInit(out TDescriptor descriptor);
+        return TryAcquire(in descriptor, flags);
     }
 
     /// <summary>

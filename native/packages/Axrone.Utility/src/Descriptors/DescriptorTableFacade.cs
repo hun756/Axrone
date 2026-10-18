@@ -30,6 +30,19 @@ public sealed class DescriptorTable<TDescriptor> : IDisposable, IAsyncDisposable
     public bool TryAllocate(out DescriptorHandle<TDescriptor> handle, ushort flags = 0) =>
         _core.TryAllocate(out handle, flags);
 
+    /// <summary>Allocates a slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AcquisitionResult<TDescriptor> TryAcquire(in TDescriptor descriptor, ushort flags = 0) =>
+        _core.TryAcquire(in descriptor, flags);
+
+    /// <summary>Allocates an uninitialized slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AcquisitionResult<TDescriptor> TryAcquire(ushort flags = 0) =>
+        _core.TryAcquire(flags);
+
+    /// <summary>Index mask for power-of-two capacities.</summary>
+    public uint Mask => _core.Mask;
+
     /// <summary>Reclaims a handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFree(in DescriptorHandle<TDescriptor> handle) =>
