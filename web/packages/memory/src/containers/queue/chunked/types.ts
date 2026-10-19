@@ -101,6 +101,7 @@ export interface IQueueSink<in T> {
     readonly isClosed: boolean;
     tryEnqueue(item: NoInfer<T>): boolean;
     enqueue(item: NoInfer<T>): Result<void, QueueFullError | QueueClosedError>;
+    enqueueBatch(items: readonly NoInfer<T>[]): Result<QueueSize, QueueFullError | QueueClosedError>;
 }
 
 export interface IAsyncQueueSource<out T> {

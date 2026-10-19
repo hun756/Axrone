@@ -192,6 +192,70 @@ export class Queue<T> implements IQueue<T> {
         return item;
     }
 
+    public enqueueBatch(
+        items: readonly NoInfer<T>[]
+    ): Result<QueueSize, QueueFullError | QueueClosedError> {
+        if (this._lifecycle !== LifecycleState.Active) {
+            return err(this._closedError());
+        }
+
+        const count = items.length;
+        if (count === 0) {
+            return ok(toQueueSize(this._elementCount));
+        }
+
+        let start = 0;
+        if (this._consumers.length > 0) {
+            while (start < count && this._consumers.length > 0) {
+                const consumer = this._consumers.shift()!;
+                consumer.detach();
+                consumer.resolve(ok(items[start]));
+                start = (start + 1) | 0;
+            }
+            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+        }
+
+        const remaining = count - start;
+        if (remaining === 0) {
+            return ok(toQueueSize(this._elementCount));
+        }
+
+        const free = this._limit - this._elementCount;
+        if (remaining <= free) {
+            this.executePushBulk(items, start, remaining);
+            this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+            return ok(toQueueSize(this._elementCount));
+        }
+
+        switch (this._overflowStrategy) {
+            case OverflowStrategy.Reject:
+            case OverflowStrategy.Block:
+                return err(QueueFullError.INSTANCE);
+            case OverflowStrategy.DropTail: {
+                if (free > 0) {
+                    this.executePushBulk(items, start, free);
+                }
+                this._telemetry.onDrop?.(OverflowStrategy.DropTail);
+                this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+                return ok(toQueueSize(this._elementCount));
+            }
+            case OverflowStrategy.DropHead: {
+                this._telemetry.onDrop?.(OverflowStrategy.DropHead);
+                if (remaining >= this._limit) {
+                    this.clearInternal();
+                    this.executePushBulk(items, start + remaining - this._limit, this._limit);
+                } else {
+                    this.dropFromHead(this._elementCount + remaining - this._limit);
+                    this.executePushBulk(items, start, remaining);
+                }
+                this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+                return ok(toQueueSize(this._elementCount));
+            }
+            default:
+                return assertNever(this._overflowStrategy);
+        }
+    }
+
     public dequeue(): Result<T, QueueEmptyError | QueueClosedError> {
         if (this._elementCount === 0) {
             if (this._lifecycle !== LifecycleState.Active) {
@@ -461,6 +525,56 @@ export class Queue<T> implements IQueue<T> {
         }
 
         return value;
+    }
+
+    private executePushBulk(items: readonly T[], start: number, count: number): void {
+        let index = start;
+        let remaining = count;
+        let tail = this._chunkTail;
+
+        while (remaining > 0) {
+            if (tail.writeHead === CHUNK_SIZE) {
+                const nextChunk = this._allocator.acquire();
+                tail.next = nextChunk;
+                this._chunkTail = nextChunk;
+                tail = nextChunk;
+            }
+
+            const free = CHUNK_SIZE - tail.writeHead;
+            const take = remaining < free ? remaining : free;
+
+            for (let k = 0; k < take; k = (k + 1) | 0) {
+                tail.write(items[index + k] as T);
+            }
+
+            index += take;
+            remaining -= take;
+            this._elementCount += take;
+        }
+    }
+
+    private dropFromHead(count: number): void {
+        let remaining = count;
+        while (remaining > 0 && this._elementCount > 0) {
+            this.executeShift();
+            remaining = (remaining - 1) | 0;
+        }
+    }
+
+    private clearInternal(): void {
+        const head = this._chunkHead;
+        let cursor = head.next;
+
+        while (cursor !== null) {
+            const next: MemoryChunk<T> | null = cursor.next;
+            this._allocator.release(cursor);
+            cursor = next;
+        }
+
+        head.next = null;
+        head.reset();
+        this._chunkTail = head;
+        this._elementCount = 0;
     }
 
     private dispatchPendingProducer(): void {
