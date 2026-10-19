@@ -23,6 +23,7 @@ export {
     isBatch,
     QueueIterator,
     IntrusiveQueue,
+    ObjectPoolChunkAllocator,
 } from './chunked';
 
 export type {
@@ -41,4 +42,6 @@ export type {
     TypestateBounded,
     TypestateConfigured,
     ILinkedListNode,
+    IChunkAllocator,
+    ObjectPoolChunkAllocatorOptions,
 } from './chunked';

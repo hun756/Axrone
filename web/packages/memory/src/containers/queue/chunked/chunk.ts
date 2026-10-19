@@ -57,7 +57,13 @@ export class MemoryChunk<T> {
     }
 }
 
-export class ChunkPool<T> {
+export interface IChunkAllocator<T> {
+    acquire(): MemoryChunk<T>;
+    release(chunk: MemoryChunk<T>): void;
+    clear(): void;
+}
+
+export class ChunkPool<T> implements IChunkAllocator<T> {
     private _head: MemoryChunk<T> | null = null;
     private _size: number = 0;
 

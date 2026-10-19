@@ -7,7 +7,7 @@ import {
     QueueUnderflowError,
     assertNever,
 } from './errors';
-import { CHUNK_SIZE, ChunkPool, type MemoryChunk } from './chunk';
+import { CHUNK_SIZE, ChunkPool, type IChunkAllocator, type MemoryChunk } from './chunk';
 import {
     type Batch,
     type IQueue,
@@ -40,7 +40,7 @@ const OK_VOID: Result<void, never> = ok();
 export class Queue<T> implements IQueue<T> {
     private _chunkHead: MemoryChunk<T>;
     private _chunkTail: MemoryChunk<T>;
-    private readonly _allocator: ChunkPool<T>;
+    private readonly _allocator: IChunkAllocator<T>;
     private _elementCount: number;
     private readonly _limit: QueueCapacity;
     private readonly _overflowStrategy: OverflowStrategy;
@@ -56,9 +56,10 @@ export class Queue<T> implements IQueue<T> {
     constructor(
         capacity: QueueCapacity = UNBOUNDED_CAPACITY,
         strategy: OverflowStrategy = OverflowStrategy.Reject,
-        metrics: IQueueMetrics = NULL_METRICS
+        metrics: IQueueMetrics = NULL_METRICS,
+        allocator?: IChunkAllocator<T>
     ) {
-        this._allocator = new ChunkPool<T>();
+        this._allocator = allocator ?? new ChunkPool<T>();
         const genesisChunk = this._allocator.acquire();
         this._chunkHead = genesisChunk;
         this._chunkTail = genesisChunk;
@@ -707,18 +708,26 @@ export class QueueBuilder<T, S extends { readonly __tag: string } = TypestateUnc
     private readonly _capacity: QueueCapacity;
     private readonly _strategy: OverflowStrategy;
     private readonly _metrics: IQueueMetrics;
+    private readonly _allocator: IChunkAllocator<T> | undefined;
 
-    private constructor(capacity: QueueCapacity, strategy: OverflowStrategy, metrics: IQueueMetrics) {
+    private constructor(
+        capacity: QueueCapacity,
+        strategy: OverflowStrategy,
+        metrics: IQueueMetrics,
+        allocator: IChunkAllocator<T> | undefined
+    ) {
         this._capacity = capacity;
         this._strategy = strategy;
         this._metrics = metrics;
+        this._allocator = allocator;
     }
 
     public static create<T>(): QueueBuilder<T, TypestateUnconfigured> {
         return new QueueBuilder<T, TypestateUnconfigured>(
             UNBOUNDED_CAPACITY,
             OverflowStrategy.Reject,
-            NULL_METRICS
+            NULL_METRICS,
+            undefined
         );
     }
 
@@ -728,7 +737,8 @@ export class QueueBuilder<T, S extends { readonly __tag: string } = TypestateUnc
         return new QueueBuilder<T, TypestateConfigured>(
             UNBOUNDED_CAPACITY,
             OverflowStrategy.Reject,
-            this._metrics
+            this._metrics,
+            this._allocator
         );
     }
 
@@ -739,7 +749,8 @@ export class QueueBuilder<T, S extends { readonly __tag: string } = TypestateUnc
         return new QueueBuilder<T, TypestateBounded>(
             toQueueCapacity(capacity),
             this._strategy,
-            this._metrics
+            this._metrics,
+            this._allocator
         );
     }
 
@@ -747,19 +758,31 @@ export class QueueBuilder<T, S extends { readonly __tag: string } = TypestateUnc
         this: QueueBuilder<T, TypestateBounded>,
         strategy: OverflowStrategy
     ): QueueBuilder<T, TypestateConfigured> {
-        return new QueueBuilder<T, TypestateConfigured>(this._capacity, strategy, this._metrics);
+        return new QueueBuilder<T, TypestateConfigured>(
+            this._capacity,
+            strategy,
+            this._metrics,
+            this._allocator
+        );
     }
 
     public withMetrics<const M extends IQueueMetrics>(
         this: QueueBuilder<T, S>,
         sink: M
     ): QueueBuilder<T, S> {
-        return new QueueBuilder<T, S>(this._capacity, this._strategy, sink);
+        return new QueueBuilder<T, S>(this._capacity, this._strategy, sink, this._allocator);
+    }
+
+    public withAllocator(
+        this: QueueBuilder<T, S>,
+        allocator: IChunkAllocator<T>
+    ): QueueBuilder<T, S> {
+        return new QueueBuilder<T, S>(this._capacity, this._strategy, this._metrics, allocator);
     }
 
     public build(this: QueueBuilder<T, TypestateConfigured>): Queue<T>;
     public build(this: QueueBuilder<T, TypestateBounded>): Queue<T>;
     public build(this: QueueBuilder<T, TypestateConfigured | TypestateBounded>): Queue<T> {
-        return new Queue<T>(this._capacity, this._strategy, this._metrics);
+        return new Queue<T>(this._capacity, this._strategy, this._metrics, this._allocator);
     }
 }
