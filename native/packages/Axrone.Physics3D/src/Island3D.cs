@@ -117,7 +117,7 @@ internal sealed class IslandSolver3D<TPolicy>
                 continue;
             }
 
-            if ((body.Flags & BodyFlags.AllowSleep) == 0)
+            if ((body.Flags & BodyFlags.AutoSleep) == 0)
             {
                 _quiet[root] = -1.0f;
                 continue;

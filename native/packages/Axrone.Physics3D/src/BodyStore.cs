@@ -62,7 +62,7 @@ public sealed class BodyStore
         body.Flags = BodyFlags.None;
         if (definition.Awake)
         {
-            body.Flags |= BodyFlags.Awake;
+            body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
         }
 
         if (definition.Bullet)
@@ -77,7 +77,7 @@ public sealed class BodyStore
 
         if (definition.AllowSleep)
         {
-            body.Flags |= BodyFlags.AllowSleep;
+            body.Flags |= BodyFlags.AutoSleep;
         }
 
         body.Position = definition.Position;
@@ -126,7 +126,7 @@ public sealed class BodyStore
         ref BodyState body = ref Slot(id);
         body.Position = position;
         body.Rotation = rotation;
-        body.Flags |= BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
     }
 
     /// <summary>Reads the linear velocity of a body.</summary>
@@ -141,7 +141,7 @@ public sealed class BodyStore
         if (body.Type != BodyType.Static)
         {
             body.LinearVelocity = velocity;
-            body.Flags |= BodyFlags.Awake;
+            body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
         }
     }
 
@@ -157,7 +157,7 @@ public sealed class BodyStore
         if (body.Type != BodyType.Static && (body.Flags & BodyFlags.FixedRotation) == 0)
         {
             body.AngularVelocity = velocity;
-            body.Flags |= BodyFlags.Awake;
+            body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
         }
     }
 
@@ -169,18 +169,22 @@ public sealed class BodyStore
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsAwake(BodyId id) => (Slot(id).Flags & BodyFlags.Awake) != 0;
 
+    /// <summary>Whether the body rests with the sleeping bit set.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsSleeping(BodyId id) => (Slot(id).Flags & BodyFlags.Sleeping) != 0;
+
     /// <summary>Puts a body to sleep or wakes it; sleeping zeroes velocities and forces.</summary>
     public void SetAwake(BodyId id, bool awake)
     {
         ref BodyState body = ref Slot(id);
         if (awake)
         {
-            body.Flags |= BodyFlags.Awake;
+            body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
             body.SleepTime = 0.0f;
             return;
         }
 
-        body.Flags &= ~BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Sleeping) & ~BodyFlags.Awake;
         body.LinearVelocity = Vec3.Zero;
         body.AngularVelocity = Vec3.Zero;
         body.Force = Vec3.Zero;
@@ -198,7 +202,7 @@ public sealed class BodyStore
         }
 
         body.Force += force;
-        body.Flags |= BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
     }
 
     /// <summary>Accumulates a torque; wakes the body.</summary>
@@ -212,7 +216,7 @@ public sealed class BodyStore
         }
 
         body.Torque += torque;
-        body.Flags |= BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
     }
 
     /// <summary>Applies an instantaneous linear impulse; wakes the body.</summary>
@@ -226,7 +230,7 @@ public sealed class BodyStore
         }
 
         body.LinearVelocity += impulse * body.InverseMass;
-        body.Flags |= BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
     }
 
     /// <summary>Applies an instantaneous angular impulse; wakes the body.</summary>
@@ -240,7 +244,7 @@ public sealed class BodyStore
         }
 
         body.AngularVelocity += impulse * body.InverseInertia;
-        body.Flags |= BodyFlags.Awake;
+        body.Flags = (body.Flags | BodyFlags.Awake) & ~BodyFlags.Sleeping;
     }
 
     /// <summary>Overwrites the mass properties; zero mass means infinite (static-like response).</summary>

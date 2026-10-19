@@ -150,7 +150,7 @@ internal readonly unsafe ref struct IslandPipelineWired<TPolicy>
             ref readonly BodyState body = ref bodies.GetSlot(slotIndex);
             int root = NativePartitionBuffer.FindRoot(_nodes, slot);
 
-            if ((body.Flags & BodyFlags.AllowSleep) == 0)
+            if ((body.Flags & BodyFlags.AutoSleep) == 0)
             {
                 _nodes[root].MarkBlocked();
             }

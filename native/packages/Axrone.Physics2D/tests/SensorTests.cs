@@ -82,6 +82,47 @@ public sealed class SensorTests : IDisposable
         evt.ShapeB.Should().Be(contact.ShapeB);
     }
 
+    [Fact]
+    public void SensorOverlap_Raises_Enter_Then_Exit()
+    {
+        AddCircle(new Vec2(0, 0), 1f, BodyType.Static, isSensor: true);
+        BodyId ball = _world.Bodies.Create(new BodyDef { Position = new Vec2(0, 1.5f), LinearVelocity = new Vec2(0, 5) });
+        _world.Shapes.AttachCircle(_world.Bodies, _world.Broadphase, ball, new Vec2(0, 0), 1f);
+
+        _world.Step(1f / 60f);
+
+        _world.SensorEventCount.Should().Be(1);
+        SensorEvent entered = _world.GetSensorEvent(0);
+        entered.Type.Should().Be(SensorEventType.Enter);
+
+        bool exited = false;
+        for (int i = 0; i < 60 && !exited; i++)
+        {
+            _world.Step(1f / 60f);
+            for (int j = 0; j < _world.SensorEventCount; j++)
+            {
+                if (_world.GetSensorEvent(j).Type == SensorEventType.Exit)
+                {
+                    exited = true;
+                }
+            }
+        }
+
+        exited.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SolidOverlap_Raises_No_Sensor_Event()
+    {
+        AddCircle(new Vec2(0, 0), 1f, BodyType.Static);
+        AddCircle(new Vec2(0, 1.5f), 1f);
+
+        _world.Step(1f / 60f);
+
+        _world.ContactEventCount.Should().Be(1);
+        _world.SensorEventCount.Should().Be(0);
+    }
+
     private static float SettleWithSensor(bool isSensor)
     {
         using var world = new World();

@@ -22,13 +22,15 @@ public sealed class JointStore : IJointRegistry
     private readonly JointStorage<WheelPolicy, WheelJointData> _wheel = new();
     private readonly JointStorage<PulleyPolicy, PulleyJointData> _pulley = new();
     private readonly JointStorage<GearPolicy, GearJointData> _gear = new();
+    private readonly JointStorage<RopePolicy, RopeJointData> _rope = new();
+    private readonly JointStorage<MousePolicy, MouseJointData> _mouse = new();
 
     /// <inheritdoc/>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _distance.Count + _revolute.Count + _weld.Count + _prismatic.Count +
-               _motor.Count + _wheel.Count + _pulley.Count + _gear.Count;
+               _motor.Count + _wheel.Count + _pulley.Count + _gear.Count + _rope.Count + _mouse.Count;
     }
 
     /// <inheritdoc/>
@@ -51,6 +53,8 @@ public sealed class JointStore : IJointRegistry
             JointKind.Wheel => _wheel.TryGetBySparseIndex(slot, out _),
             JointKind.Pulley => _pulley.TryGetBySparseIndex(slot, out _),
             JointKind.Gear => _gear.TryGetBySparseIndex(slot, out _),
+            JointKind.Rope => _rope.TryGetBySparseIndex(slot, out _),
+            JointKind.Mouse => _mouse.TryGetBySparseIndex(slot, out _),
             _ => false,
         };
     }
@@ -510,6 +514,123 @@ public sealed class JointStore : IJointRegistry
         }
     }
 
+    /// <summary>
+    /// Creates a max-distance tether between two body-frame anchors and wakes
+    /// both bodies. Slack ropes exert nothing; taut ropes pull the anchors
+    /// back inside the rest length.
+    /// </summary>
+    /// <param name="bodies">Body registry; both bodies must be live and distinct.</param>
+    /// <param name="definition">Body anchors and max separation.</param>
+    public JointId CreateRope(BodyStore bodies, in RopeDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        if (!definition.BodyA.IsValid || !definition.BodyB.IsValid || definition.BodyA == definition.BodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Rope joints need two distinct live bodies.");
+        }
+
+        if (float.IsNaN(definition.LocalAnchorA.X) || float.IsNaN(definition.LocalAnchorA.Y) ||
+            float.IsInfinity(definition.LocalAnchorA.X) || float.IsInfinity(definition.LocalAnchorA.Y) ||
+            float.IsNaN(definition.LocalAnchorB.X) || float.IsNaN(definition.LocalAnchorB.Y) ||
+            float.IsInfinity(definition.LocalAnchorB.X) || float.IsInfinity(definition.LocalAnchorB.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Rope anchors must be finite.");
+        }
+
+        bodies.Slot(definition.BodyA);
+        bodies.Slot(definition.BodyB);
+
+        lock (_lock)
+        {
+            RopeJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = definition.LocalAnchorA,
+                LocalAnchorB = definition.LocalAnchorB,
+                MaxLength = definition.MaxLength,
+                Impulse = 0.0f,
+            };
+            uint sparse = _rope.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Rope, sparse);
+        }
+    }
+
+    /// <summary>
+    /// Creates a mouse servo dragging a body-frame grab point toward a world
+    /// target and wakes both bodies. The grab point freezes at creation; the
+    /// target moves with <see cref="SetMouseTarget"/>.
+    /// </summary>
+    /// <param name="bodies">Body registry; both bodies must be live and distinct.</param>
+    /// <param name="definition">Grab target, force cap and servo response.</param>
+    public JointId CreateMouse(BodyStore bodies, in MouseDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        if (!definition.BodyA.IsValid || !definition.BodyB.IsValid || definition.BodyA == definition.BodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Mouse joints need two distinct live bodies.");
+        }
+
+        if (float.IsNaN(definition.Target.X) || float.IsNaN(definition.Target.Y) ||
+            float.IsInfinity(definition.Target.X) || float.IsInfinity(definition.Target.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Mouse target must be finite.");
+        }
+
+        bodies.Slot(definition.BodyA);
+        bodies.Slot(definition.BodyB);
+
+        ref BodyState stateB = ref bodies.Slot(definition.BodyB);
+        Transform2D transformB = Transform2D.FromRotation(stateB.Position, stateB.Cos, stateB.Sin);
+
+        lock (_lock)
+        {
+            MouseJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorB = transformB.InverseTransformPoint(definition.Target),
+                Target = definition.Target,
+                MaxForce = definition.MaxForce,
+                Stiffness = definition.Stiffness,
+                Damping = definition.Damping,
+                Impulse = Vec2.Zero,
+                MaxImpulse = 0.0f,
+            };
+            uint sparse = _mouse.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Mouse, sparse);
+        }
+    }
+
+    /// <summary>Moves a live mouse joint's world target.</summary>
+    /// <param name="id">A live mouse joint.</param>
+    /// <param name="target">The new finite world target.</param>
+    public void SetMouseTarget(JointId id, Vec2 target)
+    {
+        if (id.Kind != JointKind.Mouse || !id.IsValid)
+        {
+            ThrowHelper.ThrowInvalidOperation("SetMouseTarget needs a live mouse joint.");
+        }
+
+        if (float.IsNaN(target.X) || float.IsNaN(target.Y) ||
+            float.IsInfinity(target.X) || float.IsInfinity(target.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Mouse target must be finite.");
+        }
+
+        lock (_lock)
+        {
+            ref MouseJointData data = ref _mouse.GetBySparseIndex(id.SlotIndex);
+            data.Target = target;
+        }
+    }
+
     /// <inheritdoc/>
     public void Destroy(JointId id)
     {
@@ -545,6 +666,12 @@ public sealed class JointStore : IJointRegistry
                     break;
                 case JointKind.Gear:
                     _gear.DestroySlot(id.SlotIndex);
+                    break;
+                case JointKind.Rope:
+                    _rope.DestroySlot(id.SlotIndex);
+                    break;
+                case JointKind.Mouse:
+                    _mouse.DestroySlot(id.SlotIndex);
                     break;
                 default:
                     return;
@@ -608,6 +735,8 @@ public sealed class JointStore : IJointRegistry
         count += CopyPairsFrom(_wheel, destination[count..]);
         count += CopyPairsFrom(_pulley, destination[count..]);
         count += CopyPairsFrom(_gear, destination[count..]);
+        count += CopyPairsFrom(_rope, destination[count..]);
+        count += CopyPairsFrom(_mouse, destination[count..]);
         return count;
     }
 
@@ -641,6 +770,8 @@ public sealed class JointStore : IJointRegistry
         count += CollectFrom(_motor, JointKind.Motor, body, destination[count..]);
         count += CollectFrom(_wheel, JointKind.Wheel, body, destination[count..]);
         count += CollectFrom(_pulley, JointKind.Pulley, body, destination[count..]);
+        count += CollectFrom(_rope, JointKind.Rope, body, destination[count..]);
+        count += CollectFrom(_mouse, JointKind.Mouse, body, destination[count..]);
 
         ReadOnlySpan<GearJointData> gears = _gear.DataSpan;
         for (int i = 0; i < gears.Length && count < destination.Length; i++)
@@ -1008,6 +1139,8 @@ public sealed class JointStore : IJointRegistry
         _wheel.InitVelocity(bodies, this, wakeTolerance, dt);
         _pulley.InitVelocity(bodies, this, wakeTolerance, dt);
         _gear.InitVelocity(bodies, this, wakeTolerance, dt);
+        _rope.InitVelocity(bodies, this, wakeTolerance, dt);
+        _mouse.InitVelocity(bodies, this, wakeTolerance, dt);
     }
 
     /// <summary>Runs one velocity sweep over every packed table.</summary>
@@ -1022,6 +1155,8 @@ public sealed class JointStore : IJointRegistry
         _wheel.SolveVelocity(bodies, this);
         _pulley.SolveVelocity(bodies, this);
         _gear.SolveVelocity(bodies, this);
+        _rope.SolveVelocity(bodies, this);
+        _mouse.SolveVelocity(bodies, this);
     }
 
     /// <summary>Runs one position sweep over every packed table.</summary>
@@ -1035,6 +1170,8 @@ public sealed class JointStore : IJointRegistry
         _wheel.SolvePosition(bodies, this);
         _pulley.SolvePosition(bodies, this);
         _gear.SolvePosition(bodies, this);
+        _rope.SolvePosition(bodies, this);
+        _mouse.SolvePosition(bodies, this);
     }
 
     /// <summary>Visits every live joint across all packed tables.</summary>
@@ -1051,6 +1188,8 @@ public sealed class JointStore : IJointRegistry
         AcceptFrom(_wheel, JointKind.Wheel, ref visitor, ref context);
         AcceptFrom(_pulley, JointKind.Pulley, ref visitor, ref context);
         AcceptFrom(_gear, JointKind.Gear, ref visitor, ref context);
+        AcceptFrom(_rope, JointKind.Rope, ref visitor, ref context);
+        AcceptFrom(_mouse, JointKind.Mouse, ref visitor, ref context);
     }
 
     private static void AcceptFrom<TPolicy, TData, TVisitor, TContext>(

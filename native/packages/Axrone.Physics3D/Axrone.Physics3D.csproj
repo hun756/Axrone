@@ -42,6 +42,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Physics.Core/Axrone.Physics.Core.csproj" />
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
     <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
   </ItemGroup>

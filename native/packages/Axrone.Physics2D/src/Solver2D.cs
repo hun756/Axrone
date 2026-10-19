@@ -9,19 +9,19 @@ namespace Axrone.Physics2D;
 internal static class SolverTuning
 {
     /// <summary>Fraction of the error corrected per position sweep.</summary>
-    public const float Baumgarte = 0.2f;
+    public const float Baumgarte = PhysicsConstants.BaumgarteFactor;
 
     /// <summary>Penetration allowance that never corrects; rests stay quiet.</summary>
-    public const float LinearSlop = 0.005f;
+    public const float LinearSlop = PhysicsConstants.LinearSlop;
 
     /// <summary>Largest position correction applied in one sweep.</summary>
-    public const float MaxCorrection = 0.2f;
+    public const float MaxCorrection = PhysicsConstants.MaxLinearCorrection;
 
     /// <summary>Approach speed above which restitution kicks in.</summary>
-    public const float RestitutionThreshold = 1.0f;
+    public const float RestitutionThreshold = PhysicsConstants.VelocityThreshold;
 
     /// <summary>Angular allowance inside which limit position correction stays quiet.</summary>
-    public const float AngularSlop = 0.0349f;
+    public const float AngularSlop = PhysicsConstants.AngularSlop;
 }
 
 /// <summary>

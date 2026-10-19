@@ -30,6 +30,8 @@
     <Project Path="packages/Axrone.Patterns/tests/Axrone.Patterns.Tests.csproj" />
     <Project Path="packages/Axrone.Physics2D/Axrone.Physics2D.csproj" />
     <Project Path="packages/Axrone.Physics2D/tests/Axrone.Physics2D.Tests.csproj" />
+    <Project Path="packages/Axrone.Physics.Core/Axrone.Physics.Core.csproj" />
+    <Project Path="packages/Axrone.Physics.Core/tests/Axrone.Physics.Core.Tests.csproj" />
     <Project Path="packages/Axrone.Physics3D/Axrone.Physics3D.csproj" />
     <Project Path="packages/Axrone.Physics3D/tests/Axrone.Physics3D.Tests.csproj" />
     <Project Path="packages/Axrone.Raycast/Axrone.Raycast.csproj" />

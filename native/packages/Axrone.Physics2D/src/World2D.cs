@@ -28,7 +28,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = new Vec2(0.0f, -10.0f);
+    } = PhysicsConstants.DefaultGravity2D;
 
     /// <summary>Tuning of the broadphase tree.</summary>
     public TreeOptions BroadphaseOptions { get; init; } = new TreeOptions();
@@ -76,7 +76,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.5f;
+    } = PhysicsConstants.SleepTime;
 
     /// <summary>Linear speed below which a body counts as quiet; never negative.</summary>
     public float LinearSleepTolerance
@@ -91,7 +91,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.01f;
+    } = PhysicsConstants.LinearSleepTolerance;
 
     /// <summary>Angular speed below which a body counts as quiet; never negative.</summary>
     public float AngularSleepTolerance
@@ -106,7 +106,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.0349f;
+    } = PhysicsConstants.AngularSleepTolerance;
 
     /// <summary>Bullet translation covered per CCD substep; strictly positive.</summary>
     public float CcdSweepStep
@@ -137,6 +137,9 @@ public readonly struct WorldDef
             field = value;
         }
     } = 8;
+
+    /// <summary>Solver capabilities; clearing <see cref="SolverFlags.SleepingBodies"/> skips the sleep pass.</summary>
+    public SolverFlags Flags { get; init; } = SolverFlags.Default;
 }
 
 /// <summary>
@@ -208,6 +211,14 @@ public struct Contact : IEquatable<Contact>
 public readonly record struct ContactEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, bool Began);
 
 /// <summary>
+/// Trigger notice for a sensor pair: enter on first overlap, exit when the
+/// overlap drops out. Events accumulate across the step and clear at the
+/// start of the next one; read them after <see cref="World.Step"/>.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct SensorEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, SensorEventType Type);
+
+/// <summary>
 /// Simulation world: owns bodies, shapes and the broadphase tree, and runs
 /// the step loop — integrate, sync broadphase, collect pairs, evaluate
 /// manifolds with filtering and warm-start carry. Contacts persist across
@@ -229,6 +240,8 @@ public sealed class World : IDisposable
     private int _previousCount;
     private ContactEvent[] _events;
     private int _eventCount;
+    private SensorEvent[] _sensorEvents;
+    private int _sensorEventCount;
     private PairKey[] _lastPairs;
     private PairKey[] _currentPairs;
     private int _lastPairCount;
@@ -258,6 +271,9 @@ public sealed class World : IDisposable
     /// <summary>CCD substep cap per step.</summary>
     public int MaxCcdSubsteps { get; set; }
 
+    /// <summary>Solver capabilities.</summary>
+    public SolverFlags Flags { get; set; }
+
     /// <summary>Creates a world with default tuning.</summary>
     public World()
         : this(new WorldDef())
@@ -281,6 +297,7 @@ public sealed class World : IDisposable
         AngularSleepTolerance = definition.AngularSleepTolerance;
         CcdSweepStep = definition.CcdSweepStep;
         MaxCcdSubsteps = definition.MaxCcdSubsteps;
+        Flags = definition.Flags;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _joints = new JointStore();
@@ -291,6 +308,8 @@ public sealed class World : IDisposable
         _previousCount = 0;
         _events = new ContactEvent[InitialContactCapacity];
         _eventCount = 0;
+        _sensorEvents = new SensorEvent[InitialContactCapacity];
+        _sensorEventCount = 0;
         _lastPairs = new PairKey[InitialContactCapacity];
         _currentPairs = new PairKey[InitialContactCapacity];
         _lastPairCount = 0;
@@ -366,6 +385,24 @@ public sealed class World : IDisposable
         }
 
         return _events[index];
+    }
+
+    /// <summary>Trigger notices raised by the last step; cleared on the next one.</summary>
+    public int SensorEventCount
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _sensorEventCount;
+    }
+
+    /// <summary>Reads the trigger notice at <paramref name="index"/>.</summary>
+    public SensorEvent GetSensorEvent(int index)
+    {
+        if ((uint)index >= (uint)_sensorEventCount)
+        {
+            ThrowHelper.ThrowInvalidOperation("Sensor event index is out of range.");
+        }
+
+        return _sensorEvents[index];
     }
 
     /// <summary>
@@ -575,47 +612,51 @@ public sealed class World : IDisposable
         float h = dt / slices;
 
         _eventCount = 0;
+        _sensorEventCount = 0;
 
         for (int slice = 0; slice < slices; slice++)
         {
             StepSlice(h);
         }
 
-        BodyStoreAdapter adapter = new(_bodies);
-        SimulationParameters parameters = new(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
-
-        ContactPair[] rentedContacts = _contactCount > 0
-            ? ArrayPool<ContactPair>.Shared.Rent(_contactCount)
-            : [];
-        for (int i = 0; i < _contactCount; i++)
+        if ((Flags & SolverFlags.SleepingBodies) != 0)
         {
-            rentedContacts[i] = new ContactPair(_contacts[i].BodyA, _contacts[i].BodyB);
-        }
+            BodyStoreAdapter adapter = new(_bodies);
+            SimulationParameters parameters = new(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
 
-        int jointBudget = _joints.Count;
-        JointPair[] rentedJoints = jointBudget > 0
-            ? ArrayPool<JointPair>.Shared.Rent(jointBudget)
-            : [];
-        int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
-
-        try
-        {
-            _islands.UpdateSleep(
-                ref adapter,
-                rentedContacts.AsSpan(0, _contactCount),
-                rentedJoints.AsSpan(0, jointPairs),
-                in parameters);
-        }
-        finally
-        {
-            if (rentedContacts.Length > 0)
+            ContactPair[] rentedContacts = _contactCount > 0
+                ? ArrayPool<ContactPair>.Shared.Rent(_contactCount)
+                : [];
+            for (int i = 0; i < _contactCount; i++)
             {
-                ArrayPool<ContactPair>.Shared.Return(rentedContacts);
+                rentedContacts[i] = new ContactPair(_contacts[i].BodyA, _contacts[i].BodyB);
             }
 
-            if (rentedJoints.Length > 0)
+            int jointBudget = _joints.Count;
+            JointPair[] rentedJoints = jointBudget > 0
+                ? ArrayPool<JointPair>.Shared.Rent(jointBudget)
+                : [];
+            int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
+
+            try
             {
-                ArrayPool<JointPair>.Shared.Return(rentedJoints);
+                _islands.UpdateSleep(
+                    ref adapter,
+                    rentedContacts.AsSpan(0, _contactCount),
+                    rentedJoints.AsSpan(0, jointPairs),
+                    in parameters);
+            }
+            finally
+            {
+                if (rentedContacts.Length > 0)
+                {
+                    ArrayPool<ContactPair>.Shared.Return(rentedContacts);
+                }
+
+                if (rentedJoints.Length > 0)
+                {
+                    ArrayPool<JointPair>.Shared.Return(rentedJoints);
+                }
             }
         }
 
@@ -876,6 +917,8 @@ public sealed class World : IDisposable
             _previousCount = 0;
             _events = [];
             _eventCount = 0;
+            _sensorEvents = [];
+            _sensorEventCount = 0;
             _lastPairs = [];
             _currentPairs = [];
             _lastPairCount = 0;
@@ -904,13 +947,17 @@ public sealed class World : IDisposable
         _contacts[_contactCount++] = new Contact(shapeA, shapeB, bodyA, bodyB, in manifold, default, isSensor);
     }
 
-    /// <summary>Pair identity snapshot for begin/end diffing; shape order matches contacts.</summary>
-    private readonly record struct PairKey(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB);
+    /// <summary>Pair lifecycle notice: a shape pair started or stopped overlapping. Events
+    /// accumulate across the step and clear at the start of the next one; read
+    /// them after <see cref="World.Step"/>.
+    /// </summary>
+    private readonly record struct PairKey(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, bool IsSensor);
 
     /// <summary>
     /// Diffs this step's pairs against the last published set: unseen pairs
     /// raise begin notices, vanished pairs raise end notices, then the
-    /// snapshot becomes the new baseline. Sensor pairs report like any other.
+    /// snapshot becomes the new baseline. Sensor pairs report like any other
+    /// and additionally raise trigger notices.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void PublishContactEvents()
@@ -922,7 +969,7 @@ public sealed class World : IDisposable
 
         for (int i = 0; i < _contactCount; i++)
         {
-            _currentPairs[i] = new PairKey(_contacts[i].ShapeA, _contacts[i].ShapeB, _contacts[i].BodyA, _contacts[i].BodyB);
+            _currentPairs[i] = new PairKey(_contacts[i].ShapeA, _contacts[i].ShapeB, _contacts[i].BodyA, _contacts[i].BodyB, _contacts[i].IsSensor);
         }
 
         for (int i = 0; i < _contactCount; i++)
@@ -976,6 +1023,18 @@ public sealed class World : IDisposable
         }
 
         _events[_eventCount++] = new ContactEvent(pair.ShapeA, pair.ShapeB, pair.BodyA, pair.BodyB, began);
+
+        if (pair.IsSensor)
+        {
+            if (_sensorEventCount >= _sensorEvents.Length)
+            {
+                Array.Resize(ref _sensorEvents, Math.Max(_sensorEvents.Length * 2, 1));
+            }
+
+            _sensorEvents[_sensorEventCount++] = new SensorEvent(
+                pair.ShapeA, pair.ShapeB, pair.BodyA, pair.BodyB,
+                began ? SensorEventType.Enter : SensorEventType.Exit);
+        }
     }
 
     private struct PairCollector : IPairVisitor<ShapeId, World>

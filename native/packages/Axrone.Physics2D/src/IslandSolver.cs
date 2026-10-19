@@ -183,7 +183,7 @@ internal sealed unsafe class IslandSolver<TPolicy> : IDisposable
                 Size = 1,
                 MinSleep = float.PositiveInfinity,
                 Flags = IslandFlags.Dynamic |
-                    (((body.Flags & BodyFlags.AllowSleep) != 0) ? IslandFlags.AllowSleep : IslandFlags.None),
+                    (((body.Flags & BodyFlags.AutoSleep) != 0) ? IslandFlags.AllowSleep : IslandFlags.None),
             };
 
             if ((body.Flags & BodyFlags.Awake) == 0)

@@ -61,26 +61,6 @@ public readonly struct RigidTransform3D : IEquatable<RigidTransform3D>
     public static bool operator !=(RigidTransform3D left, RigidTransform3D right) => !left.Equals(right);
 }
 
-/// <summary>Stored body flags; kept in one byte alongside the type.</summary>
-[Flags]
-internal enum BodyFlags : byte
-{
-    /// <summary>No flags set.</summary>
-    None = 0,
-
-    /// <summary>The body is awake and simulated.</summary>
-    Awake = 1 << 0,
-
-    /// <summary>Continuous collision detection hint; the solver treats motion as a sweep.</summary>
-    Bullet = 1 << 1,
-
-    /// <summary>Rotation is locked; angular velocity stays zero.</summary>
-    FixedRotation = 1 << 2,
-
-    /// <summary>The body may fall asleep when quiet.</summary>
-    AllowSleep = 1 << 3,
-}
-
 /// <summary>
 /// Construction parameters of a body. Defaults describe an awake dynamic
 /// body at the origin with no damping and unit gravity scale.

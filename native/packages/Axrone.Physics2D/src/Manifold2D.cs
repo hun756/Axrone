@@ -768,7 +768,7 @@ public static class Narrowphase2D
             }
         }
 
-        const float TouchDistance = 1e-6f;
+        const float TouchDistance = PhysicsConstants.Epsilon;
         if (bestDistSq > TouchDistance * TouchDistance)
         {
             manifold = ContactManifold.Empty;

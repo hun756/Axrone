@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Physics.Core</RootNamespace>
+    <AssemblyName>Axrone.Physics.Core</AssemblyName>
+    <Description>Shared physics foundation: canonical constants, solver flags, body flags and collision categories for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1711: Flags suffix — names mirror the web physics-core
+         contract (SolverFlags, BodyFlags), intentional. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1008: zero None member — discriminant values mirror the web
+         contract (ShapeType3D starts at Capsule=1), intentional. -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
+    <!-- CA1028: byte-backed physics enums — wire-sized discriminants
+         matching the solver and state encoding, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1032: Standard exception ctors — physics errors carry coded
+         payloads instead of free-form messages; no exceptions defined here. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Physics.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
