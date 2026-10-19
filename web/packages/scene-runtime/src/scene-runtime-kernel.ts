@@ -30,7 +30,7 @@ import {
 import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
 import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
 import { PhysicsBridge2D, type PhysicsBridge2DOptions } from './components/physics-bridge-2d';
-import { SCENE_2D_RUNTIME_PROFILE_ID } from './scene-2d-profile';
+import { resolvePhysicsBridgesForProfile } from './scene-profile';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
 
@@ -161,11 +161,11 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             (typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null);
 
         // Determine which physics bridge(s) to create based on the scene profile.
-        // 2D profile → 2D bridge only, 3D profile → 3D bridge only, full/default → 3D bridge.
-        const profileId = sceneOptions.profile?.id;
-        const is2DProfile = profileId === SCENE_2D_RUNTIME_PROFILE_ID;
+        // 2D profile → 2D bridge only, mixed profile → both bridges,
+        // everything else (3D / full / core) → 3D bridge only.
+        const bridgeSelection = resolvePhysicsBridgesForProfile(sceneOptions.profile?.id);
 
-        this.physicsBridge3D = !is2DProfile
+        this.physicsBridge3D = bridgeSelection.bridge3D
             ? new PhysicsBridge3D(
                   this.world,
                   profilerRequested
@@ -180,7 +180,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
               )
             : null;
 
-        this.physicsBridge2D = is2DProfile
+        this.physicsBridge2D = bridgeSelection.bridge2D
             ? new PhysicsBridge2D(
                   this.world,
                   profilerRequested

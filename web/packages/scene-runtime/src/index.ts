@@ -33,6 +33,7 @@ export {
 } from './scene-registry';
 export type {
 	SceneManifestRuntimeProfileOptions,
+	ScenePhysicsBridgeSelection,
 	SceneRuntimeProfile,
 	SceneRuntimeProfileContext,
 } from './scene-profile';
@@ -49,6 +50,7 @@ export {
 	getMixedSceneRuntimeProfile,
 	getCoreSceneRuntimeProfile,
 	getDefaultSceneRuntimeProfile,
+	resolvePhysicsBridgesForProfile,
 	resolveSceneRegistryFromProfile,
 } from './scene-profile';
 

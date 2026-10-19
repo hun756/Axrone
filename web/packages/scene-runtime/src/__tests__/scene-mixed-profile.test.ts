@@ -3,6 +3,7 @@ import {
     SCENE_MIXED_RUNTIME_PROFILE_ID,
     getMixedSceneRuntimeProfile,
 } from '../scene-mixed-profile';
+import { resolvePhysicsBridgesForProfile } from '../scene-profile';
 import * as barrelExports from '../index';
 
 describe('scene mixed runtime profile', () => {
@@ -42,5 +43,22 @@ describe('scene mixed runtime profile', () => {
             'scene/mixed-default'
         );
         expect((barrelExports as Record<string, unknown>).getMixedSceneRuntimeProfile).toBeDefined();
+    });
+
+    it('selects physics bridges per profile without taxing pure 3d runtimes', () => {
+        expect(resolvePhysicsBridgesForProfile('scene/2d-default')).toEqual({
+            bridge3D: false,
+            bridge2D: true,
+        });
+        expect(resolvePhysicsBridgesForProfile('scene/mixed-default')).toEqual({
+            bridge3D: true,
+            bridge2D: true,
+        });
+        for (const profileId of ['scene/3d-default', 'scene/full-3d-default', 'scene/core-default', undefined]) {
+            expect(resolvePhysicsBridgesForProfile(profileId)).toEqual({
+                bridge3D: true,
+                bridge2D: false,
+            });
+        }
     });
 });

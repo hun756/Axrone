@@ -55,3 +55,25 @@ export const resolveSceneRegistryFromProfile = <
         getDefaultSceneRuntimeProfile<R>(),
         context
     );
+
+export type ScenePhysicsBridgeSelection = {
+    readonly bridge3D: boolean;
+    readonly bridge2D: boolean;
+};
+
+/**
+ * Which physics bridges a scene profile needs. The 2D profile steps 2D only,
+ * the mixed profile steps both, everything else (3D / full / core / unknown)
+ * steps 3D only so pure-3D runtimes never pay for an idle 2D world.
+ */
+export const resolvePhysicsBridgesForProfile = (
+    profileId: string | undefined
+): ScenePhysicsBridgeSelection => {
+    if (profileId === SCENE_2D_RUNTIME_PROFILE_ID) {
+        return { bridge3D: false, bridge2D: true };
+    }
+    if (profileId === SCENE_MIXED_RUNTIME_PROFILE_ID) {
+        return { bridge3D: true, bridge2D: true };
+    }
+    return { bridge3D: true, bridge2D: false };
+};
