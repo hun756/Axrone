@@ -126,6 +126,39 @@ export class Queue<T> implements IQueue<T> {
         return result;
     }
 
+    public contains(value: T): boolean {
+        let chunk: MemoryChunk<T> | null = this._chunkHead;
+
+        while (chunk !== null) {
+            const start = chunk === this._chunkHead ? chunk.readHead : 0;
+            const end = chunk === this._chunkTail ? chunk.writeHead : CHUNK_SIZE;
+
+            for (let i = start; i < end; i = (i + 1) | 0) {
+                if (chunk.slotAt(i) === value) {
+                    return true;
+                }
+            }
+
+            chunk = chunk.next;
+        }
+
+        return false;
+    }
+
+    public clone(): Queue<T> {
+        const copy = new Queue<T>(this._limit, this._overflowStrategy, this._telemetry);
+        copy.enqueueBatch(this.toArray());
+        return copy;
+    }
+
+    public clear(): void {
+        this.clearInternal();
+
+        if (this._lifecycle === LifecycleState.Closing) {
+            this.evaluateDrainState();
+        }
+    }
+
     public [Symbol.iterator](): Iterator<T> {
         return new QueueIterator<T>(this._chunkHead, this._elementCount);
     }

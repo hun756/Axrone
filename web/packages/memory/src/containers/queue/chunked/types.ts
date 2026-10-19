@@ -88,6 +88,8 @@ export interface IQueueSource<out T> extends Iterable<T> {
     readonly isClosed: boolean;
     peek(): T | undefined;
     toArray(): T[];
+    contains(value: T): boolean;
+    clone(): IQueueSource<T>;
     tryDequeue(): T | undefined;
     dequeue(): Result<T, QueueEmptyError | QueueClosedError>;
     dequeueBatch<const N extends number>(
@@ -103,6 +105,7 @@ export interface IQueueSink<in T> {
     tryEnqueue(item: NoInfer<T>): boolean;
     enqueue(item: NoInfer<T>): Result<void, QueueFullError | QueueClosedError>;
     enqueueBatch(items: readonly NoInfer<T>[]): Result<QueueSize, QueueFullError | QueueClosedError>;
+    clear(): void;
 }
 
 export interface IAsyncQueueSource<out T> {
