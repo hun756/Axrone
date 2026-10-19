@@ -36,34 +36,77 @@ public sealed class AudioEcsBinderTests : IDisposable
         return _system.Clips.Register(record);
     }
 
+    private Entity SpawnSource(AudioSourceId id, AudioClipId clip, bool loop = true)
+    {
+        Entity entity = _world.BeginEntity().Commit();
+        var link = new AudioSourceRef(id)
+        {
+            ClipId = clip,
+            BusId = AudioBusId.Master,
+            Loop = loop,
+        };
+        _world.AddComponent(entity, link);
+        _binder.AttachSource(entity);
+        return entity;
+    }
+
     [Fact]
-    public void PlayCommand_Renders_ThroughSystem()
+    public void PlayCommand_Renders_AndSyncs_State()
     {
         AudioClipId clip = RegisterClip();
         var sourceId = new AudioSourceId(1U);
-        _system.Sources.Upsert(sourceId, new AudioSourceDefinition(ClipId: clip, Loop: true));
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
 
-        Entity entity = _world.BeginEntity().Commit();
-        _world.AddComponent(entity, new AudioSourceRef(sourceId));
+        Entity entity = SpawnSource(sourceId, clip);
+        _binder.Play(entity);
+
+        IReadOnlyList<AudioBinderFailure> failures = _binder.Update();
+        failures.Should().BeEmpty();
+
+        Span<float> block = stackalloc float[256];
+        _system.ProcessAudioRenderBlock(block);
+        block.ToArray().Should().Contain(v => v != 0.0f);
+
+        _world.GetComponent<AudioSourceRef>(entity).PlaybackState.Should().Be(AudioPlaybackState.Playing);
+    }
+
+    [Fact]
+    public void Tuning_Propagates_OnUpsert()
+    {
+        AudioClipId clip = RegisterClip();
+        var sourceId = new AudioSourceId(1U);
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
+
+        Entity entity = SpawnSource(sourceId, clip);
+        _binder.Update();
+
+        ref AudioSourceRef link = ref _world.GetComponent<AudioSourceRef>(entity);
+        link.Volume = 0.25f;
+        _binder.Update();
 
         _binder.Play(entity);
         _binder.Update();
 
         Span<float> block = stackalloc float[256];
         _system.ProcessAudioRenderBlock(block);
-        block.ToArray().Should().Contain(v => v != 0.0f);
+
+        float energy = 0.0f;
+        foreach (float sample in block)
+        {
+            energy += MathF.Abs(sample);
+        }
+
+        energy.Should().BeGreaterThan(0.0f);
     }
 
     [Fact]
-    public void StopCommand_Silences_Voice()
+    public void StopCommand_Silences_AndSyncs_State()
     {
         AudioClipId clip = RegisterClip();
         var sourceId = new AudioSourceId(1U);
-        _system.Sources.Upsert(sourceId, new AudioSourceDefinition(ClipId: clip, Loop: true));
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
 
-        Entity entity = _world.BeginEntity().Commit();
-        _world.AddComponent(entity, new AudioSourceRef(sourceId));
-
+        Entity entity = SpawnSource(sourceId, clip);
         _binder.Play(entity);
         _binder.Update();
         _binder.Stop(entity);
@@ -72,6 +115,35 @@ public sealed class AudioEcsBinderTests : IDisposable
         Span<float> block = stackalloc float[256];
         _system.ProcessAudioRenderBlock(block);
         block.ToArray().Should().OnlyContain(v => v == 0.0f);
+        _world.GetComponent<AudioSourceRef>(entity).PlaybackState.Should().Be(AudioPlaybackState.Stopped);
+    }
+
+    [Fact]
+    public void Failures_Are_Reported_Without_Stalling()
+    {
+        var sourceId = new AudioSourceId(9U);
+        Entity entity = _world.BeginEntity().Commit();
+        _world.AddComponent(entity, new AudioSourceRef(sourceId));
+        _binder.AttachSource(entity);
+        _binder.Play(entity);
+
+        AudioClipId clip = RegisterClip();
+        var goodId = new AudioSourceId(10U);
+        _system.Sources.Upsert(goodId, new AudioSourceDefinition());
+        Entity good = _world.BeginEntity().Commit();
+        _world.AddComponent(good, new AudioSourceRef(goodId) { ClipId = clip, BusId = AudioBusId.Master, Loop = true });
+        _binder.AttachSource(good);
+        _binder.Play(good);
+
+        IReadOnlyList<AudioBinderFailure> failures = _binder.Update();
+
+        failures.Should().ContainSingle();
+        failures[0].Entity.Should().Be(entity);
+        failures[0].Command.Should().Be(AudioSourceCommandType.Play);
+
+        Span<float> block = stackalloc float[256];
+        _system.ProcessAudioRenderBlock(block);
+        block.ToArray().Should().Contain(v => v != 0.0f);
     }
 
     [Fact]
@@ -79,14 +151,12 @@ public sealed class AudioEcsBinderTests : IDisposable
     {
         AudioClipId clip = RegisterClip();
         var sourceId = new AudioSourceId(1U);
-        _system.Sources.Upsert(sourceId, new AudioSourceDefinition(ClipId: clip, Loop: true));
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
 
-        Entity entity = _world.BeginEntity().Commit();
-        _world.AddComponent(entity, new AudioSourceRef(sourceId));
-
+        Entity entity = SpawnSource(sourceId, clip);
         _binder.Play(entity);
         _world.DestroyEntity(entity);
-        _binder.Update();
+        _binder.Update().Should().BeEmpty();
 
         Span<float> block = stackalloc float[256];
         _system.ProcessAudioRenderBlock(block);
@@ -94,15 +164,49 @@ public sealed class AudioEcsBinderTests : IDisposable
     }
 
     [Fact]
-    public void AttachListener_Registers_Entry()
+    public void DetachSource_Stops_Immediately()
+    {
+        AudioClipId clip = RegisterClip();
+        var sourceId = new AudioSourceId(1U);
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
+
+        Entity entity = SpawnSource(sourceId, clip);
+        _binder.Play(entity);
+        _binder.Update();
+        _binder.DetachSource(entity);
+
+        Span<float> block = stackalloc float[256];
+        _system.ProcessAudioRenderBlock(block);
+        block.ToArray().Should().OnlyContain(v => v == 0.0f);
+    }
+
+    [Fact]
+    public void Autoplay_Fires_OnAttach()
+    {
+        AudioClipId clip = RegisterClip();
+        var sourceId = new AudioSourceId(1U);
+        _system.Sources.Upsert(sourceId, new AudioSourceDefinition());
+
+        Entity entity = _world.BeginEntity().Commit();
+        var link = new AudioSourceRef(sourceId) { Autoplay = true, ClipId = clip, BusId = AudioBusId.Master };
+        _world.AddComponent(entity, link);
+        _binder.AttachSource(entity);
+        _binder.Update();
+
+        Span<float> block = stackalloc float[256];
+        _system.ProcessAudioRenderBlock(block);
+        block.ToArray().Should().Contain(v => v != 0.0f);
+    }
+
+    [Fact]
+    public void AttachListener_Registers_AndActivates()
     {
         Entity entity = _world.BeginEntity().Commit();
-        _world.AddComponent(entity, new AudioListenerRef(new AudioListenerId(2U)));
-
+        _world.AddComponent(entity, new AudioListenerRef(new AudioListenerId(3U), active: true));
         _binder.AttachListener(entity);
         _binder.Update();
 
-        _system.Listeners.ActiveListenerId.Should().Be(AudioListenerId.Primary);
+        _system.Listeners.ActiveListenerId.Should().Be(new AudioListenerId(3U));
         _binder.DetachListener(entity);
         _binder.Update();
     }

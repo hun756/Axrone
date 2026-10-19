@@ -12,7 +12,7 @@ namespace Axrone.Memory.Lifetime;
 public readonly struct SingletonLease<T, TFactory, TBackoff, TDiagnostics> : IDisposable
     where T : class
     where TFactory : struct, ISingletonFactory<T>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, IDelayPolicy
     where TDiagnostics : struct, ISingletonDiagnostics
 {
     private readonly Singleton<T, TFactory, TBackoff, TDiagnostics>? _engine;

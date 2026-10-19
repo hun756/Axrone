@@ -19,6 +19,12 @@
   </ItemGroup>
 
   <PropertyGroup Label="SuppressedRules">
+    <!-- CA1031: Catching general exceptions — intentional for per-command
+         failure capture; failures are reported, never swallowed. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
     <!-- CA1051: Visible instance fields — ECS components are mutable
          column data by design, matching transform component precedent. -->
     <NoWarn>$(NoWarn);CA1051</NoWarn>

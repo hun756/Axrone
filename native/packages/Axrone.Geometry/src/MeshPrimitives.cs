@@ -1,5 +1,7 @@
 namespace Axrone.Geometry;
 
+using Axrone.Utility.Descriptors;
+
 /// <summary>OpenGL vertex attribute component types, as raw values.</summary>
 public enum GLAttributeType : uint
 {
@@ -227,4 +229,45 @@ public readonly record struct VertexAttributeDescriptor(
     GLAttributeType Type,
     bool Normalized,
     int Offset
-);
+) : IDescriptor<VertexAttributeDescriptor>
+{
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in VertexAttributeDescriptor descriptor)
+    {
+        if (descriptor.Semantic is not
+            (AttributeSemantic.Position or
+            AttributeSemantic.Normal or
+            AttributeSemantic.TexCoord or
+            AttributeSemantic.Tangent))
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor.Semantic));
+        }
+
+        if (descriptor.ComponentCount is < 1 or > 4)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor.ComponentCount));
+        }
+
+        if (descriptor.Type is not
+            (GLAttributeType.Byte or
+            GLAttributeType.UnsignedByte or
+            GLAttributeType.Short or
+            GLAttributeType.UnsignedShort or
+            GLAttributeType.Int or
+            GLAttributeType.UnsignedInt or
+            GLAttributeType.Float))
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor.Type));
+        }
+
+        if (descriptor.Offset < 0)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor.Offset));
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in VertexAttributeDescriptor descriptor) => descriptor.ToString();
+}

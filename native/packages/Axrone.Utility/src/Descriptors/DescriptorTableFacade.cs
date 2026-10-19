@@ -30,10 +30,30 @@ public sealed class DescriptorTable<TDescriptor> : IDisposable, IAsyncDisposable
     public bool TryAllocate(out DescriptorHandle<TDescriptor> handle, ushort flags = 0) =>
         _core.TryAllocate(out handle, flags);
 
+    /// <summary>Allocates a slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AcquisitionResult<TDescriptor> TryAcquire(in TDescriptor descriptor, ushort flags = 0) =>
+        _core.TryAcquire(in descriptor, flags);
+
+    /// <summary>Allocates an uninitialized slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AcquisitionResult<TDescriptor> TryAcquire(ushort flags = 0) =>
+        _core.TryAcquire(flags);
+
+    /// <summary>Index mask for power-of-two capacities.</summary>
+    public uint Mask => _core.Mask;
+
     /// <summary>Reclaims a handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFree(in DescriptorHandle<TDescriptor> handle) =>
         _core.TryFree(in handle);
+
+    /// <summary>Borrows a live slot as a stack-bound lease.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryBorrow(
+        in DescriptorHandle<TDescriptor> handle,
+        out DescriptorLease<TDescriptor, AdaptiveSpinBackoff, NullMetricsSink> lease) =>
+        _core.TryBorrow(in handle, out lease);
 
     /// <summary>Reclaims a batch.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -44,6 +64,19 @@ public sealed class DescriptorTable<TDescriptor> : IDisposable, IAsyncDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGet(in DescriptorHandle<TDescriptor> handle, out TDescriptor descriptor) =>
         _core.TryGet(in handle, out descriptor);
+
+    /// <summary>Copies the payload with its observed status, failing on torn reads.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TrySnapshot(in DescriptorHandle<TDescriptor> handle, out DescriptorSnapshot<TDescriptor> snapshot) =>
+        _core.TrySnapshot(in handle, out snapshot);
+
+    /// <summary>Allocates a run of descriptors, stopping at the first failure.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int AllocateBatch(
+        Span<DescriptorHandle<TDescriptor>> outHandles,
+        ReadOnlySpan<TDescriptor> descriptors,
+        ushort flags = 0) =>
+        _core.AllocateBatch(outHandles, descriptors, flags);
 
     /// <summary>Zero-copy readonly reference.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

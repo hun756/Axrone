@@ -1,3 +1,4 @@
+using Axrone.Collections;
 using Axrone.Input;
 using FluentAssertions;
 using Xunit;
@@ -9,19 +10,19 @@ public class InputQueueTests
     [Fact]
     public void Capacity_Rejects_NonPowerOfTwo()
     {
-        var actZero = () => QueueCapacity.Create(0);
-        var actThree = () => QueueCapacity.Create(3);
+        var actZero = () => new BufferCapacity(0);
+        var actThree = () => new BufferCapacity(3);
 
         actZero.Should().Throw<ArgumentOutOfRangeException>();
         actThree.Should().Throw<ArgumentOutOfRangeException>();
-        QueueCapacity.Create(2).Value.Should().Be(2u);
-        QueueCapacity.Create(4096).Mask.Should().Be(4095u);
+        new BufferCapacity(2).Value.Should().Be(2u);
+        ((uint)new BufferCapacity(4096)).Should().Be(4096u);
     }
 
     [Fact]
     public void EnqueueDequeue_Preserves_FifoOrder()
     {
-        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(QueueCapacity.Create(8));
+        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(new BufferCapacity(8));
         var stamp = InputTimestamp.Now();
 
         for (int i = 0; i < 5; i++)
@@ -42,7 +43,7 @@ public class InputQueueTests
     [Fact]
     public void FullQueue_Drops_WithFalse()
     {
-        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(QueueCapacity.Create(2));
+        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(new BufferCapacity(2));
         var stamp = InputTimestamp.Now();
 
         queue.TryEnqueue(RawInputEvent.CreateKeyDown(DeviceIndex.Primary, Key.A, 0, stamp)).Should().BeTrue();
@@ -53,7 +54,7 @@ public class InputQueueTests
     [Fact]
     public void Drain_Empties_IntoSpan()
     {
-        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(QueueCapacity.Create(8));
+        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(new BufferCapacity(8));
         var stamp = InputTimestamp.Now();
 
         queue.TryEnqueue(RawInputEvent.CreateMouseMove(DeviceIndex.Primary, 10.0f, 20.0f, stamp));
@@ -71,7 +72,7 @@ public class InputQueueTests
     [Fact]
     public void Complete_Rejects_FurtherWrites()
     {
-        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(QueueCapacity.Create(8));
+        using var queue = new LockFreeInputRingBuffer<SpinWaitBackoff, NullMetricsPolicy>(new BufferCapacity(8));
         var stamp = InputTimestamp.Now();
 
         queue.TryEnqueue(RawInputEvent.CreateKeyDown(DeviceIndex.Primary, Key.A, 0, stamp)).Should().BeTrue();

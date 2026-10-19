@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
+using Axrone.Utility.Backoff;
+using Axrone.Utility.Backoff.SpinPolicies;
 
 public interface IEventConsumer<TEvent> where TEvent : allows ref struct
 {
@@ -18,12 +20,6 @@ public interface IEventFilter<TEvent> where TEvent : allows ref struct
 public interface IEventVisitor<TEvent> where TEvent : allows ref struct
 {
     void Visit(scoped in TEvent evt);
-}
-
-public interface IBackoffPolicy
-{
-    static abstract void Step(ref int spinCount);
-    static abstract void Reset(out int spinCount);
 }
 
 public interface IEventMetricsSink
@@ -72,44 +68,6 @@ public interface IEventHub<TEvent> :
     IEventReader<TEvent>,
     IEventHubLifecycle
 {
-}
-
-public readonly struct AdaptiveBackoff : IBackoffPolicy
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Step(ref int spinCount)
-    {
-        if ((uint)spinCount < 16)
-        {
-            Thread.SpinWait(1 << spinCount);
-        }
-        else if ((uint)spinCount < 24)
-        {
-            Thread.Yield();
-        }
-        else
-        {
-            Thread.Sleep(0);
-        }
-        spinCount++;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Reset(out int spinCount) => spinCount = 0;
-}
-
-public readonly struct ExponentialBackoff : IBackoffPolicy
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void Step(ref int spinCount)
-    {
-        int iterations = Math.Min(spinCount, 12);
-        Thread.SpinWait(1 << iterations);
-        spinCount++;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Reset(out int spinCount) => spinCount = 0;
 }
 
 public readonly struct NullMetricsSink : IEventMetricsSink
@@ -481,7 +439,7 @@ public static class EventHubBuilder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EventHub<TEvent, TBackoff, TMetricsSink> Build<TEvent, TBackoff, TMetricsSink>(
         this EventHubBuilder<StageComplete> builder)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetricsSink : struct, IEventMetricsSink
     {
         ref var accessor = ref Unsafe.As<EventHubBuilder<StageComplete>, EventHubBuilderAccessor>(ref builder);
@@ -496,8 +454,8 @@ public static class EventHubBuilder
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static EventHub<TEvent, AdaptiveBackoff, NullMetricsSink> Build<TEvent>(this EventHubBuilder<StageComplete> builder) =>
-        builder.Build<TEvent, AdaptiveBackoff, NullMetricsSink>();
+    public static EventHub<TEvent, AdaptiveSpinBackoff, NullMetricsSink> Build<TEvent>(this EventHubBuilder<StageComplete> builder) =>
+        builder.Build<TEvent, AdaptiveSpinBackoff, NullMetricsSink>();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct EventHubBuilderAccessor

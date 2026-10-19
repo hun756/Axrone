@@ -24,7 +24,7 @@ public readonly struct Configured;
 public readonly struct SingletonBuilder<TPhase, T, TFactory, TBackoff, TDiagnostics>
     where T : class
     where TFactory : struct, ISingletonFactory<T>
-    where TBackoff : struct, IBackoffPolicy
+    where TBackoff : struct, IDelayPolicy
     where TDiagnostics : struct, ISingletonDiagnostics
 {
     internal readonly TBackoff _backoff;
@@ -50,7 +50,7 @@ public readonly struct SingletonBuilder<TPhase, T, TFactory, TBackoff, TDiagnost
     /// <param name="backoff">The backoff policy instance to use.</param>
     /// <returns>A builder carrying the new backoff policy.</returns>
     public SingletonBuilder<TPhase, T, TFactory, TNewBackoff, TDiagnostics> WithBackoff<TNewBackoff>(TNewBackoff backoff)
-        where TNewBackoff : struct, IBackoffPolicy
+        where TNewBackoff : struct, IDelayPolicy
         => new(backoff, _diagnostics, _options);
 
     /// <summary>Selects the diagnostics sink struct receiving lifecycle callbacks.</summary>
@@ -107,7 +107,7 @@ public static class SingletonBuilderExtensions
         this SingletonBuilder<TPhase, T, TFactory, TBackoff, TDiagnostics> builder)
         where T : class
         where TFactory : struct, ISingletonFactory<T>
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, IDelayPolicy
         where TDiagnostics : struct, ISingletonDiagnostics
         => new(builder._backoff, builder._diagnostics, builder._options);
 
@@ -124,7 +124,7 @@ public static class SingletonBuilderExtensions
         this SingletonBuilder<Configured, T, TFactory, TBackoff, TDiagnostics> builder)
         where T : class
         where TFactory : struct, ISingletonFactory<T>
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, IDelayPolicy
         where TDiagnostics : struct, ISingletonDiagnostics
         => builder.Materialize();
 }

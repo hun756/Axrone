@@ -21,7 +21,7 @@ public static class InputPipeline
         InputEngine<TSchema> engine,
         float deltaMs)
         where TSchema : unmanaged, Enum
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(coordinator);

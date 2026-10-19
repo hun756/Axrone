@@ -1,5 +1,7 @@
 namespace Axrone.Geometry;
 
+using Axrone.Utility.Descriptors;
+
 /// <summary>UV-sphere parameters.</summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public readonly record struct SphereConfig
@@ -178,7 +180,7 @@ public enum ShapeKind : byte
 /// take bespoke parameters by design.
 /// </summary>
 [StructLayout(LayoutKind.Explicit)]
-public readonly record struct ShapeDescriptor
+public readonly record struct ShapeDescriptor : IDescriptor<ShapeDescriptor>
 {
     /// <summary>Active arm.</summary>
     [FieldOffset(0)] public readonly ShapeKind Kind;
@@ -225,4 +227,98 @@ public readonly record struct ShapeDescriptor
 
     /// <summary>Wraps a torus configuration.</summary>
     public static ShapeDescriptor FromTorus(TorusConfig cfg) => new(ShapeKind.Torus, cfg);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Validate(in ShapeDescriptor descriptor)
+    {
+        switch (descriptor.Kind)
+        {
+            case ShapeKind.Sphere:
+                ValidateMetric(descriptor.Sphere.Radius.Value, "Sphere radius");
+                ValidateSegments(descriptor.Sphere.WidthSegments.Value, "Sphere width segments");
+                ValidateSegments(descriptor.Sphere.HeightSegments.Value, "Sphere height segments");
+                ValidateSweep(descriptor.Sphere.PhiLength.Value, "Sphere phi length");
+                ValidateSweep(descriptor.Sphere.ThetaLength.Value, "Sphere theta length");
+                break;
+            case ShapeKind.Box:
+                ValidateMetric(descriptor.Box.Width.Value, "Box width");
+                ValidateMetric(descriptor.Box.Height.Value, "Box height");
+                ValidateMetric(descriptor.Box.Depth.Value, "Box depth");
+                ValidateSegments(descriptor.Box.WidthSegments.Value, "Box width segments");
+                ValidateSegments(descriptor.Box.HeightSegments.Value, "Box height segments");
+                ValidateSegments(descriptor.Box.DepthSegments.Value, "Box depth segments");
+                break;
+            case ShapeKind.Cylinder:
+                ValidateNonNegativeFinite(descriptor.Cylinder.RadiusTop.Value, "Cylinder top radius");
+                ValidateNonNegativeFinite(descriptor.Cylinder.RadiusBottom.Value, "Cylinder bottom radius");
+                ValidateMetric(descriptor.Cylinder.Height.Value, "Cylinder height");
+                ValidateSegments(descriptor.Cylinder.RadialSegments.Value, "Cylinder radial segments");
+                ValidateSegments(descriptor.Cylinder.HeightSegments.Value, "Cylinder height segments");
+                ValidateSweep(descriptor.Cylinder.ThetaLength.Value, "Cylinder theta length");
+                break;
+            case ShapeKind.Capsule:
+                ValidateMetric(descriptor.Capsule.Radius.Value, "Capsule radius");
+                ValidateNonNegativeFinite(descriptor.Capsule.Length.Value, "Capsule length");
+                ValidateSegments(descriptor.Capsule.CapSegments.Value, "Capsule cap segments");
+                ValidateSegments(descriptor.Capsule.RadialSegments.Value, "Capsule radial segments");
+                break;
+            case ShapeKind.Plane:
+                ValidateMetric(descriptor.Plane.Width.Value, "Plane width");
+                ValidateMetric(descriptor.Plane.Height.Value, "Plane height");
+                ValidateSegments(descriptor.Plane.WidthSegments.Value, "Plane width segments");
+                ValidateSegments(descriptor.Plane.HeightSegments.Value, "Plane height segments");
+                break;
+            case ShapeKind.Torus:
+                ValidateMetric(descriptor.Torus.Radius.Value, "Torus radius");
+                ValidateMetric(descriptor.Torus.Tube.Value, "Torus tube");
+                ValidateSegments(descriptor.Torus.RadialSegments.Value, "Torus radial segments");
+                ValidateSegments(descriptor.Torus.TubularSegments.Value, "Torus tubular segments");
+                ValidateSweep(descriptor.Torus.Arc.Value, "Torus arc");
+                break;
+            default:
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(descriptor.Kind));
+                break;
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Describe(in ShapeDescriptor descriptor) => descriptor.ToString();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateMetric(float value, string name)
+    {
+        if (!float.IsFinite(value) || value <= 0.0f)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(name);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateNonNegativeFinite(float value, string name)
+    {
+        if (!float.IsFinite(value) || value < 0.0f)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(name);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateSegments(uint value, string name)
+    {
+        if (value == 0U)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(name);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateSweep(float value, string name)
+    {
+        if (!float.IsFinite(value) || value < 0.0f)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(name);
+        }
+    }
 }

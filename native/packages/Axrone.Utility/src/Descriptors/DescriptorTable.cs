@@ -27,6 +27,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
     private readonly nuint _controlWords;
     private readonly nuint _queueCells;
     private readonly nuint _descriptorStorage;
+    private readonly int[] _refCounts;
 
     private AlignedAtomicCounter64 _enqueuePos;
     private AlignedAtomicCounter64 _dequeuePos;
@@ -47,6 +48,13 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         get => _capacity;
     }
 
+    /// <summary>Index mask for power-of-two capacities.</summary>
+    public uint Mask
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _mask;
+    }
+
     /// <summary>Live descriptors.</summary>
     public long ActiveCount
     {
@@ -61,6 +69,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         _capacity = options.Capacity;
         _mask = _capacity - 1;
         _metrics = metrics;
+        _refCounts = new int[_capacity];
 
         _lifecycleState.Reset();
         _lifecycleState.Add(StateActive);
@@ -161,6 +170,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             }
             else if (diff < 0)
             {
+                _metrics.OnExhausted();
                 handle = DescriptorHandle<TDescriptor>.Invalid;
                 return false;
             }
@@ -179,9 +189,37 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         return TryAllocate(in descriptor, out handle, flags);
     }
 
+    /// <summary>Allocates a slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe AcquisitionResult<TDescriptor> TryAcquire(in TDescriptor descriptor, ushort flags = 0)
+    {
+        if (_lifecycleState.Value != StateActive)
+        {
+            return AcquisitionResult<TDescriptor>.Terminated();
+        }
+
+        if (TryAllocate(in descriptor, out DescriptorHandle<TDescriptor> handle, flags))
+        {
+            return AcquisitionResult<TDescriptor>.Ok(handle);
+        }
+
+        return _lifecycleState.Value != StateActive
+            ? AcquisitionResult<TDescriptor>.Terminated()
+            : AcquisitionResult<TDescriptor>.Exhausted();
+    }
+
+    /// <summary>Allocates an uninitialized slot, reporting the outcome as a discriminated result.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe AcquisitionResult<TDescriptor> TryAcquire(ushort flags = 0)
+    {
+        Unsafe.SkipInit(out TDescriptor descriptor);
+        return TryAcquire(in descriptor, flags);
+    }
+
     /// <summary>
     /// Reclaims a handle: generation bumps (wrapping past max), the slot returns to
     /// the freelist, and waiter release fires when the last descriptor drains.
+    /// A slot with live leases retires instead and frees on the last release.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public unsafe bool TryFree(in DescriptorHandle<TDescriptor> handle)
@@ -191,24 +229,55 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             return false;
         }
 
-        var cells = (MpmcQueueCell*)_queueCells;
         long current = Volatile.Read(ref ControlWord(handle.SlotIndex));
         UnpackControlWord(current, out uint generation, out ushort status, out _);
 
-        if (generation != handle.Generation || status == (ushort)DescriptorStatus.Free)
+        if (generation != handle.Generation
+            || status == (ushort)DescriptorStatus.Free
+            || status == (ushort)DescriptorStatus.Retired)
         {
             return false;
         }
 
+        if (Volatile.Read(ref _refCounts[handle.SlotIndex]) > 0)
+        {
+            long retired = PackControlWord(generation, (ushort)DescriptorStatus.Retired, 0);
+            if (Interlocked.CompareExchange(ref ControlWord(handle.SlotIndex), retired, current) != current)
+            {
+                return false;
+            }
+
+            if (Volatile.Read(ref _refCounts[handle.SlotIndex]) == 0)
+            {
+                long marked = Volatile.Read(ref ControlWord(handle.SlotIndex));
+                UnpackControlWord(marked, out uint markedGeneration, out ushort markedStatus, out _);
+
+                if (markedGeneration == generation && markedStatus == (ushort)DescriptorStatus.Retired)
+                {
+                    return FreeSlot(handle.SlotIndex, marked, generation);
+                }
+            }
+
+            return true;
+        }
+
+        return FreeSlot(handle.SlotIndex, current, generation);
+    }
+
+    /// <summary>Completes the reclaim: bumps the generation and returns the slot.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private unsafe bool FreeSlot(uint slotIndex, long currentWord, uint generation)
+    {
+        var cells = (MpmcQueueCell*)_queueCells;
         uint nextGeneration = generation == uint.MaxValue ? 1 : generation + 1;
         long next = PackControlWord(nextGeneration, (ushort)DescriptorStatus.Free, 0);
 
-        if (Interlocked.CompareExchange(ref ControlWord(handle.SlotIndex), next, current) != current)
+        if (Interlocked.CompareExchange(ref ControlWord(slotIndex), next, currentWord) != currentWord)
         {
             return false;
         }
 
-        DescriptorAt(handle.SlotIndex) = default;
+        DescriptorAt(slotIndex) = default;
 
         TBackoff.Initialize(out int spin);
         while (true)
@@ -222,7 +291,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             {
                 if (_enqueuePos.CompareExchange(pos + 1, pos))
                 {
-                    cells[cellIndex].SlotIndex = handle.SlotIndex;
+                    cells[cellIndex].SlotIndex = slotIndex;
                     Volatile.Write(ref cells[cellIndex].Sequence, pos + 1);
                     break;
                 }
@@ -233,7 +302,7 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
             }
         }
 
-        _metrics.OnFreed(handle.SlotIndex);
+        _metrics.OnFreed(slotIndex);
 
         if (_activeCount.Decrement() == 0 && _lifecycleState.Value >= StateDraining)
         {
@@ -241,6 +310,100 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
         }
 
         return true;
+    }
+
+    /// <summary>Borrows a live slot as a stack-bound lease.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe bool TryBorrow(
+        in DescriptorHandle<TDescriptor> handle,
+        out DescriptorLease<TDescriptor, TBackoff, TMetrics> lease)
+    {
+        lease = default;
+
+        if (!handle.IsValid || handle.SlotIndex >= _capacity)
+        {
+            return false;
+        }
+
+        long current = Volatile.Read(ref ControlWord(handle.SlotIndex));
+        UnpackControlWord(current, out uint generation, out ushort status, out _);
+
+        if (generation != handle.Generation
+            || status == (ushort)DescriptorStatus.Free
+            || status == (ushort)DescriptorStatus.Retired)
+        {
+            return false;
+        }
+
+        Interlocked.Increment(ref _refCounts[handle.SlotIndex]);
+
+        long recheck = Volatile.Read(ref ControlWord(handle.SlotIndex));
+        UnpackControlWord(recheck, out uint freshGeneration, out ushort freshStatus, out _);
+
+        if (freshGeneration != handle.Generation
+            || freshStatus == (ushort)DescriptorStatus.Free
+            || freshStatus == (ushort)DescriptorStatus.Retired)
+        {
+            Interlocked.Decrement(ref _refCounts[handle.SlotIndex]);
+            return false;
+        }
+
+        lease = new DescriptorLease<TDescriptor, TBackoff, TMetrics>(
+            this,
+            new SlotIndex(handle.SlotIndex),
+            new Generation(handle.Generation));
+        return true;
+    }
+
+    /// <summary>Releases a lease; completes a retired slot on last release.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal unsafe void ReleaseLease(SlotIndex index, Generation generation)
+    {
+        uint slot = index.Value;
+        if (slot >= _capacity)
+        {
+            ThrowHelper.ThrowInvalidOperationException("The descriptor lease names a slot outside the table.");
+        }
+
+        int remaining = Interlocked.Decrement(ref _refCounts[slot]);
+        if (remaining < 0)
+        {
+            Interlocked.Increment(ref _refCounts[slot]);
+            ThrowHelper.ThrowInvalidOperationException("The descriptor lease was released more than once.");
+        }
+
+        if (remaining != 0)
+        {
+            return;
+        }
+
+        long current = Volatile.Read(ref ControlWord(slot));
+        UnpackControlWord(current, out uint currentGeneration, out ushort status, out _);
+
+        if (currentGeneration == generation.Value && status == (ushort)DescriptorStatus.Retired)
+        {
+            FreeSlot(slot, current, currentGeneration);
+        }
+    }
+
+    /// <summary>Zero-copy payload for a leased slot; throws when the slot moved on.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    internal unsafe ref readonly TDescriptor GetLeasedRef(SlotIndex index, Generation generation)
+    {
+        uint slot = index.Value;
+        if (slot < _capacity)
+        {
+            long current = Volatile.Read(ref ControlWord(slot));
+            UnpackControlWord(current, out uint currentGeneration, out ushort status, out _);
+
+            if (currentGeneration == generation.Value && status != (ushort)DescriptorStatus.Free)
+            {
+                return ref DescriptorAt(slot);
+            }
+        }
+
+        ThrowHelper.ThrowInvalidOperationException("The descriptor lease no longer names a live slot.");
+        return ref Unsafe.NullRef<TDescriptor>();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -275,6 +438,55 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
 
         descriptor = default;
         return false;
+    }
+
+    /// <summary>Copies the payload with its observed status, failing on torn reads.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public unsafe bool TrySnapshot(in DescriptorHandle<TDescriptor> handle, out DescriptorSnapshot<TDescriptor> snapshot)
+    {
+        if (handle.SlotIndex < _capacity && handle.IsValid)
+        {
+            long before = Volatile.Read(ref ControlWord(handle.SlotIndex));
+            UnpackControlWord(before, out uint generation, out ushort status, out _);
+
+            if (generation == handle.Generation && status != (ushort)DescriptorStatus.Free)
+            {
+                TDescriptor descriptor = DescriptorAt(handle.SlotIndex);
+                long after = Volatile.Read(ref ControlWord(handle.SlotIndex));
+
+                if (before == after)
+                {
+                    snapshot = new DescriptorSnapshot<TDescriptor>(handle, descriptor, (DescriptorStatus)status);
+                    return true;
+                }
+            }
+        }
+
+        snapshot = default;
+        return false;
+    }
+
+    /// <summary>Allocates a run of descriptors, stopping at the first failure.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public unsafe int AllocateBatch(
+        Span<DescriptorHandle<TDescriptor>> outHandles,
+        ReadOnlySpan<TDescriptor> descriptors,
+        ushort flags = 0)
+    {
+        int limit = Math.Min(descriptors.Length, outHandles.Length);
+        int acquired = 0;
+
+        for (int i = 0; i < limit; i++)
+        {
+            if (!TryAllocate(in descriptors[i], out outHandles[i], flags))
+            {
+                break;
+            }
+
+            acquired++;
+        }
+
+        return acquired;
     }
 
     /// <summary>Zero-copy readonly reference into table memory.</summary>
@@ -362,6 +574,11 @@ public sealed class DescriptorTable<TDescriptor, TBackoff, TMetrics> : IDisposab
     public unsafe bool TrySetStatus(in DescriptorHandle<TDescriptor> handle, DescriptorStatus newStatus)
     {
         if (handle.SlotIndex >= _capacity || !handle.IsValid || newStatus == DescriptorStatus.Free)
+        {
+            return false;
+        }
+
+        if (newStatus == DescriptorStatus.Retired)
         {
             return false;
         }

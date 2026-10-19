@@ -15,7 +15,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedKeyDown<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, Key key)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -28,7 +28,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedKeyUp<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, Key key)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -41,7 +41,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedKeyChar<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, char character)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -54,7 +54,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedMouseDown<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, MouseButton button)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -67,7 +67,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedMouseUp<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, MouseButton button)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -81,7 +81,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedMouseMove<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, float x, float y)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -95,7 +95,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedMouseScroll<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, float x, float y)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -110,7 +110,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedGamepadButton<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte slot, ButtonName name, bool down)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -130,7 +130,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedGamepadAxis<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte slot, byte axis, float value)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -146,7 +146,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedTouch<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte contactId, TouchPhase phase, float x, float y)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -160,7 +160,7 @@ public static class SilkInputFeed
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool FeedGamepadConnection<TBackoff, TMetrics>(
         this LockFreeInputRingBuffer<TBackoff, TMetrics> buffer, byte slot, bool connected)
-        where TBackoff : struct, IBackoffPolicy
+        where TBackoff : struct, ISpinBackoff
         where TMetrics : struct, IInputMetricsSink
     {
         ArgumentNullException.ThrowIfNull(buffer);

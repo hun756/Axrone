@@ -1,5 +1,7 @@
 namespace Axrone.Input;
 
+using Axrone.Collections;
+
 /// <summary>
 /// Writes one event without blocking.
 /// </summary>
@@ -40,15 +42,6 @@ public interface IAsyncDrainable
 }
 
 /// <summary>
-/// Contention backoff for lock-free loops. Monomorphized, no vtable.
-/// </summary>
-public interface IBackoffPolicy
-{
-    /// <summary>Backs off once, advancing the iteration cursor.</summary>
-    static abstract void SpinOnce(ref int iteration);
-}
-
-/// <summary>
 /// Zero-cost queue telemetry. Monomorphized, no vtable.
 /// </summary>
 public interface IInputMetricsSink
@@ -74,7 +67,7 @@ public interface IInputEventQueue :
     IDisposable
 {
     /// <summary>Queue capacity.</summary>
-    QueueCapacity Capacity { get; }
+    BufferCapacity Capacity { get; }
 
     /// <summary>Enqueues an event; <see langword="false"/> when full or completed.</summary>
     bool TryEnqueue(in RawInputEvent evt);
@@ -88,77 +81,24 @@ public interface IInputEventQueue :
 }
 
 /// <summary>
-/// Power-of-two queue capacity with its index mask.
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly record struct QueueCapacity :
-    IComparable<QueueCapacity>,
-    IComparisonOperators<QueueCapacity, QueueCapacity, bool>
-{
-    /// <summary>Slot count.</summary>
-    public uint Value { get; }
-
-    /// <summary>Index mask (capacity minus one).</summary>
-    public uint Mask { get; }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private QueueCapacity(uint value)
-    {
-        Value = value;
-        Mask = value - 1;
-    }
-
-    /// <summary>Creates a capacity; must be a power of two, at least two.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static QueueCapacity Create(uint powerOfTwoCapacity)
-    {
-        if (powerOfTwoCapacity < 2 || (powerOfTwoCapacity & (powerOfTwoCapacity - 1)) != 0)
-        {
-            ThrowHelper.ThrowMustBePowerOfTwo();
-        }
-        return new QueueCapacity(powerOfTwoCapacity);
-    }
-
-    /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(QueueCapacity other) => Value.CompareTo(other.Value);
-
-    /// <summary>Determines whether the left capacity is smaller.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(QueueCapacity left, QueueCapacity right) => left.Value < right.Value;
-
-    /// <summary>Determines whether the left capacity is larger.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(QueueCapacity left, QueueCapacity right) => left.Value > right.Value;
-
-    /// <summary>Determines whether the left capacity is smaller or equal.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(QueueCapacity left, QueueCapacity right) => left.Value <= right.Value;
-
-    /// <summary>Determines whether the left capacity is larger or equal.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(QueueCapacity left, QueueCapacity right) => left.Value >= right.Value;
-
-    /// <summary>Unwraps the slot count.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator uint(QueueCapacity capacity) => capacity.Value;
-}
-
-/// <summary>
 /// Adaptive backoff: spins with growth, then yields.
 /// </summary>
-public readonly struct AdaptiveBackoff : IBackoffPolicy
+public readonly struct AdaptiveBackoff : ISpinBackoff
 {
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Initialize(out int state) => state = 0;
+
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static void SpinOnce(ref int iteration)
+    public static void Advance(ref int state)
     {
-        iteration++;
-        if ((uint)iteration <= 10)
+        state++;
+        if ((uint)state <= 10)
         {
-            Thread.SpinWait(1 << iteration);
+            Thread.SpinWait(1 << state);
         }
-        else if ((uint)iteration <= 20)
+        else if ((uint)state <= 20)
         {
             Thread.SpinWait(1024);
         }
@@ -167,20 +107,32 @@ public readonly struct AdaptiveBackoff : IBackoffPolicy
             Thread.Yield();
         }
     }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Reset(ref int state) => state = 0;
 }
 
 /// <summary>
 /// Minimal fixed-spin backoff for short critical sections.
 /// </summary>
-public readonly struct SpinWaitBackoff : IBackoffPolicy
+public readonly struct SpinWaitBackoff : ISpinBackoff
 {
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void SpinOnce(ref int iteration)
+    public static void Initialize(out int state) => state = 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Advance(ref int state)
     {
-        iteration++;
+        state++;
         Thread.SpinWait(4);
     }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Reset(ref int state) => state = 0;
 }
 
 /// <summary>

@@ -39,6 +39,11 @@ public interface IDescriptorMetricsSink
 
     /// <summary>Table faulted.</summary>
     void OnFaulted(Exception error);
+
+    /// <summary>Allocation rejected because the table is full. Default is a no-op.</summary>
+    void OnExhausted()
+    {
+    }
 }
 
 /// <summary>No-op sink eliminated by dead-code removal.</summary>

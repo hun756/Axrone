@@ -19,7 +19,7 @@ public readonly struct DefaultActivatorFactory<T> : ISingletonFactory<T>
 /// a configurable maximum. Suitable for drain waits where held leases are expected to
 /// release quickly at first and progressively more slowly.
 /// </summary>
-public readonly struct AdaptiveBackoff : IBackoffPolicy
+public readonly struct AdaptiveBackoff : IDelayPolicy
 {
     private readonly int _maxAttempts;
     private readonly TimeSpan _maxDelay;
@@ -94,7 +94,7 @@ public readonly struct AdaptiveBackoff : IBackoffPolicy
 /// exponentially growing delays. Suitable for lease-release waits where the expected
 /// release time is sub-millisecond.
 /// </summary>
-public readonly struct ExponentialSpinBackoff : IBackoffPolicy
+public readonly struct ExponentialSpinBackoff : IDelayPolicy
 {
     private readonly int _maxAttempts;
     private readonly int _spinThreshold;
