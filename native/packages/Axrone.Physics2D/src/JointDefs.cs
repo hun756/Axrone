@@ -455,3 +455,70 @@ public readonly struct RopeDef
         }
     } = 1.0f;
 }
+
+/// <summary>
+/// Construction parameters of a mouse joint: a body-frame grab point pulled
+/// toward a moving world target with capped force. The grab point freezes at
+/// creation; the target moves with <see cref="JointStore.SetMouseTarget"/>.
+/// </summary>
+public readonly struct MouseDef
+{
+    /// <summary>Creates default parameters.</summary>
+    public MouseDef()
+    {
+    }
+
+    /// <summary>Ground holder; usually static.</summary>
+    public BodyId BodyA { get; init; } = BodyId.Invalid;
+
+    /// <summary>Dragged body.</summary>
+    public BodyId BodyB { get; init; } = BodyId.Invalid;
+
+    /// <summary>World target.</summary>
+    public Vec2 Target { get; init; } = default;
+
+    /// <summary>Peak force; finite and never negative.</summary>
+    public float MaxForce
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(MaxForce));
+            }
+
+            field = value;
+        }
+    } = 100.0f;
+
+    /// <summary>Convergence rate per second; finite and never negative.</summary>
+    public float Stiffness
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(Stiffness));
+            }
+
+            field = value;
+        }
+    } = 5.0f;
+
+    /// <summary>Relative-velocity blend in [0, 1).</summary>
+    public float Damping
+    {
+        get => field;
+        init
+        {
+            if (value < 0.0f || value >= 1.0f || float.IsNaN(value))
+            {
+                ThrowHelper.ThrowArgumentOutOfRange(nameof(Damping));
+            }
+
+            field = value;
+        }
+    } = 0.0f;
+}

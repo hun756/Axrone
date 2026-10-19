@@ -29,6 +29,9 @@ public enum JointKind : byte
 
     /// <summary>Max-distance tether between two anchors.</summary>
     Rope = 8,
+
+    /// <summary>Spring toward a moving world-space target with capped force.</summary>
+    Mouse = 9,
 }
 
 /// <summary>Angular or linear limit state resolved per step.</summary>
