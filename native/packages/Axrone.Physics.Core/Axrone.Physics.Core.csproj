@@ -18,6 +18,9 @@
     <!-- CA1711: Flags suffix — names mirror the web physics-core
          contract (SolverFlags, BodyFlags), intentional. -->
     <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1008: zero None member — discriminant values mirror the web
+         contract (ShapeType3D starts at Capsule=1), intentional. -->
+    <NoWarn>$(NoWarn);CA1008</NoWarn>
     <!-- CA1028: byte-backed physics enums — wire-sized discriminants
          matching the solver and state encoding, intentional. -->
     <NoWarn>$(NoWarn);CA1028</NoWarn>
