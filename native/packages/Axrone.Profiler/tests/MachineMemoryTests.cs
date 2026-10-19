@@ -93,4 +93,22 @@ public sealed class MachineMemoryTests
 
         tracker.GetTotalSamples().Should().BeGreaterThan(0);
     }
+
+    [Fact]
+    public void Memory_Samples_Carry_Change_And_Gc_Counts()
+    {
+        using var tracker = new MemoryTracker();
+        tracker.StartTracking();
+
+        MemorySample first = tracker.Sample();
+        first.HeapSizeChangeSinceLastSample.Should().Be(0L);
+        first.GcEventsCount.Should().BeGreaterThanOrEqualTo(0);
+
+        byte[] keep = new byte[256 * 1024];
+        GC.KeepAlive(keep);
+        MemorySample second = tracker.Sample();
+        second.TimestampMs.Should().BeGreaterThanOrEqualTo(first.TimestampMs);
+        second.AvailableHeapSizeBytes.Should().BeGreaterThanOrEqualTo(0L);
+        tracker.StopTracking();
+    }
 }

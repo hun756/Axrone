@@ -191,4 +191,52 @@ public sealed class ProfilerFacadeTests : IDisposable
         _profiler.GetOverheadMetrics().TimerCount.Should().Be(0);
         _profiler.Stop();
     }
+
+    [Fact]
+    public void Marker_Callback_And_Frame_Hook_Run()
+    {
+        int frames = 0;
+        using var profiler = new Profiler(new ProfilerOptions(OnFrameEnd: () => Interlocked.Increment(ref frames)));
+        profiler.Start();
+
+        int first = profiler.AddMarkerWithCallback(() => "dynamic");
+        int second = profiler.AddMarkerWithCallback(() => "other");
+        second.Should().Be(first + 1);
+        profiler.EndFrame();
+
+        frames.Should().Be(1);
+        profiler.GetTimelineRecorder().GetEvents().Should().Contain(e => e.Message == "marker:dynamic");
+        profiler.Stop();
+
+        Action bad = () => profiler.AddMarkerWithCallback(null!);
+        bad.Should().Throw<ArgumentNullException>();
+    }
+}
+
+public sealed class ResultHelperTests
+{
+    [Fact]
+    public void TryExecute_Captures_Success_And_Failure()
+    {
+        Result<int> ok = ProfilerResults.TryExecute(() => 41 + 1, "PROFILER_ERROR");
+        ok.IsSuccess.Should().BeTrue();
+        ok.Value.Should().Be(42);
+
+        Result<int> failed = ProfilerResults.TryExecute<int>(() => throw new InvalidOperationException("boom"), "PROFILER_TICK_ERROR");
+        failed.IsFailure.Should().BeTrue();
+        failed.TopError.Code.Should().Be("PROFILER_TICK_ERROR");
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_Captures_Failure()
+    {
+        async ValueTask<int> Boom()
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("async boom");
+        }
+
+        Result<int> failed = await ProfilerResults.TryExecuteAsync<int>(Boom, "PROFILER_ERROR");
+        failed.IsFailure.Should().BeTrue();
+    }
 }

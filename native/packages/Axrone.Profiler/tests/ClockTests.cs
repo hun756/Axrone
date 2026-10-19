@@ -111,4 +111,64 @@ public sealed class ClockTests
         watch.Reset();
         watch.Stop();
     }
+
+    [Fact]
+    public void Clocks_Expose_Metadata_And_Metrics()
+    {
+        var mono = new MonotonicClock("main", ClockPrecision.High);
+        mono.GetMetadata().Should().Be(new ClockMetadata("main", Stopwatch.Frequency, ClockPrecision.High));
+        mono.GetMetrics().TickCount.Should().Be(0L);
+        mono.GetMetrics().State.Should().Be(ClockState.Stopped);
+        mono.Start();
+        mono.Tick();
+        mono.GetMetrics().TickCount.Should().Be(1L);
+        mono.Stop();
+
+        var wall = new WallClock();
+        wall.Start();
+        wall.GetMetadata().ClockId.Should().Be("wall");
+        wall.GetMetadata().ResolutionHz.Should().Be(TimeConversion.Milliseconds);
+        wall.GetMetrics().State.Should().Be(ClockState.Running);
+        wall.Stop();
+
+        var virt = new VirtualClock();
+        virt.Start();
+        virt.GetMetadata().Precision.Should().Be(ClockPrecision.High);
+        virt.GetMetrics().State.Should().Be(ClockState.Running);
+        virt.Stop();
+    }
+
+    [Fact]
+    public async Task WaitForNextTick_Returns_After_Tick()
+    {
+        var clock = new MonotonicClock();
+        clock.Start();
+        try
+        {
+            ValueTask<Nanoseconds> wait = clock.WaitForNextTickAsync();
+            clock.Tick();
+            Nanoseconds stamped = await wait;
+            stamped.Value.Should().BeGreaterThan(0L);
+        }
+        finally
+        {
+            clock.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task WaitForNextTick_Honors_Cancellation()
+    {
+        var clock = new MonotonicClock();
+        clock.Start();
+        try
+        {
+            using var cts = new CancellationTokenSource(50);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => clock.WaitForNextTickAsync(cts.Token).AsTask());
+        }
+        finally
+        {
+            clock.Stop();
+        }
+    }
 }

@@ -97,4 +97,32 @@ public sealed class MetricsFlameTests
         FlameGraphNode node = builder.GetRoots().Should().ContainSingle().Subject;
         node.GetUniqueSignatures().Should().BeEquivalentTo("update#1", "update#2");
     }
+
+    [Fact]
+    public void Histogram_Buckets_Cover_Recorded_Range()
+    {
+        using var histogram = new LogHistogram();
+        histogram.Record(1.0);
+        histogram.Record(100.0);
+
+        HistogramBucket[] buckets = histogram.GetBuckets();
+        buckets.Should().NotBeEmpty();
+        buckets.Should().OnlyContain(b => b.Count > 0L);
+        buckets.Sum(b => b.Count).Should().Be(2L);
+
+        HistogramStatistics stats = histogram.GetStatistics();
+        stats.Buckets.Should().BeEquivalentTo(buckets);
+    }
+
+    [Fact]
+    public void FlameGraph_Reports_Active_Depth()
+    {
+        using var builder = new FlameGraphBuilder();
+        builder.GetActiveTimerCount().Should().Be(0);
+        builder.BeginFrame("a");
+        builder.BeginFrame("b");
+        builder.GetActiveTimerCount().Should().Be(2);
+        builder.EndFrame();
+        builder.GetActiveTimerCount().Should().Be(1);
+    }
 }
