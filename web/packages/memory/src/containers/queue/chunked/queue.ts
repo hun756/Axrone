@@ -33,6 +33,10 @@ import { QueueIterator } from './iterator';
 
 const OK_VOID: Result<void, never> = ok();
 
+/**
+ * FIFO queue backed by 512-slot chunks. O(1) append, bounded overflow
+ * strategies, abortable async coordination, and an explicit lifecycle FSM.
+ */
 export class Queue<T> implements IQueue<T> {
     private _chunkHead: MemoryChunk<T>;
     private _chunkTail: MemoryChunk<T>;

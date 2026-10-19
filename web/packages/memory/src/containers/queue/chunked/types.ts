@@ -54,18 +54,26 @@ export function toQueueSize(value: number): QueueSize {
 }
 
 export const OverflowStrategy = {
+    /** Reject the write and return QueueFullError. */
     Reject: 'REJECT',
+    /** Drop the oldest buffered item to make room. */
     DropHead: 'DROP_HEAD',
+    /** Discard the incoming item when full. */
     DropTail: 'DROP_TAIL',
+    /** Suspend the producer until capacity frees (async only). */
     Block: 'BLOCK',
 } as const;
 
 export type OverflowStrategy = (typeof OverflowStrategy)[keyof typeof OverflowStrategy];
 
 export const LifecycleState = {
+    /** Accepts reads and writes. */
     Active: 'ACTIVE',
+    /** Close called with buffered items; reads drain, writes rejected. */
     Closing: 'CLOSING',
+    /** Buffer empty after close; readers released. */
     Drained: 'DRAINED',
+    /** Resources released by dispose. */
     Terminated: 'TERMINATED',
 } as const;
 
