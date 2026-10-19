@@ -65,4 +65,67 @@ public sealed class PhysicsCoreContractTests
         PhysicsConstants.LinearSleepTolerance.Should().Be(0.01f);
         PhysicsConstants.AngularSleepTolerance.Should().BeApproximately((2.0f / 180.0f) * MathF.PI, 1e-9f);
     }
+
+    [Fact]
+    public void Shape_And_Constraint_Types_Match_Web_Contract()
+    {
+        ((byte)ShapeType.Circle).Should().Be(0);
+        ((byte)ShapeType.Capsule).Should().Be(1);
+        ((byte)ShapeType.Polygon).Should().Be(2);
+        ((byte)ShapeType.Box).Should().Be(3);
+        ((byte)ShapeType.Segment).Should().Be(4);
+        ((byte)ShapeType.Sphere).Should().Be(5);
+        ((byte)ShapeType.Cylinder).Should().Be(6);
+        ((byte)ShapeType.Cone).Should().Be(7);
+        ((byte)ShapeType.ConvexHull).Should().Be(8);
+        ((byte)ShapeType.TriangleMesh).Should().Be(9);
+        ((byte)ShapeType.HeightField).Should().Be(10);
+
+        ((byte)ConstraintType.Distance).Should().Be(0);
+        ((byte)ConstraintType.Revolute).Should().Be(1);
+        ((byte)ConstraintType.Prismatic).Should().Be(2);
+        ((byte)ConstraintType.Weld).Should().Be(3);
+        ((byte)ConstraintType.Wheel).Should().Be(4);
+        ((byte)ConstraintType.Motor).Should().Be(5);
+        ((byte)ConstraintType.Mouse).Should().Be(6);
+        ((byte)ConstraintType.Gear).Should().Be(7);
+        ((byte)ConstraintType.Rope).Should().Be(8);
+
+        ((byte)ShapeType3D.Sphere).Should().Be(5);
+        ((byte)ShapeType3D.Box).Should().Be(3);
+        ((byte)ShapeType3D.Capsule).Should().Be(1);
+        ((byte)ShapeType3D.Cylinder).Should().Be(6);
+        ((byte)ShapeType3D.Cone).Should().Be(7);
+        ((byte)ShapeType3D.ConvexHull).Should().Be(8);
+        ((byte)ShapeType3D.TriangleMesh).Should().Be(9);
+        ((byte)ShapeType3D.HeightField).Should().Be(10);
+
+        ((byte)ConstraintType3D.Fixed).Should().Be(0);
+        ((byte)ConstraintType3D.Spherical).Should().Be(1);
+        ((byte)ConstraintType3D.Hinge).Should().Be(2);
+        ((byte)ConstraintType3D.Slider).Should().Be(3);
+        ((byte)ConstraintType3D.ConeTwist).Should().Be(4);
+        ((byte)ConstraintType3D.Generic).Should().Be(5);
+        ((byte)ConstraintType3D.Spring).Should().Be(6);
+    }
+
+    [Fact]
+    public void Collision_And_Sensor_Events_Match_Web_Contract()
+    {
+        ((byte)CollisionEventType.Begin).Should().Be(0);
+        ((byte)CollisionEventType.Stay).Should().Be(1);
+        ((byte)CollisionEventType.End).Should().Be(2);
+        ((byte)CollisionEventType.PreSolve).Should().Be(3);
+        ((byte)CollisionEventType.PostSolve).Should().Be(4);
+
+        ((byte)SensorEventType.Enter).Should().Be(0);
+        ((byte)SensorEventType.Stay).Should().Be(1);
+        ((byte)SensorEventType.Exit).Should().Be(2);
+
+        ((byte)ToiState.Unknown).Should().Be(0);
+        ((byte)ToiState.Failed).Should().Be(1);
+        ((byte)ToiState.Overlapped).Should().Be(2);
+        ((byte)ToiState.Touching).Should().Be(3);
+        ((byte)ToiState.Separated).Should().Be(4);
+    }
 }
