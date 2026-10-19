@@ -1,10 +1,9 @@
 export * from './errors';
-export * from './queue';
 export * from './priority-queue';
 export * from './utils';
 
 export {
-    Queue as ChunkedQueue,
+    Queue,
     QueueBuilder,
     QueueDomainError,
     QueueEmptyError,
@@ -22,6 +21,12 @@ export {
     isValidQueueCapacity,
     isValidQueueSize,
     isBatch,
+    MemoryChunk,
+    ChunkPool,
+    QueueIterator,
+    IntrusiveQueue,
+    CHUNK_SIZE,
+    CHUNK_POOL_LIMIT,
 } from './chunked';
 
 export type {
@@ -39,4 +44,5 @@ export type {
     TypestateUnconfigured,
     TypestateBounded,
     TypestateConfigured,
+    ILinkedListNode,
 } from './chunked';
