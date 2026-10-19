@@ -26,6 +26,9 @@ public enum JointKind : byte
 
     /// <summary>Ratio constraint between the coordinates of two revolute/prismatic joints.</summary>
     Gear = 7,
+
+    /// <summary>Max-distance tether between two anchors.</summary>
+    Rope = 8,
 }
 
 /// <summary>Angular or linear limit state resolved per step.</summary>

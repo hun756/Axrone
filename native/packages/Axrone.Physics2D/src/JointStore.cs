@@ -22,13 +22,14 @@ public sealed class JointStore : IJointRegistry
     private readonly JointStorage<WheelPolicy, WheelJointData> _wheel = new();
     private readonly JointStorage<PulleyPolicy, PulleyJointData> _pulley = new();
     private readonly JointStorage<GearPolicy, GearJointData> _gear = new();
+    private readonly JointStorage<RopePolicy, RopeJointData> _rope = new();
 
     /// <inheritdoc/>
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _distance.Count + _revolute.Count + _weld.Count + _prismatic.Count +
-               _motor.Count + _wheel.Count + _pulley.Count + _gear.Count;
+               _motor.Count + _wheel.Count + _pulley.Count + _gear.Count + _rope.Count;
     }
 
     /// <inheritdoc/>
@@ -51,6 +52,7 @@ public sealed class JointStore : IJointRegistry
             JointKind.Wheel => _wheel.TryGetBySparseIndex(slot, out _),
             JointKind.Pulley => _pulley.TryGetBySparseIndex(slot, out _),
             JointKind.Gear => _gear.TryGetBySparseIndex(slot, out _),
+            JointKind.Rope => _rope.TryGetBySparseIndex(slot, out _),
             _ => false,
         };
     }
@@ -510,6 +512,51 @@ public sealed class JointStore : IJointRegistry
         }
     }
 
+    /// <summary>
+    /// Creates a max-distance tether between two body-frame anchors and wakes
+    /// both bodies. Slack ropes exert nothing; taut ropes pull the anchors
+    /// back inside the rest length.
+    /// </summary>
+    /// <param name="bodies">Body registry; both bodies must be live and distinct.</param>
+    /// <param name="definition">Body anchors and max separation.</param>
+    public JointId CreateRope(BodyStore bodies, in RopeDef definition)
+    {
+        ArgumentNullException.ThrowIfNull(bodies);
+
+        if (!definition.BodyA.IsValid || !definition.BodyB.IsValid || definition.BodyA == definition.BodyB)
+        {
+            ThrowHelper.ThrowInvalidOperation("Rope joints need two distinct live bodies.");
+        }
+
+        if (float.IsNaN(definition.LocalAnchorA.X) || float.IsNaN(definition.LocalAnchorA.Y) ||
+            float.IsInfinity(definition.LocalAnchorA.X) || float.IsInfinity(definition.LocalAnchorA.Y) ||
+            float.IsNaN(definition.LocalAnchorB.X) || float.IsNaN(definition.LocalAnchorB.Y) ||
+            float.IsInfinity(definition.LocalAnchorB.X) || float.IsInfinity(definition.LocalAnchorB.Y))
+        {
+            ThrowHelper.ThrowInvalidOperation("Rope anchors must be finite.");
+        }
+
+        bodies.Slot(definition.BodyA);
+        bodies.Slot(definition.BodyB);
+
+        lock (_lock)
+        {
+            RopeJointData data = new()
+            {
+                BodyA = definition.BodyA,
+                BodyB = definition.BodyB,
+                LocalAnchorA = definition.LocalAnchorA,
+                LocalAnchorB = definition.LocalAnchorB,
+                MaxLength = definition.MaxLength,
+                Impulse = 0.0f,
+            };
+            uint sparse = _rope.Allocate(in data);
+            bodies.SetAwake(definition.BodyA, true);
+            bodies.SetAwake(definition.BodyB, true);
+            return new JointId(JointKind.Rope, sparse);
+        }
+    }
+
     /// <inheritdoc/>
     public void Destroy(JointId id)
     {
@@ -545,6 +592,9 @@ public sealed class JointStore : IJointRegistry
                     break;
                 case JointKind.Gear:
                     _gear.DestroySlot(id.SlotIndex);
+                    break;
+                case JointKind.Rope:
+                    _rope.DestroySlot(id.SlotIndex);
                     break;
                 default:
                     return;
@@ -608,6 +658,7 @@ public sealed class JointStore : IJointRegistry
         count += CopyPairsFrom(_wheel, destination[count..]);
         count += CopyPairsFrom(_pulley, destination[count..]);
         count += CopyPairsFrom(_gear, destination[count..]);
+        count += CopyPairsFrom(_rope, destination[count..]);
         return count;
     }
 
@@ -641,6 +692,7 @@ public sealed class JointStore : IJointRegistry
         count += CollectFrom(_motor, JointKind.Motor, body, destination[count..]);
         count += CollectFrom(_wheel, JointKind.Wheel, body, destination[count..]);
         count += CollectFrom(_pulley, JointKind.Pulley, body, destination[count..]);
+        count += CollectFrom(_rope, JointKind.Rope, body, destination[count..]);
 
         ReadOnlySpan<GearJointData> gears = _gear.DataSpan;
         for (int i = 0; i < gears.Length && count < destination.Length; i++)
@@ -1008,6 +1060,7 @@ public sealed class JointStore : IJointRegistry
         _wheel.InitVelocity(bodies, this, wakeTolerance, dt);
         _pulley.InitVelocity(bodies, this, wakeTolerance, dt);
         _gear.InitVelocity(bodies, this, wakeTolerance, dt);
+        _rope.InitVelocity(bodies, this, wakeTolerance, dt);
     }
 
     /// <summary>Runs one velocity sweep over every packed table.</summary>
@@ -1022,6 +1075,7 @@ public sealed class JointStore : IJointRegistry
         _wheel.SolveVelocity(bodies, this);
         _pulley.SolveVelocity(bodies, this);
         _gear.SolveVelocity(bodies, this);
+        _rope.SolveVelocity(bodies, this);
     }
 
     /// <summary>Runs one position sweep over every packed table.</summary>
@@ -1035,6 +1089,7 @@ public sealed class JointStore : IJointRegistry
         _wheel.SolvePosition(bodies, this);
         _pulley.SolvePosition(bodies, this);
         _gear.SolvePosition(bodies, this);
+        _rope.SolvePosition(bodies, this);
     }
 
     /// <summary>Visits every live joint across all packed tables.</summary>
@@ -1051,6 +1106,7 @@ public sealed class JointStore : IJointRegistry
         AcceptFrom(_wheel, JointKind.Wheel, ref visitor, ref context);
         AcceptFrom(_pulley, JointKind.Pulley, ref visitor, ref context);
         AcceptFrom(_gear, JointKind.Gear, ref visitor, ref context);
+        AcceptFrom(_rope, JointKind.Rope, ref visitor, ref context);
     }
 
     private static void AcceptFrom<TPolicy, TData, TVisitor, TContext>(
