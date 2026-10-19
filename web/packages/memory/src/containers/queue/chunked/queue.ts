@@ -475,7 +475,7 @@ export class Queue<T> implements IQueue<T> {
             if (result.isOk()) {
                 yield result.get();
             } else {
-                const error = result.err()!;
+                const error = result.errToOptional()!;
                 if (error instanceof QueueClosedError) {
                     if (this._terminalFault !== undefined) {
                         throw this._terminalFault;
