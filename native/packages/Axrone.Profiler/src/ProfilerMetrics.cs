@@ -156,6 +156,20 @@ public sealed class LogHistogram : IDisposable
         }
     }
 
+    /// <summary>Drops all recorded samples.</summary>
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            Array.Clear(_counts);
+            Array.Clear(_sums);
+            _totalCount = 0;
+            _totalSum = 0.0;
+            _minValue = double.PositiveInfinity;
+            _maxValue = double.NegativeInfinity;
+        }
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {

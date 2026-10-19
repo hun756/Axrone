@@ -198,6 +198,32 @@ public sealed class FlameGraphBuilder : IDisposable
         }
     }
 
+    /// <summary>Drops the innermost frame without recording.</summary>
+    public void AbortFrame()
+    {
+        ThrowIfDisposed();
+        lock (_gate)
+        {
+            if (_stack.Count == 0)
+            {
+                ProfilerThrowHelper.ThrowArgument(nameof(AbortFrame), "No open frame to abort.");
+            }
+
+            _stack.Pop();
+        }
+    }
+
+    /// <summary>Drops all recorded nodes.</summary>
+    public void Clear()
+    {
+        ThrowIfDisposed();
+        lock (_gate)
+        {
+            _roots.Clear();
+            _stack.Clear();
+        }
+    }
+
     /// <summary>Records a full stack with one duration at the leaf.</summary>
     public void RecordStack(ReadOnlySpan<string> stack, long durationNs = 0L)
     {
