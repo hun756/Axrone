@@ -139,6 +139,59 @@ export class Queue<T> implements IQueue<T> {
         return ok();
     }
 
+    public tryEnqueue(item: NoInfer<T>): boolean {
+        if (this._lifecycle !== LifecycleState.Active) {
+            return false;
+        }
+
+        const consumer = this._consumers.shift();
+        if (consumer !== null) {
+            consumer.detach();
+            consumer.resolve(ok(item));
+            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+            return true;
+        }
+
+        if (this._elementCount >= this._limit) {
+            switch (this._overflowStrategy) {
+                case OverflowStrategy.Reject:
+                case OverflowStrategy.Block:
+                    return false;
+                case OverflowStrategy.DropTail:
+                    this._telemetry.onDrop?.(OverflowStrategy.DropTail);
+                    return true;
+                case OverflowStrategy.DropHead:
+                    this._telemetry.onDrop?.(OverflowStrategy.DropHead);
+                    this.executeShift();
+                    this.executePush(item);
+                    this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+                    return true;
+                default:
+                    return assertNever(this._overflowStrategy);
+            }
+        }
+
+        this.executePush(item);
+        this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+        return true;
+    }
+
+    public tryDequeue(): T | undefined {
+        if (this._elementCount === 0) {
+            return undefined;
+        }
+
+        const item = this.executeShift();
+        this.dispatchPendingProducer();
+        this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+
+        if (this._elementCount === 0) {
+            this.evaluateDrainState();
+        }
+
+        return item;
+    }
+
     public dequeue(): Result<T, QueueEmptyError | QueueClosedError> {
         if (this._elementCount === 0) {
             if (this._lifecycle !== LifecycleState.Active) {

@@ -87,6 +87,7 @@ export interface IQueueSource<out T> {
     readonly isEmpty: boolean;
     readonly isClosed: boolean;
     peek(): T | undefined;
+    tryDequeue(): T | undefined;
     dequeue(): Result<T, QueueEmptyError | QueueClosedError>;
     dequeueBatch<const N extends number>(
         count: N
@@ -98,6 +99,7 @@ export interface IQueueSink<in T> {
     readonly capacity: QueueCapacity;
     readonly isFull: boolean;
     readonly isClosed: boolean;
+    tryEnqueue(item: NoInfer<T>): boolean;
     enqueue(item: NoInfer<T>): Result<void, QueueFullError | QueueClosedError>;
 }
 
