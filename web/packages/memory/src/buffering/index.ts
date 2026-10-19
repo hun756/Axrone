@@ -9,21 +9,20 @@ export { BufferUtils } from './utils';
 export { ByteBuffer } from './byte-buffer-core';
 export {
     ByteChunk,
+    ByteChunkLease,
     ByteChunkPool,
     ByteChunkPoolSet,
     ByteCursor,
-    MemoryChunk,
-    MemoryChunkLease,
     ByteOffset,
     ByteLength,
     ChunkId,
+    MemoryErrorCode,
 } from './byte-chunk';
 export type {
     ByteChunkPoolSetOptions,
     ByteChunkPoolOptions,
     MemoryError,
-    MemoryErrorCode,
-    Result,
+    IChunkPoolRecycler,
 } from './byte-chunk';
 
 export type { BufferPoolOptions, BufferPoolStats, BucketStats } from './buffer-pool';

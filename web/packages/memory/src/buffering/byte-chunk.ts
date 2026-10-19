@@ -1,12 +1,13 @@
-// Benchmark copy of ByteChunk v5 (repo-aligned pool, restored API, epoch telemetry, poison guards).
+/**
+ * ByteChunk: pooled, epoch-guarded byte buffer used by ByteBuffer.
+ * Built on @axrone/utility Result/Brand primitives.
+ */
 
-declare const __byteOffsetBrand: unique symbol;
-declare const __byteLengthBrand: unique symbol;
-declare const __chunkIdBrand: unique symbol;
+import { Brand, err, ok, type Result } from '@axrone/utility';
 
-export type ByteOffset = number & { readonly [__byteOffsetBrand]: typeof __byteOffsetBrand };
-export type ByteLength = number & { readonly [__byteLengthBrand]: typeof __byteLengthBrand };
-export type ChunkId = string & { readonly [__chunkIdBrand]: typeof __chunkIdBrand };
+export type ByteOffset = Brand<number, 'ByteOffset'>;
+export type ByteLength = Brand<number, 'ByteLength'>;
+export type ChunkId = Brand<string, 'ChunkId'>;
 
 export function ByteOffset(n: number): ByteOffset {
     return (n | 0) as ByteOffset;
@@ -20,19 +21,7 @@ export function ChunkId(id: string): ChunkId {
     return id as ChunkId;
 }
 
-export type Result<T, E> =
-    | { readonly ok: true; readonly value: T }
-    | { readonly ok: false; readonly error: E };
-
-export function Ok<T>(value: T): Result<T, never> {
-    return { ok: true, value };
-}
-
-export function Err<E>(error: E): Result<never, E> {
-    return { ok: false, error };
-}
-
-export const VOID_OK: Result<void, never> = Object.freeze({ ok: true, value: undefined });
+export const VOID_OK: Result<void, never> = ok();
 
 export const MemoryErrorCode = {
     OUT_OF_BOUNDS: 1,
@@ -55,78 +44,60 @@ export interface MemoryError {
     readonly limit: number;
 }
 
-export const ERR_DISPOSED: Result<never, MemoryError> = Object.freeze({
-    ok: false,
-    error: Object.freeze({
-        code: MemoryErrorCode.DISPOSED,
-        message: 'MemoryChunk is unallocated or already reclaimed',
-        offset: 0,
-        required: 0,
-        limit: 0,
-    }),
+export const ERR_DISPOSED: Result<never, MemoryError> = err({
+    code: MemoryErrorCode.DISPOSED,
+    message: 'ByteChunk is unallocated or already reclaimed',
+    offset: 0,
+    required: 0,
+    limit: 0,
 });
 
-export const ERR_READ_ONLY: Result<never, MemoryError> = Object.freeze({
-    ok: false,
-    error: Object.freeze({
-        code: MemoryErrorCode.ACCESS_VIOLATION,
-        message: 'Mutation attempted on an immutable MemoryChunk instance',
-        offset: 0,
-        required: 0,
-        limit: 0,
-    }),
+export const ERR_READ_ONLY: Result<never, MemoryError> = err({
+    code: MemoryErrorCode.ACCESS_VIOLATION,
+    message: 'Mutation attempted on an immutable ByteChunk instance',
+    offset: 0,
+    required: 0,
+    limit: 0,
 });
 
 function coldOutOfBounds(offset: number, required: number, limit: number): Result<never, MemoryError> {
-    return {
-        ok: false,
-        error: {
-            code: MemoryErrorCode.OUT_OF_BOUNDS,
-            message: 'Index out of bounded physical memory range',
-            offset,
-            required,
-            limit,
-        },
-    };
+    return err({
+        code: MemoryErrorCode.OUT_OF_BOUNDS,
+        message: 'Index out of bounded physical memory range',
+        offset,
+        required,
+        limit,
+    });
 }
 
 function coldAborted(reason: unknown): Result<never, MemoryError> {
-    return {
-        ok: false,
-        error: {
-            code: MemoryErrorCode.ABORTED,
-            message: reason instanceof Error ? reason.message : 'MemoryChunk operation cancelled',
-            offset: 0,
-            required: 0,
-            limit: 0,
-        },
-    };
+    return err({
+        code: MemoryErrorCode.ABORTED,
+        message: reason instanceof Error ? reason.message : 'ByteChunk operation cancelled',
+        offset: 0,
+        required: 0,
+        limit: 0,
+    });
 }
 
 function coldVarIntOverflow(offset: number, bytesRead: number, limit: number): Result<never, MemoryError> {
-    return {
-        ok: false,
-        error: {
-            code: MemoryErrorCode.BUFFER_OVERFLOW,
-            message: 'Malformed LEB128 varint32 sequence exceeds 5 bytes',
-            offset,
-            required: bytesRead,
-            limit,
-        },
-    };
+    return err({
+        code: MemoryErrorCode.BUFFER_OVERFLOW,
+        message: 'Malformed LEB128 varint32 sequence exceeds 5 bytes',
+        offset,
+        required: bytesRead,
+        limit,
+    });
 }
 
-function coldUtf8Error(err: unknown, offset: number, required: number, limit: number): Result<never, MemoryError> {
-    return {
-        ok: false,
-        error: {
-            code: MemoryErrorCode.BUFFER_OVERFLOW,
-            message: err instanceof Error ? err.message : 'UTF-8 decoding fault',
-            offset,
-            required,
-            limit,
-        },
-    };
+function coldUtf8Error(cause: unknown, offset: number, required: number, limit: number): Result<never, MemoryError> {
+    return err({
+        code: MemoryErrorCode.BUFFER_OVERFLOW,
+        message: cause instanceof Error ? cause.message : 'UTF-8 decoding fault',
+        offset,
+        required,
+        limit,
+    });
 }
 
 const TEXT_ENCODER = new TextEncoder();
@@ -139,7 +110,7 @@ function safeDecodeUtf8(
     limit: number
 ): Result<string, MemoryError> {
     try {
-        return { ok: true, value: TEXT_DECODER.decode(bytes) };
+        return ok(TEXT_DECODER.decode(bytes));
     } catch (err: unknown) {
         return coldUtf8Error(err, offset, length, limit);
     }
@@ -256,23 +227,23 @@ const FLAG_DISPOSED = 1 << 0;
 const FLAG_IMMUTABLE = 1 << 1;
 
 export interface IChunkPoolRecycler {
-    recycle(chunk: MemoryChunk<any, any>): void;
+    recycle(chunk: ByteChunk<any, any>): void;
 }
 
-export class MemoryChunkLease<out M extends Mutability, out O extends Ownership>
-    implements IChunkLease<MemoryChunk<M, O>>
+export class ByteChunkLease<out M extends Mutability, out O extends Ownership>
+    implements IChunkLease<ByteChunk<M, O>>
 {
-    private _chunk: MemoryChunk<M, O> | null;
+    private _chunk: ByteChunk<M, O> | null;
     private _disposer: (() => void) | null;
     private readonly _epoch: number;
 
-    public constructor(chunk: MemoryChunk<M, O>, disposer: () => void) {
+    public constructor(chunk: ByteChunk<M, O>, disposer: () => void) {
         this._chunk = chunk;
         this._disposer = disposer;
         this._epoch = chunk.epoch;
     }
 
-    public get chunk(): MemoryChunk<M, O> {
+    public get chunk(): ByteChunk<M, O> {
         const ref = this._chunk;
         if (ref === null || ref.epoch !== this._epoch || ref.isDisposed) {
             throw new Error('Use-after-free: Lease has expired or was returned to pool');
@@ -290,7 +261,7 @@ export class MemoryChunkLease<out M extends Mutability, out O extends Ownership>
     }
 }
 
-export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OWNED'>
+export class ByteChunk<M extends Mutability = 'MUT', O extends Ownership = 'OWNED'>
     implements Disposable, AsyncDisposable
 {
     public readonly id: ChunkId;
@@ -304,7 +275,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     private _flags: number;
     private _refCount: number;
     private _epoch: number;
-    private _parent: MemoryChunk<Mutability, Ownership> | null;
+    private _parent: ByteChunk<Mutability, Ownership> | null;
     private _drainWaiters: Set<() => void> | null;
     private readonly _metrics: IMetricsSink<ChunkLifecycleEvent> | null;
     private _recycler: IChunkPoolRecycler | null;
@@ -316,7 +287,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         byteOffset: ByteOffset,
         byteLength: ByteLength,
         mutability: M,
-        parent: MemoryChunk<Mutability, Ownership> | null,
+        parent: ByteChunk<Mutability, Ownership> | null,
         metrics: IMetricsSink<ChunkLifecycleEvent> | null,
         recycler: IChunkPoolRecycler | null = null,
         poolTag: number = 0
@@ -344,7 +315,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
 
     public static allocate<TMode extends Mutability = 'MUT'>(
         options: AllocationOptions<TMode>
-    ): MemoryChunk<TMode, 'OWNED'> {
+    ): ByteChunk<TMode, 'OWNED'> {
         const capacity = options.capacity | 0;
         if (capacity <= 0 || !Number.isSafeInteger(options.capacity)) {
             throw new RangeError('Capacity must be a positive safe integer');
@@ -353,7 +324,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         const rawBuffer = new ArrayBuffer(capacity);
         const chunkId = options.id ?? generateFastChunkId('chk');
 
-        const chunk = new MemoryChunk<TMode, 'OWNED'>(
+        const chunk = new ByteChunk<TMode, 'OWNED'>(
             chunkId,
             rawBuffer,
             ByteOffset(0),
@@ -375,7 +346,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         length?: ByteLength,
         mutability: TMode = 'MUT' as TMode,
         metrics?: IMetricsSink<ChunkLifecycleEvent>
-    ): MemoryChunk<TMode, 'OWNED'> {
+    ): ByteChunk<TMode, 'OWNED'> {
         const rawLen = buffer.byteLength | 0;
         const off = offset | 0;
         const len = length === undefined ? (rawLen - off) | 0 : length | 0;
@@ -384,7 +355,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
             throw new RangeError('Wrapped bounds exceed base ArrayBuffer allocation');
         }
 
-        return new MemoryChunk<TMode, 'OWNED'>(
+        return new ByteChunk<TMode, 'OWNED'>(
             generateFastChunkId('wrap'),
             buffer,
             offset,
@@ -438,10 +409,10 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return new ByteCursor(this, initialOffset);
     }
 
-    public freeze(): MemoryChunk<'IMMUT', O> {
+    public freeze(): ByteChunk<'IMMUT', O> {
         this._flags |= FLAG_IMMUTABLE;
         this._refCount = (this._refCount + 1) | 0;
-        return new MemoryChunk<'IMMUT', O>(
+        return new ByteChunk<'IMMUT', O>(
             this.id,
             this.buffer,
             this.byteOffset,
@@ -463,7 +434,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._u8[offset]!;
     }
 
-    public setUint8(this: MemoryChunk<'MUT', any>, offset: number, value: number): void {
+    public setUint8(this: ByteChunk<'MUT', any>, offset: number, value: number): void {
         this._u8[offset] = value;
     }
 
@@ -471,7 +442,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return (this._u8[offset]! << 24) >> 24;
     }
 
-    public setInt8(this: MemoryChunk<'MUT', any>, offset: number, value: number): void {
+    public setInt8(this: ByteChunk<'MUT', any>, offset: number, value: number): void {
         this._u8[offset] = value;
     }
 
@@ -479,7 +450,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getUint16(offset, le);
     }
 
-    public setUint16(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setUint16(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setUint16(offset, value, le);
     }
 
@@ -487,7 +458,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getInt16(offset, le);
     }
 
-    public setInt16(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setInt16(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setInt16(offset, value, le);
     }
 
@@ -495,7 +466,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getUint32(offset, le);
     }
 
-    public setUint32(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setUint32(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setUint32(offset, value, le);
     }
 
@@ -503,7 +474,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getInt32(offset, le);
     }
 
-    public setInt32(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setInt32(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setInt32(offset, value, le);
     }
 
@@ -511,7 +482,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getFloat32(offset, le);
     }
 
-    public setFloat32(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setFloat32(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setFloat32(offset, value, le);
     }
 
@@ -519,7 +490,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getFloat64(offset, le);
     }
 
-    public setFloat64(this: MemoryChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
+    public setFloat64(this: ByteChunk<'MUT', any>, offset: number, value: number, le: boolean = true): void {
         this._view.setFloat64(offset, value, le);
     }
 
@@ -527,7 +498,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getBigUint64(offset, le);
     }
 
-    public setBigUint64(this: MemoryChunk<'MUT', any>, offset: number, value: bigint, le: boolean = true): void {
+    public setBigUint64(this: ByteChunk<'MUT', any>, offset: number, value: bigint, le: boolean = true): void {
         this._view.setBigUint64(offset, value, le);
     }
 
@@ -535,7 +506,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return this._view.getBigInt64(offset, le);
     }
 
-    public setBigInt64(this: MemoryChunk<'MUT', any>, offset: number, value: bigint, le: boolean = true): void {
+    public setBigInt64(this: ByteChunk<'MUT', any>, offset: number, value: bigint, le: boolean = true): void {
         this._view.setBigInt64(offset, value, le);
     }
 
@@ -546,7 +517,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 1, this.byteLength);
         }
-        return { ok: true, value: this._u8[off]! };
+        return ok(this._u8[off]!);
     }
 
     public readInt8(offset: ByteOffset): Result<number, MemoryError> {
@@ -556,7 +527,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 1, this.byteLength);
         }
-        return { ok: true, value: (this._u8[off]! << 24) >> 24 };
+        return ok((this._u8[off]! << 24) >> 24);
     }
 
     public readUint16(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -566,7 +537,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 2, this.byteLength);
         }
-        return { ok: true, value: this._view.getUint16(off, le) };
+        return ok(this._view.getUint16(off, le));
     }
 
     public readInt16(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -576,7 +547,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 2, this.byteLength);
         }
-        return { ok: true, value: this._view.getInt16(off, le) };
+        return ok(this._view.getInt16(off, le));
     }
 
     public readUint32(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -586,7 +557,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 4, this.byteLength);
         }
-        return { ok: true, value: this._view.getUint32(off, le) };
+        return ok(this._view.getUint32(off, le));
     }
 
     public readInt32(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -596,7 +567,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 4, this.byteLength);
         }
-        return { ok: true, value: this._view.getInt32(off, le) };
+        return ok(this._view.getInt32(off, le));
     }
 
     public readFloat32(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -606,7 +577,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 4, this.byteLength);
         }
-        return { ok: true, value: this._view.getFloat32(off, le) };
+        return ok(this._view.getFloat32(off, le));
     }
 
     public readFloat64(offset: ByteOffset, le: boolean = true): Result<number, MemoryError> {
@@ -616,7 +587,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 8, this.byteLength);
         }
-        return { ok: true, value: this._view.getFloat64(off, le) };
+        return ok(this._view.getFloat64(off, le));
     }
 
     public readBigUint64(offset: ByteOffset, le: boolean = true): Result<bigint, MemoryError> {
@@ -626,7 +597,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 8, this.byteLength);
         }
-        return { ok: true, value: this._view.getBigUint64(off, le) };
+        return ok(this._view.getBigUint64(off, le));
     }
 
     public readBigInt64(offset: ByteOffset, le: boolean = true): Result<bigint, MemoryError> {
@@ -636,7 +607,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
                 ? ERR_DISPOSED
                 : coldOutOfBounds(off, 8, this.byteLength);
         }
-        return { ok: true, value: this._view.getBigInt64(off, le) };
+        return ok(this._view.getBigInt64(off, le));
     }
 
     public readVarUint32(
@@ -658,7 +629,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
             bytesRead = (bytesRead + 1) | 0;
             result = (result | ((byte & 0x7f) << shift)) >>> 0;
             if ((byte & 0x80) === 0) {
-                return { ok: true, value: { value: result, bytesRead } };
+                return ok({ value: result, bytesRead });
             }
             shift = (shift + 7) | 0;
         }
@@ -679,7 +650,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return safeDecodeUtf8(this._u8.subarray(off, (off + len) | 0), off, len, chunkLen);
     }
 
-    public writeUint8(this: MemoryChunk<'MUT', any>, offset: ByteOffset, value: number): Result<void, MemoryError> {
+    public writeUint8(this: ByteChunk<'MUT', any>, offset: ByteOffset, value: number): Result<void, MemoryError> {
         const off = offset | 0;
         if ((off >>> 0) >= (this.byteLength >>> 0) || this._flags !== 0) {
             return this._flags !== 0 ? this._coldWriteCheck() : coldOutOfBounds(off, 1, this.byteLength);
@@ -688,7 +659,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         return VOID_OK;
     }
 
-    public writeInt8(this: MemoryChunk<'MUT', any>, offset: ByteOffset, value: number): Result<void, MemoryError> {
+    public writeInt8(this: ByteChunk<'MUT', any>, offset: ByteOffset, value: number): Result<void, MemoryError> {
         const off = offset | 0;
         if ((off >>> 0) >= (this.byteLength >>> 0) || this._flags !== 0) {
             return this._flags !== 0 ? this._coldWriteCheck() : coldOutOfBounds(off, 1, this.byteLength);
@@ -698,7 +669,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeUint16(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -712,7 +683,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeInt16(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -726,7 +697,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeUint32(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -740,7 +711,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeInt32(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -754,7 +725,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeFloat32(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -768,7 +739,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeFloat64(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number,
         le: boolean = true
@@ -782,7 +753,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeBigUint64(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: bigint,
         le: boolean = true
@@ -796,7 +767,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeBigInt64(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: bigint,
         le: boolean = true
@@ -810,7 +781,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeVarUint32(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         offset: ByteOffset,
         value: number
     ): Result<number, MemoryError> {
@@ -836,10 +807,10 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         this._u8[off] = v & 0x7f;
         bytesWritten = (bytesWritten + 1) | 0;
 
-        return { ok: true, value: bytesWritten };
+        return ok(bytesWritten);
     }
 
-    public writeUtf8(this: MemoryChunk<'MUT', any>, offset: ByteOffset, text: string): Result<number, MemoryError> {
+    public writeUtf8(this: ByteChunk<'MUT', any>, offset: ByteOffset, text: string): Result<number, MemoryError> {
         if (this._flags !== 0) return this._coldWriteCheck();
         const off = offset | 0;
         const chunkLen = this.byteLength | 0;
@@ -849,7 +820,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
 
         const dest = this._u8.subarray(off);
         const encodeResult = TEXT_ENCODER.encodeInto(text, dest);
-        return { ok: true, value: encodeResult.written ?? 0 };
+        return ok(encodeResult.written ?? 0);
     }
 
     public copyTo(
@@ -878,11 +849,11 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         if (finalCount > 0) {
             target.set(this._u8.subarray(srcOff, (srcOff + finalCount) | 0), 0);
         }
-        return { ok: true, value: finalCount };
+        return ok(finalCount);
     }
 
     public copyFrom(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         source: Uint8Array,
         targetOffset: ByteOffset = ByteOffset(0)
     ): Result<number, MemoryError> {
@@ -896,11 +867,11 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         }
 
         this._u8.set(source, off);
-        return { ok: true, value: srcLen };
+        return ok(srcLen);
     }
 
     public fill(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         value: number,
         offset: ByteOffset = ByteOffset(0),
         length?: NoInfer<ByteLength>
@@ -963,7 +934,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     }
 
     public writeStructField(
-        this: MemoryChunk<'MUT', any>,
+        this: ByteChunk<'MUT', any>,
         layout: readonly (readonly [string, PrimitiveType])[],
         name: string,
         value: number | bigint,
@@ -1002,7 +973,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         }
     }
 
-    public slice(offset: ByteOffset, length: ByteLength): Result<MemoryChunk<M, 'BORROWED'>, MemoryError> {
+    public slice(offset: ByteOffset, length: ByteLength): Result<ByteChunk<M, 'BORROWED'>, MemoryError> {
         if ((this._flags & FLAG_DISPOSED) !== 0) return ERR_DISPOSED;
         const off = offset | 0;
         const len = length | 0;
@@ -1015,7 +986,7 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         this._refCount = (this._refCount + 1) | 0;
         this._metrics?.emit({ kind: 'retain', id: this.id, count: this._refCount, epoch: this._epoch });
 
-        const subChunk = new MemoryChunk<M, 'BORROWED'>(
+        const subChunk = new ByteChunk<M, 'BORROWED'>(
             ChunkId(`${this.id}#${off}:${len}`),
             this.buffer,
             ByteOffset((this.byteOffset | 0) + off),
@@ -1028,24 +999,24 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
         );
 
         this._metrics?.emit({ kind: 'slice', id: subChunk.id, bytes: len, epoch: 1 });
-        return { ok: true, value: subChunk };
+        return ok(subChunk);
     }
 
-    public acquireLease(): Result<MemoryChunkLease<M, O>, MemoryError> {
+    public acquireLease(): Result<ByteChunkLease<M, O>, MemoryError> {
         if ((this._flags & FLAG_DISPOSED) !== 0) return ERR_DISPOSED;
 
         this._refCount = (this._refCount + 1) | 0;
         this._metrics?.emit({ kind: 'retain', id: this.id, count: this._refCount, epoch: this._epoch });
 
         let returned = false;
-        const lease = new MemoryChunkLease<M, O>(this, () => {
+        const lease = new ByteChunkLease<M, O>(this, () => {
             if (!returned) {
                 returned = true;
                 this._releaseInternal(this._epoch);
             }
         });
 
-        return { ok: true, value: lease };
+        return ok(lease);
     }
 
     private _releaseInternal(epoch: number = this._epoch): void {
@@ -1096,16 +1067,13 @@ export class MemoryChunk<M extends Mutability = 'MUT', O extends Ownership = 'OW
     public close(error?: Error): Result<void, MemoryError> {
         if ((this._flags & FLAG_DISPOSED) !== 0) return VOID_OK;
         if (this._refCount > 1) {
-            return {
-                ok: false,
-                error: {
-                    code: MemoryErrorCode.ACTIVE_LEASES,
-                    message: error ? error.message : 'Active leases or borrowed slices prevent synchronous closure',
-                    offset: 0,
-                    required: this._refCount,
-                    limit: 1,
-                },
-            };
+            return err({
+                code: MemoryErrorCode.ACTIVE_LEASES,
+                message: error ? error.message : 'Active leases or borrowed slices prevent synchronous closure',
+                offset: 0,
+                required: this._refCount,
+                limit: 1,
+            });
         }
         this.dispose();
         return VOID_OK;
@@ -1179,13 +1147,13 @@ interface ChunkInternals {
     _flags: number;
     _refCount: number;
     _epoch: number;
-    _parent: MemoryChunk<Mutability, Ownership> | null;
+    _parent: ByteChunk<Mutability, Ownership> | null;
     _drainWaiters: Set<() => void> | null;
     _recycler: IChunkPoolRecycler | null;
     _poolTag: number;
 }
 
-function friendReinitializeChunk<M extends Mutability>(chunk: MemoryChunk<any, any>, mutability: M): void {
+function friendReinitializeChunk<M extends Mutability>(chunk: ByteChunk<any, any>, mutability: M): void {
     const internals = chunk as unknown as ChunkInternals;
     internals._mutability = mutability;
     internals._flags = mutability === 'IMMUT' ? FLAG_IMMUTABLE : FLAG_ACTIVE;
@@ -1196,7 +1164,7 @@ function friendReinitializeChunk<M extends Mutability>(chunk: MemoryChunk<any, a
 }
 
 function friendAttachRecycler(
-    chunk: MemoryChunk<any, any>,
+    chunk: ByteChunk<any, any>,
     recycler: IChunkPoolRecycler | null,
     poolTag: number
 ): void {
@@ -1206,14 +1174,14 @@ function friendAttachRecycler(
 }
 
 export class ByteCursor implements Disposable {
-    private readonly _chunk: MemoryChunk<any, any>;
+    private readonly _chunk: ByteChunk<any, any>;
     private readonly _u8: Uint8Array;
     private readonly _view: DataView;
     private readonly _limit: number;
     private readonly _epoch: number;
     private _pos: number;
 
-    public constructor(chunk: MemoryChunk<any, any>, initialOffset: ByteOffset = ByteOffset(0)) {
+    public constructor(chunk: ByteChunk<any, any>, initialOffset: ByteOffset = ByteOffset(0)) {
         this._chunk = chunk;
         this._u8 = chunk._u8;
         this._view = chunk._view;
@@ -1224,7 +1192,7 @@ export class ByteCursor implements Disposable {
 
     private _assertActive(): void {
         if (this._epoch !== this._chunk.epoch || this._chunk.isDisposed) {
-            throw new Error('Use-after-free: ByteCursor invoked on recycled or disposed MemoryChunk');
+            throw new Error('Use-after-free: ByteCursor invoked on recycled or disposed ByteChunk');
         }
     }
 
@@ -1329,14 +1297,6 @@ export class ByteCursor implements Disposable {
     }
 }
 
-export interface IObjectPool<T> extends Disposable {
-    acquire(): T;
-    release(item: T): void;
-    getAvailableCount(): number;
-    getAllocatedCount(): number;
-    getTotalCount(): number;
-    clear(): void;
-}
 
 export interface ByteChunkPoolOptions {
     readonly chunkSize?: number | undefined;
@@ -1347,12 +1307,12 @@ export interface ByteChunkPoolOptions {
 
 let nextPoolTag = 1;
 
-export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, IChunkPoolRecycler {
+export class ByteChunkPool implements IChunkPoolRecycler {
     private readonly _chunkSize: number;
     private readonly _maxIdle: number;
     private readonly _clearOnRelease: boolean;
     private readonly _metrics: IMetricsSink<ChunkLifecycleEvent> | null;
-    private readonly _idleStack: MemoryChunk<'MUT', 'OWNED'>[] = [];
+    private readonly _idleStack: ByteChunk<'MUT', 'OWNED'>[] = [];
     private readonly _poolTag: number;
     private _totalCreated: number = 0;
     private _activeAllocated: number = 0;
@@ -1366,7 +1326,7 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
         this._poolTag = (nextPoolTag = (nextPoolTag + 1) >>> 0);
     }
 
-    public acquire(): MemoryChunk<'MUT', 'OWNED'> {
+    public acquire(): ByteChunk<'MUT', 'OWNED'> {
         if (this._isDisposed) {
             throw new Error('Cannot acquire from disposed ByteChunkPool');
         }
@@ -1384,7 +1344,7 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
             return cached;
         }
 
-        const chunk = MemoryChunk.allocate({
+        const chunk = ByteChunk.allocate({
             capacity: this._chunkSize,
             mutability: 'MUT',
             metrics: this._metrics ?? undefined,
@@ -1394,7 +1354,7 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
         return chunk;
     }
 
-    public tryAcquire(): MemoryChunk<'MUT', 'OWNED'> | null {
+    public tryAcquire(): ByteChunk<'MUT', 'OWNED'> | null {
         if (this._isDisposed) {
             return null;
         }
@@ -1410,7 +1370,7 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
         return cached;
     }
 
-    public release(chunk: MemoryChunk<any, any>): void {
+    public release(chunk: ByteChunk<any, any>): void {
         if (this._isDisposed) return;
 
         const internals = chunk as unknown as ChunkInternals;
@@ -1430,10 +1390,10 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
             chunk._u8.fill(0);
         }
 
-        this._idleStack.push(chunk as MemoryChunk<'MUT', 'OWNED'>);
+        this._idleStack.push(chunk as ByteChunk<'MUT', 'OWNED'>);
     }
 
-    public recycle(chunk: MemoryChunk<any, any>): void {
+    public recycle(chunk: ByteChunk<any, any>): void {
         this.release(chunk);
     }
 
@@ -1481,7 +1441,7 @@ export class ByteChunkPoolSet implements Disposable {
     private static _instance: ByteChunkPoolSet | undefined;
 
     private readonly _pools = new Map<number, ByteChunkPool>();
-    private _chunkByBuffer = new WeakMap<ArrayBuffer, MemoryChunk<'MUT', 'OWNED'>>();
+    private _chunkByBuffer = new WeakMap<ArrayBuffer, ByteChunk<'MUT', 'OWNED'>>();
     private readonly _clearOnRelease: boolean;
     private readonly _maxIdlePerBucket: number;
     private readonly _maxTotalPerBucket: number;
@@ -1507,13 +1467,13 @@ export class ByteChunkPoolSet implements Disposable {
         }
     }
 
-    public acquireChunk(requestedSize: number): MemoryChunk<'MUT', 'OWNED'> {
+    public acquireChunk(requestedSize: number): ByteChunk<'MUT', 'OWNED'> {
         if (requestedSize <= 0) {
             throw new Error('Requested size must be positive');
         }
 
         if (requestedSize > MAX_POOLED_BUCKET) {
-            return MemoryChunk.allocate({ capacity: requestedSize, mutability: 'MUT' });
+            return ByteChunk.allocate({ capacity: requestedSize, mutability: 'MUT' });
         }
 
         const bucket = bucketSizeFor(requestedSize);
@@ -1521,7 +1481,7 @@ export class ByteChunkPoolSet implements Disposable {
 
         // Bounded pool: beyond the per-bucket limit, hand out an unpooled chunk.
         if (pool.getAllocatedCount() >= this._maxTotalPerBucket && pool.getAvailableCount() === 0) {
-            return MemoryChunk.allocate({ capacity: bucket, mutability: 'MUT' });
+            return ByteChunk.allocate({ capacity: bucket, mutability: 'MUT' });
         }
 
         return pool.acquire();
@@ -1623,59 +1583,4 @@ function bucketSizeFor(requestedSize: number): number {
     return Math.min(bucket, MAX_POOLED_BUCKET);
 }
 
-export class MemoryChunkBuilder<TMode extends Mutability = 'MUT'> {
-    private readonly _capacity: number;
-    private readonly _mutability: TMode;
-    private readonly _id: ChunkId | null;
-    private readonly _metrics: IMetricsSink<ChunkLifecycleEvent> | null;
 
-    private constructor(
-        capacity: number,
-        mutability: TMode,
-        id: ChunkId | null,
-        metrics: IMetricsSink<ChunkLifecycleEvent> | null
-    ) {
-        this._capacity = capacity;
-        this._mutability = mutability;
-        this._id = id;
-        this._metrics = metrics;
-    }
-
-    public static create(): MemoryChunkBuilder<'MUT'> {
-        return new MemoryChunkBuilder<'MUT'>(0, 'MUT', null, null);
-    }
-
-    public capacity(bytes: number): MemoryChunkBuilder<TMode> {
-        if (bytes <= 0 || !Number.isSafeInteger(bytes)) {
-            throw new RangeError('Capacity must be a positive safe integer');
-        }
-        return new MemoryChunkBuilder<TMode>(bytes, this._mutability, this._id, this._metrics);
-    }
-
-    public as<M extends Mutability>(mode: M): MemoryChunkBuilder<M> {
-        return new MemoryChunkBuilder<M>(this._capacity, mode, this._id, this._metrics);
-    }
-
-    public identifier(id: string): MemoryChunkBuilder<TMode> {
-        return new MemoryChunkBuilder<TMode>(this._capacity, this._mutability, ChunkId(id), this._metrics);
-    }
-
-    public metrics(hook: IMetricsSink<ChunkLifecycleEvent>): MemoryChunkBuilder<TMode> {
-        return new MemoryChunkBuilder<TMode>(this._capacity, this._mutability, this._id, hook);
-    }
-
-    public build(): MemoryChunk<TMode, 'OWNED'> {
-        if (this._capacity <= 0) {
-            throw new Error('Invalid chunk capacity configuration');
-        }
-
-        return MemoryChunk.allocate({
-            capacity: this._capacity,
-            mutability: this._mutability,
-            id: this._id ?? undefined,
-            metrics: this._metrics ?? undefined,
-        });
-    }
-}
-
-export { MemoryChunk as ByteChunk };

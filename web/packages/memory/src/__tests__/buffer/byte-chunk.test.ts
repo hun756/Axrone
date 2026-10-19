@@ -11,9 +11,14 @@ import {
 describe('ByteChunk lifecycle', () => {
     it('allocates, writes and reads with epoch guards', () => {
         const chunk = ByteChunk.allocate({ capacity: 64, mutability: 'MUT' });
-        expect(chunk.writeUint32(ByteOffset(0), 1234).ok).toBe(true);
+        expect(chunk.writeUint32(ByteOffset(0), 1234).isOk()).toBe(true);
+
         const read = chunk.readUint32(ByteOffset(0));
-        expect(read.ok && read.value).toBe(1234);
+        expect(read.isOk()).toBe(true);
+        if (read.isOk()) {
+            expect(read.get()).toBe(1234);
+        }
+
         const cursor = chunk.cursor();
         cursor.writeUint32(7);
         cursor.seek(ByteOffset(0));
@@ -31,11 +36,13 @@ describe('ByteChunk lifecycle', () => {
     it('rejects lease access after dispose', () => {
         const chunk = ByteChunk.allocate({ capacity: 32, mutability: 'MUT' });
         const lease = chunk.acquireLease();
-        expect(lease.ok).toBe(true);
-        if (!lease.ok) return;
+        expect(lease.isOk()).toBe(true);
+        if (!lease.isOk()) return;
+
+        const handle = lease.get();
         chunk.dispose();
-        expect(() => lease.value.chunk).toThrow(/Use-after-free/);
-        lease.value[Symbol.dispose]();
+        expect(() => handle.chunk).toThrow(/Use-after-free/);
+        handle[Symbol.dispose]();
     });
 
     it('wraps an existing buffer without copying', () => {
@@ -87,11 +94,12 @@ describe('ByteChunkPool', () => {
 
         const owner = pool.acquire();
         const slice = owner.slice(ByteOffset(0), ByteLength(32));
-        expect(slice.ok).toBe(true);
-        if (slice.ok) {
-            pool.release(slice.value as never);
+        expect(slice.isOk()).toBe(true);
+        if (slice.isOk()) {
+            const view = slice.get();
+            pool.release(view as never);
             expect(pool.getAvailableCount()).toBe(0);
-            slice.value.dispose();
+            view.dispose();
         }
         owner.dispose();
         pool[Symbol.dispose]();
@@ -155,7 +163,6 @@ describe('ByteChunkPoolSet', () => {
         buffer.putInt32(0x55667788);
         buffer.putInt32(0x99aabbcc);
 
-        // Force growth beyond the initial 32-byte bucket.
         for (let i = 0; i < 32; i++) buffer.putInt32(i);
         buffer.flip();
         expect(buffer.getInt32()).toBe(0x11223344);
