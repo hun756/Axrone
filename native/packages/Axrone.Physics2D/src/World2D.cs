@@ -28,7 +28,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = new Vec2(0.0f, -10.0f);
+    } = PhysicsConstants.DefaultGravity2D;
 
     /// <summary>Tuning of the broadphase tree.</summary>
     public TreeOptions BroadphaseOptions { get; init; } = new TreeOptions();
@@ -76,7 +76,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.5f;
+    } = PhysicsConstants.SleepTime;
 
     /// <summary>Linear speed below which a body counts as quiet; never negative.</summary>
     public float LinearSleepTolerance
@@ -91,7 +91,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.01f;
+    } = PhysicsConstants.LinearSleepTolerance;
 
     /// <summary>Angular speed below which a body counts as quiet; never negative.</summary>
     public float AngularSleepTolerance
@@ -106,7 +106,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.0349f;
+    } = PhysicsConstants.AngularSleepTolerance;
 
     /// <summary>Bullet translation covered per CCD substep; strictly positive.</summary>
     public float CcdSweepStep
@@ -137,6 +137,9 @@ public readonly struct WorldDef
             field = value;
         }
     } = 8;
+
+    /// <summary>Solver capabilities; clearing <see cref="SolverFlags.SleepingBodies"/> skips the sleep pass.</summary>
+    public SolverFlags Flags { get; init; } = SolverFlags.Default;
 }
 
 /// <summary>
@@ -258,6 +261,9 @@ public sealed class World : IDisposable
     /// <summary>CCD substep cap per step.</summary>
     public int MaxCcdSubsteps { get; set; }
 
+    /// <summary>Solver capabilities.</summary>
+    public SolverFlags Flags { get; set; }
+
     /// <summary>Creates a world with default tuning.</summary>
     public World()
         : this(new WorldDef())
@@ -281,6 +287,7 @@ public sealed class World : IDisposable
         AngularSleepTolerance = definition.AngularSleepTolerance;
         CcdSweepStep = definition.CcdSweepStep;
         MaxCcdSubsteps = definition.MaxCcdSubsteps;
+        Flags = definition.Flags;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _joints = new JointStore();
@@ -581,41 +588,44 @@ public sealed class World : IDisposable
             StepSlice(h);
         }
 
-        BodyStoreAdapter adapter = new(_bodies);
-        SimulationParameters parameters = new(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
-
-        ContactPair[] rentedContacts = _contactCount > 0
-            ? ArrayPool<ContactPair>.Shared.Rent(_contactCount)
-            : [];
-        for (int i = 0; i < _contactCount; i++)
+        if ((Flags & SolverFlags.SleepingBodies) != 0)
         {
-            rentedContacts[i] = new ContactPair(_contacts[i].BodyA, _contacts[i].BodyB);
-        }
+            BodyStoreAdapter adapter = new(_bodies);
+            SimulationParameters parameters = new(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
 
-        int jointBudget = _joints.Count;
-        JointPair[] rentedJoints = jointBudget > 0
-            ? ArrayPool<JointPair>.Shared.Rent(jointBudget)
-            : [];
-        int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
-
-        try
-        {
-            _islands.UpdateSleep(
-                ref adapter,
-                rentedContacts.AsSpan(0, _contactCount),
-                rentedJoints.AsSpan(0, jointPairs),
-                in parameters);
-        }
-        finally
-        {
-            if (rentedContacts.Length > 0)
+            ContactPair[] rentedContacts = _contactCount > 0
+                ? ArrayPool<ContactPair>.Shared.Rent(_contactCount)
+                : [];
+            for (int i = 0; i < _contactCount; i++)
             {
-                ArrayPool<ContactPair>.Shared.Return(rentedContacts);
+                rentedContacts[i] = new ContactPair(_contacts[i].BodyA, _contacts[i].BodyB);
             }
 
-            if (rentedJoints.Length > 0)
+            int jointBudget = _joints.Count;
+            JointPair[] rentedJoints = jointBudget > 0
+                ? ArrayPool<JointPair>.Shared.Rent(jointBudget)
+                : [];
+            int jointPairs = _joints.CopyJointPairs(rentedJoints.AsSpan(0, jointBudget));
+
+            try
             {
-                ArrayPool<JointPair>.Shared.Return(rentedJoints);
+                _islands.UpdateSleep(
+                    ref adapter,
+                    rentedContacts.AsSpan(0, _contactCount),
+                    rentedJoints.AsSpan(0, jointPairs),
+                    in parameters);
+            }
+            finally
+            {
+                if (rentedContacts.Length > 0)
+                {
+                    ArrayPool<ContactPair>.Shared.Return(rentedContacts);
+                }
+
+                if (rentedJoints.Length > 0)
+                {
+                    ArrayPool<JointPair>.Shared.Return(rentedJoints);
+                }
             }
         }
 

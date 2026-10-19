@@ -28,7 +28,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = new Vec3(0.0f, -10.0f, 0.0f);
+    } = new Vec3(0.0f, -10.0f, 0.0f); // Legacy default; web reference is -9.81 (see PhysicsConstants). Switching needs a tuning pass: -9.81 tunnels CylinderWorld_Drops_OnGround.
 
     /// <summary>Tuning of the broadphase tree.</summary>
     public TreeOptions BroadphaseOptions { get; init; } = new TreeOptions();
@@ -76,7 +76,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.5f;
+    } = PhysicsConstants.SleepTime;
 
     /// <summary>Linear speed below which a body counts as quiet; never negative.</summary>
     public float LinearSleepTolerance
@@ -91,7 +91,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.01f;
+    } = PhysicsConstants.LinearSleepTolerance;
 
     /// <summary>Angular speed below which a body counts as quiet; never negative.</summary>
     public float AngularSleepTolerance
@@ -106,7 +106,7 @@ public readonly struct WorldDef
 
             field = value;
         }
-    } = 0.0349f;
+    } = PhysicsConstants.AngularSleepTolerance;
 
     /// <summary>Bullet translation covered per CCD substep; strictly positive.</summary>
     public float CcdSweepStep
@@ -137,6 +137,9 @@ public readonly struct WorldDef
             field = value;
         }
     } = 8;
+
+    /// <summary>Solver capabilities; clearing <see cref="SolverFlags.SleepingBodies"/> skips the sleep pass.</summary>
+    public SolverFlags Flags { get; init; } = SolverFlags.Default;
 }
 
 /// <summary>
@@ -219,6 +222,9 @@ public sealed class World : IDisposable
     /// <summary>CCD substep cap per step.</summary>
     public int MaxCcdSubsteps { get; set; }
 
+    /// <summary>Solver capabilities.</summary>
+    public SolverFlags Flags { get; set; }
+
     /// <summary>Creates a world with default tuning.</summary>
     public World()
         : this(new WorldDef())
@@ -236,6 +242,7 @@ public sealed class World : IDisposable
         AngularSleepTolerance = definition.AngularSleepTolerance;
         CcdSweepStep = definition.CcdSweepStep;
         MaxCcdSubsteps = definition.MaxCcdSubsteps;
+        Flags = definition.Flags;
         _bodies = new BodyStore();
         _shapes = new ShapeStore();
         _joints = new JointStore();
@@ -1030,6 +1037,11 @@ public sealed class World : IDisposable
     /// <summary>Runs the island sleep pass over the contact and joint graph.</summary>
     private void UpdateIslands(float dt)
     {
+        if ((Flags & SolverFlags.SleepingBodies) == 0)
+        {
+            return;
+        }
+
         var parameters = new SimulationParameters3D(dt, TimeToSleep, LinearSleepTolerance, AngularSleepTolerance);
 
         ContactPair3D[] rentedContacts = _contactCount > 0
