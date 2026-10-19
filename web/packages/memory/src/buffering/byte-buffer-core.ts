@@ -9,7 +9,7 @@ import {
     BufferAlignmentError,
     BufferReleasedError,
 } from './errors';
-import { BufferPool } from './buffer-pool';
+import { ByteChunkPoolSet } from './byte-chunk';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
 import { writeVarInt, readVarInt, writeJson, readJson } from './varint';
@@ -43,8 +43,8 @@ export class ByteBuffer implements IByteBuffer {
     private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
 
-    private static get pool(): BufferPool {
-        return BufferPool.getInstance();
+    private static get pool(): ByteChunkPoolSet {
+        return ByteChunkPoolSet.getInstance();
     }
 
     private buffer: ArrayBuffer;
