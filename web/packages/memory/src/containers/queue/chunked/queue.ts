@@ -30,6 +30,7 @@ import {
     IntrusiveQueue,
     ProducerWaitNode,
 } from './wait-queue';
+import { QueueIterator } from './iterator';
 
 export class Queue<T> implements IQueue<T> {
     private _chunkHead: MemoryChunk<T>;
@@ -98,6 +99,35 @@ export class Queue<T> implements IQueue<T> {
             return undefined;
         }
         return this._chunkHead.peek();
+    }
+
+    public toArray(): T[] {
+        const size = this._elementCount;
+        if (size === 0) {
+            return [];
+        }
+
+        const result = new Array<T>(size);
+        let writeIndex = 0;
+        let chunk: MemoryChunk<T> | null = this._chunkHead;
+
+        while (chunk !== null && writeIndex < size) {
+            const start = chunk === this._chunkHead ? chunk.readHead : 0;
+            const end = chunk === this._chunkTail ? chunk.writeHead : CHUNK_SIZE;
+
+            for (let i = start; i < end; i = (i + 1) | 0) {
+                result[writeIndex] = chunk.slotAt(i);
+                writeIndex = (writeIndex + 1) | 0;
+            }
+
+            chunk = chunk.next;
+        }
+
+        return result;
+    }
+
+    public [Symbol.iterator](): Iterator<T> {
+        return new QueueIterator<T>(this._chunkHead, this._elementCount);
     }
 
     public enqueue(item: NoInfer<T>): Result<void, QueueFullError | QueueClosedError> {

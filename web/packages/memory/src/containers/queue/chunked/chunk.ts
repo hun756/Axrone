@@ -40,6 +40,10 @@ export class MemoryChunk<T> {
         return value === EMPTY_SLOT ? undefined : (value as T);
     }
 
+    public slotAt(index: number): T {
+        return this._slots[index] as T;
+    }
+
     public reset(): void {
         const slots = this._slots;
         const start = this.readHead;

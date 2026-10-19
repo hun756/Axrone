@@ -37,5 +37,6 @@ export type {
     IQueue,
 } from './types';
 export { MemoryChunk, ChunkPool, CHUNK_SIZE, CHUNK_POOL_LIMIT } from './chunk';
+export { QueueIterator } from './iterator';
 export { IntrusiveQueue } from './wait-queue';
 export type { ILinkedListNode } from './wait-queue';
