@@ -21,12 +21,8 @@ export {
     isValidQueueCapacity,
     isValidQueueSize,
     isBatch,
-    MemoryChunk,
-    ChunkPool,
     QueueIterator,
     IntrusiveQueue,
-    CHUNK_SIZE,
-    CHUNK_POOL_LIMIT,
 } from './chunked';
 
 export type {
