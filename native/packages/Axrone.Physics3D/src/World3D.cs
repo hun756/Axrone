@@ -150,6 +150,15 @@ public readonly struct WorldDef
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public readonly record struct ContactEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, ContactEventType Type);
 
+/// <summary>
+/// Trigger notice for a sensor pair: enter on first overlap, stay while the
+/// overlap persists, exit when it drops out. Events accumulate across the
+/// step and clear at the start of the next one; read them after
+/// <see cref="World.Step"/>.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct SensorEvent(ShapeId ShapeA, ShapeId ShapeB, BodyId BodyA, BodyId BodyB, SensorEventType Type);
+
 /// <summary>Lifecycle phase of a contact event.</summary>
 public enum ContactEventType : byte
 {
@@ -192,6 +201,8 @@ public sealed class World : IDisposable
     private int _previousCount;
     private ContactEvent[] _events;
     private int _eventCount;
+    private SensorEvent[] _sensorEvents;
+    private int _sensorEventCount;
     private BroadPair[] _currentPairs;
     private int _currentPairCount;
     private BroadPair[] _stepPairs;
@@ -253,6 +264,8 @@ public sealed class World : IDisposable
         _previousCount = 0;
         _events = new ContactEvent[InitialContactCapacity];
         _eventCount = 0;
+        _sensorEvents = new SensorEvent[InitialContactCapacity];
+        _sensorEventCount = 0;
         _currentPairs = new BroadPair[InitialContactCapacity];
         _currentPairCount = 0;
         _stepPairs = new BroadPair[InitialContactCapacity];
@@ -316,6 +329,17 @@ public sealed class World : IDisposable
     /// <summary>Reads a pair event by index.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ContactEvent GetContactEvent(int index) => _events[index];
+
+    /// <summary>Trigger events raised by the last step.</summary>
+    public int SensorEventCount
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _sensorEventCount;
+    }
+
+    /// <summary>Reads a trigger event by index.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SensorEvent GetSensorEvent(int index) => _sensorEvents[index];
 
     /// <summary>Casts a ray against all shapes; hits sort by ascending distance.</summary>
     /// <param name="ray">The ray.</param>
@@ -565,6 +589,7 @@ public sealed class World : IDisposable
         float h = dt / slices;
 
         _eventCount = 0;
+        _sensorEventCount = 0;
         SnapshotStepPairs();
 
         for (int slice = 0; slice < slices; slice++)
@@ -1148,6 +1173,23 @@ public sealed class World : IDisposable
         BodyId bodyA = _shapes.GetBody(shapeA);
         BodyId bodyB = _shapes.GetBody(shapeB);
         _events[_eventCount++] = new ContactEvent(shapeA, shapeB, bodyA, bodyB, type);
+
+        if (_shapes.IsSensor(shapeA) || _shapes.IsSensor(shapeB))
+        {
+            if (_sensorEventCount >= _sensorEvents.Length)
+            {
+                Array.Resize(ref _sensorEvents, _sensorEvents.Length * 2);
+            }
+
+            _sensorEvents[_sensorEventCount++] = new SensorEvent(
+                shapeA, shapeB, bodyA, bodyB,
+                type switch
+                {
+                    ContactEventType.Began => SensorEventType.Enter,
+                    ContactEventType.Ended => SensorEventType.Exit,
+                    _ => SensorEventType.Stay,
+                });
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
