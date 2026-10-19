@@ -20,7 +20,7 @@ export {
 } from './byte-chunk';
 export type {
     ByteChunkPoolSetOptions,
-    ChunkPoolOptions,
+    ByteChunkPoolOptions,
     MemoryError,
     MemoryErrorCode,
     Result,

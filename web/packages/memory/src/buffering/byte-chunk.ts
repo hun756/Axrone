@@ -1338,7 +1338,7 @@ export interface IObjectPool<T> extends Disposable {
     clear(): void;
 }
 
-export interface ChunkPoolOptions {
+export interface ByteChunkPoolOptions {
     readonly chunkSize?: number | undefined;
     readonly maxIdle?: number | undefined;
     readonly clearOnRelease?: boolean | undefined;
@@ -1358,7 +1358,7 @@ export class ByteChunkPool implements IObjectPool<MemoryChunk<'MUT', 'OWNED'>>, 
     private _activeAllocated: number = 0;
     private _isDisposed: boolean = false;
 
-    public constructor(options: ChunkPoolOptions = {}) {
+    public constructor(options: ByteChunkPoolOptions = {}) {
         this._chunkSize = (options.chunkSize ?? 512) | 0;
         this._maxIdle = (options.maxIdle ?? 1024) | 0;
         this._clearOnRelease = options.clearOnRelease ?? false;
