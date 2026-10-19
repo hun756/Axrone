@@ -22,7 +22,7 @@ export {
     isValidQueueCapacity,
     isValidQueueSize,
     isBatch,
-} from './chunked-queue';
+} from './chunked';
 
 export type {
     QueueCapacity,
@@ -39,4 +39,4 @@ export type {
     TypestateUnconfigured,
     TypestateBounded,
     TypestateConfigured,
-} from './chunked-queue';
+} from './chunked';
