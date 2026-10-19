@@ -17,6 +17,9 @@
   <PropertyGroup Label="SuppressedRules">
     <!-- CA1724: ProfilerStopwatch avoids clashing with System.Diagnostics.Stopwatch. -->
     <NoWarn>$(NoWarn);CA1724</NoWarn>
+    <!-- CA1024: Web-mapped getters stay methods (ToUnixMs, GetRoots,
+         GetStatistics, GetState); matches the profiler reference API. -->
+    <NoWarn>$(NoWarn);CA1024</NoWarn>
     <!-- CA2225: Operator overloads need named alternatives — nominal
          arithmetic surfaces Next/Add/Subtract where it matters. -->
     <NoWarn>$(NoWarn);CA2225</NoWarn>
