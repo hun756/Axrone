@@ -44,10 +44,15 @@ export class MemoryChunk<T> {
     }
 
     public reset(): void {
+        const slots = this._slots;
+        const start = this.readHead;
+        const end = this.writeHead;
+        for (let i = start; i < end; i = (i + 1) | 0) {
+            slots[i] = EMPTY_SLOT;
+        }
         this.next = null;
         this.readHead = 0;
         this.writeHead = 0;
-        this._slots.fill(EMPTY_SLOT);
     }
 }
 
