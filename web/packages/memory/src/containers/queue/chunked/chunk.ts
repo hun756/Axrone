@@ -37,10 +37,7 @@ export class MemoryChunk<T> {
 
     public peek(): T | undefined {
         const value = this._slots[this.readHead];
-        if (value === undefined || value === EMPTY_SLOT) {
-            return undefined;
-        }
-        return value;
+        return value === EMPTY_SLOT ? undefined : (value as T);
     }
 
     public reset(): void {
