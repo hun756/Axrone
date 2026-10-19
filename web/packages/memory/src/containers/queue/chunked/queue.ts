@@ -163,6 +163,10 @@ export class Queue<T> implements IQueue<T> {
         return new QueueIterator<T>(this._chunkHead, this._elementCount);
     }
 
+    /**
+     * Synchronous enqueue. With {@link OverflowStrategy.Block}, use
+     * {@link enqueueAsync} instead — a synchronous caller cannot be suspended.
+     */
     public enqueue(item: NoInfer<T>): Result<void, QueueFullError | QueueClosedError> {
         if (this._lifecycle !== LifecycleState.Active) {
             return err(this._closedError());
@@ -746,7 +750,9 @@ export class QueueBuilder<T, S extends { readonly __tag: string } = TypestateUnc
         return new QueueBuilder<T, S>(this._capacity, this._strategy, sink);
     }
 
-    public build(this: QueueBuilder<T, TypestateConfigured>): Queue<T> {
+    public build(this: QueueBuilder<T, TypestateConfigured>): Queue<T>;
+    public build(this: QueueBuilder<T, TypestateBounded>): Queue<T>;
+    public build(this: QueueBuilder<T, TypestateConfigured | TypestateBounded>): Queue<T> {
         return new Queue<T>(this._capacity, this._strategy, this._metrics);
     }
 }
