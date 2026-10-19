@@ -8,7 +8,7 @@ import {
     QueueEmptyError,
     QueueFullError,
     NULL_METRICS,
-} from '../../containers/queue/chunked';
+} from '../../containers/queue/core';
 
 function expectOk<T, E>(result: { isOk(): boolean; get(): T }): T {
     expect(result.isOk()).toBe(true);

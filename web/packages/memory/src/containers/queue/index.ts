@@ -24,7 +24,7 @@ export {
     QueueIterator,
     IntrusiveQueue,
     ObjectPoolChunkAllocator,
-} from './chunked';
+} from './core';
 
 export type {
     QueueCapacity,
@@ -44,4 +44,4 @@ export type {
     ILinkedListNode,
     IChunkAllocator,
     ObjectPoolChunkAllocatorOptions,
-} from './chunked';
+} from './core';
