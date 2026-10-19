@@ -10,6 +10,7 @@ import {
     BufferReleasedError,
 } from './errors';
 import { ByteChunkPoolSet } from './byte-chunk';
+import type { ByteChunk } from './byte-chunk';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
 import { writeVarInt, readVarInt, writeJson, readJson } from './varint';
@@ -43,19 +44,17 @@ export class ByteBuffer implements IByteBuffer {
     private static readonly VIEW_CACHE_CAPACITY = PERFORMANCE_DEFAULTS.CACHE_SIZE ?? 256;
     private static readonly viewCache = new Map<string, WeakMap<ByteBuffer, BufferView<any>>>();
 
-    private static get pool(): ByteChunkPoolSet {
-        return ByteChunkPoolSet.getInstance();
-    }
-
     private buffer: ArrayBuffer;
     private view: DataView;
     private u8Array: Uint8Array;
+    private chunk: ByteChunk | null;
     private pos: number;
     private byteOrder: ByteOrder;
     private markPos: number;
     private limitPos: number;
     private readOnly: boolean;
     private state: BufferState;
+    private readonly littleEndian: boolean;
 
     static alloc(
         capacity: number = BUFFER_DEFAULTS.INITIAL_CAPACITY,
@@ -69,14 +68,12 @@ export class ByteBuffer implements IByteBuffer {
         const powerOf2 = Math.ceil(Math.log2(capacity));
         const actualCapacity = Math.min(1 << powerOf2, BUFFER_DEFAULTS.MAX_CAPACITY);
 
-        let buffer: ArrayBuffer;
         if (usePool) {
-            buffer = ByteBuffer.pool.allocate(actualCapacity);
-        } else {
-            buffer = new ArrayBuffer(actualCapacity);
+            const chunk = ByteChunkPoolSet.getInstance().acquireChunk(actualCapacity);
+            return new ByteBuffer(chunk.buffer, order, true, chunk);
         }
 
-        return new ByteBuffer(buffer, order, usePool);
+        return new ByteBuffer(new ArrayBuffer(actualCapacity), order, false);
     }
 
     static wrap(array: ArrayBuffer | ArrayBufferView, order = ByteOrder.Big): ByteBuffer {
@@ -114,15 +111,18 @@ export class ByteBuffer implements IByteBuffer {
     private constructor(
         buffer: ArrayBuffer,
         order: ByteOrder,
-        private pooled: boolean = false
+        private pooled: boolean = false,
+        chunk: ByteChunk | null = null
     ) {
         this.buffer = buffer;
-        this.view = new DataView(buffer);
-        this.u8Array = new Uint8Array(buffer);
+        this.chunk = chunk;
+        this.view = chunk !== null ? chunk._view : new DataView(buffer);
+        this.u8Array = chunk !== null ? chunk._u8 : new Uint8Array(buffer);
         this.pos = 0;
         this.markPos = -1;
         this.limitPos = buffer.byteLength;
         this.byteOrder = order;
+        this.littleEndian = order === ByteOrder.Little;
         this.readOnly = false;
         this.state = BufferState.Empty;
     }
@@ -208,19 +208,27 @@ export class ByteBuffer implements IByteBuffer {
         const oldCapacity = this.buffer.byteLength;
         const limitTracksCapacity = this.limitPos === oldCapacity;
 
-        const newBuffer = this.pooled
-            ? ByteBuffer.pool.allocate(newCapacity)
-            : new ArrayBuffer(newCapacity);
+        const newChunk = this.pooled
+            ? ByteChunkPoolSet.getInstance().acquireChunk(newCapacity)
+            : null;
+        const newBuffer = newChunk !== null ? newChunk.buffer : new ArrayBuffer(newCapacity);
 
         new Uint8Array(newBuffer).set(this.u8Array);
 
         if (this.pooled) {
-            ByteBuffer.pool.release(this.buffer);
+            const oldChunk = this.chunk;
+            this.chunk = null;
+            if (oldChunk !== null) {
+                oldChunk.dispose();
+            } else {
+                ByteChunkPoolSet.getInstance().release(this.buffer);
+            }
         }
 
         this.buffer = newBuffer;
-        this.view = new DataView(newBuffer);
-        this.u8Array = new Uint8Array(newBuffer);
+        this.chunk = newChunk;
+        this.view = newChunk !== null ? newChunk._view : new DataView(newBuffer);
+        this.u8Array = newChunk !== null ? newChunk._u8 : new Uint8Array(newBuffer);
 
         if (limitTracksCapacity) {
             this.limitPos = newBuffer.byteLength;
@@ -264,7 +272,16 @@ export class ByteBuffer implements IByteBuffer {
     release(): void {
         if (!this.pooled || this.state === BufferState.Released) return;
 
-        ByteBuffer.pool.release(this.buffer);
+        const chunk = this.chunk;
+        this.chunk = null;
+        this.pooled = false;
+
+        if (chunk !== null) {
+            chunk.dispose();
+        } else {
+            ByteChunkPoolSet.getInstance().release(this.buffer);
+        }
+
         this.state = BufferState.Released;
     }
 
@@ -575,92 +592,112 @@ export class ByteBuffer implements IByteBuffer {
     }
 
     putInt8(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 1);
-        this.view.setInt8(this.pos, value);
-        this.movePosition(1);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 1 > this.limitPos) this.ensureCapacity(pos + 1);
+        this.view.setInt8(pos, value);
+        const next = pos + 1;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putUint8(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 1);
-        this.view.setUint8(this.pos, value);
-        this.movePosition(1);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 1 > this.limitPos) this.ensureCapacity(pos + 1);
+        this.view.setUint8(pos, value);
+        const next = pos + 1;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putInt16(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 2);
-        this.view.setInt16(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(2);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 2 > this.limitPos) this.ensureCapacity(pos + 2);
+        this.view.setInt16(pos, value, this.littleEndian);
+        const next = pos + 2;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putUint16(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 2);
-        this.view.setUint16(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(2);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 2 > this.limitPos) this.ensureCapacity(pos + 2);
+        this.view.setUint16(pos, value, this.littleEndian);
+        const next = pos + 2;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putInt32(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 4);
-        this.view.setInt32(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 4 > this.limitPos) this.ensureCapacity(pos + 4);
+        this.view.setInt32(pos, value, this.littleEndian);
+        const next = pos + 4;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putUint32(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 4);
-        this.view.setUint32(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 4 > this.limitPos) this.ensureCapacity(pos + 4);
+        this.view.setUint32(pos, value, this.littleEndian);
+        const next = pos + 4;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putBigInt64(value: bigint): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 8);
-        this.view.setBigInt64(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 8 > this.limitPos) this.ensureCapacity(pos + 8);
+        this.view.setBigInt64(pos, value, this.littleEndian);
+        const next = pos + 8;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putBigUint64(value: bigint): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 8);
-        this.view.setBigUint64(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 8 > this.limitPos) this.ensureCapacity(pos + 8);
+        this.view.setBigUint64(pos, value, this.littleEndian);
+        const next = pos + 8;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putFloat32(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 4);
-        this.view.setFloat32(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 4 > this.limitPos) this.ensureCapacity(pos + 4);
+        this.view.setFloat32(pos, value, this.littleEndian);
+        const next = pos + 4;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
     putFloat64(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        this.ensureCapacity(this.pos + 8);
-        this.view.setFloat64(this.pos, value, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 8 > this.limitPos) this.ensureCapacity(pos + 8);
+        this.view.setFloat64(pos, value, this.littleEndian);
+        const next = pos + 8;
+        this.pos = next <= this.limitPos ? next : this.limitPos;
         return this;
     }
 
@@ -722,72 +759,92 @@ export class ByteBuffer implements IByteBuffer {
     }
 
     getInt8(): number {
-        this.checkReadableBytes(1);
-        const value = this.view.getInt8(this.pos);
-        this.movePosition(1);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 1 > this.limitPos) this.checkReadableBytes(1);
+        const value = this.view.getInt8(pos);
+        this.pos = pos + 1;
         return value;
     }
 
     getUint8(): number {
-        this.checkReadableBytes(1);
-        const value = this.view.getUint8(this.pos);
-        this.movePosition(1);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 1 > this.limitPos) this.checkReadableBytes(1);
+        const value = this.view.getUint8(pos);
+        this.pos = pos + 1;
         return value;
     }
 
     getInt16(): number {
-        this.checkReadableBytes(2);
-        const value = this.view.getInt16(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(2);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 2 > this.limitPos) this.checkReadableBytes(2);
+        const value = this.view.getInt16(pos, this.littleEndian);
+        this.pos = pos + 2;
         return value;
     }
 
     getUint16(): number {
-        this.checkReadableBytes(2);
-        const value = this.view.getUint16(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(2);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 2 > this.limitPos) this.checkReadableBytes(2);
+        const value = this.view.getUint16(pos, this.littleEndian);
+        this.pos = pos + 2;
         return value;
     }
 
     getInt32(): number {
-        this.checkReadableBytes(4);
-        const value = this.view.getInt32(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 4 > this.limitPos) this.checkReadableBytes(4);
+        const value = this.view.getInt32(pos, this.littleEndian);
+        this.pos = pos + 4;
         return value;
     }
 
     getUint32(): number {
-        this.checkReadableBytes(4);
-        const value = this.view.getUint32(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 4 > this.limitPos) this.checkReadableBytes(4);
+        const value = this.view.getUint32(pos, this.littleEndian);
+        this.pos = pos + 4;
         return value;
     }
 
     getBigInt64(): bigint {
-        this.checkReadableBytes(8);
-        const value = this.view.getBigInt64(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 8 > this.limitPos) this.checkReadableBytes(8);
+        const value = this.view.getBigInt64(pos, this.littleEndian);
+        this.pos = pos + 8;
         return value;
     }
 
     getBigUint64(): bigint {
-        this.checkReadableBytes(8);
-        const value = this.view.getBigUint64(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 8 > this.limitPos) this.checkReadableBytes(8);
+        const value = this.view.getBigUint64(pos, this.littleEndian);
+        this.pos = pos + 8;
         return value;
     }
 
     getFloat32(): number {
-        this.checkReadableBytes(4);
-        const value = this.view.getFloat32(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(4);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 4 > this.limitPos) this.checkReadableBytes(4);
+        const value = this.view.getFloat32(pos, this.littleEndian);
+        this.pos = pos + 4;
         return value;
     }
 
     getFloat64(): number {
-        this.checkReadableBytes(8);
-        const value = this.view.getFloat64(this.pos, this.byteOrder === ByteOrder.Little);
-        this.movePosition(8);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 8 > this.limitPos) this.checkReadableBytes(8);
+        const value = this.view.getFloat64(pos, this.littleEndian);
+        this.pos = pos + 8;
         return value;
     }
 

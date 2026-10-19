@@ -1469,6 +1469,8 @@ export interface ByteChunkPoolSetOptions {
     readonly clearOnRelease?: boolean;
     /** Maximum idle chunks retained per size bucket. */
     readonly maxIdlePerBucket?: number;
+    /** Maximum concurrently checked-out chunks per size bucket. */
+    readonly maxTotalPerBucket?: number;
 }
 
 /**
@@ -1482,11 +1484,13 @@ export class ByteChunkPoolSet implements Disposable {
     private _chunkByBuffer = new WeakMap<ArrayBuffer, MemoryChunk<'MUT', 'OWNED'>>();
     private readonly _clearOnRelease: boolean;
     private readonly _maxIdlePerBucket: number;
+    private readonly _maxTotalPerBucket: number;
     private _isDisposed = false;
 
     public constructor(options: ByteChunkPoolSetOptions = {}) {
         this._clearOnRelease = options.clearOnRelease ?? true;
         this._maxIdlePerBucket = options.maxIdlePerBucket ?? 256;
+        this._maxTotalPerBucket = options.maxTotalPerBucket ?? 1024;
     }
 
     public static getInstance(): ByteChunkPoolSet {
@@ -1501,6 +1505,26 @@ export class ByteChunkPoolSet implements Disposable {
             ByteChunkPoolSet._instance[Symbol.dispose]();
             ByteChunkPoolSet._instance = undefined;
         }
+    }
+
+    public acquireChunk(requestedSize: number): MemoryChunk<'MUT', 'OWNED'> {
+        if (requestedSize <= 0) {
+            throw new Error('Requested size must be positive');
+        }
+
+        if (requestedSize > MAX_POOLED_BUCKET) {
+            return MemoryChunk.allocate({ capacity: requestedSize, mutability: 'MUT' });
+        }
+
+        const bucket = bucketSizeFor(requestedSize);
+        const pool = this._poolFor(bucket);
+
+        // Bounded pool: beyond the per-bucket limit, hand out an unpooled chunk.
+        if (pool.getAllocatedCount() >= this._maxTotalPerBucket && pool.getAvailableCount() === 0) {
+            return MemoryChunk.allocate({ capacity: bucket, mutability: 'MUT' });
+        }
+
+        return pool.acquire();
     }
 
     public allocate(requestedSize: number): ArrayBuffer {
