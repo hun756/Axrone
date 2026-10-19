@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     LifecycleState,
+    ObjectPoolChunkAllocator,
     OverflowStrategy,
     Queue,
     QueueBuilder,
@@ -330,6 +331,34 @@ describe('Chunked Queue', () => {
             queue.enqueueBatch([1, 2, 3]);
 
             expect(queue.toArray()).toEqual([2, 3]);
+        });
+    });
+
+    describe('pool integration', () => {
+        it('runs on an injected ObjectPool chunk allocator', () => {
+            const allocator = new ObjectPoolChunkAllocator<number>({
+                initialCapacity: 2,
+                maxCapacity: 64,
+            });
+            const queue = QueueBuilder.create<number>()
+                .unbounded()
+                .withAllocator(allocator)
+                .build();
+
+            const values = Array.from({ length: 2000 }, (_, i) => i);
+            expectOk(queue.enqueueBatch(values));
+
+            for (let i = 0; i < 1500; i++) {
+                expect(queue.tryDequeue()).toBe(i);
+            }
+
+            expect(queue.toArray()).toEqual(values.slice(1500));
+            expect(allocator.totalCount).toBeGreaterThan(0);
+
+            queue.clear();
+            expect(queue.isEmpty).toBe(true);
+
+            allocator[Symbol.dispose]();
         });
     });
 
