@@ -3,3 +3,4 @@ global using System.Runtime.CompilerServices;
 global using System.Runtime.InteropServices;
 global using Axrone.Numeric;
 global using Axrone.Geometry;
+global using Axrone.Physics.Core;
