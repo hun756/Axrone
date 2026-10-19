@@ -79,7 +79,13 @@ export interface IQueueMetrics {
     readonly onSuspendProducer?: (() => void) | undefined;
 }
 
-export const NULL_METRICS: IQueueMetrics = Object.freeze({});
+export const NULL_METRICS: IQueueMetrics = Object.freeze({
+    onEnqueue(): void {},
+    onDequeue(): void {},
+    onDrop(): void {},
+    onSuspendConsumer(): void {},
+    onSuspendProducer(): void {},
+});
 
 export interface IQueueSource<out T> extends Iterable<T> {
     readonly size: QueueSize;

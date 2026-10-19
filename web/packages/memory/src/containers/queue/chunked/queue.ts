@@ -22,7 +22,6 @@ import {
     Symbol_asyncDispose,
     Symbol_dispose,
     toQueueCapacity,
-    toQueueSize,
 } from './types';
 import {
     ConsumerWaitNode,
@@ -31,6 +30,8 @@ import {
     ProducerWaitNode,
 } from './wait-queue';
 import { QueueIterator } from './iterator';
+
+const OK_VOID: Result<void, never> = ok();
 
 export class Queue<T> implements IQueue<T> {
     private _chunkHead: MemoryChunk<T>;
@@ -71,7 +72,7 @@ export class Queue<T> implements IQueue<T> {
     }
 
     public get size(): QueueSize {
-        return toQueueSize(this._elementCount);
+        return (this._elementCount as QueueSize);
     }
 
     public get capacity(): QueueCapacity {
@@ -172,12 +173,12 @@ export class Queue<T> implements IQueue<T> {
             return err(this._closedError());
         }
 
-        const consumer = this._consumers.shift();
-        if (consumer !== null) {
+        if (this._consumers.length > 0) {
+            const consumer = this._consumers.shift()!;
             consumer.detach();
             consumer.resolve(ok(item));
-            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
-            return ok();
+            this._telemetry.onDequeue?.(this._elementCount as QueueSize);
+            return OK_VOID;
         }
 
         if (this._elementCount >= this._limit) {
@@ -186,13 +187,13 @@ export class Queue<T> implements IQueue<T> {
                     return err(QueueFullError.INSTANCE);
                 case OverflowStrategy.DropTail:
                     this._telemetry.onDrop?.(OverflowStrategy.DropTail);
-                    return ok();
+                    return OK_VOID;
                 case OverflowStrategy.DropHead: {
                     this._telemetry.onDrop?.(OverflowStrategy.DropHead);
                     this.executeShift();
                     this.executePush(item);
-                    this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-                    return ok();
+                    this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+                    return OK_VOID;
                 }
                 case OverflowStrategy.Block:
                     return err(QueueFullError.INSTANCE);
@@ -202,8 +203,8 @@ export class Queue<T> implements IQueue<T> {
         }
 
         this.executePush(item);
-        this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-        return ok();
+        this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+        return OK_VOID;
     }
 
     public tryEnqueue(item: NoInfer<T>): boolean {
@@ -211,11 +212,11 @@ export class Queue<T> implements IQueue<T> {
             return false;
         }
 
-        const consumer = this._consumers.shift();
-        if (consumer !== null) {
+        if (this._consumers.length > 0) {
+            const consumer = this._consumers.shift()!;
             consumer.detach();
             consumer.resolve(ok(item));
-            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+            this._telemetry.onDequeue?.(this._elementCount as QueueSize);
             return true;
         }
 
@@ -231,7 +232,7 @@ export class Queue<T> implements IQueue<T> {
                     this._telemetry.onDrop?.(OverflowStrategy.DropHead);
                     this.executeShift();
                     this.executePush(item);
-                    this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+                    this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
                     return true;
                 default:
                     return assertNever(this._overflowStrategy);
@@ -239,7 +240,7 @@ export class Queue<T> implements IQueue<T> {
         }
 
         this.executePush(item);
-        this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
+        this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
         return true;
     }
 
@@ -250,7 +251,7 @@ export class Queue<T> implements IQueue<T> {
 
         const item = this.executeShift();
         this.dispatchPendingProducer();
-        this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+        this._telemetry.onDequeue?.(this._elementCount as QueueSize);
 
         if (this._elementCount === 0) {
             this.evaluateDrainState();
@@ -268,7 +269,7 @@ export class Queue<T> implements IQueue<T> {
 
         const count = items.length;
         if (count === 0) {
-            return ok(toQueueSize(this._elementCount));
+            return ok(this._elementCount as QueueSize);
         }
 
         let start = 0;
@@ -279,19 +280,19 @@ export class Queue<T> implements IQueue<T> {
                 consumer.resolve(ok(items[start]));
                 start = (start + 1) | 0;
             }
-            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+            this._telemetry.onDequeue?.(this._elementCount as QueueSize);
         }
 
         const remaining = count - start;
         if (remaining === 0) {
-            return ok(toQueueSize(this._elementCount));
+            return ok(this._elementCount as QueueSize);
         }
 
         const free = this._limit - this._elementCount;
         if (remaining <= free) {
             this.executePushBulk(items, start, remaining);
-            this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-            return ok(toQueueSize(this._elementCount));
+            this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+            return ok(this._elementCount as QueueSize);
         }
 
         switch (this._overflowStrategy) {
@@ -303,8 +304,8 @@ export class Queue<T> implements IQueue<T> {
                     this.executePushBulk(items, start, free);
                 }
                 this._telemetry.onDrop?.(OverflowStrategy.DropTail);
-                this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-                return ok(toQueueSize(this._elementCount));
+                this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+                return ok(this._elementCount as QueueSize);
             }
             case OverflowStrategy.DropHead: {
                 this._telemetry.onDrop?.(OverflowStrategy.DropHead);
@@ -315,8 +316,8 @@ export class Queue<T> implements IQueue<T> {
                     this.dropFromHead(this._elementCount + remaining - this._limit);
                     this.executePushBulk(items, start, remaining);
                 }
-                this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-                return ok(toQueueSize(this._elementCount));
+                this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+                return ok(this._elementCount as QueueSize);
             }
             default:
                 return assertNever(this._overflowStrategy);
@@ -333,7 +334,7 @@ export class Queue<T> implements IQueue<T> {
 
         const item = this.executeShift();
         this.dispatchPendingProducer();
-        this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+        this._telemetry.onDequeue?.(this._elementCount as QueueSize);
 
         if (this._elementCount === 0) {
             this.evaluateDrainState();
@@ -366,7 +367,7 @@ export class Queue<T> implements IQueue<T> {
             this.dispatchPendingProducer();
         }
 
-        this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+        this._telemetry.onDequeue?.(this._elementCount as QueueSize);
 
         if (this._elementCount === 0) {
             this.evaluateDrainState();
@@ -395,8 +396,8 @@ export class Queue<T> implements IQueue<T> {
         if (consumer !== null) {
             consumer.detach();
             consumer.resolve(ok(item));
-            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
-            return Promise.resolve(ok());
+            this._telemetry.onDequeue?.(this._elementCount as QueueSize);
+            return Promise.resolve(OK_VOID);
         }
 
         if (this._elementCount >= this._limit) {
@@ -425,8 +426,8 @@ export class Queue<T> implements IQueue<T> {
         }
 
         this.executePush(item);
-        this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-        return Promise.resolve(ok());
+        this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+        return Promise.resolve(OK_VOID);
     }
 
     public dequeueAsync(
@@ -439,7 +440,7 @@ export class Queue<T> implements IQueue<T> {
         if (this._elementCount > 0) {
             const item = this.executeShift();
             this.dispatchPendingProducer();
-            this._telemetry.onDequeue?.(toQueueSize(this._elementCount));
+            this._telemetry.onDequeue?.(this._elementCount as QueueSize);
 
             if (this._elementCount === 0) {
                 this.evaluateDrainState();
@@ -645,13 +646,15 @@ export class Queue<T> implements IQueue<T> {
     }
 
     private dispatchPendingProducer(): void {
-        const producer = this._producers.shift();
-        if (producer !== null) {
-            producer.detach();
-            this.executePush(producer.element);
-            this._telemetry.onEnqueue?.(toQueueSize(this._elementCount));
-            producer.resolve(ok());
+        if (this._producers.length === 0) {
+            return;
         }
+
+        const producer = this._producers.shift()!;
+        producer.detach();
+        this.executePush(producer.element);
+        this._telemetry.onEnqueue?.(this._elementCount as QueueSize);
+        producer.resolve(OK_VOID);
     }
 
     private evaluateDrainState(): void {

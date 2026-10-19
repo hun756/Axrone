@@ -1,7 +1,7 @@
 import { assertNever, throwCorruptedSlot } from './errors';
 
 export const CHUNK_SIZE = 512;
-export const CHUNK_POOL_LIMIT = 64;
+export const CHUNK_POOL_LIMIT = 1024;
 export const EMPTY_SLOT: unique symbol = Symbol('EMPTY_SLOT');
 export type EmptySlot = typeof EMPTY_SLOT;
 
