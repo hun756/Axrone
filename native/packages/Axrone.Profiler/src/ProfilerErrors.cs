@@ -11,7 +11,7 @@ public class ProfilerException : Exception
         : base(message) => Code = code;
 
     /// <summary>Creates an error with an inner exception.</summary>
-    protected ProfilerException(string code, string message, Exception? inner)
+    public ProfilerException(string code, string message, Exception? inner)
         : base(message, inner) => Code = code;
 }
 
