@@ -11,7 +11,11 @@ public readonly record struct HistogramStatistics(
     double P90Ms,
     double P95Ms,
     double P99Ms,
-    double TotalDurationMs);
+    double TotalDurationMs,
+    System.Collections.Generic.IReadOnlyList<HistogramBucket> Buckets);
+
+/// <summary>One log bucket: lower bound, count and mean.</summary>
+public readonly record struct HistogramBucket(double LowerBoundMs, long Count, double MeanMs);
 
 /// <summary>Logarithmic histogram with doubling bucket bounds for durations.</summary>
 public sealed class LogHistogram : IDisposable
@@ -131,6 +135,29 @@ public sealed class LogHistogram : IDisposable
 
     private static double BucketWidth(int bucket) => bucket == 0 ? 1.0 : Math.Pow(2.0, bucket - 1);
 
+    /// <summary>Bucket table: lower bound, count and mean per live bucket.</summary>
+    public HistogramBucket[] GetBuckets()
+    {
+        lock (_gate)
+        {
+            return GetBucketsLocked();
+        }
+    }
+
+    private HistogramBucket[] GetBucketsLocked()
+    {
+        var buckets = new System.Collections.Generic.List<HistogramBucket>();
+        for (int i = 0; i < MaxBuckets; i++)
+        {
+            if (_counts[i] > 0)
+            {
+                buckets.Add(new HistogramBucket(BucketLower(i), _counts[i], _sums[i] / _counts[i]));
+            }
+        }
+
+        return buckets.ToArray();
+    }
+
     /// <summary>Computes summary statistics. Percentiles are bucket-quantized
     /// approximations, accurate within half a bucket width.</summary>
     public HistogramStatistics GetStatistics()
@@ -139,7 +166,7 @@ public sealed class LogHistogram : IDisposable
         {
             if (_totalCount == 0)
             {
-                return new HistogramStatistics(0, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, 0.0);
+                return new HistogramStatistics(0, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, 0.0, []);
             }
 
             return new HistogramStatistics(
@@ -152,7 +179,8 @@ public sealed class LogHistogram : IDisposable
                 QuantileLocked(0.90),
                 QuantileLocked(0.95),
                 QuantileLocked(0.99),
-                _totalSum);
+                _totalSum,
+                GetBucketsLocked());
         }
     }
 

@@ -33,6 +33,12 @@ public enum ClockPrecision : byte
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 public readonly record struct ClockSnapshot(Nanoseconds Timestamp, long Ticks);
 
+/// <summary>Static clock identity and capability.</summary>
+public readonly record struct ClockMetadata(string ClockId, long ResolutionHz, ClockPrecision Precision);
+
+/// <summary>Live clock counters.</summary>
+public readonly record struct ClockMetrics(long TickCount, ClockState State);
+
 /// <summary>Monotonic high-resolution clock over QueryPerformanceCounter.</summary>
 public sealed class MonotonicClock
 {
@@ -142,6 +148,30 @@ public sealed class MonotonicClock
 
     /// <summary>Captures a snapshot.</summary>
     public ClockSnapshot Sample() => new(Now(), Volatile.Read(ref _tickCount));
+
+    /// <summary>Clock identity and capability.</summary>
+    public ClockMetadata GetMetadata() => new(_id, _frequency, Precision);
+
+    /// <summary>Live counters.</summary>
+    public ClockMetrics GetMetrics() => new(Volatile.Read(ref _tickCount), State);
+
+    /// <summary>Waits until the next tick lands or cancellation fires.</summary>
+    public async ValueTask<Nanoseconds> WaitForNextTickAsync(CancellationToken cancellationToken = default)
+    {
+        if (State == ClockState.Stopped)
+        {
+            ProfilerThrowHelper.ThrowNotRunning(nameof(MonotonicClock));
+        }
+
+        long baseline = Volatile.Read(ref _tickCount);
+        while (Volatile.Read(ref _tickCount) == baseline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+        }
+
+        return Now();
+    }
 }
 
 /// <summary>Wall clock over UTC with skew detection.</summary>
@@ -168,6 +198,9 @@ public sealed class WallClock
 
     /// <summary>Maximum tolerated skew in milliseconds.</summary>
     public long MaxSkewMs { get; }
+
+    /// <summary>Millisecond-class precision.</summary>
+    public static ClockPrecision Precision => ClockPrecision.Medium;
 
     /// <summary>Lifecycle state.</summary>
     public ClockState State => (ClockState)Volatile.Read(ref _state);
@@ -214,6 +247,12 @@ public sealed class WallClock
 
     /// <summary>Current time as nanoseconds since the Unix epoch.</summary>
     public Nanoseconds Now() => ToUnixNs();
+
+    /// <summary>Clock identity and capability.</summary>
+    public ClockMetadata GetMetadata() => new(_id, TimeConversion.Milliseconds, Precision);
+
+    /// <summary>Live counters.</summary>
+    public ClockMetrics GetMetrics() => new(0L, State);
 
     /// <summary>Validates an external wall reading against this clock.</summary>
     /// <returns>The observed skew in milliseconds.</returns>
@@ -339,6 +378,12 @@ public sealed class VirtualClock
 
         Volatile.Write(ref _timeScale, scale);
     }
+
+    /// <summary>Clock identity and capability.</summary>
+    public ClockMetadata GetMetadata() => new(_id, TimeConversion.Seconds, ClockPrecision.High);
+
+    /// <summary>Live counters.</summary>
+    public ClockMetrics GetMetrics() => new(0L, State);
 }
 
 /// <summary>One recorded lap.</summary>

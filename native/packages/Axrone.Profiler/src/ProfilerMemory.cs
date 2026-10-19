@@ -15,7 +15,10 @@ public readonly record struct MemorySample(
     long TimestampMs,
     long UsedHeapBytes,
     long WorkingSetBytes,
-    MemorySource Source);
+    MemorySource Source,
+    long HeapSizeChangeSinceLastSample = 0L,
+    int GcEventsCount = 0,
+    long AvailableHeapSizeBytes = 0L);
 
 /// <summary>Memory sample provider contract.</summary>
 public interface IMemoryProvider
@@ -145,8 +148,26 @@ public sealed class MemoryTracker : IDisposable, IAsyncDisposable
                 _samples.RemoveRange(0, Math.Max(1, _maxSamples / 2));
             }
 
-            _samples.Add(sample);
-            return sample;
+            long change = _samples.Count == 0 ? 0L : sample.UsedHeapBytes - _samples[^1].UsedHeapBytes;
+            int gcEvents = GC.CollectionCount(0) + GC.CollectionCount(1) + GC.CollectionCount(2);
+            long available;
+            try
+            {
+                available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            }
+            catch (InvalidOperationException)
+            {
+                available = 0L;
+            }
+
+            MemorySample enriched = sample with
+            {
+                HeapSizeChangeSinceLastSample = change,
+                GcEventsCount = gcEvents,
+                AvailableHeapSizeBytes = available,
+            };
+            _samples.Add(enriched);
+            return enriched;
         }
     }
 

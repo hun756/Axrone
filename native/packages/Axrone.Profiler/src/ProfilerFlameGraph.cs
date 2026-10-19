@@ -252,6 +252,16 @@ public sealed class FlameGraphBuilder : IDisposable
         }
     }
 
+    /// <summary>Open frame depth.</summary>
+    public int GetActiveTimerCount()
+    {
+        ThrowIfDisposed();
+        lock (_gate)
+        {
+            return _stack.Count;
+        }
+    }
+
     /// <summary>Root nodes, optionally sorted by duration descending.</summary>
     public IReadOnlyList<FlameGraphNode> GetRoots()
     {

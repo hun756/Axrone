@@ -17,7 +17,8 @@ public enum ProfilerMode : byte
 public readonly record struct ProfilerOptions(
     ProfilerMode Mode = ProfilerMode.OnDemand,
     int BufferCapacity = 1024,
-    bool AutoStart = false);
+    bool AutoStart = false,
+    Action? OnFrameEnd = null);
 
 /// <summary>Profiler self-cost and volume counters.</summary>
 public readonly record struct OverheadMetrics(long OverheadNs, int TimerCount, int MarkerCount);
@@ -261,6 +262,24 @@ public sealed class Profiler : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>Records a marker whose name comes from a callback; returns the marker index.</summary>
+    public int AddMarkerWithCallback(Func<string> nameFactory, int? parentId = null)
+    {
+        ArgumentNullException.ThrowIfNull(nameFactory);
+        string name;
+        try
+        {
+            name = nameFactory();
+        }
+        catch (Exception ex)
+        {
+            throw new ProfilerException("PROFILER_ERROR", "Marker name callback failed.", ex);
+        }
+
+        AddMarker(name, parentId);
+        return (int)Interlocked.Read(ref _markers) - 1;
+    }
+
     /// <summary>Arms periodic heartbeat sampling.</summary>
     public void EnableSampling(double intervalMs = 10.0)
     {
@@ -294,6 +313,7 @@ public sealed class Profiler : IDisposable, IAsyncDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ThrowIfStopped();
         _timeline.Tick();
+        _options.OnFrameEnd?.Invoke();
     }
 
     /// <summary>Drops timers, hierarchy, metrics and timeline.</summary>
