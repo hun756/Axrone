@@ -75,7 +75,7 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
             return false;
         }
 
-        uint hash = Asset2DHashing.ComputeNameHash(name);
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(name)).Value;
         uint mask = (uint)_frameSlots.Length - 1;
         uint idx = hash & mask;
 
@@ -127,7 +127,7 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
             return false;
         }
 
-        uint hash = Asset2DHashing.ComputeNameHash(name);
+        uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(name)).Value;
         uint mask = (uint)_animationSlots.Length - 1;
         uint idx = hash & mask;
 
@@ -386,7 +386,7 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
 
         for (int i = 0; i < resolvedFrames.Length; i++)
         {
-            uint hash = Asset2DHashing.ComputeNameHash(resolvedFrames[i].Id.Value.AsSpan());
+            uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(resolvedFrames[i].Id.Value.AsSpan())).Value;
             uint idx = hash & frameMask;
             while (frameSlots[idx].TargetIndex >= 0)
             {
@@ -421,7 +421,7 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
                 {
                     SpriteClipRefDefinition aRef = aDef.Frames[j];
 
-                    uint refHash = Asset2DHashing.ComputeNameHash(aRef.FrameId.Value.AsSpan());
+                    uint refHash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(aRef.FrameId.Value.AsSpan())).Value;
                     uint sIdx = refHash & frameMask;
                     int foundIdx = -1;
 
@@ -477,7 +477,7 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
 
             for (int i = 0; i < resolvedAnimations.Length; i++)
             {
-                uint hash = Asset2DHashing.ComputeNameHash(resolvedAnimations[i].Id.Value.AsSpan());
+                uint hash = Fnv1a32Algorithm.Hash(MemoryMarshal.AsBytes(resolvedAnimations[i].Id.Value.AsSpan())).Value;
                 uint idx = hash & animMask;
                 while (animationSlots[idx].TargetIndex >= 0)
                 {
@@ -503,3 +503,4 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
             animationSlots);
     }
 }
+
