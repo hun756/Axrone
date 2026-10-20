@@ -59,9 +59,9 @@ public static class DeterministicFingerprinter
 
         string[] propertyKeys = new string[metadata.Properties.Count];
         int propertyIndex = 0;
-        foreach (string key in metadata.Properties.Keys)
+        foreach (string propertyName in metadata.Properties.Keys)
         {
-            propertyKeys[propertyIndex++] = key;
+            propertyKeys[propertyIndex++] = propertyName;
         }
 
         Array.Sort(propertyKeys, StringComparer.Ordinal);
