@@ -93,7 +93,7 @@ public sealed class ShaderPreprocessTests
         var lookup = new EmptyMacroPolicy();
         var sink = new ShaderDiagnosticSink();
         Action stray = () => GLSLPreprocessor.Preprocess("#elif 1\n", in lookup, sink, "t");
-        stray.Should().NotThrow();
+        stray.Should().Throw<ShaderPreprocessException>();
         sink.HasErrors.Should().BeTrue();
 
         var sink2 = new ShaderDiagnosticSink();
