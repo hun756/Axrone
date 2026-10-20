@@ -152,7 +152,7 @@ public readonly record struct AssetKey :
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         string trimmed = value.Trim();
-        return trimmed.IndexOf('\\') >= 0 ? trimmed.Replace('\\', '/') : trimmed;
+        return trimmed.Contains('\\') ? trimmed.Replace('\\', '/') : trimmed;
     }
 
     /// <summary>Creates a key from a precomputed hash.</summary>
