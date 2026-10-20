@@ -51,38 +51,36 @@ public sealed class AssetCodecTests
     [Fact]
     public void Binary_Codec_RoundTrips()
     {
-        var codec = new BinaryAssetCodec();
-        codec.Format.Should().Be("binary");
+        ByteArrayCodecPolicy.Format.Should().Be("binary");
 
         byte[] payload = [1, 2, 3, 250];
-        string stable = codec.SerializeStable(payload);
-        codec.Deserialize(stable).Should().BeEquivalentTo(payload);
-
-        Action wrong = () => codec.SerializeStable("nope");
-        wrong.Should().Throw<AssetConfigurationException>();
+        Span<byte> buffer = stackalloc byte[ByteArrayCodecPolicy.MaxSerializedBytes(payload)];
+        ByteArrayCodecPolicy.TrySerialize(in payload, buffer, out int written).Should().BeTrue();
+        ByteArrayCodecPolicy.TryDeserialize(buffer[..written], out byte[] restored).Should().BeTrue();
+        restored.Should().BeEquivalentTo(payload);
     }
 
     [Fact]
     public void Text_Codec_RoundTrips()
     {
-        var codec = new TextAssetCodec();
-        codec.Format.Should().Be("text");
+        Utf8StringCodecPolicy.Format.Should().Be("text");
 
-        codec.SerializeStable("hello").Should().Be("hello");
-        codec.Deserialize("hello").Should().Be("hello");
-
-        Action wrong = () => codec.SerializeStable(42);
-        wrong.Should().Throw<AssetConfigurationException>();
+        string payload = "hello";
+        Span<byte> buffer = stackalloc byte[Utf8StringCodecPolicy.MaxSerializedBytes(payload)];
+        Utf8StringCodecPolicy.TrySerialize(in payload, buffer, out int written).Should().BeTrue();
+        Utf8StringCodecPolicy.TryDeserialize(buffer[..written], out string restored).Should().BeTrue();
+        restored.Should().Be("hello");
     }
 
     [Fact]
-    public void Registry_Resolves_And_Rejects_Unknown()
+    public void Unmanaged_Codec_RoundTrips()
     {
-        var registry = AssetCodecRegistry.WithDefaults();
-        registry.Get("binary").Format.Should().Be("binary");
-        registry.TryGet("nope", out _).Should().BeFalse();
+        UnmanagedBinaryCodecPolicy<int>.Format.Should().Be("unmanaged");
 
-        Action missing = () => registry.Get("nope");
-        missing.Should().Throw<AssetConfigurationException>();
+        int payload = 42;
+        Span<byte> buffer = stackalloc byte[UnmanagedBinaryCodecPolicy<int>.MaxSerializedBytes(payload)];
+        UnmanagedBinaryCodecPolicy<int>.TrySerialize(in payload, buffer, out int written).Should().BeTrue();
+        UnmanagedBinaryCodecPolicy<int>.TryDeserialize(buffer[..written], out int restored).Should().BeTrue();
+        restored.Should().Be(42);
     }
 }
