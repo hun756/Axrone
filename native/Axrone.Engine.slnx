@@ -44,6 +44,8 @@
     <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
     <Project Path="packages/Axrone.Asset/Axrone.Asset.csproj" />
     <Project Path="packages/Axrone.Asset/tests/Axrone.Asset.Tests.csproj" />
+    <Project Path="packages/Axrone.Asset2D/Axrone.Asset2D.csproj" />
+    <Project Path="packages/Axrone.Asset2D/tests/Axrone.Asset2D.Tests.csproj" />
     <Project Path="packages/Axrone.Execution/Axrone.Execution.csproj" />
     <Project Path="packages/Axrone.Execution/tests/Axrone.Execution.Tests.csproj" />
     <Project Path="packages/Axrone.Random/Axrone.Random.csproj" />
