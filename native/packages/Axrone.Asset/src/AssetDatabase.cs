@@ -227,86 +227,10 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
             AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
                 input.Kind, input.Key, in inputData, meta);
-
-            AssetId finalId;
-            if (_keyIndex.TryGetValue(input.Key, out AssetId bound))
-            {
-                if (input.Id.HasValue && input.Id.Value != bound)
-                {
-                    ThrowHelper.ThrowConflictError(
-                        string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{bound}'."),
-                        "key-bound");
-                }
-
-                finalId = bound;
-            }
-            else
-            {
-                finalId = input.Id ?? AssetId.CreateNew();
-            }
-
+            AssetId finalId = ResolveFinalId(in input, null);
             IReadOnlyList<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies);
 
-            AssetRevision finalRev;
-            if (_assetsById.TryGetValue(finalId, out StoredAsset? existing))
-            {
-                isInsert = false;
-                if (!string.Equals(existing.Kind, input.Kind, StringComparison.Ordinal))
-                {
-                    ThrowHelper.ThrowConflictError(
-                        string.Create(CultureInfo.InvariantCulture, $"Asset kind mismatch for '{finalId}'."),
-                        "kind-mismatch");
-                }
-
-                ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, finalId, out _);
-                ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
-                ring.Push(existing);
-
-                _catalog.UnindexAsset(existing);
-
-                finalRev = existing.Revision.Next();
-                stored = existing.CloneWithNewRevision(
-                    finalRev,
-                    input.Data,
-                    fingerprint,
-                    now,
-                    meta,
-                    dependencyIds,
-                    input.Aliases,
-                    input.Name);
-                RemoveDependencyEdges(finalId, existing.DependencyIds);
-            }
-            else
-            {
-                isInsert = true;
-                finalRev = AssetRevision.Initial;
-                stored = new StoredAsset
-                {
-                    Kind = input.Kind,
-                    Id = finalId,
-                    Key = input.Key,
-                    Aliases = input.Aliases ?? [],
-                    Name = input.Name,
-                    Data = input.Data,
-                    Revision = finalRev,
-                    Fingerprint = fingerprint,
-                    CreatedAtEpochMs = now,
-                    UpdatedAtEpochMs = now,
-                    Metadata = meta,
-                    DependencyIds = dependencyIds,
-                };
-            }
-
-            _assetsById[finalId] = stored;
-            _keyIndex[stored.Key] = finalId;
-            foreach (AssetKey alias in stored.Aliases)
-            {
-                _aliasIndex[alias] = finalId;
-            }
-
-            AddDependencyEdges(finalId, stored.DependencyIds);
-            _catalog.IndexAsset(stored);
-            Interlocked.Increment(ref _counters.Upserts);
+            (stored, isInsert) = CommitWrite(in input, meta, fingerprint, finalId, dependencyIds, now);
         }
 
         AssetRecord<TData> record = stored.ToRecord<TData>();
@@ -329,16 +253,171 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         return record;
     }
 
-    /// <summary>Inserts or updates many assets.</summary>
+    /// <summary>Resolves the final identity, asserting key ownership.</summary>
+    private AssetId ResolveFinalId<TData>(in AssetWriteInput<TData> input, Dictionary<AssetKey, AssetId>? staged)
+    {
+        if (staged is not null && staged.TryGetValue(input.Key, out AssetId stagedId))
+        {
+            if (input.Id.HasValue && input.Id.Value != stagedId)
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{stagedId}'."),
+                    "key-bound");
+            }
+
+            return stagedId;
+        }
+
+        if (_keyIndex.TryGetValue(input.Key, out AssetId bound))
+        {
+            if (input.Id.HasValue && input.Id.Value != bound)
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{bound}'."),
+                    "key-bound");
+            }
+
+            staged?.Add(input.Key, bound);
+            return bound;
+        }
+
+        AssetId finalId = input.Id ?? AssetId.CreateNew();
+        staged?.Add(input.Key, finalId);
+        return finalId;
+    }
+
+    /// <summary>Applies one prepared write to the live indexes.</summary>
+    private (StoredAsset Stored, bool IsInsert) CommitWrite<TData>(
+        in AssetWriteInput<TData> input,
+        AssetMetadata meta,
+        AssetFingerprint fingerprint,
+        AssetId finalId,
+        IReadOnlyList<AssetId> dependencyIds,
+        long now)
+    {
+        StoredAsset stored;
+        bool isInsert;
+        AssetRevision finalRev;
+        if (_assetsById.TryGetValue(finalId, out StoredAsset? existing))
+        {
+            isInsert = false;
+            if (!string.Equals(existing.Kind, input.Kind, StringComparison.Ordinal))
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset kind mismatch for '{finalId}'."),
+                    "kind-mismatch");
+            }
+
+            ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, finalId, out _);
+            ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
+            ring.Push(existing);
+
+            _catalog.UnindexAsset(existing);
+
+            finalRev = existing.Revision.Next();
+            stored = existing.CloneWithNewRevision(
+                finalRev,
+                input.Data,
+                fingerprint,
+                now,
+                meta,
+                dependencyIds,
+                input.Aliases,
+                input.Name);
+            RemoveDependencyEdges(finalId, existing.DependencyIds);
+        }
+        else
+        {
+            isInsert = true;
+            finalRev = AssetRevision.Initial;
+            stored = new StoredAsset
+            {
+                Kind = input.Kind,
+                Id = finalId,
+                Key = input.Key,
+                Aliases = input.Aliases ?? [],
+                Name = input.Name,
+                Data = input.Data,
+                Revision = finalRev,
+                Fingerprint = fingerprint,
+                CreatedAtEpochMs = now,
+                UpdatedAtEpochMs = now,
+                Metadata = meta,
+                DependencyIds = dependencyIds,
+            };
+        }
+
+        _assetsById[finalId] = stored;
+        _keyIndex[stored.Key] = finalId;
+        foreach (AssetKey alias in stored.Aliases)
+        {
+            _aliasIndex[alias] = finalId;
+        }
+
+        AddDependencyEdges(finalId, stored.DependencyIds);
+        _catalog.IndexAsset(stored);
+        Interlocked.Increment(ref _counters.Upserts);
+        return (stored, isInsert);
+    }
+
+    /// <summary>Inserts or updates many assets atomically.</summary>
     public IReadOnlyList<AssetRecord<object>> UpsertMany(IReadOnlyList<AssetWriteInput<object>> inputs)
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(inputs);
-        var records = new List<AssetRecord<object>>(inputs.Count);
-        for (int i = 0; i < inputs.Count; i++)
+
+        var staged = new List<(StoredAsset Stored, bool IsInsert)>(inputs.Count);
+        lock (_gate)
         {
-            AssetWriteInput<object> input = inputs[i];
-            records.Add(Upsert(in input));
+            long now = _clock();
+            var stagedKeys = new Dictionary<AssetKey, AssetId>(inputs.Count);
+            var stagedIds = new HashSet<AssetId>();
+            var prepared = new List<(AssetWriteInput<object> Input, AssetMetadata Meta, AssetFingerprint Fingerprint, AssetId FinalId, List<AssetId> Dependencies)>(inputs.Count);
+
+            foreach (AssetWriteInput<object> input in inputs)
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(input.Kind);
+                stagedIds.Add(ResolveFinalId(in input, stagedKeys));
+            }
+
+            foreach (AssetWriteInput<object> input in inputs)
+            {
+                object inputData = input.Data;
+                AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
+                AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<object, DefaultDataCodecPolicy<object>>(
+                    input.Kind, input.Key, in inputData, meta);
+                AssetId finalId = stagedKeys[input.Key];
+                List<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies, stagedKeys, stagedIds);
+                prepared.Add((input, meta, fingerprint, finalId, dependencyIds));
+            }
+
+            foreach (var (input, meta, fingerprint, finalId, dependencyIds) in prepared)
+            {
+                staged.Add(CommitWrite(in input, meta, fingerprint, finalId, dependencyIds, now));
+            }
+        }
+
+        var records = new List<AssetRecord<object>>(staged.Count);
+        foreach ((StoredAsset stored, bool isInsert) in staged)
+        {
+            AssetRecord<object> record = stored.ToRecord<object>();
+            object boxed = record.Data!;
+            if (isInsert)
+            {
+                TLifecycle.OnCreated(in boxed);
+            }
+            else
+            {
+                AssetRevision revision = record.Revision;
+                TLifecycle.OnUpdated(in boxed, in revision);
+            }
+
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Upsert,
+                stored.Id,
+                stored.Revision,
+                Fnv1a64.ComputeUtf8Chars(stored.Kind.AsSpan())));
+            records.Add(record);
         }
 
         return records;
@@ -1224,7 +1303,10 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         return serialized;
     }
 
-    private List<AssetId> ResolveDependencyIds(IReadOnlyList<AssetDependencyInput>? inputs)
+    private List<AssetId> ResolveDependencyIds(
+        IReadOnlyList<AssetDependencyInput>? inputs,
+        Dictionary<AssetKey, AssetId>? stagedKeys = null,
+        HashSet<AssetId>? stagedIds = null)
     {
         if (inputs is null || inputs.Count == 0)
         {
@@ -1244,7 +1326,21 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             };
 
             AssetId resolved = default;
-            if (selector.Kind == SelectorKind.None || !TryResolveId(in selector, out resolved))
+            bool found = selector.Kind != SelectorKind.None && TryResolveId(in selector, out resolved);
+            if (!found && stagedKeys is not null && selector.Kind == SelectorKind.Key &&
+                stagedKeys.TryGetValue(selector.Key, out AssetId stagedKeyId))
+            {
+                resolved = stagedKeyId;
+                found = true;
+            }
+
+            if (!found && stagedIds is not null && selector.Kind == SelectorKind.Id && stagedIds.Contains(selector.Id))
+            {
+                resolved = selector.Id;
+                found = true;
+            }
+
+            if (!found)
             {
                 string descriptor = input switch
                 {
