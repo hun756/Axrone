@@ -17,6 +17,12 @@ public sealed class SpriteAtlasAssetImporter : IAssetImporter
     public int Priority => 20;
 
     /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["bytes", "text"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> Extensions => [".spriteatlas.json", ".atlas.json", ".json"];
+
+    /// <inheritdoc/>
     public bool CanImport(AssetPipelineContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

@@ -17,6 +17,12 @@ public sealed class ShaderEffectAssetImporter : IAssetImporter
     public int Priority => 20;
 
     /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["bytes", "text"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> Extensions => [".effect.json", ".shader.json", ".glsl", ".shader"];
+
+    /// <inheritdoc/>
     public bool CanImport(AssetImportContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

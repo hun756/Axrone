@@ -225,7 +225,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         {
             long now = _clock();
             AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
-            AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
+            AssetFingerprint fingerprint = input.Fingerprint ?? DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
                 input.Kind, input.Key, in inputData, meta);
             AssetId finalId = ResolveFinalId(in input, null);
             IReadOnlyList<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies);
@@ -384,7 +384,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             {
                 object inputData = input.Data;
                 AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
-                AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<object, DefaultDataCodecPolicy<object>>(
+                AssetFingerprint fingerprint = input.Fingerprint ?? DeterministicFingerprinter.Compute<object, DefaultDataCodecPolicy<object>>(
                     input.Kind, input.Key, in inputData, meta);
                 AssetId finalId = stagedKeys[input.Key];
                 List<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies, stagedKeys, stagedIds);
@@ -605,8 +605,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
     }
 
-    /// <summary>Lists every stored asset.</summary>
-    public IReadOnlyList<AssetRecord<object>> List()
+    /// <summary>Lists every stored asset, optionally filtered to a kind.</summary>
+    public IReadOnlyList<AssetRecord<object>> List(string? kind = null)
     {
         EnsureNotDisposed();
         lock (_gate)
@@ -614,7 +614,10 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             var results = new List<AssetRecord<object>>(_assetsById.Count);
             foreach (StoredAsset asset in _assetsById.Values)
             {
-                results.Add(asset.ToRecord<object>());
+                if (kind is null || string.Equals(asset.Kind, kind, StringComparison.Ordinal))
+                {
+                    results.Add(asset.ToRecord<object>());
+                }
             }
 
             return results;
@@ -681,7 +684,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             (TData)result.Primary.Data!,
             result.Primary.Aliases,
             result.Primary.Metadata,
-            NormalizeDependencies(result.Primary.Dependencies, baseKey)));
+            NormalizeDependencies(result.Primary.Dependencies, baseKey),
+            result.Primary.Fingerprint));
 
         List<AssetRecord<object>> imported = new() { primary.ToUntypedRecord() };
         if (result.Additional is not null)
