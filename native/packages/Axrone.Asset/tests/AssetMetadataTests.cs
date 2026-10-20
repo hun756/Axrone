@@ -11,9 +11,9 @@ public sealed class AssetMetadataTests
             MimeType = "text/plain",
             Locale = new AssetLocale("en"),
             Tags = ["b", "a"],
-            Properties = new Dictionary<string, string>
+            Properties = new Dictionary<string, AssetJsonValue>
             {
-                ["z"] = "1",
+                ["z"] = 1.0,
                 ["a"] = "qu\"ote",
             },
         };
@@ -25,16 +25,17 @@ public sealed class AssetMetadataTests
             MimeType = "text/plain",
             Locale = new AssetLocale("en"),
             Tags = ["b", "a"],
-            Properties = new Dictionary<string, string>
+            Properties = new Dictionary<string, AssetJsonValue>
             {
                 ["a"] = "qu\"ote",
-                ["z"] = "1",
+                ["z"] = 1.0,
             },
         });
 
         stable.Should().Be(reordered);
         stable.Should().Contain("\\\"");
         stable.Should().Contain("\"a\":\"qu\\\"ote\"");
+        stable.Should().Contain("\"z\":1");
     }
 
     [Fact]

@@ -37,9 +37,8 @@ public static class StableJson
 
             builder.Append('\"');
             AppendEscaped(builder, keys[i]);
-            builder.Append("\":\"");
-            AppendEscaped(builder, metadata.Properties[keys[i]]);
-            builder.Append('\"');
+            builder.Append("\":");
+            AssetJsonValue.AppendCanonical(builder, metadata.Properties[keys[i]]);
         }
 
         builder.Append("},\"tags\":[");

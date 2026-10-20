@@ -57,11 +57,22 @@ public static class DeterministicFingerprinter
             hash = Fnv1a64.ComputeUtf8Chars(metadata.Tags[i].AsSpan(), hash);
         }
 
-        foreach (KeyValuePair<string, string> entry in metadata.Properties)
+        string[] propertyKeys = new string[metadata.Properties.Count];
+        int propertyIndex = 0;
+        foreach (string key in metadata.Properties.Keys)
         {
-            hash = Fnv1a64.ComputeUtf8Chars(entry.Key.AsSpan(), hash);
+            propertyKeys[propertyIndex++] = key;
+        }
+
+        Array.Sort(propertyKeys, StringComparer.Ordinal);
+        var canonical = new StringBuilder(64);
+        for (int i = 0; i < propertyKeys.Length; i++)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(propertyKeys[i].AsSpan(), hash);
             hash = Fnv1a64.ComputeUtf8Chars("=".AsSpan(), hash);
-            hash = Fnv1a64.ComputeUtf8Chars(entry.Value.AsSpan(), hash);
+            canonical.Clear();
+            AssetJsonValue.AppendCanonical(canonical, metadata.Properties[propertyKeys[i]]);
+            hash = Fnv1a64.ComputeUtf8Chars(canonical.ToString().AsSpan(), hash);
         }
 
         return new AssetFingerprint(hash);

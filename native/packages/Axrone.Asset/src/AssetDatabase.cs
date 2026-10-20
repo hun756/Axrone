@@ -224,7 +224,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         lock (_gate)
         {
             long now = _clock();
-            AssetMetadata meta = input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) };
+            AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
             AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
                 input.Kind, input.Key, in inputData, meta);
 
@@ -1194,6 +1194,78 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
 
         return AssetSelector.FromKey(new AssetKey(token));
+    }
+
+    /// <summary>Normalizes metadata on write: trims, dedupes and sorts.</summary>
+    private static AssetMetadata NormalizeMetadata(AssetMetadata metadata)
+    {
+        string? mime = metadata.MimeType?.Trim();
+        if (mime is not null && mime.Length == 0)
+        {
+            mime = null;
+        }
+
+        AssetUri? uri = metadata.Uri;
+        if (uri.HasValue)
+        {
+            string normalized = uri.Value.Value.Replace('\\', '/').Trim();
+            if (normalized.Length == 0)
+            {
+                uri = null;
+            }
+            else if (!string.Equals(normalized, uri.Value.Value, StringComparison.Ordinal))
+            {
+                uri = new AssetUri(normalized);
+            }
+        }
+
+        AssetLocale? locale = metadata.Locale;
+        if (locale.HasValue)
+        {
+            string trimmed = locale.Value.Value.Trim();
+            if (!string.Equals(trimmed, locale.Value.Value, StringComparison.Ordinal))
+            {
+                locale = new AssetLocale(trimmed);
+            }
+        }
+
+        List<string>? tags = null;
+        if (metadata.Tags.Count > 0)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            tags = new List<string>(metadata.Tags.Count);
+            foreach (string tag in metadata.Tags)
+            {
+                string trimmed = tag.Trim();
+                if (trimmed.Length > 0 && seen.Add(trimmed))
+                {
+                    tags.Add(trimmed);
+                }
+            }
+
+            tags.Sort(StringComparer.Ordinal);
+        }
+
+        bool mimeChanged = !string.Equals(mime, metadata.MimeType, StringComparison.Ordinal);
+        bool uriChanged = uri?.Value != metadata.Uri?.Value;
+        bool localeChanged = locale?.Value != metadata.Locale?.Value;
+        bool tagsChanged = tags is null
+            ? metadata.Tags.Count != 0
+            : tags.Count != metadata.Tags.Count || !tags.SequenceEqual(metadata.Tags);
+
+        if (!mimeChanged && !uriChanged && !localeChanged && !tagsChanged)
+        {
+            return metadata;
+        }
+
+        return new AssetMetadata
+        {
+            Uri = uri,
+            MimeType = mime,
+            Locale = locale,
+            Tags = tags ?? [],
+            Properties = metadata.Properties,
+        };
     }
 
     private void UnbindSourceIdentitiesForAsset(AssetId id)
