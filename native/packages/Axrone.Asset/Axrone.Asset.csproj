@@ -57,6 +57,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Axrone.Event/Axrone.Event.csproj" />
     <ProjectReference Include="../Axrone.Hash/Axrone.Hash.csproj" />
   </ItemGroup>
 

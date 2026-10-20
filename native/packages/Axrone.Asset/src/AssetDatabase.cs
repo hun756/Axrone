@@ -3,7 +3,7 @@ namespace Axrone.Asset;
 /// <summary>
 /// Asset database: generational stores over id, key and alias indexes with
 /// revision history, dependency graph, source bindings, query catalog and an
-/// async event dispatcher. All mutations serialize on one lock; events fire
+/// Axrone.Event-backed fan-out. All mutations serialize on one lock; events fire
 /// after the lock drops so listeners never deadlock reentrancy.
 /// </summary>
 /// <typeparam name="TSchema">Schema tag; selects the kind space.</typeparam>

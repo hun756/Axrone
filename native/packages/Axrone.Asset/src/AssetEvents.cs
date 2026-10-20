@@ -1,3 +1,5 @@
+using Axrone.Event;
+
 namespace Axrone.Asset;
 
 /// <summary>Asset event type.</summary>
@@ -25,85 +27,44 @@ public interface IAssetSubscription : IDisposable
 {
 }
 
-/// <summary>Channel-based async event dispatcher with per-subscriber fan-out.</summary>
+/// <summary>
+/// Asset fan-out over <see cref="EventBus"/>: publishes are non-blocking and
+/// a failing listener lands in dead letters instead of stalling the
+/// remaining subscribers.
+/// </summary>
 internal sealed class EventBatchDispatcher : IAsyncDisposable
 {
-    private readonly Channel<AssetEvent> _channel;
-    private readonly ConcurrentDictionary<int, Action<AssetEvent>> _subscribers = new();
-    private readonly CancellationTokenSource _cts = new();
-    private readonly Task _drainTask;
-    private int _subIdCounter;
-
-    /// <summary>Creates a dispatcher with a background drain loop.</summary>
-    public EventBatchDispatcher()
-    {
-        _channel = Channel.CreateUnbounded<AssetEvent>(new UnboundedChannelOptions
-        {
-            SingleReader = true,
-            SingleWriter = false,
-        });
-
-        _drainTask = Task.Run(ProcessQueueAsync);
-    }
+    private readonly EventBus _bus = new();
 
     /// <summary>Enqueues an event.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Enqueue(in AssetEvent evt) => _channel.Writer.TryWrite(evt);
+    public void Enqueue(in AssetEvent evt) => _bus.Publish(in evt);
 
     /// <summary>Subscribes a listener.</summary>
     public IAssetSubscription Subscribe(Action<AssetEvent> listener)
     {
         ArgumentNullException.ThrowIfNull(listener);
-        int id = Interlocked.Increment(ref _subIdCounter);
-        _subscribers[id] = listener;
-        return new Subscription(() => _subscribers.TryRemove(id, out _));
-    }
-
-    private async Task ProcessQueueAsync()
-    {
-        ChannelReader<AssetEvent> reader = _channel.Reader;
-        try
-        {
-            while (await reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
-            {
-                while (reader.TryRead(out AssetEvent evt))
-                {
-                    foreach (Action<AssetEvent> sub in _subscribers.Values)
-                    {
-                        try
-                        {
-                            sub(evt);
-                        }
-                        catch
-                        {
-                            // A failing listener must not stall the remaining subscribers.
-                        }
-                    }
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Teardown requested.
-        }
+        IEventSubscription subscription = _bus.Subscribe<AssetEvent>(
+            (envelope, _) => listener(envelope.Payload));
+        return new Subscription(subscription);
     }
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        _channel.Writer.TryComplete();
-        await _cts.CancelAsync().ConfigureAwait(false);
-        await _drainTask.ConfigureAwait(false);
-        _cts.Dispose();
-    }
+    public ValueTask DisposeAsync() => _bus.DisposeAsync();
 
-    private sealed class Subscription(Action unsubscribe) : IAssetSubscription
+    private sealed class Subscription : IAssetSubscription
     {
-        private Action? _unsubscribe = unsubscribe;
+        private readonly IEventSubscription _inner;
+        private int _disposed;
+
+        public Subscription(IEventSubscription inner) => _inner = inner;
 
         public void Dispose()
         {
-            Interlocked.Exchange(ref _unsubscribe, null)?.Invoke();
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                _inner.Dispose();
+            }
         }
     }
 }
