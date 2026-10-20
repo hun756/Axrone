@@ -922,11 +922,39 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
 
         bool replace = options?.Replace ?? false;
+        List<StoredAsset> restored = new();
         lock (_gate)
         {
+            var stagedIds = new HashSet<AssetId>();
+            foreach (AssetSnapshotRecord record in snapshot.Assets)
+            {
+                ValidateSnapshotRecord(record, stagedIds);
+                stagedIds.Add(new AssetId(record.Id));
+            }
+
             if (replace)
             {
                 ClearInternal();
+            }
+            else
+            {
+                foreach (AssetSnapshotRecord record in snapshot.Assets)
+                {
+                    var id = new AssetId(record.Id);
+                    if (_assetsById.ContainsKey(id))
+                    {
+                        continue;
+                    }
+
+                    var key = new AssetKey(record.Key);
+                    if ((_keyIndex.TryGetValue(key, out AssetId bound) && bound != id) ||
+                        (_aliasIndex.TryGetValue(key, out bound) && bound != id))
+                    {
+                        ThrowHelper.ThrowConflictError(
+                            string.Create(CultureInfo.InvariantCulture, $"Asset key '{record.Key}' is already bound to '{bound}'."),
+                            "key-bound");
+                    }
+                }
             }
 
             foreach (AssetSnapshotRecord record in snapshot.Assets)
@@ -937,35 +965,16 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                     continue;
                 }
 
-                object? data = DeserializeDataFromSnapshot(record.SerializedData);
-                AssetMetadata metadata = record.Metadata;
-                AssetKey[] aliases = new AssetKey[record.Aliases.Count];
-                for (int ai = 0; ai < aliases.Length; ai++)
+                StoredAsset stored = BuildStoredAsset(record, id);
+                foreach (AssetId dep in stored.DependencyIds)
                 {
-                    aliases[ai] = new AssetKey(record.Aliases[ai]);
+                    if (!stagedIds.Contains(dep) && !_assetsById.ContainsKey(dep))
+                    {
+                        ThrowHelper.ThrowSnapshotError(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Snapshot asset '{record.Key}' references missing dependency '{dep}'."));
+                    }
                 }
-
-                AssetId[] dependencies = new AssetId[record.DependencyIds.Count];
-                for (int di = 0; di < dependencies.Length; di++)
-                {
-                    dependencies[di] = new AssetId(record.DependencyIds[di]);
-                }
-
-                var stored = new StoredAsset
-                {
-                    Kind = record.Kind,
-                    Id = id,
-                    Key = new AssetKey(record.Key),
-                    Aliases = aliases,
-                    Name = record.Name,
-                    Data = data,
-                    Revision = new AssetRevision((uint)record.Revision),
-                    Fingerprint = AssetFingerprint.FromHex(record.Fingerprint.AsSpan()),
-                    CreatedAtEpochMs = record.CreatedAtEpochMs,
-                    UpdatedAtEpochMs = record.UpdatedAtEpochMs,
-                    Metadata = metadata,
-                    DependencyIds = dependencies,
-                };
 
                 _assetsById[id] = stored;
                 _keyIndex[stored.Key] = id;
@@ -976,6 +985,18 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
                 AddDependencyEdges(id, stored.DependencyIds);
                 _catalog.IndexAsset(stored);
+
+                if (record.History is not null && record.History.Count > 0)
+                {
+                    ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, id, out _);
+                    ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
+                    foreach (AssetSnapshotRecord historyRecord in record.History)
+                    {
+                        ring.Push(BuildStoredAsset(historyRecord, id));
+                    }
+                }
+
+                restored.Add(stored);
             }
 
             if (snapshot.SourceBindings is not null)
@@ -983,10 +1004,104 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                 foreach (AssetSnapshotSourceBindingRecord binding in snapshot.SourceBindings)
                 {
                     AssetSourceIdentity identity = new(binding.Identity);
-                    _sourceBindings[identity] = new AssetSourceBinding(identity, new AssetId(binding.TargetId), binding.BoundAtEpochMs);
+                    var target = new AssetId(binding.TargetId);
+                    if (!_assetsById.ContainsKey(target))
+                    {
+                        ThrowHelper.ThrowSnapshotError(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Snapshot binding '{binding.Identity}' targets missing asset '{target}'."));
+                    }
+
+                    _sourceBindings[identity] = new AssetSourceBinding(identity, target, binding.BoundAtEpochMs);
                 }
             }
         }
+
+        foreach (StoredAsset asset in restored)
+        {
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Upsert,
+                asset.Id,
+                asset.Revision,
+                Fnv1a64.ComputeUtf8Chars(asset.Kind.AsSpan())));
+        }
+    }
+
+    private static void ValidateSnapshotRecord(AssetSnapshotRecord record, HashSet<AssetId> stagedIds)
+    {
+        if (string.IsNullOrWhiteSpace(record.Kind))
+        {
+            ThrowHelper.ThrowSnapshotError($"Snapshot asset '{record.Id}' has no kind.");
+        }
+
+        if (record.Revision < 1)
+        {
+            ThrowHelper.ThrowSnapshotError($"Snapshot asset '{record.Key}' has an invalid revision.");
+        }
+
+        if (record.History is not null)
+        {
+            long previous = 0;
+            foreach (AssetSnapshotRecord history in record.History)
+            {
+                if (string.IsNullOrWhiteSpace(history.Kind) || history.Kind != record.Kind)
+                {
+                    ThrowHelper.ThrowSnapshotError($"Snapshot history for '{record.Key}' mismatches asset kind.");
+                }
+
+                if (history.Revision <= previous || history.Revision >= record.Revision)
+                {
+                    ThrowHelper.ThrowSnapshotError($"Snapshot history for '{record.Key}' is not monotonic.");
+                }
+
+                previous = history.Revision;
+            }
+        }
+    }
+
+    private StoredAsset BuildStoredAsset(AssetSnapshotRecord record, AssetId id)
+    {
+        object? data = DeserializeDataFromSnapshot(record.SerializedData);
+        AssetMetadata metadata = record.Metadata;
+        AssetKey[] aliases = new AssetKey[record.Aliases.Count];
+        for (int ai = 0; ai < aliases.Length; ai++)
+        {
+            aliases[ai] = new AssetKey(record.Aliases[ai]);
+        }
+
+        AssetId[] dependencies = new AssetId[record.DependencyIds.Count];
+        for (int di = 0; di < dependencies.Length; di++)
+        {
+            dependencies[di] = new AssetId(record.DependencyIds[di]);
+        }
+
+        AssetFingerprint fingerprint;
+        try
+        {
+            fingerprint = AssetFingerprint.FromHex(record.Fingerprint.AsSpan());
+        }
+        catch (AssetConfigurationError ex)
+        {
+            throw new AssetSnapshotError(
+                string.Create(CultureInfo.InvariantCulture, $"Snapshot asset '{record.Key}' has an invalid fingerprint."),
+                ex);
+        }
+
+        return new StoredAsset
+        {
+            Kind = record.Kind,
+            Id = id,
+            Key = new AssetKey(record.Key),
+            Aliases = aliases,
+            Name = record.Name,
+            Data = data,
+            Revision = new AssetRevision((uint)record.Revision),
+            Fingerprint = fingerprint,
+            CreatedAtEpochMs = record.CreatedAtEpochMs,
+            UpdatedAtEpochMs = record.UpdatedAtEpochMs,
+            Metadata = metadata,
+            DependencyIds = dependencies,
+        };
     }
 
     private static AssetSnapshotRecord ToSnapshotRecord(StoredAsset asset, string serializedData)
