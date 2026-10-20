@@ -511,12 +511,15 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         AssetUri? sourceUri = null,
         AssetSourceIdentity? sourceIdentity = null,
         AssetMetadata? metadata = null,
+        AssetImportOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(source);
 
         AssetImportContext context = new(source, baseKey, sourceUri, sourceIdentity, metadata);
+        await RunStagesAsync(AssetImportStagePhase.Source, context, null, cancellationToken).ConfigureAwait(false);
+
         IAssetImporter? selected;
         lock (_gate)
         {
@@ -530,24 +533,49 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                 $"No eligible importer found for source kind '{source.Kind}'."));
         }
 
-        AssetImportResult result = await selected.ImportAsync(context, cancellationToken).ConfigureAwait(false);
+        AssetImportResult? beforeResult = await RunStagesAsync(
+            AssetImportStagePhase.BeforeImport, context, null, cancellationToken).ConfigureAwait(false);
+
+        AssetImportResult result = beforeResult
+            ?? await ImportWithRetryAsync(selected, context, options?.Retry, cancellationToken).ConfigureAwait(false);
+
+        AssetImportResult? afterResult = await RunStagesAsync(
+            AssetImportStagePhase.AfterImport, context, result, cancellationToken).ConfigureAwait(false);
+        result = afterResult ?? result;
+
+        AssetId? primaryId = result.Primary.Id;
+        if (sourceIdentity.HasValue && primaryId is null)
+        {
+            lock (_gate)
+            {
+                if (_sourceBindings.TryGetValue(sourceIdentity.Value, out AssetSourceBinding binding) &&
+                    _assetsById.ContainsKey(binding.TargetId))
+                {
+                    primaryId = binding.TargetId;
+                }
+            }
+        }
 
         AssetRecord<TData> primary = Upsert(new AssetWriteInput<TData>(
             result.Primary.Kind,
-            result.Primary.Id,
+            primaryId,
             result.Primary.Key,
             result.Primary.Name,
             (TData)result.Primary.Data!,
             result.Primary.Aliases,
             result.Primary.Metadata,
-            result.Primary.Dependencies));
+            NormalizeDependencies(result.Primary.Dependencies, baseKey)));
 
         List<AssetRecord<object>> imported = new() { primary.ToUntypedRecord() };
         if (result.Additional is not null)
         {
             for (int i = 0; i < result.Additional.Count; i++)
             {
-                imported.Add(Upsert(result.Additional[i]));
+                AssetWriteInput<object> additional = result.Additional[i] with
+                {
+                    Dependencies = NormalizeDependencies(result.Additional[i].Dependencies, baseKey),
+                };
+                imported.Add(Upsert(additional));
             }
         }
 
@@ -558,7 +586,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
         return new AssetImportReceipt<TData>(
             selected.Id,
-            source.Kind,
+            context.Source.Kind,
             sourceUri,
             baseKey,
             sourceIdentity,
@@ -566,6 +594,217 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             result.Diagnostics ?? context.Diagnostics,
             primary,
             imported);
+    }
+
+    /// <summary>Imports many sources, optionally concurrently.</summary>
+    public async ValueTask<IReadOnlyList<AssetImportReceipt<TData>>> ImportManyAsync<TData>(
+        IEnumerable<AssetImportRequest> requests,
+        AssetImportOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNotDisposed();
+        ArgumentNullException.ThrowIfNull(requests);
+
+        var list = new List<AssetImportRequest>(requests);
+        int concurrency = options?.Concurrency ?? 1;
+        if (concurrency <= 1)
+        {
+            var receipts = new List<AssetImportReceipt<TData>>(list.Count);
+            foreach (AssetImportRequest request in list)
+            {
+                receipts.Add(await ImportAsync<TData>(
+                    request.Source,
+                    request.BaseKey,
+                    request.SourceUri,
+                    request.SourceIdentity,
+                    request.Metadata,
+                    options,
+                    cancellationToken).ConfigureAwait(false));
+            }
+
+            return receipts;
+        }
+
+        using var gate = new SemaphoreSlim(concurrency);
+        var tasks = new Task<AssetImportReceipt<TData>>[list.Count];
+        for (int i = 0; i < list.Count; i++)
+        {
+            AssetImportRequest request = list[i];
+            tasks[i] = Task.Run(async () =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await ImportAsync<TData>(
+                        request.Source,
+                        request.BaseKey,
+                        request.SourceUri,
+                        request.SourceIdentity,
+                        request.Metadata,
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }, cancellationToken);
+        }
+
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private static IReadOnlyList<AssetDependencyInput>? NormalizeDependencies(
+        IReadOnlyList<AssetDependencyInput>? dependencies,
+        AssetKey baseKey)
+    {
+        if (dependencies is null || dependencies.Count == 0)
+        {
+            return dependencies;
+        }
+
+        string prefix = baseKey.Value ?? baseKey.Hash.ToString("x16", CultureInfo.InvariantCulture);
+        List<AssetDependencyInput>? rewritten = null;
+        for (int i = 0; i < dependencies.Count; i++)
+        {
+            AssetDependencyInput input = dependencies[i];
+            AssetDependencyInput normalized = input switch
+            {
+                AssetDependencyInput.TokenDependency token when token.Token.StartsWith('#') =>
+                    AssetDependencyInput.FromToken(prefix + token.Token),
+                AssetDependencyInput.LookupDependency lookup
+                    when lookup.Lookup.Key.Value is not null && lookup.Lookup.Key.Value.StartsWith('#') =>
+                    AssetDependencyInput.FromLookup(new AssetLookupByKey(
+                        new AssetKey(prefix + lookup.Lookup.Key.Value),
+                        lookup.Lookup.KindHash)),
+                _ => input,
+            };
+
+            if (!ReferenceEquals(normalized, input))
+            {
+                rewritten ??= new List<AssetDependencyInput>(dependencies);
+                rewritten[i] = normalized;
+            }
+        }
+
+        return rewritten ?? dependencies;
+    }
+
+    private async ValueTask<AssetImportResult?> RunStagesAsync(
+        AssetImportStagePhase phase,
+        AssetImportContext context,
+        AssetImportResult? current,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IAssetImportStage> stages;
+        lock (_gate)
+        {
+            stages = _stageRegistry.ListByPhase(phase);
+        }
+
+        foreach (IAssetImportStage stage in stages)
+        {
+            IReadOnlyList<string> kinds = stage.SourceKinds;
+            if (kinds.Count > 0)
+            {
+                bool kindMatch = false;
+                foreach (string kind in kinds)
+                {
+                    if (string.Equals(kind, context.Source.Kind, StringComparison.OrdinalIgnoreCase))
+                    {
+                        kindMatch = true;
+                        break;
+                    }
+                }
+
+                if (!kindMatch)
+                {
+                    continue;
+                }
+            }
+
+            if (!stage.CanProcess(context))
+            {
+                continue;
+            }
+
+            AssetStageOutput? output = await stage.RunAsync(context, cancellationToken).ConfigureAwait(false);
+            if (output is null)
+            {
+                continue;
+            }
+
+            if (output.Diagnostics is not null)
+            {
+                foreach (AssetImportDiagnostic diagnostic in output.Diagnostics)
+                {
+                    context.AddDiagnostic(in diagnostic);
+                }
+            }
+
+            if (output.Source is not null)
+            {
+                context.Source = output.Source;
+            }
+
+            if (output.Result is not null)
+            {
+                if (phase == AssetImportStagePhase.Source)
+                {
+                    ThrowHelper.ThrowConfigurationError(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Import stage '{stage.Id.Value}' must not produce a result in the source phase."));
+                }
+
+                current = output.Result;
+            }
+        }
+
+        return current;
+    }
+
+    private static async ValueTask<AssetImportResult> ImportWithRetryAsync(
+        IAssetImporter importer,
+        AssetImportContext context,
+        AssetRetryPolicy? policy,
+        CancellationToken cancellationToken)
+    {
+        int maxAttempts = Math.Max(1, policy?.Attempts ?? 1);
+        int baseDelayMs = Math.Max(0, policy?.BaseDelayMs ?? 0);
+        int maxDelayMs = Math.Max(0, policy?.MaxDelayMs ?? 0);
+
+        for (int attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await importer.ImportAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                bool retry = attempt < maxAttempts && (policy?.ShouldRetry?.Invoke(ex, attempt) ?? true);
+                if (!retry)
+                {
+                    throw new AssetImportError(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Import through '{importer.Id.Value}' failed after {attempt} attempt(s)."),
+                        importer.Id.Value,
+                        attempt,
+                        ex);
+                }
+
+                int delayMs = maxDelayMs > 0 ? Math.Min(maxDelayMs, baseDelayMs * attempt) : baseDelayMs * attempt;
+                if (delayMs > 0)
+                {
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     /// <summary>Binds a source identity to an asset.</summary>
@@ -884,7 +1123,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             {
                 AssetDependencyInput.IdDependency d => AssetSelector.FromId(d.Id),
                 AssetDependencyInput.KeyDependency d => AssetSelector.FromKey(d.Key, null),
-                AssetDependencyInput.TokenDependency d => AssetSelector.Parse(d.Token.AsSpan()),
+                AssetDependencyInput.TokenDependency d => ResolveTokenSelector(d.Token),
                 AssetDependencyInput.LookupDependency d => AssetSelector.FromKey(d.Lookup.Key, null),
                 _ => default,
             };
@@ -935,6 +1174,26 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
 
         return ids;
+    }
+
+    /// <summary>Resolves a token to a selector: structured, hex id, then key.</summary>
+    private AssetSelector ResolveTokenSelector(string token)
+    {
+        if (token.StartsWith("asset:", StringComparison.Ordinal))
+        {
+            return AssetSelector.Parse(token.AsSpan());
+        }
+
+        if (ulong.TryParse(token.AsSpan(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong hex))
+        {
+            var id = new AssetId(hex);
+            if (_assetsById.ContainsKey(id))
+            {
+                return AssetSelector.FromId(id);
+            }
+        }
+
+        return AssetSelector.FromKey(new AssetKey(token));
     }
 
     private void UnbindSourceIdentitiesForAsset(AssetId id)

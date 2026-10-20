@@ -45,6 +45,7 @@ public interface IAssetImportStage
 public sealed class AssetImporterRegistry
 {
     private readonly List<IAssetImporter> _importers = new();
+    private readonly Lock _gate = new();
     private int _disposed;
 
     private void EnsureNotDisposed()
@@ -60,30 +61,42 @@ public sealed class AssetImporterRegistry
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(importer);
-        _importers.RemoveAll(existing => existing.Id.Equals(importer.Id));
-        _importers.Add(importer);
-        _importers.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+        lock (_gate)
+        {
+            _importers.RemoveAll(existing => existing.Id.Equals(importer.Id));
+            _importers.Add(importer);
+            _importers.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+        }
     }
 
     /// <summary>Unregisters an importer by identity.</summary>
     public bool Unregister(AssetImporterId id)
     {
-        EnsureNotDisposed();
-        return _importers.RemoveAll(existing => existing.Id.Equals(id)) > 0;
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            return _importers.RemoveAll(existing => existing.Id.Equals(id)) > 0;
+        }
     }
 
     /// <summary>Clears all importers.</summary>
     public void Clear()
     {
-        EnsureNotDisposed();
-        _importers.Clear();
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            _importers.Clear();
+        }
     }
 
     /// <summary>Lists registered importers in priority order.</summary>
     public IReadOnlyList<IAssetImporter> List()
     {
-        EnsureNotDisposed();
-        return new List<IAssetImporter>(_importers);
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            return new List<IAssetImporter>(_importers);
+        }
     }
 
     /// <summary>Releases the registry.</summary>
@@ -95,17 +108,20 @@ public sealed class AssetImporterRegistry
     /// <summary>Finds the first matching importer.</summary>
     public IAssetImporter? Find(AssetImportContext context)
     {
-        EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(context);
-        foreach (IAssetImporter importer in _importers)
+        lock (_gate)
         {
-            if (Matches(importer, context) && importer.CanImport(context))
+            EnsureNotDisposed();
+            foreach (IAssetImporter importer in _importers)
             {
-                return importer;
+                if (Matches(importer, context) && importer.CanImport(context))
+                {
+                    return importer;
+                }
             }
-        }
 
-        return null;
+            return null;
+        }
     }
 
     internal static bool Matches(IAssetImporter importer, AssetImportContext context)
@@ -225,6 +241,7 @@ public sealed class AssetImporterRegistry
 public sealed class AssetImportStageRegistry
 {
     private readonly List<IAssetImportStage> _stages = new();
+    private readonly Lock _gate = new();
     private int _disposed;
 
     private void EnsureNotDisposed()
@@ -238,32 +255,44 @@ public sealed class AssetImportStageRegistry
     /// <summary>Registers a stage; higher priority runs first.</summary>
     public void Register(IAssetImportStage stage)
     {
-        EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(stage);
-        _stages.RemoveAll(existing => existing.Id.Equals(stage.Id));
-        _stages.Add(stage);
-        _stages.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            _stages.RemoveAll(existing => existing.Id.Equals(stage.Id));
+            _stages.Add(stage);
+            _stages.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+        }
     }
 
     /// <summary>Unregisters a stage by identity.</summary>
     public bool Unregister(AssetImporterId id)
     {
-        EnsureNotDisposed();
-        return _stages.RemoveAll(existing => existing.Id.Equals(id)) > 0;
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            return _stages.RemoveAll(existing => existing.Id.Equals(id)) > 0;
+        }
     }
 
     /// <summary>Clears all stages.</summary>
     public void Clear()
     {
-        EnsureNotDisposed();
-        _stages.Clear();
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            _stages.Clear();
+        }
     }
 
     /// <summary>Lists registered stages in priority order.</summary>
     public IReadOnlyList<IAssetImportStage> List()
     {
-        EnsureNotDisposed();
-        return new List<IAssetImportStage>(_stages);
+        lock (_gate)
+        {
+            EnsureNotDisposed();
+            return new List<IAssetImportStage>(_stages);
+        }
     }
 
     /// <summary>Releases the registry.</summary>
@@ -275,18 +304,21 @@ public sealed class AssetImportStageRegistry
     /// <summary>Lists stages running in a phase, in priority order.</summary>
     public IReadOnlyList<IAssetImportStage> ListByPhase(AssetImportStagePhase phase)
     {
-        EnsureNotDisposed();
-        var matching = new List<IAssetImportStage>();
-        foreach (IAssetImportStage stage in _stages)
+        lock (_gate)
         {
-            IReadOnlyList<AssetImportStagePhase> phases = stage.Phases;
-            if (phases.Count == 0 || phases.Contains(phase))
+            EnsureNotDisposed();
+            var matching = new List<IAssetImportStage>();
+            foreach (IAssetImportStage stage in _stages)
             {
-                matching.Add(stage);
+                IReadOnlyList<AssetImportStagePhase> phases = stage.Phases;
+                if (phases.Count == 0 || phases.Contains(phase))
+                {
+                    matching.Add(stage);
+                }
             }
-        }
 
-        return matching;
+            return matching;
+        }
     }
 }
 
