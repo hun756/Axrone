@@ -189,6 +189,6 @@ public sealed class AssetDatabaseTests : IDisposable
     public void Require_Throws_For_Missing()
     {
         Action missing = () => Db.Require<string>(AssetSelector.FromId(new AssetId(1234UL)));
-        missing.Should().Throw<KeyNotFoundException>();
+        missing.Should().Throw<AssetReferenceError>();
     }
 }

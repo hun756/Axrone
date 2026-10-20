@@ -198,13 +198,13 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
     }
 
-    /// <summary>Gets an asset or throws <see cref="KeyNotFoundException"/>.</summary>
+    /// <summary>Gets an asset or throws <see cref="AssetReferenceError"/>.</summary>
     public AssetRecord<TData> Require<TData>(in AssetSelector selector)
     {
         AssetRecord<TData>? record = Get<TData>(in selector);
         if (record is null)
         {
-            throw new KeyNotFoundException(string.Create(
+            ThrowHelper.ThrowReferenceError(string.Create(
                 CultureInfo.InvariantCulture,
                 $"Asset selector could not be resolved (kind {selector.Kind})."));
         }
@@ -1547,6 +1547,27 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         _dependentsById.Clear();
         _sourceBindings.Clear();
         _catalog.Clear();
+    }
+
+    /// <summary>Removes every asset, emitting a delete event per asset.</summary>
+    public void Clear()
+    {
+        EnsureNotDisposed();
+        List<StoredAsset> removed;
+        lock (_gate)
+        {
+            removed = new List<StoredAsset>(_assetsById.Values);
+            ClearInternal();
+        }
+
+        foreach (StoredAsset asset in removed)
+        {
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Delete,
+                asset.Id,
+                asset.Revision,
+                Fnv1a64.ComputeUtf8Chars(asset.Kind.AsSpan())));
+        }
     }
 
     /// <inheritdoc/>

@@ -138,13 +138,21 @@ public readonly record struct AssetKey :
     /// <summary>Source text, when retained.</summary>
     public string? Value { get; }
 
-    /// <summary>Creates a keyed hash.</summary>
+    /// <summary>Creates a keyed hash, canonicalizing separators and whitespace.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public AssetKey(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        Value = value;
-        Hash = Fnv1a64.ComputeUtf8Chars(value.AsSpan());
+        Value = Canonicalize(value);
+        Hash = Fnv1a64.ComputeUtf8Chars(Value.AsSpan());
+    }
+
+    /// <summary>Canonicalizes key text: trims and unifies separators.</summary>
+    public static string Canonicalize(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        string trimmed = value.Trim();
+        return trimmed.IndexOf('\\') >= 0 ? trimmed.Replace('\\', '/') : trimmed;
     }
 
     /// <summary>Creates a key from a precomputed hash.</summary>

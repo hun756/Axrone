@@ -42,6 +42,35 @@ public readonly record struct AssetTextSource(string Text) : IAssetSource
     public object RawData => Text;
 }
 
+/// <summary>JSON import source.</summary>
+public readonly record struct AssetJsonSource(object? Data) : IAssetSource
+{
+    /// <summary>Source kind.</summary>
+    public string Kind => "json";
+
+    /// <summary>JSON payload.</summary>
+    public object? JsonData => Data;
+
+    /// <inheritdoc/>
+    public object RawData => Data!;
+}
+
+/// <summary>Custom import source.</summary>
+public readonly record struct AssetCustomSource(object? Data, string? Format = null) : IAssetSource
+{
+    /// <summary>Source kind.</summary>
+    public string Kind => "custom";
+
+    /// <summary>Custom payload.</summary>
+    public object? CustomData => Data;
+
+    /// <summary>Format discriminator.</summary>
+    public string? Format { get; } = Format;
+
+    /// <inheritdoc/>
+    public object RawData => Data!;
+}
+
 /// <summary>One import diagnostic.</summary>
 public readonly record struct AssetImportDiagnostic(string Severity, string Code, string Message);
 
