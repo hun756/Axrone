@@ -12,7 +12,8 @@ public enum HashAlgorithmId : byte
     Sha3_512 = 8,
     HmacSha256 = 9,
     HmacSha512 = 10,
-    Fnv1a32 = 11
+    Fnv1a32 = 11,
+    Fnv1a64 = 12
 }
 
 /// <summary>Represents a fixed-size hash digest value with equality, comparison, and formatting support.</summary>

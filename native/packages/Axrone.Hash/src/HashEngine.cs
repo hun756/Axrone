@@ -38,6 +38,7 @@ public static class HashEngine
         HashAlgorithmId.Sha3_256 => new Adapter<Sha3_256Algorithm, Sha3_256Accumulator, Digest256>(),
         HashAlgorithmId.Sha3_512 => new Adapter<Sha3_512Algorithm, Sha3_512Accumulator, Digest512>(),
         HashAlgorithmId.Fnv1a32 => new Adapter<Fnv1a32Algorithm, Fnv1a32Accumulator, Digest32>(),
+        HashAlgorithmId.Fnv1a64 => new Adapter<Fnv1a64Algorithm, Fnv1a64Accumulator, Digest64>(),
         HashAlgorithmId.HmacSha256 => new HmacAdapter(HashAlgorithmId.HmacSha256, HashAlgorithmName.SHA256, 32, key),
         HashAlgorithmId.HmacSha512 => new HmacAdapter(HashAlgorithmId.HmacSha512, HashAlgorithmName.SHA512, 64, key),
         _ => throw new NotSupportedException($"Algorithm {id} is not supported in dynamic mode.")
