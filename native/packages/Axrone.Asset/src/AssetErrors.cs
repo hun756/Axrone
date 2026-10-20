@@ -1,136 +1,104 @@
 namespace Axrone.Asset;
 
-/// <summary>
-/// Coded asset error.
-/// </summary>
-public class AssetException : Exception
+/// <summary>Base asset error carrying a machine-readable code.</summary>
+public class AssetError : Exception
 {
     /// <summary>Machine-readable code.</summary>
     public string Code { get; }
 
     /// <summary>Creates an error.</summary>
-    public AssetException(string code, string message)
-        : base(message) => Code = code;
-
-    /// <summary>Creates an error with an inner exception.</summary>
-    protected AssetException(string code, string message, Exception? inner)
+    public AssetError(string message, string code = "asset.error", Exception? inner = null)
         : base(message, inner) => Code = code;
 }
 
-/// <summary>
-/// Invalid asset configuration.
-/// </summary>
-public sealed class AssetConfigurationException(string code, string message) : AssetException(code, message);
+/// <summary>Invalid asset configuration.</summary>
+public sealed class AssetConfigurationError(string message) : AssetError(message, "asset.configuration");
 
-/// <summary>
-/// Key already bound or kind mismatch.
-/// </summary>
-public sealed class AssetConflictException(string code, string message) : AssetException(code, message);
+/// <summary>Key or kind conflict.</summary>
+public sealed class AssetConflictError(string message, string conflictCode) : AssetError(message, conflictCode);
 
-/// <summary>
-/// Use after asset database disposal.
-/// </summary>
-public sealed class AssetDisposedException(string message) : AssetException("asset.disposed", message);
+/// <summary>Use after database disposal.</summary>
+public sealed class AssetDisposedError() : AssetError("The AssetDatabase instance is disposed.", "asset.disposed");
 
-/// <summary>
-/// No importer for the requested source.
-/// </summary>
-public sealed class AssetImporterNotFoundException(string message) : AssetException("asset.importer.not-found", message);
+/// <summary>No importer accepts the source.</summary>
+public sealed class AssetImporterNotFoundError(string message) : AssetError(message, "importer.not-found");
 
-/// <summary>
-/// Import failed inside an importer.
-/// </summary>
-public sealed class AssetImportException : AssetException
-{
-    /// <summary>Failing importer.</summary>
-    public AssetImporterId ImporterId { get; }
+/// <summary>Invalid asset reference.</summary>
+public sealed class AssetReferenceError(string message) : AssetError(message, "reference.invalid");
 
-    /// <summary>Attempt number.</summary>
-    public int Attempt { get; }
-
-    /// <summary>Creates an error.</summary>
-    public AssetImportException(string message, AssetImporterId importerId, int attempt, Exception? inner = null)
-        : base("asset.import.failed", message, inner)
-    {
-        ImporterId = importerId;
-        Attempt = attempt;
-    }
-}
-
-/// <summary>
-/// Invalid asset reference token.
-/// </summary>
-public sealed class AssetReferenceException(string message) : AssetException("asset.reference.invalid", message);
-
-/// <summary>
-/// Missing asset dependency.
-/// </summary>
-public sealed class AssetDependencyException : AssetException
+/// <summary>Missing asset dependency.</summary>
+public sealed class AssetDependencyError(string message, string dependency) : AssetError(message, "dependency.missing")
 {
     /// <summary>Missing dependency.</summary>
-    public string Dependency { get; }
-
-    /// <summary>Creates an error.</summary>
-    public AssetDependencyException(string message, string dependency)
-        : base("asset.dependency.missing", message) => Dependency = dependency;
+    public string Dependency { get; } = dependency;
 }
 
-/// <summary>
-/// Invalid asset snapshot.
-/// </summary>
-public sealed class AssetSnapshotException(string message) : AssetException("asset.snapshot.invalid", message);
+/// <summary>Invalid asset snapshot.</summary>
+public sealed class AssetSnapshotError(string message, Exception? inner = null) : AssetError(message, "snapshot.invalid", inner);
 
-/// <summary>
-/// Asset disposal failure.
-/// </summary>
-public sealed class AssetLifecycleException : AssetException
+/// <summary>Lifecycle teardown failure.</summary>
+public sealed class AssetLifecycleError(string message, string assetId, string kind, Exception? inner = null)
+    : AssetError(message, "lifecycle.failed", inner)
 {
     /// <summary>Failing asset.</summary>
-    public AssetId Id { get; }
+    public string AssetId { get; } = assetId;
 
-    /// <summary>Asset kind.</summary>
-    public AssetKind Kind { get; }
-
-    /// <summary>Creates an error.</summary>
-    public AssetLifecycleException(string message, AssetId id, AssetKind kind, Exception? inner = null)
-        : base("asset.lifecycle.dispose-failed", message, inner)
-    {
-        Id = id;
-        Kind = kind;
-    }
+    /// <summary>Failing kind.</summary>
+    public string Kind { get; } = kind;
 }
 
-/// <summary>
-/// Centralized asset throw helpers.
-/// </summary>
-internal static class AssetThrowHelper
+/// <summary>Centralized cold-path throw helpers.</summary>
+internal static class ThrowHelper
 {
-    /// <summary>Throws for an invalid brand.</summary>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowInvalid(string code, string? value) =>
-        throw new AssetConfigurationException(code, $"Invalid asset value for '{code}': '{value}'.");
+    /// <summary>Optional message resolver hook.</summary>
+    internal static Func<string, string>? MessageResolver;
 
-    /// <summary>Throws when the database is used after disposal.</summary>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowDisposed() => throw new AssetDisposedException("Asset database has been disposed.");
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string Resolve(string raw) => MessageResolver?.Invoke(raw) ?? raw;
 
-    /// <summary>Throws for a key already bound to another id.</summary>
+    /// <summary>Throws after disposal.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowKeyBound(AssetKey key, AssetId current, AssetId requested) =>
-        throw new AssetConflictException("asset.conflict.key-bound", $"Asset key '{key}' is already bound to {current}; requested {requested}.");
+    public static void ThrowDisposed() => throw new AssetDisposedError();
 
-    /// <summary>Throws for a kind mismatch.</summary>
+    /// <summary>Throws a configuration error.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowKindMismatch(AssetId id, AssetKind expected, AssetKind received) =>
-        throw new AssetConflictException("asset.conflict.kind-mismatch", $"Asset {id} expected kind '{expected}' but received '{received}'.");
+    public static void ThrowConfigurationError(string message) => throw new AssetConfigurationError(Resolve(message));
+
+    /// <summary>Throws a conflict error.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowConflictError(string message, string code) => throw new AssetConflictError(Resolve(message), code);
+
+    /// <summary>Throws when no importer accepts a source.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowImporterNotFound(string message) => throw new AssetImporterNotFoundError(Resolve(message));
+
+    /// <summary>Throws for an invalid reference.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowReferenceError(string message) => throw new AssetReferenceError(Resolve(message));
+
+    /// <summary>Throws for a missing dependency.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDependencyError(string message, string dependency) => throw new AssetDependencyError(Resolve(message), dependency);
 
     /// <summary>Throws for an invalid snapshot.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowSnapshot(string reason) =>
-        throw new AssetSnapshotException($"Invalid asset snapshot: {reason}.");
+    public static void ThrowSnapshotError(string message, Exception? inner = null) => throw new AssetSnapshotError(Resolve(message), inner);
+
+    /// <summary>Throws for a lifecycle failure.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowLifecycleError(string message, string id, string kind, Exception? inner = null) =>
+        throw new AssetLifecycleError(Resolve(message), id, kind, inner);
+
+    /// <summary>Throws for an unreachable selector arm.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T ThrowInvalidSelector<T>() => throw new AssetReferenceError("Unreachable selector discriminant encountered.");
 }
