@@ -123,6 +123,12 @@ public readonly struct AssetJsonValue : IEquatable<AssetJsonValue>
     public override bool Equals(object? obj) => obj is AssetJsonValue other && Equals(other);
 
     /// <inheritdoc/>
+    public static bool operator ==(AssetJsonValue left, AssetJsonValue right) => left.Equals(right);
+
+    /// <inheritdoc/>
+    public static bool operator !=(AssetJsonValue left, AssetJsonValue right) => !left.Equals(right);
+
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hash = new HashCode();
