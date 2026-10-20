@@ -88,6 +88,11 @@ public static class ShaderSerialization
             dto.RenderState = RenderStateToDto(effect.RenderState.Value);
         }
 
+        if (effect.Migrations is not null)
+        {
+            dto.Migrations = MigrationsToDto(effect.Migrations.Value);
+        }
+
         return dto;
     }
 
@@ -263,6 +268,38 @@ public static class ShaderSerialization
         CullMode = r.CullMode,
     };
 
+    private static ShaderEffectMigrationsDto MigrationsToDto(in ShaderEffectMigrations migrations)
+    {
+        var dto = new ShaderEffectMigrationsDto();
+        if (migrations.Properties.Count > 0)
+        {
+            dto.Properties = new Dictionary<string, ShaderPropertyMigrationDto>(migrations.Properties.Count);
+            foreach (KeyValuePair<string, ShaderPropertyMigration> kvp in migrations.Properties)
+            {
+                dto.Properties[kvp.Key] = MigrationToDto(kvp.Value);
+            }
+        }
+
+        if (migrations.Keywords.Count > 0)
+        {
+            dto.Keywords = new Dictionary<string, ShaderPropertyMigrationDto>(migrations.Keywords.Count);
+            foreach (KeyValuePair<string, ShaderPropertyMigration> kvp in migrations.Keywords)
+            {
+                dto.Keywords[kvp.Key] = MigrationToDto(kvp.Value);
+            }
+        }
+
+        return dto;
+    }
+
+    private static ShaderPropertyMigrationDto MigrationToDto(in ShaderPropertyMigration migration) => new()
+    {
+        FormerlySerializedAs = migration.FormerlySerializedAs,
+        TargetChannels = migration.TargetChannels is { } channels ? new List<string>(channels) : null,
+        Removed = migration.Removed,
+        Reason = migration.Reason,
+    };
+
     private static ShaderEffectDefinition FromDto(ShaderEffectDto dto)
     {
         return new ShaderEffectDefinition(
@@ -277,7 +314,8 @@ public static class ShaderSerialization
             Libraries: ConvertLibraries(dto.Libraries),
             DefaultTechnique: dto.DefaultTechnique is not null ? (ShaderSymbol?)new ShaderSymbol(dto.DefaultTechnique) : null,
             Techniques: ConvertTechniques(dto.Techniques),
-            RenderState: dto.RenderState is not null ? (ShaderRenderState?)RenderStateFromDto(dto.RenderState) : null);
+            RenderState: dto.RenderState is not null ? (ShaderRenderState?)RenderStateFromDto(dto.RenderState) : null,
+            Migrations: dto.Migrations is not null ? ConvertMigrations(dto.Migrations) : null);
     }
 
     private static ShaderStageDefinition StageFromDto(ShaderStageDto dto)
@@ -473,6 +511,37 @@ public static class ShaderSerialization
         DepthWrite: dto.DepthWrite,
         DepthTest: dto.DepthTest,
         CullMode: dto.CullMode);
+
+    private static ShaderEffectMigrations ConvertMigrations(ShaderEffectMigrationsDto dto)
+    {
+        ImmutableDictionary<string, ShaderPropertyMigration>.Builder properties =
+            ImmutableDictionary.CreateBuilder<string, ShaderPropertyMigration>();
+        if (dto.Properties is not null)
+        {
+            foreach (KeyValuePair<string, ShaderPropertyMigrationDto> kvp in dto.Properties)
+            {
+                properties[kvp.Key] = ConvertMigration(kvp.Value);
+            }
+        }
+
+        ImmutableDictionary<string, ShaderPropertyMigration>.Builder keywords =
+            ImmutableDictionary.CreateBuilder<string, ShaderPropertyMigration>();
+        if (dto.Keywords is not null)
+        {
+            foreach (KeyValuePair<string, ShaderPropertyMigrationDto> kvp in dto.Keywords)
+            {
+                keywords[kvp.Key] = ConvertMigration(kvp.Value);
+            }
+        }
+
+        return new ShaderEffectMigrations(properties.ToImmutable(), keywords.ToImmutable());
+    }
+
+    private static ShaderPropertyMigration ConvertMigration(ShaderPropertyMigrationDto dto) => new(
+        FormerlySerializedAs: dto.FormerlySerializedAs,
+        TargetChannels: dto.TargetChannels is not null ? dto.TargetChannels.ToImmutableArray() : null,
+        Removed: dto.Removed,
+        Reason: dto.Reason);
 
     private static ShaderInterpolation ParseInterpolation(string? s) =>
         string.Equals(s, "flat", StringComparison.OrdinalIgnoreCase)

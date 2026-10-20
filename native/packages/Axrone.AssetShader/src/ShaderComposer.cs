@@ -23,7 +23,8 @@ public readonly record struct PartialShaderEffectOverride(
     ImmutableArray<ShaderLibraryDefinition> Libraries = default,
     ShaderSymbol? DefaultTechnique = null,
     ImmutableArray<ShaderTechniqueDefinition> Techniques = default,
-    ShaderRenderState? RenderState = null);
+    ShaderRenderState? RenderState = null,
+    ShaderEffectMigrations? Migrations = null);
 
 /// <summary>Effect extension engine: merges partial overrides onto a base effect.</summary>
 public static class ShaderComposer
@@ -59,6 +60,7 @@ public static class ShaderComposer
 
         ShaderSymbol? defaultTech = over.DefaultTechnique ?? baseEffect.DefaultTechnique;
         ShaderRenderState? renderState = over.RenderState ?? baseEffect.RenderState;
+        ShaderEffectMigrations? migrations = over.Migrations ?? baseEffect.Migrations;
 
         return new ShaderEffectDefinition(
             Id: id,
@@ -72,7 +74,8 @@ public static class ShaderComposer
             Libraries: libraries,
             DefaultTechnique: defaultTech,
             Techniques: techniques,
-            RenderState: renderState);
+            RenderState: renderState,
+            Migrations: migrations);
     }
 
     private static ShaderStageDefinition MergeStage(

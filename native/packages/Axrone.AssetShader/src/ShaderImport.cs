@@ -29,8 +29,105 @@ public sealed class ShaderEffectJsonImporter : IShaderImporter
     public IReadOnlyList<string> Extensions => [".effect.json", ".shader.json"];
 
     /// <inheritdoc/>
-    public ShaderEffectDefinition Import(string source, string sourcePath) =>
-        ShaderSerialization.DeserializeFromJson(source);
+    public ShaderEffectDefinition Import(string source, string sourcePath)
+    {
+        using JsonDocument document = JsonDocument.Parse(source);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("Shader effect payload must be an object.");
+        }
+
+        JsonElement candidate = document.RootElement;
+        if (candidate.TryGetProperty("effect", out JsonElement wrapped) && wrapped.ValueKind == JsonValueKind.Object)
+        {
+            candidate = wrapped;
+        }
+
+        if (candidate.TryGetProperty("format", out JsonElement format) &&
+            format.ValueKind == JsonValueKind.String &&
+            format.GetString() != "axrone.shader/effect")
+        {
+            throw new InvalidOperationException("Shader effect payload.format must be axrone.shader/effect");
+        }
+
+        bool hasVersion = candidate.TryGetProperty("version", out JsonElement versionElement) &&
+            versionElement.ValueKind == JsonValueKind.Number;
+        uint version = hasVersion ? versionElement.GetUInt32() : (HasSchemaV2Fields(candidate) ? 2u : 1u);
+        if (version != 1 && version != 2)
+        {
+            throw new InvalidOperationException("Shader effect payload.version must be 1 or 2");
+        }
+
+        if (version == 1 && HasSchemaV2Fields(candidate))
+        {
+            throw new InvalidOperationException(
+                "Shader effect payload.version must be 2 when keywords, property bindings, or techniques are used");
+        }
+
+        ShaderEffectDefinition definition = ShaderSerialization.DeserializeFromJson(candidate.GetRawText());
+        string id = !string.IsNullOrWhiteSpace(definition.Id.Name)
+            ? definition.Id.Name
+            : DeriveShaderEffectId(sourcePath);
+        return definition with { Id = new ShaderSymbol(id), Version = version };
+    }
+
+    private static bool HasSchemaV2Fields(JsonElement candidate)
+    {
+        if (candidate.TryGetProperty("keywords", out _) ||
+            candidate.TryGetProperty("defaultTechnique", out _) ||
+            candidate.TryGetProperty("techniques", out _))
+        {
+            return true;
+        }
+
+        if (candidate.TryGetProperty("properties", out JsonElement properties) &&
+            properties.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement entry in properties.EnumerateArray())
+            {
+                if (entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("binding", out _))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    internal static string DeriveShaderEffectId(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return "shader-effect";
+        }
+
+        ReadOnlySpan<char> path = sourcePath.AsSpan();
+        int query = path.IndexOfAny('?', '#');
+        if (query >= 0)
+        {
+            path = path[..query];
+        }
+
+        int slash = path.LastIndexOfAny('/', '\\');
+        ReadOnlySpan<char> leaf = (slash >= 0 ? path[(slash + 1)..] : path).Trim();
+        foreach (string ext in new[] { ".effect.json", ".shader.json", ".json" })
+        {
+            if (leaf.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+            {
+                leaf = leaf[..^ext.Length];
+                break;
+            }
+        }
+
+        int dot = leaf.LastIndexOf('.');
+        if (dot >= 0)
+        {
+            leaf = leaf[..dot];
+        }
+
+        return leaf.IsEmpty ? "shader-effect" : new string(leaf);
+    }
 }
 
 /// <summary>Raw GLSL module importer: wraps the source as both stages.</summary>

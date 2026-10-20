@@ -38,6 +38,9 @@ public sealed class ShaderEffectDto
 
     /// <summary>Render state.</summary>
     public ShaderRenderStateDto? RenderState { get; set; }
+
+    /// <summary>Migrations.</summary>
+    public ShaderEffectMigrationsDto? Migrations { get; set; }
 }
 
 /// <summary>JSON DTO for a stage.</summary>
@@ -164,6 +167,32 @@ public sealed class ShaderInspectorDto
 
     /// <summary>Tooltip.</summary>
     public string? Tooltip { get; set; }
+}
+
+/// <summary>JSON DTO for a property migration rule.</summary>
+public sealed class ShaderPropertyMigrationDto
+{
+    /// <summary>Formerly serialized name.</summary>
+    public string? FormerlySerializedAs { get; set; }
+
+    /// <summary>Target channels.</summary>
+    public List<string>? TargetChannels { get; set; }
+
+    /// <summary>Whether removed.</summary>
+    public bool Removed { get; set; }
+
+    /// <summary>Reason.</summary>
+    public string? Reason { get; set; }
+}
+
+/// <summary>JSON DTO for effect migrations.</summary>
+public sealed class ShaderEffectMigrationsDto
+{
+    /// <summary>Property migrations by name.</summary>
+    public Dictionary<string, ShaderPropertyMigrationDto>? Properties { get; set; }
+
+    /// <summary>Keyword migrations by name.</summary>
+    public Dictionary<string, ShaderPropertyMigrationDto>? Keywords { get; set; }
 }
 
 /// <summary>JSON DTO for a library.</summary>

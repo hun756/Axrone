@@ -98,7 +98,20 @@ public readonly record struct ShaderEffectDefinition(
     ImmutableArray<ShaderLibraryDefinition> Libraries = default,
     ShaderSymbol? DefaultTechnique = null,
     ImmutableArray<ShaderTechniqueDefinition> Techniques = default,
-    ShaderRenderState? RenderState = null);
+    ShaderRenderState? RenderState = null,
+    ShaderEffectMigrations? Migrations = null);
+
+/// <summary>Property migration rule.</summary>
+public readonly record struct ShaderPropertyMigration(
+    string? FormerlySerializedAs = null,
+    ImmutableArray<string>? TargetChannels = null,
+    bool Removed = false,
+    string? Reason = null);
+
+/// <summary>Effect migration map.</summary>
+public readonly record struct ShaderEffectMigrations(
+    ImmutableDictionary<string, ShaderPropertyMigration> Properties,
+    ImmutableDictionary<string, ShaderPropertyMigration> Keywords);
 
 /// <summary>Reference wrapper over an effect definition.</summary>
 public sealed class ShaderEffect
