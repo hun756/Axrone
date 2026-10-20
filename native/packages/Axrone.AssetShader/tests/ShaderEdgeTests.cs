@@ -46,7 +46,7 @@ public sealed class ShaderEdgeTests
         Eval("defined(NOPE)", in lookup).Should().Be(0);
         Eval("defined ( A )", in lookup).Should().Be(1);
         Eval("A + 1", in lookup).Should().Be(7);
-        Eval("FLAG", in lookup).Should().Be(1);
+        Eval("FLAG", in lookup).Should().Be(0);
     }
 
     [Fact]

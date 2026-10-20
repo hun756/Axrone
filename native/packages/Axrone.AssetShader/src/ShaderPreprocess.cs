@@ -11,6 +11,9 @@ public interface IMacroLookupPolicy
 
     /// <summary>Tries to resolve macro replacement text.</summary>
     bool TryGetText(ShaderSymbol symbol, [NotNullWhen(true)] out string? text);
+
+    /// <summary>Predefined object-like macros seeding #define state.</summary>
+    ImmutableDictionary<ShaderSymbol, string> GetDefines() => ImmutableDictionary<ShaderSymbol, string>.Empty;
 }
 
 /// <summary>Empty macro environment: nothing defined.</summary>
@@ -72,16 +75,18 @@ public readonly struct ImmutableMacroEnvironment : IMacroLookupPolicy
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetText(ShaderSymbol symbol, [NotNullWhen(true)] out string? text) =>
         _macros.TryGetValue(symbol, out text);
+
+    /// <inheritdoc/>
+    public ImmutableDictionary<ShaderSymbol, string> GetDefines() => _macros;
 }
 
-/// <summary>Zero-allocation recursive-descent constant expression parser.</summary>
+/// <summary>Constant expression parser: expands macros, then evaluates.</summary>
 /// <typeparam name="TLookup">Macro lookup type.</typeparam>
 public ref struct SpanExpressionParser<TLookup>
     where TLookup : struct, IMacroLookupPolicy
 {
-    private ReadOnlySpan<char> _span;
+    private readonly ReadOnlySpan<char> _span;
     private readonly TLookup _lookup;
-    private int _pos;
 
     /// <summary>Creates a parser.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,317 +94,19 @@ public ref struct SpanExpressionParser<TLookup>
     {
         _span = span;
         _lookup = lookup;
-        _pos = 0;
     }
 
     /// <summary>Parses the expression.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long Parse() => ParseLogicalOr();
-
-    private void SkipWhitespace()
+    public long Parse()
     {
-        while (_pos < _span.Length && char.IsWhiteSpace(_span[_pos]))
-        {
-            _pos++;
-        }
-    }
-
-    private bool Match(string op)
-    {
-        SkipWhitespace();
-        if (_pos + op.Length <= _span.Length && _span.Slice(_pos, op.Length).SequenceEqual(op.AsSpan()))
-        {
-            _pos += op.Length;
-            return true;
-        }
-
-        return false;
-    }
-
-    private long ParseLogicalOr()
-    {
-        long left = ParseLogicalAnd();
-        while (Match("||"))
-        {
-            long right = ParseLogicalAnd();
-            left = (left != 0 || right != 0) ? 1 : 0;
-        }
-
-        return left;
-    }
-
-    private long ParseLogicalAnd()
-    {
-        long left = ParseBitOr();
-        while (Match("&&"))
-        {
-            long right = ParseBitOr();
-            left = (left != 0 && right != 0) ? 1 : 0;
-        }
-
-        return left;
-    }
-
-    private long ParseBitOr()
-    {
-        long left = ParseBitXor();
-        while (Match("|") && !Match("|"))
-        {
-            long right = ParseBitXor();
-            left |= right;
-        }
-
-        return left;
-    }
-
-    private long ParseBitXor()
-    {
-        long left = ParseBitAnd();
-        while (Match("^"))
-        {
-            long right = ParseBitAnd();
-            left ^= right;
-        }
-
-        return left;
-    }
-
-    private long ParseBitAnd()
-    {
-        long left = ParseEquality();
-        while (Match("&") && !Match("&"))
-        {
-            long right = ParseEquality();
-            left &= right;
-        }
-
-        return left;
-    }
-
-    private long ParseEquality()
-    {
-        long left = ParseRelational();
-        while (true)
-        {
-            if (Match("=="))
-            {
-                left = left == ParseRelational() ? 1 : 0;
-            }
-            else if (Match("!="))
-            {
-                left = left != ParseRelational() ? 1 : 0;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return left;
-    }
-
-    private long ParseRelational()
-    {
-        long left = ParseShift();
-        while (true)
-        {
-            if (Match("<="))
-            {
-                left = left <= ParseShift() ? 1 : 0;
-            }
-            else if (Match(">="))
-            {
-                left = left >= ParseShift() ? 1 : 0;
-            }
-            else if (Match("<"))
-            {
-                left = left < ParseShift() ? 1 : 0;
-            }
-            else if (Match(">"))
-            {
-                left = left > ParseShift() ? 1 : 0;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return left;
-    }
-
-    private long ParseShift()
-    {
-        long left = ParseAdditive();
-        while (true)
-        {
-            if (Match("<<"))
-            {
-                left <<= (int)ParseAdditive();
-            }
-            else if (Match(">>"))
-            {
-                left >>= (int)ParseAdditive();
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return left;
-    }
-
-    private long ParseAdditive()
-    {
-        long left = ParseMultiplicative();
-        while (true)
-        {
-            if (Match("+"))
-            {
-                left += ParseMultiplicative();
-            }
-            else if (Match("-"))
-            {
-                left -= ParseMultiplicative();
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return left;
-    }
-
-    private long ParseMultiplicative()
-    {
-        long left = ParseUnary();
-        while (true)
-        {
-            if (Match("*"))
-            {
-                left *= ParseUnary();
-            }
-            else if (Match("/"))
-            {
-                long right = ParseUnary();
-                left = right != 0 ? left / right : 0;
-            }
-            else if (Match("%"))
-            {
-                long right = ParseUnary();
-                left = right != 0 ? left % right : 0;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return left;
-    }
-
-    private long ParseUnary()
-    {
-        SkipWhitespace();
-        if (Match("!"))
-        {
-            return ParseUnary() == 0 ? 1 : 0;
-        }
-
-        if (Match("~"))
-        {
-            return ~ParseUnary();
-        }
-
-        if (Match("+"))
-        {
-            return ParseUnary();
-        }
-
-        if (Match("-"))
-        {
-            return -ParseUnary();
-        }
-
-        if (Match("defined"))
-        {
-            SkipWhitespace();
-            bool hasParen = Match("(");
-            SkipWhitespace();
-            int start = _pos;
-            while (_pos < _span.Length && (char.IsLetterOrDigit(_span[_pos]) || _span[_pos] == '_'))
-            {
-                _pos++;
-            }
-
-            ReadOnlySpan<char> idSpan = _span[start.._pos];
-            if (hasParen)
-            {
-                Match(")");
-            }
-
-            return _lookup.IsDefined(new ShaderSymbol(idSpan)) ? 1 : 0;
-        }
-
-        return ParsePrimary();
-    }
-
-    private long ParsePrimary()
-    {
-        SkipWhitespace();
-        if (Match("("))
-        {
-            long val = ParseLogicalOr();
-            Match(")");
-            return val;
-        }
-
-        if (_pos < _span.Length && char.IsDigit(_span[_pos]))
-        {
-            int start = _pos;
-            if (_pos + 1 < _span.Length && _span[_pos] == '0' && (_span[_pos + 1] == 'x' || _span[_pos + 1] == 'X'))
-            {
-                _pos += 2;
-                while (_pos < _span.Length && Uri.IsHexDigit(_span[_pos]))
-                {
-                    _pos++;
-                }
-
-                return Convert.ToInt64(_span[start.._pos].ToString(), 16);
-            }
-
-            while (_pos < _span.Length && char.IsDigit(_span[_pos]))
-            {
-                _pos++;
-            }
-
-            return long.Parse(_span[start.._pos], CultureInfo.InvariantCulture);
-        }
-
-        if (_pos < _span.Length && (char.IsLetter(_span[_pos]) || _span[_pos] == '_'))
-        {
-            int start = _pos;
-            while (_pos < _span.Length && (char.IsLetterOrDigit(_span[_pos]) || _span[_pos] == '_'))
-            {
-                _pos++;
-            }
-
-            ReadOnlySpan<char> id = _span[start.._pos];
-            if (_lookup.TryLookup(new ShaderSymbol(id), out long val))
-            {
-                return val;
-            }
-
-            return 0;
-        }
-
-        return 0;
+        var table = new ShaderMacroTable();
+        table.Seed(_lookup.GetDefines());
+        string expanded = table.Expand(table.ResolveDefined(_span.ToString(), in _lookup));
+        return ConstantExpression.Evaluate(expanded);
     }
 }
 
-/// <summary>Lexical GLSL preprocessor: conditionals, errors and macro expansion.</summary>
+/// <summary>Lexical GLSL preprocessor: macros, conditionals and line markers.</summary>
 public static class GLSLPreprocessor
 {
     private struct BranchContext
@@ -421,37 +128,33 @@ public static class GLSLPreprocessor
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(sink);
 
-        ReadOnlySpan<char> sourceSpan = source.AsSpan();
-        var output = new StringBuilder(source.Length);
+        var table = new ShaderMacroTable();
+        table.Seed(lookup.GetDefines());
+
+        List<(string Text, uint Line)> logical = BuildLogicalLines(StripComments(source));
         Span<BranchContext> branchStack = stackalloc BranchContext[32];
         int stackDepth = 0;
 
-        var enumerator = new SpanLineEnumerator(sourceSpan);
+        var output = new List<(string Text, uint Line, bool Directive)>();
 
-        while (enumerator.MoveNext())
+        foreach ((string text, uint line) in logical)
         {
-            ReadOnlySpan<char> line = enumerator.Current;
-            ReadOnlySpan<char> trimmed = line.TrimStart();
-
-            if (trimmed.StartsWith("#"))
+            if (!TryParseDirectiveLine(text, out string name, out string rest))
             {
-                ReadOnlySpan<char> directiveSpan = trimmed[1..].TrimStart();
-                int spaceIndex = directiveSpan.IndexOfAny(' ', '\t');
-                ReadOnlySpan<char> directive = spaceIndex >= 0 ? directiveSpan[..spaceIndex] : directiveSpan;
-                ReadOnlySpan<char> rest = spaceIndex >= 0 ? directiveSpan[spaceIndex..].Trim() : default;
-
-                bool isCurrentActive = stackDepth == 0 || branchStack[stackDepth - 1].Active;
-
-                if (directive.SequenceEqual("if".AsSpan()))
+                if (IsEmitting(branchStack, stackDepth))
                 {
-                    bool parentActive = stackDepth == 0 || branchStack[stackDepth - 1].Active;
-                    bool cond = false;
-                    if (parentActive)
-                    {
-                        var parser = new SpanExpressionParser<TLookup>(rest, lookup);
-                        cond = parser.Parse() != 0;
-                    }
+                    output.Add((text, line, false));
+                }
 
+                continue;
+            }
+
+            switch (name)
+            {
+                case "if":
+                {
+                    bool parentActive = IsEmitting(branchStack, stackDepth);
+                    bool cond = parentActive && EvaluateCondition(rest, table, lookup) != 0;
                     if (stackDepth >= branchStack.Length)
                     {
                         ThrowHelper.ThrowPreprocessorStackOverflow();
@@ -463,14 +166,14 @@ public static class GLSLPreprocessor
                         Active = parentActive && cond,
                         HadElse = false,
                     };
-                    continue;
+
+                    break;
                 }
 
-                if (directive.SequenceEqual("ifdef".AsSpan()))
+                case "ifdef":
                 {
-                    bool parentActive = stackDepth == 0 || branchStack[stackDepth - 1].Active;
-                    bool exists = lookup.IsDefined(new ShaderSymbol(rest));
-
+                    bool parentActive = IsEmitting(branchStack, stackDepth);
+                    bool exists = parentActive && (table.IsDefined(rest.Trim()) || lookup.IsDefined(new ShaderSymbol(rest.Trim())));
                     if (stackDepth >= branchStack.Length)
                     {
                         ThrowHelper.ThrowPreprocessorStackOverflow();
@@ -482,14 +185,15 @@ public static class GLSLPreprocessor
                         Active = parentActive && exists,
                         HadElse = false,
                     };
-                    continue;
+
+                    break;
                 }
 
-                if (directive.SequenceEqual("ifndef".AsSpan()))
+                case "ifndef":
                 {
-                    bool parentActive = stackDepth == 0 || branchStack[stackDepth - 1].Active;
-                    bool notExists = !lookup.IsDefined(new ShaderSymbol(rest));
-
+                    bool parentActive = IsEmitting(branchStack, stackDepth);
+                    string target = rest.Trim();
+                    bool missing = parentActive && !table.IsDefined(target) && !lookup.IsDefined(new ShaderSymbol(target));
                     if (stackDepth >= branchStack.Length)
                     {
                         ThrowHelper.ThrowPreprocessorStackOverflow();
@@ -497,109 +201,126 @@ public static class GLSLPreprocessor
 
                     branchStack[stackDepth++] = new BranchContext
                     {
-                        ConditionMet = notExists,
-                        Active = parentActive && notExists,
+                        ConditionMet = missing,
+                        Active = parentActive && missing,
                         HadElse = false,
                     };
-                    continue;
+
+                    break;
                 }
 
-                if (directive.SequenceEqual("elif".AsSpan()))
+                case "elif":
                 {
                     if (stackDepth == 0)
                     {
                         sink.ReportError("ERR_UNEXPECTED_ELIF", "#elif without matching #if",
-                            new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                        continue;
+                            new SourceLocation(line, 1), sourceId);
+                        break;
                     }
 
                     ref BranchContext current = ref branchStack[stackDepth - 1];
                     if (current.HadElse)
                     {
                         sink.ReportError("ERR_ELIF_AFTER_ELSE", "#elif after #else is forbidden",
-                            new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                        continue;
+                            new SourceLocation(line, 1), sourceId);
+                        break;
                     }
 
                     bool parentActive = stackDepth <= 1 || branchStack[stackDepth - 2].Active;
-                    bool cond = false;
-                    if (parentActive && !current.ConditionMet)
-                    {
-                        var parser = new SpanExpressionParser<TLookup>(rest, lookup);
-                        cond = parser.Parse() != 0;
-                    }
-
-                    current.Active = parentActive && !current.ConditionMet && cond;
+                    bool cond = parentActive && !current.ConditionMet && EvaluateCondition(rest, table, lookup) != 0;
+                    current.Active = cond;
                     if (cond)
                     {
                         current.ConditionMet = true;
                     }
 
-                    continue;
+                    break;
                 }
 
-                if (directive.SequenceEqual("else".AsSpan()))
+                case "else":
                 {
                     if (stackDepth == 0)
                     {
                         sink.ReportError("ERR_UNEXPECTED_ELSE", "#else without matching #if",
-                            new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                        continue;
+                            new SourceLocation(line, 1), sourceId);
+                        break;
                     }
 
                     ref BranchContext current = ref branchStack[stackDepth - 1];
                     if (current.HadElse)
                     {
                         sink.ReportError("ERR_DUPLICATE_ELSE", "Duplicate #else block encountered",
-                            new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                        continue;
+                            new SourceLocation(line, 1), sourceId);
+                        break;
                     }
 
                     bool parentActive = stackDepth <= 1 || branchStack[stackDepth - 2].Active;
                     current.Active = parentActive && !current.ConditionMet;
                     current.ConditionMet = true;
                     current.HadElse = true;
-                    continue;
+                    break;
                 }
 
-                if (directive.SequenceEqual("endif".AsSpan()))
+                case "endif":
                 {
                     if (stackDepth == 0)
                     {
                         sink.ReportError("ERR_UNEXPECTED_ENDIF", "#endif without matching #if",
-                            new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                        continue;
+                            new SourceLocation(line, 1), sourceId);
+                        break;
                     }
 
                     stackDepth--;
-                    continue;
+                    break;
                 }
 
-                if (!isCurrentActive)
+                case "define":
                 {
-                    continue;
+                    if (IsEmitting(branchStack, stackDepth))
+                    {
+                        var (macroName, macroRest) = SplitDefineName(rest);
+                        if (macroName.Length != 0)
+                        {
+                            table.Define(macroName, ShaderMacroTable.ParseDefine(macroRest, macroName));
+                        }
+                    }
+
+                    break;
                 }
 
-                if (directive.SequenceEqual("error".AsSpan()))
+                case "undef":
                 {
-                    sink.ReportError("ERR_USER_DIRECTIVE", rest.ToString(),
-                        new SourceLocation(enumerator.LineNumber, 1), sourceId);
-                    continue;
+                    if (IsEmitting(branchStack, stackDepth))
+                    {
+                        table.Undefine(rest.Trim());
+                    }
+
+                    break;
                 }
 
-                output.Append(line).Append('\n');
-            }
-            else
-            {
-                bool isCurrentActive = stackDepth == 0 || branchStack[stackDepth - 1].Active;
-                if (isCurrentActive)
+                case "error":
                 {
-                    ExpandIdentifiersInLine(line, lookup, output);
-                    output.Append('\n');
+                    if (IsEmitting(branchStack, stackDepth))
+                    {
+                        sink.ReportError("ERR_USER_DIRECTIVE", rest.Trim().Length != 0 ? rest.Trim() : "#error",
+                            new SourceLocation(line, 1), sourceId);
+                    }
+
+                    break;
                 }
-                else if (preserveLineMarkers)
+
+                case "version":
+                case "extension":
+                case "pragma":
+                case "line":
+                default:
                 {
-                    output.Append('\n');
+                    if (IsEmitting(branchStack, stackDepth))
+                    {
+                        output.Add((text.TrimStart(), line, true));
+                    }
+
+                    break;
                 }
             }
         }
@@ -607,7 +328,34 @@ public static class GLSLPreprocessor
         if (stackDepth > 0)
         {
             sink.ReportError("ERR_UNTERMINATED_CONDITIONAL", "Unterminated #if directive block",
-                new SourceLocation(enumerator.LineNumber, 1), sourceId);
+                new SourceLocation(logical.Count > 0 ? logical[^1].Line : 1, 1), sourceId);
+        }
+
+        var assembled = new StringBuilder(source.Length);
+        uint lastEmittedLine = 0;
+        bool first = true;
+        foreach ((string text, uint line, bool directive) in output)
+        {
+            string expanded = directive ? text : table.Expand(text);
+            if (preserveLineMarkers && (lastEmittedLine == 0 || line != lastEmittedLine + 1))
+            {
+                if (!first)
+                {
+                    assembled.Append('\n');
+                }
+
+                first = false;
+                assembled.Append("#line ").Append(line).Append(" \"").Append(sourceId.Name).Append('\"');
+            }
+
+            if (!first)
+            {
+                assembled.Append('\n');
+            }
+
+            first = false;
+            assembled.Append(expanded);
+            lastEmittedLine = line;
         }
 
         if (sink.HasErrors)
@@ -615,44 +363,168 @@ public static class GLSLPreprocessor
             throw new ShaderPreprocessException(sink.Diagnostics);
         }
 
+        return assembled.ToString();
+    }
+
+    private static bool IsEmitting(Span<BranchContext> branchStack, int stackDepth) =>
+        stackDepth == 0 || branchStack[stackDepth - 1].Active;
+
+    private static long EvaluateCondition<TLookup>(string expression, ShaderMacroTable table, in TLookup lookup)
+        where TLookup : struct, IMacroLookupPolicy =>
+        ConstantExpression.Evaluate(table.Expand(table.ResolveDefined(expression, in lookup)));
+
+    private static (string Name, string Remainder) SplitDefineName(string rest)
+    {
+        int index = 0;
+        while (index < rest.Length && ShaderMacroTable.IsIdentStart(rest[index]))
+        {
+            index++;
+        }
+
+        while (index < rest.Length && ShaderMacroTable.IsIdentPart(rest[index]))
+        {
+            index++;
+        }
+
+        return index == 0 ? (string.Empty, rest) : (rest[..index], rest[index..]);
+    }
+
+    private static bool TryParseDirectiveLine(string line, out string name, out string rest)
+    {
+        name = string.Empty;
+        rest = string.Empty;
+
+        int index = 0;
+        while (index < line.Length && char.IsWhiteSpace(line[index]))
+        {
+            index++;
+        }
+
+        if (index >= line.Length || line[index] != '#')
+        {
+            return false;
+        }
+
+        index++;
+        while (index < line.Length && char.IsWhiteSpace(line[index]))
+        {
+            index++;
+        }
+
+        int start = index;
+        if (index < line.Length && (char.IsLetter(line[index]) || line[index] == '_'))
+        {
+            index++;
+            while (index < line.Length && (char.IsLetterOrDigit(line[index]) || line[index] == '_'))
+            {
+                index++;
+            }
+
+            name = line[start..index];
+            rest = line[index..].Trim();
+            return true;
+        }
+
+        rest = line[start..].Trim();
+        return true;
+    }
+
+    internal static string StripComments(string source)
+    {
+        var output = new StringBuilder(source.Length);
+        int index = 0;
+        CommentState state = CommentState.Code;
+
+        while (index < source.Length)
+        {
+            char c = source[index];
+            char next = index + 1 < source.Length ? source[index + 1] : '\0';
+
+            switch (state)
+            {
+                case CommentState.Code:
+                    if (c == '/' && next == '/')
+                    {
+                        state = CommentState.Line;
+                        output.Append("  ");
+                        index += 2;
+                    }
+                    else if (c == '/' && next == '*')
+                    {
+                        state = CommentState.Block;
+                        output.Append("  ");
+                        index += 2;
+                    }
+                    else
+                    {
+                        output.Append(c);
+                        index++;
+                    }
+
+                    break;
+
+                case CommentState.Line:
+                    if (c == '\n')
+                    {
+                        state = CommentState.Code;
+                        output.Append(c);
+                    }
+                    else
+                    {
+                        output.Append(' ');
+                    }
+
+                    index++;
+                    break;
+
+                default:
+                    if (c == '*' && next == '/')
+                    {
+                        state = CommentState.Code;
+                        output.Append("  ");
+                        index += 2;
+                    }
+                    else
+                    {
+                        output.Append(c == '\n' ? c : ' ');
+                        index++;
+                    }
+
+                    break;
+            }
+        }
+
         return output.ToString();
     }
 
-    private static void ExpandIdentifiersInLine<TLookup>(
-        ReadOnlySpan<char> line,
-        in TLookup lookup,
-        StringBuilder output)
-        where TLookup : struct, IMacroLookupPolicy
+    private enum CommentState : byte
     {
-        int i = 0;
-        while (i < line.Length)
-        {
-            char c = line[i];
-            if (char.IsLetter(c) || c == '_')
-            {
-                int start = i;
-                while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_'))
-                {
-                    i++;
-                }
+        Code = 0,
+        Line = 1,
+        Block = 2,
+    }
 
-                ReadOnlySpan<char> token = line[start..i];
-                var sym = new ShaderSymbol(token);
-                if (lookup.TryGetText(sym, out string? replacement))
-                {
-                    output.Append(replacement);
-                }
-                else
-                {
-                    output.Append(token);
-                }
-            }
-            else
+    internal static List<(string Text, uint Line)> BuildLogicalLines(string source)
+    {
+        string[] physical = source.Split('\n');
+        var logical = new List<(string Text, uint Line)>(physical.Length);
+
+        int index = 0;
+        while (index < physical.Length)
+        {
+            string text = physical[index];
+            uint startLine = (uint)index + 1;
+            while (text.EndsWith('\\') && index + 1 < physical.Length)
             {
-                output.Append(c);
-                i++;
+                text = text[..^1] + physical[index + 1];
+                index++;
             }
+
+            logical.Add((text, startLine));
+            index++;
         }
+
+        return logical;
     }
 }
 
@@ -758,3 +630,4 @@ public static class UniformExtractor
         return true;
     }
 }
+
