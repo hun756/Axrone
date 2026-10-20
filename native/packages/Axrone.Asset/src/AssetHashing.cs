@@ -1,30 +1,28 @@
+using Axrone.Hash;
+
 namespace Axrone.Asset;
 
 /// <summary>
-/// 64-bit FNV-1a hasher: offset basis XORed per octet, multiplied by the
-/// prime. Span-based and allocation-free on both ingest and digest paths.
+/// Asset-facing FNV-1a entry point. Thin bridge over
+/// <see cref="Fnv1a64Accumulator"/> so the canonical implementation lives in
+/// <c>Axrone.Hash</c>; this type only preserves the seeded/chained call shape
+/// the database, query catalog and fingerprint paths rely on.
 /// </summary>
 public static class Fnv1a64
 {
-    /// <summary>FNV offset basis.</summary>
-    public const ulong OffsetBasis = 14695981039346656037UL;
+    /// <summary>FNV offset basis (mirrors the hash package).</summary>
+    public const ulong OffsetBasis = Fnv1a64Accumulator.OffsetBasis;
 
-    /// <summary>FNV prime.</summary>
-    public const ulong Prime = 1099511628211UL;
+    /// <summary>FNV prime (mirrors the hash package).</summary>
+    public const ulong Prime = Fnv1a64Accumulator.Prime;
 
     /// <summary>Hashes a span, folding into an optional seed.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static ulong Compute(ReadOnlySpan<byte> bytes, ulong hash = OffsetBasis)
     {
-        ref byte ptr = ref MemoryMarshal.GetReference(bytes);
-        nuint len = (nuint)bytes.Length;
-        for (nuint i = 0; i < len; i++)
-        {
-            hash ^= Unsafe.Add(ref ptr, i);
-            hash *= Prime;
-        }
-
-        return hash;
+        Fnv1a64Accumulator acc = new(hash);
+        acc.Append(bytes);
+        return acc.GetDigest().Value;
     }
 
     /// <summary>Hashes UTF-8 encoded chars, renting only past the stack budget.</summary>

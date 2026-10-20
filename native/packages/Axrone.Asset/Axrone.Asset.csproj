@@ -57,6 +57,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Axrone.Hash/Axrone.Hash.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />
   </ItemGroup>
