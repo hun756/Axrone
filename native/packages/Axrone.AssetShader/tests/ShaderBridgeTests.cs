@@ -78,6 +78,6 @@ public sealed class ShaderBridgeTests : IDisposable
             new AssetTextSource("{ not json"),
             new AssetKey("shaders/bad"),
             sourceUri: new AssetUri("shaders/bad.effect.json")).AsTask();
-        await act.Should().ThrowAsync<ShaderPreprocessException>();
+        await act.Should().ThrowAsync<AssetImportError>();
     }
 }

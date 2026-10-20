@@ -322,6 +322,8 @@ public sealed class Asset2DEdgeTests : IDisposable
             new AssetTextSource("""{"id":"bad","textureId":"bad.png","textureSize":{"width":64,"height":64},"frames":[{"id":"f","region":{"x":0,"y":0,"width":0,"height":8}}]}"""),
             new AssetKey("sprites/bad"),
             sourceUri: new AssetUri("sprites/bad.spriteatlas.json")).AsTask();
-        (await act.Should().ThrowAsync<Asset2DException>()).Where(e => e.Code == "asset-2d.import");
+        AssetImportError error = await act.Should().ThrowAsync<AssetImportError>().Where(e => e.Attempt == 1);
+        error.InnerException.Should().BeOfType<Asset2DException>()
+            .Which.Code.Should().Be("asset-2d.import");
     }
 }
