@@ -34,10 +34,11 @@ public sealed class AssetJsonValueTests
     [Fact]
     public void Fingerprint_Ignores_Property_Order()
     {
+        string payload = "v";
         AssetFingerprint first = DeterministicFingerprinter.Compute<string, Utf8StringCodecPolicy>(
             "text",
             new AssetKey("k"),
-            in "v",
+            in payload,
             new AssetMetadata
             {
                 Properties = new Dictionary<string, AssetJsonValue>
@@ -49,7 +50,7 @@ public sealed class AssetJsonValueTests
         AssetFingerprint second = DeterministicFingerprinter.Compute<string, Utf8StringCodecPolicy>(
             "text",
             new AssetKey("k"),
-            in "v",
+            in payload,
             new AssetMetadata
             {
                 Properties = new Dictionary<string, AssetJsonValue>
