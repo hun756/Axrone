@@ -538,10 +538,29 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             {
                 foreach (AssetId id in candidates)
                 {
-                    if (_assetsById.TryGetValue(id, out StoredAsset? asset) && MatchesKind(asset, query.Kind))
+                    if (_assetsById.TryGetValue(id, out StoredAsset? asset) &&
+                        MatchesKind(asset, query.Kind) &&
+                        MatchesProperties(asset, query.Properties))
                     {
                         results.Add(asset.ToRecord<object>());
                     }
+                }
+
+                return results;
+            }
+
+            bool hasFilters = query.Kind is not null
+                || query.Fingerprint.HasValue
+                || query.Uri.HasValue
+                || query.MimeType is not null
+                || query.Locale.HasValue
+                || (query.Tags is not null && query.Tags.Count > 0)
+                || (query.Properties is not null && query.Properties.Count > 0);
+            if (!hasFilters)
+            {
+                foreach (StoredAsset asset in _assetsById.Values)
+                {
+                    results.Add(asset.ToRecord<object>());
                 }
 
                 return results;
@@ -554,7 +573,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
             foreach (StoredAsset asset in _assetsById.Values)
             {
-                if (MatchesKind(asset, query.Kind))
+                if (MatchesKind(asset, query.Kind) && MatchesProperties(asset, query.Properties))
                 {
                     results.Add(asset.ToRecord<object>());
                 }
@@ -565,6 +584,25 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
         static bool MatchesKind(StoredAsset asset, string? kind) =>
             kind is null || string.Equals(asset.Kind, kind, StringComparison.Ordinal);
+
+        static bool MatchesProperties(StoredAsset asset, IReadOnlyDictionary<string, AssetJsonValue>? properties)
+        {
+            if (properties is null || properties.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (KeyValuePair<string, AssetJsonValue> expected in properties)
+            {
+                if (!asset.Metadata.Properties.TryGetValue(expected.Key, out AssetJsonValue actual) ||
+                    !actual.Equals(expected.Value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     /// <summary>Lists every stored asset.</summary>
