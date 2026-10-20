@@ -203,7 +203,61 @@ public static class ShaderVariantSystem
         return result;
     }
 
-    /// <summary>Lowers a selection to macro defines.</summary>
+    /// <summary>Selects each keyword's default value.</summary>
+    public static ShaderKeywordSelection DefaultShaderKeywordSelection(ImmutableArray<ShaderKeywordDefinition> keywords)
+    {
+        if (keywords.IsDefaultOrEmpty)
+        {
+            return ShaderKeywordSelection.Empty;
+        }
+
+        ImmutableDictionary<ShaderSymbol, string>.Builder builder = ImmutableDictionary.CreateBuilder<ShaderSymbol, string>();
+        foreach (ShaderKeywordDefinition kw in keywords)
+        {
+            if (kw.IsToggle)
+            {
+                builder[kw.Name] = string.Equals(kw.DefaultValue, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false";
+            }
+            else
+            {
+                builder[kw.Name] = kw.DefaultValue ?? (kw.Options.IsDefaultOrEmpty ? string.Empty : kw.Options[0]);
+            }
+        }
+
+        return new ShaderKeywordSelection(builder.ToImmutable());
+    }
+
+    /// <summary>Stable sortable key for a selection.</summary>
+    public static string ComputeVariantKeyString(in ShaderKeywordSelection selection)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        if (selection.Selections.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        string[] names = new string[selection.Selections.Count];
+        int i = 0;
+        foreach (ShaderSymbol name in selection.Selections.Keys)
+        {
+            names[i++] = name.Name;
+        }
+
+        Array.Sort(names, StringComparer.Ordinal);
+        var builder = new StringBuilder();
+        for (int j = 0; j < names.Length; j++)
+        {
+            if (j > 0)
+            {
+                builder.Append('|');
+            }
+
+            builder.Append(names[j]).Append('=').Append(selection.Selections[new ShaderSymbol(names[j])]);
+        }
+
+        return builder.ToString();
+    }
+    /// <summary>Lowers a selection to macro defines (web parity).</summary>
     public static ImmutableDictionary<ShaderSymbol, string> SelectionToDefines(
         ImmutableArray<ShaderKeywordDefinition> keywords,
         ShaderKeywordSelection selection)
@@ -220,15 +274,13 @@ public static class ShaderVariantSystem
 
             if (kw.IsToggle)
             {
-                if (string.Equals(val, "true", StringComparison.OrdinalIgnoreCase) || val == "1")
-                {
-                    builder[kw.Name] = "1";
-                }
+                builder[kw.Name] = string.Equals(val, "true", StringComparison.OrdinalIgnoreCase) || val == "1" ? "1" : "0";
             }
             else
             {
-                builder[kw.Name] = val;
-                builder[$"{kw.Name.Name}_{val.ToUpperInvariant()}"] = "1";
+                int selectedIndex = Math.Max(0, kw.Options.IndexOf(val));
+                builder[kw.Options[selectedIndex]] = "1";
+                builder[kw.Name] = selectedIndex.ToString(CultureInfo.InvariantCulture);
             }
         }
 
@@ -239,10 +291,11 @@ public static class ShaderVariantSystem
     public static ShaderVariant BakeVariant(
         ShaderEffect effect,
         ShaderKeywordSelection? selection = null,
-        ShaderDiagnosticSink? sink = null)
+        ShaderDiagnosticSink? sink = null,
+        bool preserveLineMarkers = false)
     {
         ArgumentNullException.ThrowIfNull(effect);
-        selection ??= ShaderKeywordSelection.Empty;
+        selection ??= DefaultShaderKeywordSelection(effect.Definition.Keywords);
         VariantKey key = ComputeVariantKey(selection);
 
         ConcurrentDictionary<VariantKey, ShaderVariant> cache = s_variantCache.GetOrCreateValue(effect);
@@ -258,11 +311,11 @@ public static class ShaderVariantSystem
         string rawVtx = ComposeStage(effect.Definition.Vertex);
         string rawFrag = ComposeStage(effect.Definition.Fragment);
 
-        string vtxInc = IncludeExpander.ExpandIncludes(rawVtx, ShaderLibraryRegistry.Instance, sink, $"{effect.Id.Name}:vtx");
-        string fragInc = IncludeExpander.ExpandIncludes(rawFrag, ShaderLibraryRegistry.Instance, sink, $"{effect.Id.Name}:frag");
+        string vtxInc = IncludeExpander.ExpandIncludes(rawVtx, ShaderLibraryRegistry.Instance, sink, $"{effect.Id.Name}:vtx", preserveLineMarkers);
+        string fragInc = IncludeExpander.ExpandIncludes(rawFrag, ShaderLibraryRegistry.Instance, sink, $"{effect.Id.Name}:frag", preserveLineMarkers);
 
-        string vtxPre = GLSLPreprocessor.Preprocess(vtxInc, macroPolicy, sink, $"{effect.Id.Name}:vtx");
-        string fragPre = GLSLPreprocessor.Preprocess(fragInc, macroPolicy, sink, $"{effect.Id.Name}:frag");
+        string vtxPre = GLSLPreprocessor.Preprocess(vtxInc, macroPolicy, sink, $"{effect.Id.Name}:vtx", preserveLineMarkers);
+        string fragPre = GLSLPreprocessor.Preprocess(fragInc, macroPolicy, sink, $"{effect.Id.Name}:frag", preserveLineMarkers);
 
         ImmutableArray<ShaderUniformScanResult> uniforms = UniformExtractor.ScanUniforms(vtxPre.AsSpan(), fragPre.AsSpan());
 
@@ -279,6 +332,23 @@ public static class ShaderVariantSystem
 
         cache.TryAdd(key, variant);
         return variant;
+    }
+
+    /// <summary>Bakes every permutation of the keyword space.</summary>
+    public static ShaderVariant[] BuildShaderVariants(
+        ShaderEffect effect,
+        ShaderDiagnosticSink? sink = null,
+        bool preserveLineMarkers = false)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        ShaderKeywordSelection[] combinations = EnumerateCombinations(effect.Definition.Keywords);
+        var variants = new ShaderVariant[combinations.Length];
+        for (int i = 0; i < combinations.Length; i++)
+        {
+            variants[i] = BakeVariant(effect, combinations[i], sink, preserveLineMarkers);
+        }
+
+        return variants;
     }
 
     private static string ComposeStage(in ShaderStageDefinition stage)

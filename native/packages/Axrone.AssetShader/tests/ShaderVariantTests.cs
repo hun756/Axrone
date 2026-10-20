@@ -59,6 +59,29 @@ public sealed class ShaderVariantTests
     }
 
     [Fact]
+    public void Defaults_Select_First_Options_And_Build_All_Variants()
+    {
+        ShaderEffect effect = TestEffect();
+        ShaderKeywordSelection defaults = ShaderVariantSystem.DefaultShaderKeywordSelection(effect.Definition.Keywords);
+        defaults.Selections[new ShaderSymbol("USE_FOG")].Should().Be("false");
+        defaults.Selections[new ShaderSymbol("MODE")].Should().Be("LIT");
+
+        ShaderVariant[] variants = ShaderVariantSystem.BuildShaderVariants(effect);
+        variants.Should().HaveCount(4);
+
+        string key = ShaderVariantSystem.ComputeVariantKeyString(defaults);
+        key.Should().Be("MODE=LIT|USE_FOG=false");
+    }
+
+    [Fact]
+    public void Bake_Preserves_Line_Markers_On_Request()
+    {
+        ShaderEffect effect = TestEffect();
+        ShaderVariant variant = ShaderVariantSystem.BakeVariant(effect, preserveLineMarkers: true);
+        variant.FragmentSource.Should().Contain("#line");
+    }
+
+    [Fact]
     public void Bake_Without_Keywords_Emits_Empty_Variant()
     {
         ShaderEffect effect = ShaderPipelineBuilder<StageUninitialized>.Begin("flat")

@@ -138,9 +138,9 @@ public sealed class ShaderEdgeTests
                 .Add("GHOST", "x"));
 
         ImmutableDictionary<ShaderSymbol, string> defines = ShaderVariantSystem.SelectionToDefines(keywords, selection);
-        defines.Should().NotContainKey(new ShaderSymbol("FOG"));
-        defines[new ShaderSymbol("MODE")].Should().Be("LIT");
-        defines[new ShaderSymbol("MODE_LIT")].Should().Be("1");
+        defines[new ShaderSymbol("FOG")].Should().Be("0");
+        defines[new ShaderSymbol("MODE")].Should().Be("0");
+        defines[new ShaderSymbol("LIT")].Should().Be("1");
         defines.Should().NotContainKey(new ShaderSymbol("GHOST"));
     }
 
