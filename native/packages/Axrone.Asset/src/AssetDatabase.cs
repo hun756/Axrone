@@ -30,7 +30,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
     private readonly Dictionary<AssetId, HashSet<AssetId>> _dependentsById = new();
     private readonly Dictionary<AssetSourceIdentity, AssetSourceBinding> _sourceBindings = new();
     private readonly AssetQueryCatalog _catalog = new();
-    private readonly List<IAssetImporter> _importers = new();
+    private readonly AssetImporterRegistry _importerRegistry = new();
+    private readonly AssetImportStageRegistry _stageRegistry = new();
 
     private CachePaddedCounters _counters;
     private int _disposed;
@@ -57,8 +58,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         _binaryStore = _binaryOptions.Store ?? new InMemoryBinaryStore();
         ThrowHelper.MessageResolver = opt.MessageResolver;
 
-        _importers.Add(new RawBytesImporter());
-        _importers.Add(new TextImporter());
+        _importerRegistry.Register(new RawBytesImporter());
+        _importerRegistry.Register(new TextImporter());
     }
 
     /// <summary>Stored asset count.</summary>
@@ -93,8 +94,58 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         EnsureNotDisposed();
         lock (_gate)
         {
-            _importers.Add(importer);
-            _importers.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+            _importerRegistry.Register(importer);
+        }
+    }
+
+    /// <summary>Unregisters an importer by identity.</summary>
+    public bool UnregisterImporter(AssetImporterId id)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _importerRegistry.Unregister(id);
+        }
+    }
+
+    /// <summary>Lists registered importers in priority order.</summary>
+    public IReadOnlyList<IAssetImporter> ListImporters()
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _importerRegistry.List();
+        }
+    }
+
+    /// <summary>Registers an import stage; higher priority runs first.</summary>
+    public void RegisterStage(IAssetImportStage stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            _stageRegistry.Register(stage);
+        }
+    }
+
+    /// <summary>Unregisters an import stage by identity.</summary>
+    public bool UnregisterStage(AssetImporterId id)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _stageRegistry.Unregister(id);
+        }
+    }
+
+    /// <summary>Lists registered stages in priority order.</summary>
+    public IReadOnlyList<IAssetImportStage> ListStages()
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _stageRegistry.List();
         }
     }
 
@@ -466,17 +517,10 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         ArgumentNullException.ThrowIfNull(source);
 
         AssetImportContext context = new(source, baseKey, sourceUri, sourceIdentity, metadata);
-        IAssetImporter? selected = null;
+        IAssetImporter? selected;
         lock (_gate)
         {
-            for (int i = 0; i < _importers.Count; i++)
-            {
-                if (_importers[i].CanImport(context))
-                {
-                    selected = _importers[i];
-                    break;
-                }
-            }
+            selected = _importerRegistry.Find(context);
         }
 
         if (selected is null)
@@ -1072,6 +1116,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
+        _importerRegistry.Dispose();
+        _stageRegistry.Dispose();
         _bus.DisposeAsync().AsTask().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
     }
@@ -1089,6 +1135,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
+        _importerRegistry.Dispose();
+        _stageRegistry.Dispose();
         await _bus.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }

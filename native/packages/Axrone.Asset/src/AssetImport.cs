@@ -121,6 +121,15 @@ public interface IAssetImporter
     /// <summary>Priority; higher wins.</summary>
     int Priority { get; }
 
+    /// <summary>Accepted source kinds; empty matches all.</summary>
+    IReadOnlyList<string> SourceKinds => [];
+
+    /// <summary>Accepted path extensions (with or without dot); empty matches all.</summary>
+    IReadOnlyList<string> Extensions => [];
+
+    /// <summary>Accepted mime types; empty matches all.</summary>
+    IReadOnlyList<string> MimeTypes => [];
+
     /// <summary>Whether this importer accepts the source.</summary>
     bool CanImport(AssetImportContext context);
 
@@ -136,6 +145,9 @@ public sealed class RawBytesImporter : IAssetImporter
 
     /// <inheritdoc/>
     public int Priority => 0;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["bytes"];
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -169,6 +181,9 @@ public sealed class TextImporter : IAssetImporter
 
     /// <inheritdoc/>
     public int Priority => 0;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["text"];
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
