@@ -44,6 +44,10 @@
     <!-- CA1720: Enum members mirror GLSL type keywords (float, int, uint);
          renaming would corrupt the shader domain language. -->
     <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA2227/CA1002: JSON DTOs require mutable List<T> setters for
+         source-generated deserialization; they are not public API collections. -->
+    <NoWarn>$(NoWarn);CA2227</NoWarn>
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
