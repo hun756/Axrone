@@ -56,9 +56,4 @@ internal static class ThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowInvalidIdentifier(string name) => throw new Asset2DValidationException($"Identifier '{name}' cannot be null or whitespace.");
-
-    /// <summary>Throws for an impossible discriminated-union kind.</summary>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowInvalidImportKind<T>() => throw new InvalidOperationException($"Invalid discriminated union kind for {typeof(T).FullName}.");
 }

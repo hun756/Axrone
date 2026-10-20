@@ -1,5 +1,6 @@
 global using System;
 global using System.Globalization;
+global using System.Text;
 global using System.Threading.Tasks;
 global using Xunit;
 global using FluentAssertions;
