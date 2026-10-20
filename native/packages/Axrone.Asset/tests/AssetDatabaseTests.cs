@@ -111,7 +111,7 @@ public sealed class AssetDatabaseTests : IDisposable
             DependencyIds: new[] { root.Id }));
 
         using var entered = new ManualResetEventSlim(false);
-        using IAssetSubscription sub = Db.Subscribe(evt =>
+        using var sub = Db.Subscribe(evt =>
         {
             if (evt.Type == AssetEventType.Delete && evt.Id == root.Id)
             {
@@ -167,7 +167,7 @@ public sealed class AssetDatabaseTests : IDisposable
     public async Task Import_Bytes_Through_Registered_Importer()
     {
         using var done = new ManualResetEventSlim(false);
-        using IAssetSubscription sub = Db.Subscribe(evt =>
+        using var sub = Db.Subscribe(evt =>
         {
             if (evt.Type == AssetEventType.Upsert)
             {

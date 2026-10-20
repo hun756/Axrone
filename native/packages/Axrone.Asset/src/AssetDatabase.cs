@@ -1,5 +1,7 @@
 namespace Axrone.Asset;
 
+using Axrone.Event;
+
 /// <summary>
 /// Asset database: generational stores over id, key and alias indexes with
 /// revision history, dependency graph, source bindings, query catalog and an
@@ -19,7 +21,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
     private readonly int _maxRevisions;
     private readonly AssetBinaryPersistenceOptions _binaryOptions;
     private readonly IBinaryStore _binaryStore;
-    private readonly EventBatchDispatcher _dispatcher = new();
+    private readonly EventBus _bus = new();
 
     private readonly Dictionary<AssetId, StoredAsset> _assetsById = new();
     private readonly Dictionary<AssetId, RevisionHistoryRingBuffer> _revisionsById = new();
@@ -279,7 +281,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             TLifecycle.OnUpdated(in boxed, in revision);
         }
 
-        _dispatcher.Enqueue(new AssetEvent(
+        _bus.Publish(new AssetEvent(
             AssetEventType.Upsert,
             stored.Id,
             stored.Revision,
@@ -356,7 +358,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         foreach (StoredAsset asset in removed)
         {
             TLifecycle.OnDeleted(asset.Data!);
-            _dispatcher.Enqueue(new AssetEvent(
+            _bus.Publish(new AssetEvent(
                 AssetEventType.Delete,
                 asset.Id,
                 asset.Revision,
@@ -584,11 +586,11 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
     }
 
     /// <summary>Subscribes to asset events.</summary>
-    public IAssetSubscription Subscribe(Action<AssetEvent> listener)
+    public IEventSubscription Subscribe(Action<AssetEvent> listener)
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(listener);
-        return _dispatcher.Subscribe(listener);
+        return _bus.Subscribe<AssetEvent>((envelope, _) => listener(envelope.Payload));
     }
 
     /// <summary>Captures a version-4 snapshot.</summary>
@@ -938,7 +940,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
-        _dispatcher.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _bus.DisposeAsync().AsTask().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
     }
 
@@ -955,7 +957,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
-        await _dispatcher.DisposeAsync().ConfigureAwait(false);
+        await _bus.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }
 }
