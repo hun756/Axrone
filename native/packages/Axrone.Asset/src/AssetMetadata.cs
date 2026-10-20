@@ -1,10 +1,6 @@
 namespace Axrone.Asset;
 
-/// <summary>
-/// Asset metadata: source location, mime, locale, tags and string
-/// properties. Properties stay a string map (not JSON values) so the
-/// canonical form needs no reflection and trims cleanly.
-/// </summary>
+/// <summary>Asset metadata: location, mime, locale, tags and string properties.</summary>
 public sealed record AssetMetadata
 {
     /// <summary>Empty metadata.</summary>

@@ -1,115 +1,127 @@
 namespace Axrone.Asset;
 
-/// <summary>
-/// Data codec contract: stable serialization without reflection so the
-/// trimmer and AOT compilers see every conversion.
-/// </summary>
-public interface IAssetDataCodec
+/// <summary>Codec contract: format tag, size bound, span-based round trip.</summary>
+public interface IAssetCodecPolicy<TData>
 {
-    /// <summary>Codec identifier, e.g. "binary" or "text".</summary>
-    string Format { get; }
+    /// <summary>Format tag, e.g. "binary".</summary>
+    static abstract string Format { get; }
 
-    /// <summary>Serializes data into its canonical stable form.</summary>
-    string SerializeStable(object? data);
+    /// <summary>Upper bound for one serialized payload.</summary>
+    static abstract int MaxSerializedBytes(in TData data);
 
-    /// <summary>Restores data from its stable form.</summary>
-    object? Deserialize(string stable);
+    /// <summary>Serializes into the destination.</summary>
+    static abstract bool TrySerialize(in TData data, Span<byte> destination, out int bytesWritten);
+
+    /// <summary>Deserializes from a buffer.</summary>
+    static abstract bool TryDeserialize(ReadOnlySpan<byte> source, out TData data);
 }
 
-/// <summary>
-/// Kind-keyed codec registry. Codecs arrive explicitly; there is no
-/// assembly scanning so trimming stays intact.
-/// </summary>
-public sealed class AssetCodecRegistry
+/// <summary>Byte array codec: identity copy.</summary>
+public readonly struct ByteArrayCodecPolicy : IAssetCodecPolicy<byte[]>
 {
-    private readonly Dictionary<string, IAssetDataCodec> _codecs = new(StringComparer.Ordinal);
-    private readonly Lock _gate = new();
+    /// <inheritdoc/>
+    public static string Format => "binary";
 
-    /// <summary>Creates an empty registry.</summary>
-    public AssetCodecRegistry()
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int MaxSerializedBytes(in byte[] data)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        return data.Length;
     }
 
-    /// <summary>Creates a registry with the built-in binary and text codecs.</summary>
-    public static AssetCodecRegistry WithDefaults()
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TrySerialize(in byte[] data, Span<byte> destination, out int bytesWritten)
     {
-        var registry = new AssetCodecRegistry();
-        registry.Register("binary", new BinaryAssetCodec());
-        registry.Register("text", new TextAssetCodec());
-        return registry;
-    }
-
-    /// <summary>Binds a codec to a kind name.</summary>
-    public void Register(string kind, IAssetDataCodec codec)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
-        ArgumentNullException.ThrowIfNull(codec);
-        lock (_gate)
+        ArgumentNullException.ThrowIfNull(data);
+        if (destination.Length < data.Length)
         {
-            _codecs[kind] = codec;
-        }
-    }
-
-    /// <summary>Looks up the codec for a kind.</summary>
-    public bool TryGet(string kind, out IAssetDataCodec? codec)
-    {
-        lock (_gate)
-        {
-            return _codecs.TryGetValue(kind, out codec);
-        }
-    }
-
-    /// <summary>Gets the codec for a kind; throws when unbound.</summary>
-    public IAssetDataCodec Get(string kind)
-    {
-        if (TryGet(kind, out IAssetDataCodec? codec) && codec is not null)
-        {
-            return codec;
+            bytesWritten = 0;
+            return false;
         }
 
-        AssetThrowHelper.ThrowInvalid("asset.invalid-kind", $"No codec registered for kind '{kind}'.");
-        throw new InvalidOperationException("Unreachable.");
+        data.CopyTo(destination);
+        bytesWritten = data.Length;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryDeserialize(ReadOnlySpan<byte> source, out byte[] data)
+    {
+        data = source.ToArray();
+        return true;
     }
 }
 
-/// <summary>Binary codec: base64 stable form.</summary>
-public sealed class BinaryAssetCodec : IAssetDataCodec
+/// <summary>UTF-8 string codec.</summary>
+public readonly struct Utf8StringCodecPolicy : IAssetCodecPolicy<string>
 {
     /// <inheritdoc/>
-    public string Format => "binary";
+    public static string Format => "text";
 
     /// <inheritdoc/>
-    public string SerializeStable(object? data)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int MaxSerializedBytes(in string data)
     {
-        if (data is not byte[] bytes)
-        {
-            AssetThrowHelper.ThrowInvalid("asset.invalid-kind", "Binary codec needs a byte[] payload.");
-        }
-
-        return Convert.ToBase64String((byte[])data!);
+        ArgumentNullException.ThrowIfNull(data);
+        return Encoding.UTF8.GetMaxByteCount(data.Length);
     }
 
     /// <inheritdoc/>
-    public object? Deserialize(string stable) => Convert.FromBase64String(stable);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TrySerialize(in string data, Span<byte> destination, out int bytesWritten)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        return Encoding.UTF8.TryGetBytes(data, destination, out bytesWritten);
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryDeserialize(ReadOnlySpan<byte> source, out string data)
+    {
+        data = Encoding.UTF8.GetString(source);
+        return true;
+    }
 }
 
-/// <summary>Text codec: identity stable form.</summary>
-public sealed class TextAssetCodec : IAssetDataCodec
+/// <summary>Blittable binary codec.</summary>
+public readonly struct UnmanagedBinaryCodecPolicy<T> : IAssetCodecPolicy<T> where T : unmanaged
 {
     /// <inheritdoc/>
-    public string Format => "text";
+    public static string Format => "unmanaged";
 
     /// <inheritdoc/>
-    public string SerializeStable(object? data)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int MaxSerializedBytes(in T data) => Unsafe.SizeOf<T>();
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TrySerialize(in T data, Span<byte> destination, out int bytesWritten)
     {
-        if (data is not string text)
+        if (destination.Length < Unsafe.SizeOf<T>())
         {
-            AssetThrowHelper.ThrowInvalid("asset.invalid-kind", "Text codec needs a string payload.");
+            bytesWritten = 0;
+            return false;
         }
 
-        return (string)data!;
+        MemoryMarshal.Write(destination, in data);
+        bytesWritten = Unsafe.SizeOf<T>();
+        return true;
     }
 
     /// <inheritdoc/>
-    public object? Deserialize(string stable) => stable;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryDeserialize(ReadOnlySpan<byte> source, out T data)
+    {
+        if (source.Length < Unsafe.SizeOf<T>())
+        {
+            data = default;
+            return false;
+        }
+
+        data = MemoryMarshal.Read<T>(source);
+        return true;
+    }
 }

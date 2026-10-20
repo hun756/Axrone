@@ -1,49 +1,69 @@
 namespace Axrone.Asset;
 
-using Axrone.Hash;
-
 /// <summary>
-/// Content fingerprint: <c>fp:</c> plus the lowercase hex FNV-1a 32-bit hash
-/// of <c>kind|key|data|metadata</c>. Data and metadata arrive pre-serialized
-/// in stable form; the codec layer owns that canonicalization.
+/// Deterministic content fingerprint: kind, key, codec-serialized payload
+/// and canonical metadata folded through FNV-1a.
 /// </summary>
-public static class AssetFingerprintComputer
+public static class DeterministicFingerprinter
 {
-    private const int StackLimit = 256;
-
     /// <summary>Computes a fingerprint from stable parts.</summary>
-    public static AssetFingerprint Compute(
-        in AssetKind kind,
-        in AssetKey key,
-        string stableDataJson,
-        string stableMetadataJson)
+    public static AssetFingerprint Compute<TData, TCodec>(string kind, AssetKey key, in TData data, AssetMetadata metadata)
+        where TCodec : struct, IAssetCodecPolicy<TData>
     {
-        ArgumentNullException.ThrowIfNull(stableDataJson);
-        ArgumentNullException.ThrowIfNull(stableMetadataJson);
+        ArgumentNullException.ThrowIfNull(kind);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ulong hash = Fnv1a64.ComputeUtf8Chars(kind.AsSpan());
+        hash = Fnv1a64.ComputeUtf8Chars("|".AsSpan(), hash);
+        hash = Fnv1a64.ComputeUtf8Chars(key.Value ?? key.Hash.ToString("x16", CultureInfo.InvariantCulture), hash);
+        hash = Fnv1a64.ComputeUtf8Chars("|".AsSpan(), hash);
 
-        string joined = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{kind.Value}|{key.Value}|{stableDataJson}|{stableMetadataJson}");
+        int maxBytes = TCodec.MaxSerializedBytes(in data);
+        byte[]? rented = null;
+        Span<byte> buffer = maxBytes <= 512 ? stackalloc byte[maxBytes] : (rented = ArrayPool<byte>.Shared.Rent(maxBytes));
 
-        int byteCount = System.Text.Encoding.UTF8.GetByteCount(joined);
-        if (byteCount <= StackLimit)
-        {
-            Span<byte> small = stackalloc byte[StackLimit];
-            Span<byte> target = small[..byteCount];
-            System.Text.Encoding.UTF8.GetBytes(joined, target);
-            return new AssetFingerprint("fp:" + Fnv1a32Algorithm.Hash(target).ToString());
-        }
-
-        byte[] rented = System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount);
         try
         {
-            Span<byte> target = rented.AsSpan(0, byteCount);
-            System.Text.Encoding.UTF8.GetBytes(joined, target);
-            return new AssetFingerprint("fp:" + Fnv1a32Algorithm.Hash(target).ToString());
+            if (TCodec.TrySerialize(in data, buffer, out int written))
+            {
+                hash = Fnv1a64.Compute(buffer[..written], hash);
+            }
         }
         finally
         {
-            System.Buffers.ArrayPool<byte>.Shared.Return(rented);
+            if (rented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
+
+        hash = Fnv1a64.ComputeUtf8Chars("|".AsSpan(), hash);
+        if (metadata.Uri.HasValue)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(metadata.Uri.Value.Value.AsSpan(), hash);
+        }
+
+        if (metadata.MimeType is not null)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(metadata.MimeType.AsSpan(), hash);
+        }
+
+        if (metadata.Locale.HasValue)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(metadata.Locale.Value.Value.AsSpan(), hash);
+        }
+
+        for (int i = 0; i < metadata.Tags.Count; i++)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(metadata.Tags[i].AsSpan(), hash);
+        }
+
+        foreach (KeyValuePair<string, string> entry in metadata.Properties)
+        {
+            hash = Fnv1a64.ComputeUtf8Chars(entry.Key.AsSpan(), hash);
+            hash = Fnv1a64.ComputeUtf8Chars("=".AsSpan(), hash);
+            hash = Fnv1a64.ComputeUtf8Chars(entry.Value.AsSpan(), hash);
+        }
+
+        return new AssetFingerprint(hash);
     }
 }
