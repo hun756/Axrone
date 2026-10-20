@@ -23,7 +23,7 @@ public sealed class AssetImporterRegistryTests : IDisposable
     public void Register_Unregister_List_RoundTrip()
     {
         int builtIn = _db.Inner.ListImporters().Count;
-        builtIn.Should().BeGreaterOrEqualTo(2);
+        builtIn.Should().Be(2);
 
         _db.Inner.RegisterImporter(new JsonSniffer());
         _db.Inner.ListImporters().Should().HaveCount(builtIn + 1);
