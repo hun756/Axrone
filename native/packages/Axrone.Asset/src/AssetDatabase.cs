@@ -194,18 +194,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                 finalId = input.Id ?? AssetId.CreateNew();
             }
 
-            if (input.DependencyIds is not null)
-            {
-                foreach (AssetId dep in input.DependencyIds)
-                {
-                    if (!_assetsById.ContainsKey(dep))
-                    {
-                        ThrowHelper.ThrowDependencyError(
-                            string.Create(CultureInfo.InvariantCulture, $"Dependency '{dep}' does not exist."),
-                            dep.ToString());
-                    }
-                }
-            }
+            IReadOnlyList<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies);
 
             AssetRevision finalRev;
             if (_assetsById.TryGetValue(finalId, out StoredAsset? existing))
@@ -231,7 +220,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                     fingerprint,
                     now,
                     meta,
-                    input.DependencyIds ?? [],
+                    dependencyIds,
                     input.Aliases,
                     input.Name);
                 RemoveDependencyEdges(finalId, existing.DependencyIds);
@@ -253,7 +242,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                     CreatedAtEpochMs = now,
                     UpdatedAtEpochMs = now,
                     Metadata = meta,
-                    DependencyIds = input.DependencyIds ?? [],
+                    DependencyIds = dependencyIds,
                 };
             }
 
@@ -349,6 +338,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
                 _catalog.UnindexAsset(existing);
                 RemoveDependencyEdges(target, existing.DependencyIds);
+                UnbindSourceIdentitiesForAsset(target);
                 _revisionsById.Remove(target);
                 removed.Add(existing);
                 Interlocked.Increment(ref _counters.Deletes);
@@ -506,7 +496,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             (TData)result.Primary.Data!,
             result.Primary.Aliases,
             result.Primary.Metadata,
-            result.Primary.DependencyIds));
+            result.Primary.Dependencies));
 
         List<AssetRecord<object>> imported = new() { primary.ToUntypedRecord() };
         if (result.Additional is not null)
@@ -834,6 +824,148 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
 
         return serialized;
+    }
+
+    private List<AssetId> ResolveDependencyIds(IReadOnlyList<AssetDependencyInput>? inputs)
+    {
+        if (inputs is null || inputs.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = new List<AssetId>(inputs.Count);
+        foreach (AssetDependencyInput input in inputs)
+        {
+            AssetSelector selector = input switch
+            {
+                AssetDependencyInput.IdDependency d => AssetSelector.FromId(d.Id),
+                AssetDependencyInput.KeyDependency d => AssetSelector.FromKey(d.Key, null),
+                AssetDependencyInput.TokenDependency d => AssetSelector.Parse(d.Token.AsSpan()),
+                AssetDependencyInput.LookupDependency d => AssetSelector.FromKey(d.Lookup.Key, null),
+                _ => default,
+            };
+
+            AssetId resolved = default;
+            if (selector.Kind == SelectorKind.None || !TryResolveId(in selector, out resolved))
+            {
+                string descriptor = input switch
+                {
+                    AssetDependencyInput.IdDependency d => d.Id.ToString(),
+                    AssetDependencyInput.KeyDependency d => d.Key.ToString(),
+                    AssetDependencyInput.TokenDependency d => d.Token,
+                    AssetDependencyInput.LookupDependency d => d.Lookup.Key.ToString(),
+                    _ => input.ToString() ?? "unknown",
+                };
+
+                ThrowHelper.ThrowDependencyError(
+                    string.Create(CultureInfo.InvariantCulture, $"Dependency '{descriptor}' does not exist."),
+                    descriptor);
+            }
+
+            if (input is AssetDependencyInput.KeyDependency keyed && keyed.KindHash != 0UL)
+            {
+                if (!_assetsById.TryGetValue(resolved, out StoredAsset? keyedAsset) ||
+                    Fnv1a64.ComputeUtf8Chars(keyedAsset.Kind.AsSpan()) != keyed.KindHash)
+                {
+                    ThrowHelper.ThrowDependencyError(
+                        string.Create(CultureInfo.InvariantCulture, $"Dependency '{keyed.Key}' does not exist."),
+                        keyed.Key.ToString());
+                }
+            }
+
+            if (input is AssetDependencyInput.LookupDependency looked && looked.Lookup.KindHash != 0UL)
+            {
+                if (!_assetsById.TryGetValue(resolved, out StoredAsset? lookedAsset) ||
+                    Fnv1a64.ComputeUtf8Chars(lookedAsset.Kind.AsSpan()) != looked.Lookup.KindHash)
+                {
+                    ThrowHelper.ThrowDependencyError(
+                        string.Create(CultureInfo.InvariantCulture, $"Dependency '{looked.Lookup.Key}' does not exist."),
+                        looked.Lookup.Key.ToString());
+                }
+            }
+
+            if (!ids.Contains(resolved))
+            {
+                ids.Add(resolved);
+            }
+        }
+
+        return ids;
+    }
+
+    private void UnbindSourceIdentitiesForAsset(AssetId id)
+    {
+        bool removed;
+        do
+        {
+            removed = false;
+            AssetSourceIdentity doomed = default;
+            foreach (KeyValuePair<AssetSourceIdentity, AssetSourceBinding> kvp in _sourceBindings)
+            {
+                if (kvp.Value.TargetId == id)
+                {
+                    doomed = kvp.Key;
+                    removed = true;
+                    break;
+                }
+            }
+
+            if (removed)
+            {
+                _sourceBindings.Remove(doomed);
+            }
+        }
+        while (removed);
+    }
+
+    /// <summary>Lists the assets a selector's target depends on.</summary>
+    public IReadOnlyList<AssetRecord<object>> GetDependencies(AssetSelector selector)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            if (!TryResolveId(in selector, out AssetId id) ||
+                !_assetsById.TryGetValue(id, out StoredAsset? stored))
+            {
+                return [];
+            }
+
+            var records = new List<AssetRecord<object>>(stored.DependencyIds.Count);
+            foreach (AssetId dep in stored.DependencyIds)
+            {
+                if (_assetsById.TryGetValue(dep, out StoredAsset? target))
+                {
+                    records.Add(target.ToRecord<object>());
+                }
+            }
+
+            return records;
+        }
+    }
+
+    /// <summary>Lists the assets depending on a selector's target.</summary>
+    public IReadOnlyList<AssetRecord<object>> GetDependents(AssetSelector selector)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            if (!TryResolveId(in selector, out AssetId id) ||
+                !_dependentsById.TryGetValue(id, out HashSet<AssetId>? dependents))
+            {
+                return [];
+            }
+
+            var records = new List<AssetRecord<object>>(dependents.Count);
+            foreach (AssetId dependent in dependents)
+            {
+                if (_assetsById.TryGetValue(dependent, out StoredAsset? target))
+                {
+                    records.Add(target.ToRecord<object>());
+                }
+            }
+
+            return records;
+        }
     }
 
     private bool TryResolveId(in AssetSelector selector, out AssetId id)

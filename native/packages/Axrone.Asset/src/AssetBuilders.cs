@@ -35,7 +35,7 @@ public readonly struct AssetEnvelopeBuilder<TData, TStage>
     internal readonly AssetId? _id;
     internal readonly AssetKey[]? _aliases;
     internal readonly AssetMetadata? _metadata;
-    internal readonly AssetId[]? _dependencies;
+    internal readonly AssetDependencyInput[]? _dependencies;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal AssetEnvelopeBuilder(
@@ -46,7 +46,7 @@ public readonly struct AssetEnvelopeBuilder<TData, TStage>
         AssetId? id = null,
         AssetKey[]? aliases = null,
         AssetMetadata? metadata = null,
-        AssetId[]? dependencies = null)
+        AssetDependencyInput[]? dependencies = null)
     {
         _kind = kind;
         _key = key;
@@ -75,7 +75,7 @@ public readonly struct AssetEnvelopeBuilder<TData, TStage>
 
     /// <summary>Binds dependencies.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AssetEnvelopeBuilder<TData, AssetStage.Validated> WithDependencies(params AssetId[] dependencies) =>
+    public AssetEnvelopeBuilder<TData, AssetStage.Validated> WithDependencies(params AssetDependencyInput[] dependencies) =>
         new(_kind, _key, _data, _name, _id, _aliases, _metadata, dependencies);
 
     /// <summary>Validates the envelope.</summary>

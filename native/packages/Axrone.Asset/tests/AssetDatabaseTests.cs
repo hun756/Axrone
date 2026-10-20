@@ -98,7 +98,7 @@ public sealed class AssetDatabaseTests : IDisposable
     {
         Action missing = () => Db.Upsert(new AssetWriteInput<string>(
             "text", null, new AssetKey("docs/child"), "child", "x",
-            DependencyIds: new[] { new AssetId(999UL) }));
+            Dependencies: new AssetDependencyInput[] { new AssetId(999UL) }));
         missing.Should().Throw<AssetDependencyError>();
     }
 
@@ -108,7 +108,7 @@ public sealed class AssetDatabaseTests : IDisposable
         AssetRecord<string> root = Db.Upsert(TextInput("root", "r"));
         AssetRecord<string> child = Db.Upsert(new AssetWriteInput<string>(
             "text", null, new AssetKey("child"), "child", "c",
-            DependencyIds: new[] { root.Id }));
+            Dependencies: new AssetDependencyInput[] { root.Id }));
 
         using var entered = new ManualResetEventSlim(false);
         using var sub = Db.Subscribe(evt =>
