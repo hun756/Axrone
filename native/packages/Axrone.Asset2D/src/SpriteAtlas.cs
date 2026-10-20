@@ -408,12 +408,12 @@ public sealed class SpriteAtlas<TCoordPolicy> : IReadOnlySpriteAtlas
             {
                 ref readonly SpriteClipDefinition aDef = ref animSpan[i];
                 float fps = aDef.Fps ?? 12.0f;
-                if (!float.IsFinite(fps) || fps <= 0f)
+                if (!float.IsFinite(fps))
                 {
                     fps = 12.0f;
                 }
 
-                Milliseconds fallbackDuration = new(1000.0f / MathF.Max(1.0f, fps));
+                Milliseconds fallbackDuration = new(1000.0f / Math.Max(1.0f, fps));
                 var clipFrames = new SpriteAnimationFrame[aDef.Frames.Length];
                 float totalClipDuration = 0f;
 

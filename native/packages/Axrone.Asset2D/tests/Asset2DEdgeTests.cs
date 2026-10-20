@@ -233,7 +233,7 @@ public sealed class Asset2DEdgeTests : IDisposable
     }
 
     [Fact]
-    public void TexturePacker_Reverse_Tag_Reverses_Order()
+    public void TexturePacker_Reverse_Tag_Reverses_Order_Without_Loop()
     {
         const string packed = """
             {
@@ -256,8 +256,27 @@ public sealed class Asset2DEdgeTests : IDisposable
         SpriteAnimationClip? clip = result.Atlas!.GetAnimation(new ClipId("run"));
         clip.Should().NotBeNull();
         clip!.FrameCount.Should().Be(3);
+        clip.Loop.Should().BeFalse();
         clip.GetFrame(0).Frame.Id.Value.Should().Be("run_2");
         clip.GetFrame(2).Frame.Id.Value.Should().Be("run_0");
+    }
+
+    [Fact]
+    public void TexturePacker_Out_Of_Range_Tag_Index_Fails()
+    {
+        const string packed = """
+            {
+              "frames": { "f": { "frame": { "x": 0, "y": 0, "w": 8, "h": 8 } } },
+              "meta": {
+                "image": "a.png",
+                "size": { "w": 8, "h": 8 },
+                "frameTags": [{ "name": "c", "from": 0, "to": 5 }]
+              }
+            }
+            """;
+        var context = new AssetImportContext("sprites/a.json".AsSpan(), Encoding.UTF8.GetBytes(packed));
+        Asset2DImportResult<TopLeftOriginPolicy> result = TexturePackerSpriteAtlasImporter<TopLeftOriginPolicy>.Import(in context);
+        result.IsSuccess.Should().BeFalse();
     }
 
     [Fact]
@@ -266,6 +285,7 @@ public sealed class Asset2DEdgeTests : IDisposable
         const string json = """
             {
               "id": "a",
+              "textureId": "a.png",
               "textureSize": { "width": 64, "height": 64 },
               "frames": [{ "id": "f", "region": { "x": 0, "y": 0, "width": 8, "height": 8 } }],
               "animations": [{ "id": "c", "fps": 0, "frames": ["f", "f"] }]
@@ -274,7 +294,7 @@ public sealed class Asset2DEdgeTests : IDisposable
         var context = new AssetImportContext("sprites/a.spriteatlas.json".AsSpan(), Encoding.UTF8.GetBytes(json));
         Asset2DImportResult<TopLeftOriginPolicy> result = SpriteAtlasJsonImporter<TopLeftOriginPolicy>.Import(in context);
         result.IsSuccess.Should().BeTrue();
-        result.Atlas!.GetAnimation(new ClipId("c"))!.Duration.Value.Should().BeApproximately(2000f / 12f, 1e-2f);
+        result.Atlas!.GetAnimation(new ClipId("c"))!.Duration.Value.Should().BeApproximately(2000f, 1e-2f);
     }
 
     [Fact]
@@ -299,7 +319,7 @@ public sealed class Asset2DEdgeTests : IDisposable
         _db.Inner.RegisterImporter(new SpriteAtlasAssetImporter());
 
         Func<Task> act = () => _db.Inner.ImportAsync<object>(
-            new AssetTextSource("{ not atlas json"),
+            new AssetTextSource("""{"id":"bad","textureId":"bad.png","textureSize":{"width":64,"height":64},"frames":[{"id":"f","region":{"x":0,"y":0,"width":0,"height":8}}]}"""),
             new AssetKey("sprites/bad"),
             sourceUri: new AssetUri("sprites/bad.spriteatlas.json")).AsTask();
         (await act.Should().ThrowAsync<Asset2DException>()).Where(e => e.Code == "asset-2d.import");

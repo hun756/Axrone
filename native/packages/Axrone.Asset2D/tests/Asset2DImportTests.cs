@@ -57,7 +57,7 @@ public sealed class Asset2DImportTests
     }
 
     [Fact]
-    public void TexturePacker_Import_Expands_Pingpong_Tag()
+    public void TexturePacker_Import_Treats_Pingpong_As_Forward()
     {
         AssetImportContext context = CanonicalContext("sprites/run.json", TexturePackerJson);
         TexturePackerSpriteAtlasImporter<TopLeftOriginPolicy>.CanImport(in context).Should().BeTrue();
@@ -66,7 +66,25 @@ public sealed class Asset2DImportTests
         Asset2DImportResult<TopLeftOriginPolicy> result = TexturePackerSpriteAtlasImporter<TopLeftOriginPolicy>.Import(in context);
         result.IsSuccess.Should().BeTrue();
         result.Atlas!.TextureId.Value.Should().Be("run.png");
-        result.Atlas.GetAnimation(new ClipId("run"))!.FrameCount.Should().Be(4);
+        SpriteAnimationClip? clip = result.Atlas.GetAnimation(new ClipId("run"));
+        clip.Should().NotBeNull();
+        clip!.FrameCount.Should().Be(3);
+        clip.Loop.Should().BeTrue();
+        clip.GetFrame(0).Duration.Value.Should().BeApproximately(1000f / 12f, 1e-3f);
+    }
+
+    [Fact]
+    public void Strict_Probe_Rejects_Partial_Payloads()
+    {
+        AssetImportContext missingId = CanonicalContext("sprites/x.json", """{"textureId":"x.png","textureSize":{"width":8,"height":8},"frames":[]}""");
+        SpriteAtlasJsonImporter<TopLeftOriginPolicy>.CanImport(in missingId).Should().BeFalse();
+
+        AssetImportContext missingTexture = CanonicalContext("sprites/x.json", """{"id":"x","textureSize":{"width":8,"height":8},"frames":[]}""");
+        SpriteAtlasJsonImporter<TopLeftOriginPolicy>.CanImport(in missingTexture).Should().BeFalse();
+
+        AssetImportContext notJson = CanonicalContext("sprites/x.json", "hello");
+        SpriteAtlasJsonImporter<TopLeftOriginPolicy>.CanImport(in notJson).Should().BeFalse();
+        TexturePackerSpriteAtlasImporter<TopLeftOriginPolicy>.CanImport(in notJson).Should().BeFalse();
     }
 
     [Fact]
@@ -100,9 +118,69 @@ public sealed class Asset2DImportTests
     [InlineData("a/b/hero.spriteatlas.json", "hero")]
     [InlineData("hero.atlas.json", "hero")]
     [InlineData("hero.json?ver=2", "hero")]
+    [InlineData("skin.foo", "skin")]
     [InlineData("", "atlas")]
     public void DeriveAtlasId_Strips_Extensions_And_Queries(string path, string expected)
     {
         new string(SpriteAtlasUtil.DeriveAtlasId(path.AsSpan())).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Serialize_RoundTrips_Canonical_Json()
+    {
+        SpriteAtlas<TopLeftOriginPolicy> atlas = AtlasBuilder.Create()
+            .WithIdentity("hero", "hero.png", new Size2D(256f, 256f))
+            .AddFrame(new SpriteFrameDefinition
+            {
+                Id = "idle_0",
+                Region = new Rect2D(0f, 0f, 32f, 32f),
+                SliceBorder = new Border2D(2f, 2f, 2f, 2f),
+            })
+            .AddFrame(new SpriteFrameDefinition
+            {
+                Id = "idle_1",
+                Region = new Rect2D(32f, 0f, 32f, 32f),
+                Duration = new Milliseconds(120f),
+            })
+            .AddAnimation(new SpriteClipDefinition
+            {
+                Id = "idle",
+                Frames = [new FrameId("idle_0"), new FrameId("idle_1")],
+                Fps = 10f,
+                Loop = true,
+            })
+            .Build();
+
+        string json = SpriteAtlasSerializer.SerializeToJson(atlas);
+        json.Should().Contain("\"sliceBorder\"").And.Contain("\"durationMs\"");
+
+        Asset2DImportResult<TopLeftOriginPolicy> restored =
+            SpriteAtlasSerializer.DeserializeFromJson<TopLeftOriginPolicy>("sprites/hero.spriteatlas.json", json);
+        restored.IsSuccess.Should().BeTrue();
+        restored.Atlas!.FrameCount.Should().Be(2);
+        restored.Atlas.TryGetFrame("idle_0".AsSpan(), out SpriteAtlasFrame first).Should().BeTrue();
+        first.HasBorder.Should().BeTrue();
+        SpriteAnimationClip? clip = restored.Atlas.GetAnimation(new ClipId("idle"));
+        clip.Should().NotBeNull();
+        clip!.FrameCount.Should().Be(2);
+        clip.Loop.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Capability_Constants_And_Free_Helpers()
+    {
+        Asset2DCapabilities.Id.Should().Be("asset/2d");
+        Asset2DCapabilities.Package.Should().Be("Axrone.Asset2D");
+        Asset2DCapabilities.OwnerPackage.Should().Be("Axrone.Asset");
+
+        SpriteAtlas<TopLeftOriginPolicy> atlas = AtlasBuilder.Create()
+            .WithIdentity("a", "a.png", new Size2D(64f, 64f))
+            .AddFrame(new SpriteFrameDefinition { Id = "f", Region = new Rect2D(0f, 0f, 8f, 8f) })
+            .AddAnimation(new SpriteClipDefinition { Id = "c", Frames = [new FrameId("f")] })
+            .Build();
+
+        SpriteAtlasUtil.GetFrame(atlas, new FrameId("f")).Should().NotBeNull();
+        SpriteAtlasUtil.GetFrame(atlas, new FrameId("ghost")).Should().BeNull();
+        SpriteAtlasUtil.GetAnimation(atlas, new ClipId("c")).Should().NotBeNull();
     }
 }

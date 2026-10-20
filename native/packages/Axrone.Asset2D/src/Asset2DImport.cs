@@ -150,19 +150,14 @@ public readonly struct SpriteAtlasJsonImporter<TCoordPolicy> : IAssetImporterPol
     /// <inheritdoc/>
     public static bool CanImport(in AssetImportContext context)
     {
-        ReadOnlySpan<char> path = context.Path;
-        if (path.EndsWith(".spriteatlas.json", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(".atlas.json", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            return true;
+            return IsCanonicalJsonPayload(context.Content);
         }
-
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        catch
         {
-            return IsCanonicalJson(context.Content);
+            return false;
         }
-
-        return false;
     }
 
     /// <inheritdoc/>
@@ -525,17 +520,93 @@ public readonly struct SpriteAtlasJsonImporter<TCoordPolicy> : IAssetImporterPol
         return new Border2D(l, r, t, b);
     }
 
-    private static bool IsCanonicalJson(ReadOnlySpan<byte> utf8)
+    private static bool IsCanonicalJsonPayload(ReadOnlySpan<byte> utf8)
     {
         try
         {
             var reader = new Utf8JsonReader(utf8);
+            bool hasId = false;
+            bool hasTextureId = false;
+            bool hasFrames = false;
+            bool hasWidth = false;
+            bool hasHeight = false;
+            bool inTextureSize = false;
+            int depth = 0;
+
             while (reader.Read())
             {
-                if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("frames"u8))
+                switch (reader.TokenType)
                 {
-                    reader.Read();
-                    return reader.TokenType == JsonTokenType.StartArray;
+                    case JsonTokenType.StartObject:
+                    case JsonTokenType.StartArray:
+                        depth++;
+                        break;
+                    case JsonTokenType.EndObject:
+                        depth--;
+                        if (depth == 1)
+                        {
+                            inTextureSize = false;
+                        }
+
+                        break;
+                    case JsonTokenType.EndArray:
+                        depth--;
+                        break;
+                    case JsonTokenType.PropertyName:
+                        if (depth != 1 && !inTextureSize)
+                        {
+                            break;
+                        }
+
+                        if (!inTextureSize)
+                        {
+                            if (reader.ValueTextEquals("id"u8))
+                            {
+                                reader.Read();
+                                hasId = reader.TokenType == JsonTokenType.String;
+                            }
+                            else if (reader.ValueTextEquals("textureId"u8))
+                            {
+                                reader.Read();
+                                hasTextureId = reader.TokenType == JsonTokenType.String;
+                            }
+                            else if (reader.ValueTextEquals("textureSize"u8))
+                            {
+                                reader.Read();
+                                if (reader.TokenType == JsonTokenType.StartObject)
+                                {
+                                    depth++;
+                                    inTextureSize = true;
+                                }
+                            }
+                            else if (reader.ValueTextEquals("frames"u8))
+                            {
+                                reader.Read();
+                                hasFrames = reader.TokenType == JsonTokenType.StartArray;
+                            }
+                        }
+                        else if (depth == 2)
+                        {
+                            if (reader.ValueTextEquals("width"u8))
+                            {
+                                reader.Read();
+                                hasWidth = reader.TokenType == JsonTokenType.Number;
+                            }
+                            else if (reader.ValueTextEquals("height"u8))
+                            {
+                                reader.Read();
+                                hasHeight = reader.TokenType == JsonTokenType.Number;
+                            }
+                        }
+
+                        break;
+                    default:
+                        break;
+                }
+
+                if (hasId && hasTextureId && hasFrames && hasWidth && hasHeight)
+                {
+                    return true;
                 }
             }
         }
@@ -563,11 +634,6 @@ public readonly struct TexturePackerSpriteAtlasImporter<TCoordPolicy> : IAssetIm
     /// <inheritdoc/>
     public static bool CanImport(in AssetImportContext context)
     {
-        if (!context.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         return IsTexturePackerJson(context.Content);
     }
 
@@ -680,8 +746,12 @@ public readonly struct TexturePackerSpriteAtlasImporter<TCoordPolicy> : IAssetIm
                 return Asset2DImportResult<TCoordPolicy>.Failure("TexturePacker JSON missing required 'frames' or 'meta' root sections.");
             }
 
-            string atlasId = new string(SpriteAtlasUtil.DeriveAtlasId(context.Path));
-            string textureId = metaImage ?? $"{atlasId}.png";
+            string atlasId = context.Path.IsEmpty
+                ? (!string.IsNullOrWhiteSpace(metaImage) ? metaImage.Trim() : "sprite-atlas")
+                : new string(SpriteAtlasUtil.DeriveAtlasId(context.Path));
+            string textureId = !string.IsNullOrWhiteSpace(metaImage)
+                ? metaImage.Trim()
+                : atlasId;
 
             AtlasBuilder<AtlasBuildStage.Configured, TCoordPolicy> configured = AtlasBuilder.Create<TCoordPolicy>()
                 .WithIdentity(new AtlasId(atlasId), new TextureId(textureId), metaSize.Value);
@@ -696,66 +766,30 @@ public readonly struct TexturePackerSpriteAtlasImporter<TCoordPolicy> : IAssetIm
             for (int t = 0; t < frameTags.Count; t++)
             {
                 (string Name, int From, int To, string Direction) tag = frameTags[t];
-                string tagId = string.IsNullOrWhiteSpace(tag.Name) ? $"anim_{t}" : tag.Name;
-                int minIdx = Math.Min(tag.From, tag.To);
-                int maxIdx = Math.Max(tag.From, tag.To);
+                bool reverse = string.Equals(tag.Direction, "reverse", StringComparison.OrdinalIgnoreCase);
+                int length = Math.Max(0, tag.To - tag.From + 1);
 
                 ImmutableArray<SpriteClipRefDefinition>.Builder refBuilder = ImmutableArray.CreateBuilder<SpriteClipRefDefinition>();
-                string dir = tag.Direction.ToLowerInvariant();
-
-                switch (dir)
+                for (int i = 0; i < length; i++)
                 {
-                    case "reverse":
-                        for (int idx = maxIdx; idx >= minIdx; idx--)
-                        {
-                            if ((uint)idx < (uint)frameList.Count)
-                            {
-                                refBuilder.Add(new SpriteClipRefDefinition(frameList[idx].Id));
-                            }
-                        }
+                    int idx = reverse ? tag.To - i : tag.From + i;
+                    if ((uint)idx >= (uint)frameList.Count)
+                    {
+                        ThrowHelper.ThrowValidation($"TexturePacker frame tag '{tag.Name}' references missing frame index {idx}.");
+                    }
 
-                        break;
-
-                    case "pingpong":
-                        for (int idx = minIdx; idx <= maxIdx; idx++)
-                        {
-                            if ((uint)idx < (uint)frameList.Count)
-                            {
-                                refBuilder.Add(new SpriteClipRefDefinition(frameList[idx].Id));
-                            }
-                        }
-
-                        for (int idx = maxIdx - 1; idx >= minIdx + 1; idx--)
-                        {
-                            if ((uint)idx < (uint)frameList.Count)
-                            {
-                                refBuilder.Add(new SpriteClipRefDefinition(frameList[idx].Id));
-                            }
-                        }
-
-                        break;
-
-                    case "forward":
-                    default:
-                        for (int idx = minIdx; idx <= maxIdx; idx++)
-                        {
-                            if ((uint)idx < (uint)frameList.Count)
-                            {
-                                refBuilder.Add(new SpriteClipRefDefinition(frameList[idx].Id));
-                            }
-                        }
-
-                        break;
+                    SpriteFrameDefinition target = frameList[idx];
+                    refBuilder.Add(new SpriteClipRefDefinition(target.Id, target.Duration ?? new Milliseconds(1000f / 12f)));
                 }
 
                 if (refBuilder.Count > 0)
                 {
                     builder = builder.AddAnimation(new SpriteClipDefinition
                     {
-                        Id = new ClipId(tagId),
+                        Id = new ClipId(tag.Name),
                         Frames = refBuilder.ToImmutable(),
                         Fps = 12f,
-                        Loop = true,
+                        Loop = !reverse,
                     });
                 }
             }
@@ -934,6 +968,23 @@ public readonly struct TexturePackerSpriteAtlasImporter<TCoordPolicy> : IAssetIm
 /// <summary>Atlas path and naming helpers.</summary>
 public static class SpriteAtlasUtil
 {
+    /// <summary>Resolves a frame without allocating.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static SpriteAtlasFrame? GetFrame<TCoordPolicy>(SpriteAtlas<TCoordPolicy> atlas, FrameId id)
+        where TCoordPolicy : struct, ICoordinatePolicy
+    {
+        ArgumentNullException.ThrowIfNull(atlas);
+        return atlas.GetFrame(id);
+    }
+
+    /// <summary>Resolves an animation clip without allocating.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static SpriteAnimationClip? GetAnimation<TCoordPolicy>(SpriteAtlas<TCoordPolicy> atlas, ClipId id)
+        where TCoordPolicy : struct, ICoordinatePolicy
+    {
+        ArgumentNullException.ThrowIfNull(atlas);
+        return atlas.GetAnimation(id);
+    }
     private static readonly string[] KnownExtensions =
     [
         ".spriteatlas.json",
@@ -967,6 +1018,12 @@ public static class SpriteAtlasUtil
                 fileName = fileName[..^ext.Length];
                 break;
             }
+        }
+
+        int dot = fileName.LastIndexOf('.');
+        if (dot >= 0)
+        {
+            fileName = fileName[..dot];
         }
 
         return fileName.IsEmpty ? "atlas" : fileName;
