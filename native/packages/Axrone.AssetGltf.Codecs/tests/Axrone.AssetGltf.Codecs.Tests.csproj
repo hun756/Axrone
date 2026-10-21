@@ -22,4 +22,9 @@
     <ProjectReference Include="../../Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Axrone.AssetGltf.AotSmoke/**" />
+    <None Remove="Axrone.AssetGltf.AotSmoke/**" />
+  </ItemGroup>
+
 </Project>
