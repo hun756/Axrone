@@ -151,6 +151,9 @@ public enum GltfAnimationPath : byte
 
     /// <summary>Morph weights track.</summary>
     Weights = 3,
+
+    /// <summary>KHR_animation_pointer track.</summary>
+    Pointer = 4,
 }
 
 /// <summary>Animation sampler interpolation.</summary>
