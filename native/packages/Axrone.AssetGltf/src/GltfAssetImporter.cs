@@ -3,6 +3,14 @@ namespace Axrone.AssetGltf;
 /// <summary>glTF asset importer bridge (bytes/text to canonical writes).</summary>
 public sealed class GltfAssetImporter : IAssetImporter
 {
+    private readonly GltfResourceResolver? _resourceResolver;
+
+    /// <summary>Creates an importer with an optional external resource resolver.</summary>
+    public GltfAssetImporter(GltfResourceResolver? resourceResolver = null)
+    {
+        _resourceResolver = resourceResolver;
+    }
+
     /// <inheritdoc/>
     public AssetImporterId Id => new("axrone.importer.gltf");
 
@@ -44,6 +52,7 @@ public sealed class GltfAssetImporter : IAssetImporter
         {
             Id = id,
             SourceUri = context.SourceUri?.Value,
+            ResourceResolver = _resourceResolver,
         });
         GltfImportResult result = await importer.ImportAsync(bytes, cancellationToken).ConfigureAwait(false);
 
