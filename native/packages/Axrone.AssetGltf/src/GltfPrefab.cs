@@ -48,7 +48,7 @@ internal static class GltfPrefabEngine
         GltfRawModel model,
         bool isDefaultScene,
         List<GltfDiagnostic> diagnostics,
-        ImmutableDictionary<int, string> meshKeyMap,
+        ImmutableArray<ImmutableArray<string>> meshKeysByMesh,
         ImmutableDictionary<int, string> skinKeyMap,
         ImmutableArray<string> animationClipIds)
     {
@@ -171,10 +171,13 @@ internal static class GltfPrefabEngine
             {
                 GltfRawModel.Mesh mesh = model.Meshes[node.Mesh.Value];
                 string? skinId = (node.Skin.HasValue && skinKeyMap.TryGetValue(node.Skin.Value, out string? sKey)) ? sKey : null;
+                ImmutableArray<string> primitiveKeys = meshKeysByMesh[node.Mesh.Value];
 
                 if (mesh.Primitives.Count == 1)
                 {
-                    string meshKey = meshKeyMap.TryGetValue(node.Mesh.Value, out string? k) ? k : $"{node.Mesh.Value}:0";
+                    string meshKey = primitiveKeys.Length > 0
+                        ? primitiveKeys[0]
+                        : GltfKeys.Mesh(node.Mesh.Value, 0);
                     int? material = mesh.Primitives[0].Material;
                     string? matKey = material.HasValue ? $"gltf/material/{material.Value}" : null;
 
@@ -193,7 +196,9 @@ internal static class GltfPrefabEngine
                     for (int p = 0; p < mesh.Primitives.Count; p++)
                     {
                         string childActorId = $"{nodeId}/primitive/{p}";
-                        string meshKey = $"{node.Mesh.Value}:{p}";
+                        string meshKey = p < primitiveKeys.Length
+                            ? primitiveKeys[p]
+                            : GltfKeys.Mesh(node.Mesh.Value, p);
                         int? primMaterial = mesh.Primitives[p].Material;
                         string? matKey = primMaterial.HasValue ? $"gltf/material/{primMaterial.Value}" : null;
 
@@ -235,6 +240,22 @@ internal static class GltfPrefabEngine
             }
         }
 
+        int meshKeyCount = 0;
+        for (int i = 0; i < meshKeysByMesh.Length; i++)
+        {
+            meshKeyCount += meshKeysByMesh[i].Length;
+        }
+
+        var prefabMeshKeys = ImmutableArray.CreateBuilder<string>(meshKeyCount);
+        for (int i = 0; i < meshKeysByMesh.Length; i++)
+        {
+            ImmutableArray<string> keys = meshKeysByMesh[i];
+            for (int k = 0; k < keys.Length; k++)
+            {
+                prefabMeshKeys.Add(keys[k]);
+            }
+        }
+
         return new GltfPrefabAsset
         {
             Id = prefabId,
@@ -242,7 +263,7 @@ internal static class GltfPrefabEngine
             Definition = new GltfPrefabDefinition { Actors = actorList.ToImmutableArray() },
             RootNodeIds = rootNodeIds.ToImmutableArray(),
             NodeIds = allNodeIds.ToImmutableArray(),
-            MeshKeys = meshKeyMap.Values.ToImmutableArray(),
+            MeshKeys = prefabMeshKeys.MoveToImmutable(),
             SkinKeys = skinKeyMap.Values.ToImmutableArray(),
             AnimationKeys = animationClipIds,
             MaterialKeys = ImmutableArray<string>.Empty,
