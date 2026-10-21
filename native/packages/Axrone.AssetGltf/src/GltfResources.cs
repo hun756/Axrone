@@ -262,6 +262,29 @@ public sealed class GltfResourceRuntimeCache
         return result;
     }
 
+    /// <summary>Extracts the media type from a data: URI, if present.</summary>
+    [SuppressMessage("Design", "CA1055:URI-like return values should not be strings", Justification = "A data URI media type is not itself a URI.")]
+    public static string? GetDataUriMimeType(string uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        ReadOnlySpan<char> span = uri.AsSpan();
+        if (!span.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        int commaIndex = span.IndexOf(',');
+        if (commaIndex < 5)
+        {
+            return null;
+        }
+
+        ReadOnlySpan<char> metadata = span.Slice(5, commaIndex - 5);
+        int semicolonIndex = metadata.IndexOf(';');
+        ReadOnlySpan<char> mimeType = semicolonIndex >= 0 ? metadata.Slice(0, semicolonIndex) : metadata;
+        return mimeType.Length > 0 ? mimeType.ToString() : null;
+    }
+
     /// <summary>Decodes a data: URI payload.</summary>
     public static ReadOnlyMemory<byte> DecodeDataUri(string uri)
     {

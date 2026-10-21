@@ -176,7 +176,17 @@ public static class GltfCompileExtensions
                 }
                 else if (!string.IsNullOrEmpty(img.Uri))
                 {
-                    payload = new GltfExternalTexturePayload(img.Uri);
+                    if (img.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        payload = new GltfRawTexturePayload(
+                            GltfResourceRuntimeCache.DecodeDataUri(img.Uri),
+                            img.MimeType ?? GltfResourceRuntimeCache.GetDataUriMimeType(img.Uri) ?? "application/octet-stream");
+                        runtimeFormat = GltfTextureFormat.Unknown;
+                    }
+                    else
+                    {
+                        payload = new GltfExternalTexturePayload(img.Uri);
+                    }
                 }
                 else
                 {
