@@ -612,6 +612,49 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_LocalLightBudgetOption_ControlsRuntimeLimitWarning()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["KHR_lights_punctual"],
+              "extensions": {
+                "KHR_lights_punctual": {
+                  "lights": [
+                    {"type": "point", "intensity": 1, "range": 5},
+                    {"type": "point", "intensity": 1, "range": 5},
+                    {"type": "point", "intensity": 1, "range": 5}
+                  ]
+                }
+              },
+              "scene": 0,
+              "scenes": [{"nodes": [0, 1, 2]}],
+              "nodes": [
+                {"name": "L0", "extensions": {"KHR_lights_punctual": {"light": 0}}},
+                {"name": "L1", "extensions": {"KHR_lights_punctual": {"light": 1}}},
+                {"name": "L2", "extensions": {"KHR_lights_punctual": {"light": 2}}}
+              ]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "lights.glb",
+            MaxLocalLightsBudget = 2,
+        });
+
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Diagnostics.Should().Contain(diagnostic =>
+            diagnostic.Code == "gltf.light.local.runtime-limit");
+        result.Prefabs[0].Definition.Actors
+            .SelectMany(static actor => actor.Components)
+            .OfType<GltfPointLightComponent>()
+            .Should().HaveCount(3);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
