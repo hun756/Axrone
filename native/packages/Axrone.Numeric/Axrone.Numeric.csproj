@@ -32,6 +32,14 @@
     <NoWarn>$(NoWarn);CA1028</NoWarn>
     <!-- CA1000: Static members on generic types — Vec3Builder.Create is the typestate entry point. -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1040: Empty marker interfaces drive the typestate color pipeline. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA5394: Do not use insecure randomness — decorative colors need no
+         cryptographic strength; Random.Shared is the documented choice. -->
+    <NoWarn>$(NoWarn);CA5394</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
