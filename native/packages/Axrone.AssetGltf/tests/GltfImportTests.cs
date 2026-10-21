@@ -1054,6 +1054,33 @@ public sealed class GltfImportTests
         material.Definition.ScalarUniforms.Should().ContainKey("_SheenColorTexture_Scale");
     }
 
+    [Fact]
+    public async Task Import_WebpTextureExtension_SelectsExtensionSource()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["EXT_texture_webp"],
+              "images": [
+                {"uri": "fallback.png", "mimeType": "image/png"},
+                {"uri": "preferred.webp", "mimeType": "image/webp"}
+              ],
+              "textures": [{
+                "source": 0,
+                "extensions": {"EXT_texture_webp": {"source": 1}}
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "webp.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Textures[0].ImageIndex.Should().Be(1);
+        result.Textures[0].Payload.Should().BeOfType<GltfExternalTexturePayload>()
+            .Which.Uri.Should().Be("preferred.webp");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
