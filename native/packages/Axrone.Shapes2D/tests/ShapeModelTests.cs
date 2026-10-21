@@ -52,12 +52,16 @@ public sealed class ShapeModelTests
             [new Vec2(0f, 0f), new Vec2(4f, 4f), new Vec2(0f, 4f), new Vec2(4f, 0f)]);
         selfIntersect.Should().Throw<ShapeValidationException>();
 
-        Action outsideHole = () => ShapeFactory.CreatePolygon(
-            Square,
-            [new PolygonRing([new Vec2(9f, 9f), new Vec2(10f, 9f), new Vec2(10f, 10f)], PolygonWinding.Cw)]);
+        Action outsideHole = () =>
+        {
+            var holePoints = new Vec2[] { new(9f, 9f), new(10f, 9f), new(10f, 10f) };
+            _ = ShapeFactory.CreatePolygon(
+                Square,
+                [new PolygonRing(holePoints, PolygonWinding.Cw)]);
+        };
         outsideHole.Should().Throw<ShapeValidationException>();
 
-        Action open = () => new PolygonShape(Square, closed: false);
+        Action open = () => _ = new PolygonShape(Square, closed: false);
         open.Should().Throw<ShapeValidationException>();
     }
 
@@ -77,9 +81,10 @@ public sealed class ShapeModelTests
     [Fact]
     public void Builder_Requires_Outer_Ring()
     {
+        Vec2[] hole = [new Vec2(1f, 1f), new Vec2(2f, 1f), new Vec2(2f, 2f), new Vec2(1f, 2f)];
         PolygonShape poly = PolygonBuilder<PhaseEmpty>.Create()
             .WithOuter(Square)
-            .AddHole([new Vec2(1f, 1f), new Vec2(2f, 1f), new Vec2(2f, 2f), new Vec2(1f, 2f)])
+            .AddHole(hole)
             .Build();
         poly.Holes.Should().HaveCount(1);
         poly.Kind.Should().Be(ShapeKind.Polygon);
