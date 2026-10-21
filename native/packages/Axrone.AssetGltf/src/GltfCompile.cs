@@ -185,7 +185,20 @@ public static class GltfCompileExtensions
                     }
                     else
                     {
-                        payload = new GltfExternalTexturePayload(img.Uri);
+                        ReadOnlyMemory<byte>? resolvedImage = await resourceRuntime.TryResolveImageAsync(
+                            img.Uri, img.MimeType, cancellationToken).ConfigureAwait(false);
+
+                        if (resolvedImage.HasValue)
+                        {
+                            payload = new GltfRawTexturePayload(
+                                resolvedImage.Value,
+                                img.MimeType ?? "application/octet-stream");
+                            runtimeFormat = GltfTextureFormat.Unknown;
+                        }
+                        else
+                        {
+                            payload = new GltfExternalTexturePayload(img.Uri);
+                        }
                     }
                 }
                 else
