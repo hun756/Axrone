@@ -488,6 +488,73 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_AttributeCountMismatch_ThrowsAccessorError()
+    {
+        byte[] bin = new byte[60];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}}]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC3"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 24}
+              ],
+              "buffers": [{"byteLength": 60}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "attributes.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
+    [Fact]
+    public async Task Import_MorphTargetCountMismatch_ThrowsAccessorError()
+    {
+        byte[] bin = new byte[60];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "targets": [{"POSITION": 1}]
+              }]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC3"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 24}
+              ],
+              "buffers": [{"byteLength": 60}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "morph-count.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
