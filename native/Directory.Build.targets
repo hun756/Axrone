@@ -2,7 +2,7 @@
 
   <ItemGroup Condition="'$(IsTestProject)' == 'true'">
     <Using Include="Xunit" />
-    <Using Include="FluentAssertions" />
+    <Using Include="FluentAssertions" Condition="'$(UseFluentAssertions)' != 'false'" />
   </ItemGroup>
 
 </Project>
