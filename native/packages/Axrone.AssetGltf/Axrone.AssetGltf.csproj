@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.AssetGltf</RootNamespace>
+    <AssemblyName>Axrone.AssetGltf</AssemblyName>
+    <Description>glTF 2.0 static import pipeline (schema, GLB container, accessors, meshes) for the Axrone engine: native value-type idioms, zero-copy reads and AOT-safe parsing.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: byte-backed glTF enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1040: Empty marker interfaces drive the typestate pipeline phases. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1051: Visible instance fields — explicit-layout payloads are
+         intentional wire layouts. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — glTF errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy structs carry
+         no state to compare. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — policy monomorphization
+         exposes static abstracts on generic structs by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1707: Underscores in texture format names are the KTX2/VkFormat
+         wire vocabulary (BC7_RGBA, ASTC_4x4); renaming would corrupt the mapping. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- CA1054/CA1056: URI parameters stay strings — glTF URIs include data:,
+         buffer-relative and extension schemes that System.Uri rejects. -->
+    <NoWarn>$(NoWarn);CA1054;CA1056</NoWarn>
+    <!-- CA1711: GltfVertexAttribute is an interleaved layout descriptor,
+         not a System.Attribute; the suffix is the domain term. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1720: Integer is the glTF accessor flag vocabulary; renaming would
+         corrupt the JSON mapping. -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1308: Lowercase tokens are the wire format (animation paths,
+         extension names); Invariant culture keeps the mapping deterministic. -->
+    <NoWarn>$(NoWarn);CA1308</NoWarn>
+    <!-- CA1002: Do not expose generic lists — raw schema bags are mutable
+         parser outputs; the parser and compiler need Add/Clear/List
+         semantics that Collection{T} would only virtualize. -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1819: Properties should not return arrays — float[] Min/Max/Matrix
+         and friends are the glTF JSON array vocabulary; arrays keep decode
+         paths free of per-element interface dispatch. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.AssetGltf.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Asset/Axrone.Asset.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
