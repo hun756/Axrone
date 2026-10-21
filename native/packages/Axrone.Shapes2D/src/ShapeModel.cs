@@ -314,6 +314,10 @@ public sealed class PolygonShape : Shape2D
                 ? ImmutableArray<PolygonRing>.Empty
                 : ImmutableCollectionsMarshal.AsImmutableArray(holeList.ToArray());
         }
+        else
+        {
+            Holes = ImmutableArray<PolygonRing>.Empty;
+        }
 
         Closed = true;
     }
