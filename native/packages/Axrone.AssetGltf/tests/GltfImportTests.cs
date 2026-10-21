@@ -812,6 +812,78 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_IndexAccessorMustBeUnsignedScalar()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[48];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 12}
+              ],
+              "buffers": [{"byteLength": 48}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "index-type.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
+    [Fact]
+    public async Task Import_UnknownMorphTargetAttribute_IsBypassedWithWarning()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[72];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        Buffer.BlockCopy(positions, 0, bin, 36, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "targets": [{"POSITION": 1, "CUSTOM": 1}]
+              }]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 36}
+              ],
+              "buffers": [{"byteLength": 72}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "morph-semantic.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Diagnostics.Should().Contain(diagnostic =>
+            diagnostic.Code == "gltf.mesh.target.attribute.unsupported");
+        result.Meshes[0].Definition.MorphTargets.Should().ContainSingle();
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
