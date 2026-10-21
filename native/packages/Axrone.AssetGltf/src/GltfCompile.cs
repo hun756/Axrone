@@ -689,14 +689,47 @@ public static class GltfCompileExtensions
             var jointIds = ImmutableArray.CreateBuilder<string>(skinDef.Joints.Count);
             for (int j = 0; j < skinDef.Joints.Count; j++)
             {
-                jointIds.Add($"node_{skinDef.Joints[j]}_{rawModel.Nodes[skinDef.Joints[j]].Name ?? "unnamed"}");
+                int jointIndex = skinDef.Joints[j];
+                if (jointIndex < 0 || jointIndex >= rawModel.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Skin {s} references a missing joint node {jointIndex}.");
+                }
+
+                jointIds.Add($"node_{jointIndex}_{rawModel.Nodes[jointIndex].Name ?? "unnamed"}");
+            }
+
+            if (skinDef.Skeleton.HasValue &&
+                (skinDef.Skeleton.Value < 0 || skinDef.Skeleton.Value >= rawModel.Nodes.Count))
+            {
+                ThrowHelper.ThrowSchema($"Skin {s} references a missing skeleton node {skinDef.Skeleton.Value}.");
             }
 
             ReadOnlyMemory<float> rowMajorIbm = ReadOnlyMemory<float>.Empty;
-            if (skinDef.InverseBindMatrices.HasValue && skinDef.InverseBindMatrices.Value < rawModel.Accessors.Count)
+            if (skinDef.InverseBindMatrices.HasValue)
             {
-                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[skinDef.InverseBindMatrices.Value];
-                GltfAccessorRuntime.ValidateAccessorRange(rawModel, skinDef.InverseBindMatrices.Value, 16);
+                int inverseBindAccessorIndex = skinDef.InverseBindMatrices.Value;
+                if (inverseBindAccessorIndex < 0 || inverseBindAccessorIndex >= rawModel.Accessors.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Skin {s} references a missing inverse-bind accessor {inverseBindAccessorIndex}.");
+                }
+
+                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[inverseBindAccessorIndex];
+                if (!string.Equals(ibmAcc.Type, "MAT4", StringComparison.Ordinal) ||
+                    ibmAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inverseBindAccessorIndex,
+                        "inverse bind matrices must use FLOAT MAT4 accessors.");
+                }
+
+                if (ibmAcc.Count != skinDef.Joints.Count)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inverseBindAccessorIndex,
+                        "inverse bind matrix count does not match the skin joint count.");
+                }
+
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, inverseBindAccessorIndex, 16);
                 ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                     ibmAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
