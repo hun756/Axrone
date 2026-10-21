@@ -5,7 +5,7 @@ namespace Axrone.Numeric;
 /// 128-bit hardware SIMD registers.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4, Size = 16)]
-public readonly struct Rgba128Float :
+public readonly partial struct Rgba128Float :
     IColorVector<Rgba128Float>,
     ISpanFormattable,
     IUtf8SpanFormattable

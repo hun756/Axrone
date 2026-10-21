@@ -589,6 +589,68 @@ public static class ColorOps
         return [.. colors];
     }
 
+    /// <summary>Creates from CIELAB (D65).</summary>
+    public static Rgba128Float FromLab(float l, float a, float b, float alpha = 1f)
+    {
+        float fy = (l + 16f) / 116f;
+        float fx = a / 500f + fy;
+        float fz = fy - b / 200f;
+
+        float xr = fx * fx * fx > 0.008856f ? fx * fx * fx : (116f * fx - 16f) / 903.3f;
+        float yr = l > 8f ? fy * fy * fy : l / 903.3f;
+        float zr = fz * fz * fz > 0.008856f ? fz * fz * fz : (116f * fz - 16f) / 903.3f;
+
+        float x = xr * D65X;
+        float y = yr * D65Y;
+        float z = zr * D65Z;
+
+        float r = x * 3.2406f + y * -1.5372f + z * -0.4986f;
+        float g = x * -0.9689f + y * 1.8758f + z * 0.0415f;
+        float bb = x * 0.0557f + y * -0.204f + z * 1.057f;
+        return new Rgba128Float(
+            Math.Clamp(LinearToSrgb(r), 0f, 1f),
+            Math.Clamp(LinearToSrgb(g), 0f, 1f),
+            Math.Clamp(LinearToSrgb(bb), 0f, 1f),
+            Math.Clamp(alpha, 0f, 1f));
+    }
+
+    /// <summary>Lightens by adding to lightness.</summary>
+    public static Rgba128Float Lighten(Rgba128Float color, float amount)
+    {
+        HslColor hsl = ToHsl(color);
+        return FromHsl(Mod(hsl.H, 360f), Clamp01(hsl.S), Math.Clamp(hsl.L + amount, 0f, 1f), Clamp01(hsl.A));
+    }
+
+    /// <summary>Darkens by subtracting from lightness.</summary>
+    public static Rgba128Float Darken(Rgba128Float color, float amount) => Lighten(color, -amount);
+
+    /// <summary>Increases saturation.</summary>
+    public static Rgba128Float Saturate(Rgba128Float color, float amount)
+    {
+        HslColor hsl = ToHsl(color);
+        return FromHsl(Mod(hsl.H, 360f), Math.Clamp(hsl.S + amount, 0f, 1f), Clamp01(hsl.L), Clamp01(hsl.A));
+    }
+
+    /// <summary>Decreases saturation.</summary>
+    public static Rgba128Float Desaturate(Rgba128Float color, float amount) => Saturate(color, -amount);
+
+    /// <summary>Rotates hue by degrees.</summary>
+    public static Rgba128Float AdjustHue(Rgba128Float color, float degrees)
+    {
+        HslColor hsl = ToHsl(color);
+        return FromHsl(Mod(hsl.H + degrees, 360f), Clamp01(hsl.S), Clamp01(hsl.L), Clamp01(hsl.A));
+    }
+
+    /// <summary>Inverts channels, preserving alpha.</summary>
+    public static Rgba128Float Invert(Rgba128Float color) => new(1f - color.R, 1f - color.G, 1f - color.B, color.A);
+
+    /// <summary>Converts to luminance gray, preserving alpha.</summary>
+    public static Rgba128Float Grayscale(Rgba128Float color)
+    {
+        float gray = 0.299f * color.R + 0.587f * color.G + 0.114f * color.B;
+        return new Rgba128Float(gray, gray, gray, color.A);
+    }
+
     /// <summary>Random opaque color.</summary>
     public static Rgba128Float Random(float alpha = 1f) =>
         new(

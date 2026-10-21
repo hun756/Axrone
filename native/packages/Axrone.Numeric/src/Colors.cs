@@ -47,4 +47,31 @@ public static class Colors
 
     /// <summary>Opaque purple.</summary>
     public static Rgba32 Purple => new(128, 0, 128, 255);
+
+    /// <summary>Opaque brown.</summary>
+    public static Rgba32 Brown => new(153, 102, 51, 255);
+
+    /// <summary>Opaque pink.</summary>
+    public static Rgba32 Pink => new(255, 191, 204, 255);
+
+    /// <summary>Opaque navy.</summary>
+    public static Rgba32 Navy => new(0, 0, 128, 255);
+
+    /// <summary>Opaque maroon.</summary>
+    public static Rgba32 Maroon => new(128, 0, 0, 255);
+
+    /// <summary>Opaque olive.</summary>
+    public static Rgba32 Olive => new(128, 128, 0, 255);
+
+    /// <summary>Opaque aqua.</summary>
+    public static Rgba32 Aqua => new(0, 255, 255, 255);
+
+    /// <summary>Opaque teal.</summary>
+    public static Rgba32 Teal => new(0, 128, 128, 255);
+
+    /// <summary>Opaque silver.</summary>
+    public static Rgba32 Silver => new(192, 192, 192, 255);
+
+    /// <summary>Opaque fuchsia.</summary>
+    public static Rgba32 Fuchsia => new(255, 0, 255, 255);
 }
