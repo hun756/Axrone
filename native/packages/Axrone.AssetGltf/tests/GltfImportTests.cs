@@ -884,6 +884,22 @@ public sealed class GltfImportTests
         result.Meshes[0].Definition.MorphTargets.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Import_SourceUri_IsPreservedOnDocument()
+    {
+        const string json = """{"asset": {"version": "2.0"}}""";
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "uri.gltf",
+            SourceUri = "models/uri.gltf",
+        });
+
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Document.Uri.Should().Be("models/uri.gltf");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
