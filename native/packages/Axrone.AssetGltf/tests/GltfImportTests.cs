@@ -389,6 +389,41 @@ public sealed class GltfImportTests
         texture.RuntimeFormat.Should().Be(GltfTextureFormat.Unknown);
     }
 
+    [Fact]
+    public async Task Import_ExternalImage_ResolvesThroughResourceResolver()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "images": [{"uri": "textures/albedo.png", "mimeType": "image/png"}],
+              "textures": [{"source": 0}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        byte[] imageBytes = [1, 2, 3, 4];
+        GltfResourceRequest? observedRequest = null;
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "external.glb",
+            ResourceResolver = (request, _) =>
+            {
+                observedRequest = request;
+                return ValueTask.FromResult<GltfResolvedResource?>(
+                    new GltfResolvedResource(imageBytes, "image/png"));
+            },
+        });
+
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        observedRequest.Should().NotBeNull();
+        observedRequest!.Value.Kind.Should().Be("image");
+        GltfTextureAsset texture = result.Textures.Should().ContainSingle().Subject;
+        GltfRawTexturePayload payload = texture.Payload.Should().BeOfType<GltfRawTexturePayload>().Subject;
+        payload.Bytes.ToArray().Should().Equal(imageBytes);
+        payload.MimeType.Should().Be("image/png");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
