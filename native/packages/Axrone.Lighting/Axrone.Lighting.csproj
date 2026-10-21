@@ -48,6 +48,9 @@
     <!-- CA1308: Lowercase tokens are the wire format (light kinds);
          Invariant culture keeps the mapping deterministic. -->
     <NoWarn>$(NoWarn);CA1308</NoWarn>
+    <!-- CA1711: *Flags enums end with Flags by domain vocabulary;
+         they are bit sets, not System attributes. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
