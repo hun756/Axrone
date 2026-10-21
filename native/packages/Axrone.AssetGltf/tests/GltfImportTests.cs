@@ -272,6 +272,26 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.extension.unsupported");
     }
 
+    [Fact]
+    public async Task Import_MaterialWithoutPbr_UsesSpecBaseColorDefault()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "materials": [{"name": "SpecDefault"}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "material.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfMaterialAsset material = result.Materials.Should().ContainSingle().Subject;
+        material.Definition.FloatUniforms["_BaseColorFactor"].Should().Equal(1f, 1f, 1f, 1f);
+        material.Definition.ScalarUniforms["_MetallicFactor"].Should().Be(1f);
+        material.Definition.ScalarUniforms["_RoughnessFactor"].Should().Be(1f);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
