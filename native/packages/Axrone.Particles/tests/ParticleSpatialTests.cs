@@ -37,6 +37,32 @@ public sealed class ParticleSpatialTests : IDisposable
         _storage.ActiveCount.Should().Be(1);
     }
 
+    [Fact]
+    public void QueryBounds_FindsInsideOnly()
+    {
+        _grid.Insert(ParticleId.Create(1, 1), new Vec3(1, 1, 1));
+        _grid.Insert(ParticleId.Create(2, 1), new Vec3(100, 100, 100));
+
+        var state = new CountState();
+        _grid.QueryBounds<CountingVisitor, CountState>(new ParticleBounds(Vec3.Zero, new Vec3(10, 10, 10)), ref state);
+        state.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void QueryNearest_ReturnsSorted()
+    {
+        _grid.Insert(ParticleId.Create(1, 1), new Vec3(5, 0, 0));
+        _grid.Insert(ParticleId.Create(2, 1), new Vec3(1, 0, 0));
+        _grid.Insert(ParticleId.Create(3, 1), new Vec3(50, 0, 0));
+
+        Span<ParticleId> results = stackalloc ParticleId[2];
+        int found = _grid.QueryNearest(new Vec3(0, 0, 0), 2, 100.0f, results);
+
+        found.Should().Be(2);
+        results[0].Index.Should().Be(2u);
+        results[1].Index.Should().Be(1u);
+    }
+
     private struct CountState
     {
         public int Count;
