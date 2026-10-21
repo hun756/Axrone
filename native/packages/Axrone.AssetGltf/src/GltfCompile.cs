@@ -522,10 +522,12 @@ public static class GltfCompileExtensions
                             ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
                             ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
                             GltfAccessorRuntime.MergeSparseFloats(
+                                accessorIndex,
                                 idxSpan,
                                 acc.Sparse.Indices.ComponentType,
                                 valSpan,
                                 acc.Sparse.Count,
+                                vertexCount,
                                 acc.ComponentType,
                                 layout.ComponentCount,
                                 acc.Normalized,
