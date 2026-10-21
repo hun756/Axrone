@@ -180,6 +180,66 @@ public sealed class GltfImportTests
         result.Meshes[0].Bounds!.Value.Max.Should().Be(new Vec3(0f, 1f, 0f));
     }
 
+    [Fact]
+    public async Task Import_MorphWeightAnimation_DerivesComponentCountFromOutputAccessor()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        float[] times = [0f, 1f, 2f];
+        float[] weights = [0f, 0f, 1f, 0f, 0.5f, 1f];
+
+        byte[] bin = new byte[144];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        Buffer.BlockCopy(positions, 0, bin, 36, 36);
+        Buffer.BlockCopy(positions, 0, bin, 72, 36);
+        Buffer.BlockCopy(times, 0, bin, 108, 12);
+        Buffer.BlockCopy(weights, 0, bin, 120, 24);
+
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "Morph", "mesh": 0, "weights": [0, 0]}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "targets": [{"POSITION": 1}, {"POSITION": 2}]
+              }]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 3, "componentType": 5126, "count": 3, "type": "SCALAR"},
+                {"bufferView": 4, "componentType": 5126, "count": 6, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 72, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 108, "byteLength": 12},
+                {"buffer": 0, "byteOffset": 120, "byteLength": 24}
+              ],
+              "buffers": [{"byteLength": 144}],
+              "animations": [{
+                "name": "MorphAnimation",
+                "samplers": [{"input": 3, "output": 4, "interpolation": "LINEAR"}],
+                "channels": [{"sampler": 0, "target": {"node": 0, "path": "weights"}}]
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "morph.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfAnimationTrackAsset track = result.Animations[0].Tracks[0];
+        track.Path.Should().Be(GltfAnimationPath.Weights);
+        track.KeyframeCount.Should().Be(3);
+        track.ValueComponentCount.Should().Be(2);
+        track.SampleStride.Should().Be(2);
+        track.Values.Length.Should().Be(6);
+        track.Values.Span.ToArray().Should().Equal(weights);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
