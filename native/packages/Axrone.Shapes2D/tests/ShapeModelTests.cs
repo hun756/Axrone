@@ -37,7 +37,7 @@ public sealed class ShapeModelTests
         zeroLine.Should().Throw<ShapeValidationException>();
         Action badAlign = () => ShapeFactory.CreateLine(
             new Vec2(0f, 0f), new Vec2(1f, 0f),
-            ShapeFactory.CreateStroke(ShapeFactory.CreateSolidPaint("red"), 1f, ShapeStrokeAlignment.Outside));
+            ShapePaintFactory.CreateStroke(ShapePaintFactory.CreateSolidPaint("red"), 1f, ShapeStrokeAlignment.Outside));
         badAlign.Should().Throw<ShapeValidationException>();
 
         Shape2D named = ShapeFactory.CreateCircle(0f, 0f, 1f, name: "  hero  ");
