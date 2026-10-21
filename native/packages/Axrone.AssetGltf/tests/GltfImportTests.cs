@@ -679,6 +679,55 @@ public sealed class GltfImportTests
         material.Definition.ScalarUniforms["_AlphaCutoff"].Should().Be(0.25f);
     }
 
+    [Fact]
+    public async Task Import_MaterialMissingTexture_ThrowsSchemaError()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "materials": [{
+                "pbrMetallicRoughness": {"baseColorTexture": {"index": 1}}
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "material-texture.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfSchemaError>())
+            .Which.Code.Should().Be("gltf.schema.invalid");
+    }
+
+    [Fact]
+    public async Task Import_MeshMissingMaterial_ThrowsSchemaError()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[44];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "material": 1}]}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "mesh-material.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfSchemaError>())
+            .Which.Code.Should().Be("gltf.schema.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
