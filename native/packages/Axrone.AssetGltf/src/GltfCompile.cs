@@ -511,6 +511,25 @@ public static class GltfCompileExtensions
                     ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} has no supported vertex attributes.");
                 }
 
+                GltfDracoDecodedMesh? dracoMesh = null;
+                if (prim.Draco != null && TDracoPolicy.IsSupported)
+                {
+                    ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                        prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                    if (!TDracoPolicy.TryDecodeMesh(dracoBytes.Span, out dracoMesh) || dracoMesh == null)
+                    {
+                        ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} Draco payload could not be decoded.");
+                    }
+
+                    if (dracoMesh.VertexCount != vertexCount)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            prim.Attributes.GetValueOrDefault("POSITION", -1),
+                            $"Draco vertex count {dracoMesh.VertexCount} does not match accessor count {vertexCount}.");
+                    }
+                }
+
                 byte[] interleavedVertices = GC.AllocateUninitializedArray<byte>(vertexCount * totalInterleavedStride, pinned: true);
                 GltfMeshBounds bounds = GltfMeshBounds.Empty;
 
@@ -522,27 +541,32 @@ public static class GltfCompileExtensions
                     GltfRawModel.Accessor acc = rawModel.Accessors[accessorIndex];
 
                     int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
-                    int elemSize = layout.ComponentCount * compSize;
                     GltfAccessorRuntime.ValidateAccessorRange(rawModel, accessorIndex, layout.ComponentCount);
                     var decodedFloats = new float[vertexCount * layout.ComponentCount];
 
-                    if (prim.Draco != null && TDracoPolicy.IsSupported)
+                    if (dracoMesh != null)
                     {
-                        ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
-                            prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-
-                        byte[] tempAttr = GC.AllocateUninitializedArray<byte>(vertexCount * elemSize, pinned: true);
-                        bool decoded;
-                        int dracoVertexCount;
+                        int dracoAttributeId = 0;
+                        bool hasDracoAttribute = prim.Draco != null &&
+                            prim.Draco.Attributes.TryGetValue(semStr, out dracoAttributeId);
+                        if (!hasDracoAttribute)
                         {
-                            ReadOnlySpan<byte> dracoSpan = dracoBytes.Span;
-                            decoded = TDracoPolicy.TryDecodePrimitive(dracoSpan, layout.Semantic, acc.ComponentType, tempAttr, out dracoVertexCount);
+                            ThrowHelper.ThrowAccessor(accessorIndex, "is missing from the decoded Draco primitive.");
                         }
 
-                        if (decoded)
+                        float[]? dracoValues = null;
+                        bool hasDracoValues = dracoMesh.Attributes.TryGetValue(dracoAttributeId, out dracoValues);
+                        if (!hasDracoValues || dracoValues == null)
                         {
-                            GltfAccessorRuntime.DecodeFloats(tempAttr, dracoVertexCount, acc.ComponentType, layout.ComponentCount, elemSize, acc.Normalized, decodedFloats);
+                            ThrowHelper.ThrowAccessor(accessorIndex, "is missing from the decoded Draco primitive.");
                         }
+
+                        if (dracoValues.Length != vertexCount * layout.ComponentCount)
+                        {
+                            ThrowHelper.ThrowAccessor(accessorIndex, "Draco attribute component count does not match its accessor.");
+                        }
+
+                        dracoValues.AsSpan().CopyTo(decodedFloats);
                     }
                     else
                     {
@@ -692,7 +716,16 @@ public static class GltfCompileExtensions
                 }
 
                 uint[] expandedIndices;
-                if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
+                if (dracoMesh != null)
+                {
+                    ImmutableArray<uint> dracoIndices = dracoMesh.Indices;
+                    GltfAccessorRuntime.ValidateIndices(
+                        dracoIndices.AsSpan(),
+                        vertexCount,
+                        prim.Indices ?? -1);
+                    expandedIndices = GltfMeshPipeline.ExpandTopology(4, dracoIndices.AsSpan(), vertexCount);
+                }
+                else if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
                 {
                     GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
                     if (!string.Equals(indexAcc.Type, "SCALAR", StringComparison.Ordinal) ||
@@ -1109,10 +1142,21 @@ public sealed class GltfImporter
         _options = options ?? new GltfImporterOptions();
     }
 
-    /// <summary>Imports glTF or GLB bytes.</summary>
-    public async ValueTask<GltfImportResult> ImportAsync(
+    /// <summary>Imports glTF or GLB bytes with the default null codecs.</summary>
+    public ValueTask<GltfImportResult> ImportAsync(
+        ReadOnlyMemory<byte> sourceBytes,
+        CancellationToken cancellationToken = default) =>
+        ImportAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+            sourceBytes,
+            cancellationToken);
+
+    /// <summary>Imports glTF or GLB bytes with explicit compression policies.</summary>
+    public async ValueTask<GltfImportResult> ImportAsync<TDracoPolicy, TMeshoptPolicy, TTranscoderPolicy>(
         ReadOnlyMemory<byte> sourceBytes,
         CancellationToken cancellationToken = default)
+        where TDracoPolicy : struct, IDracoMeshPolicy
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+        where TTranscoderPolicy : struct, ITextureTranscoderPolicy
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (sourceBytes.Length > _options.Limits.MaxSourceBytes)
@@ -1124,7 +1168,7 @@ public sealed class GltfImporter
         GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
         GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
 
-        return await resolved.CompileAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+        return await resolved.CompileAsync<TDracoPolicy, TMeshoptPolicy, TTranscoderPolicy>(
             _options,
             cancellationToken).ConfigureAwait(false);
     }

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.AssetGltf.Codecs</RootNamespace>
+    <AssemblyName>Axrone.AssetGltf.Codecs</AssemblyName>
+    <Description>Optional meshopt decoder policies for the Axrone glTF import pipeline.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <!-- CA1815: stateless policy structs have no values to compare. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
+    <PackageReference Include="Alimer.Bindings.MeshOptimizer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+</Project>

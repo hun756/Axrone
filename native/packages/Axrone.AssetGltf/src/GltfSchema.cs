@@ -33,6 +33,9 @@ internal sealed class GltfRawModel
 
         /// <summary>Compression mode.</summary>
         public string Mode { get; set; } = "ATTRIBUTES";
+
+        /// <summary>Optional attribute filter.</summary>
+        public string Filter { get; set; } = "NONE";
     }
 
     /// <summary>Raw bufferView descriptor.</summary>

@@ -12,6 +12,7 @@
     <CoverletVersion>6.0.4</CoverletVersion>
     <SilkNetVersion>2.23.0</SilkNetVersion>
     <MoqVersion>4.20.72</MoqVersion>
+    <AlimerMeshOptimizerVersion>1.2.1</AlimerMeshOptimizerVersion>
   </PropertyGroup>
 
   <ItemGroup Label="TestDependencies">
@@ -24,6 +25,10 @@
 
   <ItemGroup Label="PerformanceDependencies">
     <PackageVersion Include="BenchmarkDotNet" Version="$(BenchmarkDotNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="AssetCodecDependencies">
+    <PackageVersion Include="Alimer.Bindings.MeshOptimizer" Version="$(AlimerMeshOptimizerVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="RenderDependencies">
