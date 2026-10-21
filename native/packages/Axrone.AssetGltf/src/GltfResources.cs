@@ -38,7 +38,10 @@ public sealed record GltfCompressedTexturePayload(
 /// <summary>KTX2 fast header parser.</summary>
 public static class Ktx2Decoder
 {
-    private static ReadOnlySpan<byte> Ktx2Identifier => "\xABKTX 20\xBB\r\n\x1A\n"u8;
+    // KTX2 magic as raw bytes: \xAB/\xBB in a u8 literal would UTF-8-expand to
+    // two bytes each, so the 12-byte signature is spelled out explicitly.
+    private static ReadOnlySpan<byte> Ktx2Identifier =>
+        [0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A];
 
     /// <summary>Tries to parse KTX2 mip levels without transcoding.</summary>
     public static bool TryParse(
