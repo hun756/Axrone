@@ -318,4 +318,192 @@ public sealed class GltfRawModel
 
     /// <summary>Samplers.</summary>
     public List<Sampler> Samplers { get; } = new();
+
+    /// <summary>Raw skin.</summary>
+    public sealed class Skin
+    {
+        /// <summary>Skin name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Inverse-bind-matrices accessor.</summary>
+        public int? InverseBindMatrices { get; set; }
+
+        /// <summary>Skeleton node.</summary>
+        public int? Skeleton { get; set; }
+
+        /// <summary>Joint node indices.</summary>
+        public List<int> Joints { get; } = new();
+    }
+
+    /// <summary>Raw animation sampler.</summary>
+    public sealed class AnimationSampler
+    {
+        /// <summary>Input (time) accessor.</summary>
+        public int Input { get; set; }
+
+        /// <summary>Interpolation string.</summary>
+        public string Interpolation { get; set; } = "LINEAR";
+
+        /// <summary>Output accessor.</summary>
+        public int Output { get; set; }
+    }
+
+    /// <summary>Raw animation channel.</summary>
+    public sealed class AnimationChannel
+    {
+        /// <summary>Sampler index.</summary>
+        public int Sampler { get; set; }
+
+        /// <summary>Target node index (-1 when unset).</summary>
+        public int TargetNode { get; set; } = -1;
+
+        /// <summary>Target path string.</summary>
+        public string TargetPath { get; set; } = "translation";
+    }
+
+    /// <summary>Raw animation.</summary>
+    public sealed class Animation
+    {
+        /// <summary>Animation name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Samplers.</summary>
+        public List<AnimationSampler> Samplers { get; } = new();
+
+        /// <summary>Channels.</summary>
+        public List<AnimationChannel> Channels { get; } = new();
+    }
+
+    /// <summary>KHR_lights_punctual light.</summary>
+    public sealed class Light
+    {
+        /// <summary>Light name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>RGB color.</summary>
+        public float[] Color { get; set; } = [1f, 1f, 1f];
+
+        /// <summary>Intensity.</summary>
+        public float Intensity { get; set; } = 1.0f;
+
+        /// <summary>Light type string.</summary>
+        public string Type { get; set; } = "directional";
+
+        /// <summary>Range (point/spot).</summary>
+        public float? Range { get; set; }
+
+        /// <summary>Spot inner cone angle.</summary>
+        public float InnerConeAngle { get; set; }
+
+        /// <summary>Spot outer cone angle.</summary>
+        public float OuterConeAngle { get; set; } = 0.785398f;
+    }
+
+    /// <summary>Raw camera.</summary>
+    public sealed class Camera
+    {
+        /// <summary>Camera name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Camera type string.</summary>
+        public string Type { get; set; } = "perspective";
+
+        /// <summary>Vertical field of view.</summary>
+        public float Yfov { get; set; } = 0.785398f;
+
+        /// <summary>Far plane.</summary>
+        public float Zfar { get; set; } = 1000f;
+
+        /// <summary>Near plane.</summary>
+        public float Znear { get; set; } = 0.1f;
+
+        /// <summary>Orthographic horizontal size.</summary>
+        public float Xmag { get; set; } = 1.0f;
+
+        /// <summary>Orthographic vertical size.</summary>
+        public float Ymag { get; set; } = 1.0f;
+    }
+
+    /// <summary>Raw node.</summary>
+    public sealed class Node
+    {
+        /// <summary>Node name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Camera index.</summary>
+        public int? Camera { get; set; }
+
+        /// <summary>Child node indices.</summary>
+        public List<int> Children { get; } = new();
+
+        /// <summary>Skin index.</summary>
+        public int? Skin { get; set; }
+
+        /// <summary>Column-major transform matrix.</summary>
+        public float[]? Matrix { get; set; }
+
+        /// <summary>Mesh index.</summary>
+        public int? Mesh { get; set; }
+
+        /// <summary>Rotation quaternion.</summary>
+        public float[]? Rotation { get; set; }
+
+        /// <summary>Scale vector.</summary>
+        public float[]? Scale { get; set; }
+
+        /// <summary>Translation vector.</summary>
+        public float[]? Translation { get; set; }
+
+        /// <summary>Morph weights.</summary>
+        public float[]? Weights { get; set; }
+
+        /// <summary>Attached light index.</summary>
+        public int? Light { get; set; }
+    }
+
+    /// <summary>Raw scene.</summary>
+    public sealed class Scene
+    {
+        /// <summary>Scene name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Root node indices.</summary>
+        public List<int> Nodes { get; } = new();
+    }
+
+    /// <summary>Asset version string.</summary>
+    public string Version { get; set; } = "2.0";
+
+    /// <summary>Generator string.</summary>
+    public string? Generator { get; set; }
+
+    /// <summary>Copyright string.</summary>
+    public string? Copyright { get; set; }
+
+    /// <summary>Default scene index.</summary>
+    public int DefaultScene { get; set; } = -1;
+
+    /// <summary>Scenes.</summary>
+    public List<Scene> Scenes { get; } = new();
+
+    /// <summary>Nodes.</summary>
+    public List<Node> Nodes { get; } = new();
+
+    /// <summary>Skins.</summary>
+    public List<Skin> Skins { get; } = new();
+
+    /// <summary>Animations.</summary>
+    public List<Animation> Animations { get; } = new();
+
+    /// <summary>Lights.</summary>
+    public List<Light> Lights { get; } = new();
+
+    /// <summary>Cameras.</summary>
+    public List<Camera> Cameras { get; } = new();
+
+    /// <summary>Used extensions.</summary>
+    public HashSet<string> ExtensionsUsed { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Required extensions.</summary>
+    public HashSet<string> ExtensionsRequired { get; } = new(StringComparer.Ordinal);
 }
