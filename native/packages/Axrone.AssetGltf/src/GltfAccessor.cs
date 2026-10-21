@@ -153,6 +153,24 @@ internal static class GltfAccessorRuntime
         }
     }
 
+    /// <summary>Validates that every index references an existing vertex.</summary>
+    public static void ValidateIndices(ReadOnlySpan<uint> indices, int vertexCount, int accessorIndex)
+    {
+        uint count = (uint)vertexCount;
+        nuint length = (nuint)indices.Length;
+
+        for (nuint i = 0; i < length; i++)
+        {
+            uint index = indices[(int)i];
+            if (index >= count)
+            {
+                ThrowHelper.ThrowAccessor(
+                    accessorIndex,
+                    $"index {index} exceeds the vertex count {vertexCount}.");
+            }
+        }
+    }
+
     /// <summary>Decodes index bytes into uint32 indices.</summary>
     public static void DecodeIndices(
         ReadOnlySpan<byte> source,
