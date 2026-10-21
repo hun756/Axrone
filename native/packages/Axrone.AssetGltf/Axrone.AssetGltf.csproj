@@ -49,6 +49,14 @@
     <!-- CA1308: Lowercase tokens are the wire format (animation paths,
          extension names); Invariant culture keeps the mapping deterministic. -->
     <NoWarn>$(NoWarn);CA1308</NoWarn>
+    <!-- CA1002: Do not expose generic lists — raw schema bags are mutable
+         parser outputs; the parser and compiler need Add/Clear/List
+         semantics that Collection{T} would only virtualize. -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1819: Properties should not return arrays — float[] Min/Max/Matrix
+         and friends are the glTF JSON array vocabulary; arrays keep decode
+         paths free of per-element interface dispatch. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
