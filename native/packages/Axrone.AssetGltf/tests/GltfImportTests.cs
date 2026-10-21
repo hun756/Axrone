@@ -450,6 +450,44 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_IndexOutsideVertexRange_ThrowsAccessorError()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[44];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        BinaryPrimitives.WriteUInt16LittleEndian(bin.AsSpan(36, 2), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(bin.AsSpan(38, 2), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bin.AsSpan(40, 2), 3);
+
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 6}
+              ],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "indices.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
