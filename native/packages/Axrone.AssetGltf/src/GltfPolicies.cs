@@ -82,16 +82,24 @@ public interface ITextureTranscoderPolicy
     static abstract string PolicyId { get; }
 
     /// <summary>Whether a source-to-target transcode is supported.</summary>
-    static abstract bool CanTranscode(GltfTextureFormat source, GltfTextureFormat target);
+    static abstract bool CanTranscode(
+        ReadOnlySpan<byte> sourceBytes,
+        GltfTextureFormat source,
+        GltfTextureFormat target);
 
     /// <summary>Tries to transcode texture bytes.</summary>
     static abstract bool TryTranscode(
         ReadOnlyMemory<byte> sourceBytes,
         GltfTextureFormat source,
         GltfTextureFormat target,
-        out ReadOnlyMemory<byte> transcodedBytes,
+        [NotNullWhen(true)] out GltfTranscodeOutput? output,
         out string? failureReason);
 }
+
+/// <summary>Successful texture transcode output.</summary>
+public readonly record struct GltfTranscodeOutput(
+    GltfTexturePayload Payload,
+    GltfTextureFormat Format);
 
 /// <summary>Passthrough policy: only identity transcodes, zero work.</summary>
 public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
@@ -101,7 +109,10 @@ public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool CanTranscode(GltfTextureFormat source, GltfTextureFormat target) => source == target;
+    public static bool CanTranscode(
+        ReadOnlySpan<byte> sourceBytes,
+        GltfTextureFormat source,
+        GltfTextureFormat target) => source == target;
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -109,10 +120,12 @@ public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
         ReadOnlyMemory<byte> sourceBytes,
         GltfTextureFormat source,
         GltfTextureFormat target,
-        out ReadOnlyMemory<byte> transcodedBytes,
+        [NotNullWhen(true)] out GltfTranscodeOutput? output,
         out string? failureReason)
     {
-        transcodedBytes = sourceBytes;
+        output = new GltfTranscodeOutput(
+            new GltfRawTexturePayload(sourceBytes, "application/octet-stream"),
+            source);
         failureReason = null;
         return true;
     }
