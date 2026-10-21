@@ -27,6 +27,9 @@ public static class GltfCompileExtensions
         (List<GltfMeshAsset> meshes, ImmutableDictionary<int, string> meshKeyMap) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
             rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
 
+        (List<GltfSkinAsset> skins, ImmutableDictionary<int, string> skinKeyMap) = await CompileSkinsAsync<TMeshoptPolicy>(
+            rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
+
         return new GltfImportResult
         {
             Document = new GltfDocumentAsset
@@ -40,17 +43,17 @@ public static class GltfCompileExtensions
                 DefaultScene = 0,
                 Scenes = ImmutableArray<GltfDocumentSceneAsset>.Empty,
                 MeshKeys = meshes.ConvertAll(static m => m.Id).ToImmutableArray(),
-                SkinKeys = ImmutableArray<string>.Empty,
+                SkinKeys = skins.ConvertAll(static s => s.Id).ToImmutableArray(),
                 AnimationKeys = ImmutableArray<string>.Empty,
                 MaterialKeys = materials.ConvertAll(static m => m.Id).ToImmutableArray(),
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
-                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, 0, 0),
+                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, rawModel.Skins.Count, 0),
             },
             Prefabs = ImmutableArray<GltfPrefabAsset>.Empty,
             Meshes = meshes.ToImmutableArray(),
-            Skins = ImmutableArray<GltfSkinAsset>.Empty,
+            Skins = skins.ToImmutableArray(),
             Animations = ImmutableArray<GltfAnimationClipAsset>.Empty,
             Materials = materials.ToImmutableArray(),
             Textures = textures.ToImmutableArray(),
@@ -545,4 +548,69 @@ public static class GltfCompileExtensions
             GltfMeshSemantic.Weights0 => "WEIGHTS_0",
             _ => string.Empty,
         };
+
+    internal static async ValueTask<(List<GltfSkinAsset> Skins, ImmutableDictionary<int, string> SkinKeyMap)> CompileSkinsAsync<TMeshoptPolicy>(
+        GltfRawModel rawModel,
+        GltfResourceRuntimeCache resourceRuntime,
+        CancellationToken cancellationToken)
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+    {
+        var skins = new List<GltfSkinAsset>(rawModel.Skins.Count);
+        var skinKeyMap = ImmutableDictionary.CreateBuilder<int, string>();
+
+        for (int s = 0; s < rawModel.Skins.Count; s++)
+        {
+            GltfRawModel.Skin skinDef = rawModel.Skins[s];
+            string skinId = $"gltf/skin/{s}";
+            skinKeyMap[s] = skinId;
+
+            var jointIds = ImmutableArray.CreateBuilder<string>(skinDef.Joints.Count);
+            for (int j = 0; j < skinDef.Joints.Count; j++)
+            {
+                jointIds.Add($"node_{skinDef.Joints[j]}_{rawModel.Nodes[skinDef.Joints[j]].Name ?? "unnamed"}");
+            }
+
+            ReadOnlyMemory<float> rowMajorIbm = ReadOnlyMemory<float>.Empty;
+            if (skinDef.InverseBindMatrices.HasValue && skinDef.InverseBindMatrices.Value < rawModel.Accessors.Count)
+            {
+                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[skinDef.InverseBindMatrices.Value];
+                ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                    ibmAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                var rawFloats = new float[ibmAcc.Count * 16];
+                {
+                    ReadOnlySpan<byte> srcSpan = viewBytes.Span.Slice(ibmAcc.ByteOffset);
+                    GltfAccessorRuntime.DecodeFloats(srcSpan, ibmAcc.Count, ibmAcc.ComponentType, 16, rawModel.BufferViews[ibmAcc.BufferView].ByteStride, false, rawFloats);
+                }
+
+                float[] transposed = GC.AllocateUninitializedArray<float>(rawFloats.Length, pinned: true);
+                for (int mIdx = 0; mIdx < ibmAcc.Count; mIdx++)
+                {
+                    int baseIdx = mIdx * 16;
+                    for (int r = 0; r < 4; r++)
+                    {
+                        for (int c = 0; c < 4; c++)
+                        {
+                            transposed[baseIdx + (r * 4) + c] = rawFloats[baseIdx + (c * 4) + r];
+                        }
+                    }
+                }
+
+                rowMajorIbm = transposed;
+            }
+
+            skins.Add(new GltfSkinAsset
+            {
+                Id = skinId,
+                SkinIndex = s,
+                JointNodeIds = jointIds.MoveToImmutable(),
+                JointNodeIndices = skinDef.Joints.ToImmutableArray(),
+                SkeletonNodeId = skinDef.Skeleton.HasValue ? $"node_{skinDef.Skeleton.Value}_{rawModel.Nodes[skinDef.Skeleton.Value].Name ?? "unnamed"}" : null,
+                SkeletonNodeIndex = skinDef.Skeleton,
+                InverseBindMatrices = rowMajorIbm,
+            });
+        }
+
+        return (skins, skinKeyMap.ToImmutable());
+    }
 }
