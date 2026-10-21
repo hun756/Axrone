@@ -833,12 +833,8 @@ public struct EmissionModule : IParticleModulePolicy<EmissionModule>, IDisposabl
         float normTime = (state._emissionTimer % Math.Max(state.Duration, 1e-4f)) / state.Duration;
         float rate = state.RateOverTime.Evaluate(normTime);
 
+        // Accumulate only; the coordination facade drains via DrainPendingEmissions.
         state._emittedFraction += rate * context.DeltaTime.Seconds;
-        int toEmit = (int)state._emittedFraction;
-        if (toEmit > 0)
-        {
-            state._emittedFraction -= toEmit;
-        }
     }
 
     /// <summary>Drains pending emissions.</summary>
