@@ -251,3 +251,129 @@ public sealed class GltfAnimationTrackAsset
     /// <summary>Keyframe values.</summary>
     public required ReadOnlyMemory<float> Values { get; init; }
 }
+
+/// <summary>Material texture binding.</summary>
+public sealed class GltfMaterialTextureBinding
+{
+    /// <summary>Texture key.</summary>
+    public required string TextureKey { get; init; }
+
+    /// <summary>UV set.</summary>
+    public required int TexCoord { get; init; }
+
+    /// <summary>Texture scale.</summary>
+    public float Scale { get; init; } = 1.0f;
+
+    /// <summary>Texture strength.</summary>
+    public float Strength { get; init; } = 1.0f;
+
+    /// <summary>UV transform.</summary>
+    public GltfTextureTransform Transform { get; init; } = GltfTextureTransform.Default;
+}
+
+/// <summary>Material shader definition.</summary>
+public sealed class GltfMaterialDefinition
+{
+    /// <summary>Shader id.</summary>
+    public required string ShaderId { get; init; }
+
+    /// <summary>Float array uniforms.</summary>
+    public required ImmutableDictionary<string, float[]> FloatUniforms { get; init; }
+
+    /// <summary>Scalar uniforms.</summary>
+    public required ImmutableDictionary<string, float> ScalarUniforms { get; init; }
+
+    /// <summary>Integer uniforms.</summary>
+    public required ImmutableDictionary<string, int> IntUniforms { get; init; }
+}
+
+/// <summary>Canonical material asset.</summary>
+public sealed class GltfMaterialAsset
+{
+    /// <summary>Material identity.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Material index.</summary>
+    public required int MaterialIndex { get; init; }
+
+    /// <summary>Material definition.</summary>
+    public required GltfMaterialDefinition Definition { get; init; }
+
+    /// <summary>Alpha mode.</summary>
+    public required GltfAlphaMode AlphaMode { get; init; }
+
+    /// <summary>Alpha cutoff.</summary>
+    public required float AlphaCutoff { get; init; }
+
+    /// <summary>Double-sided flag.</summary>
+    public required bool DoubleSided { get; init; }
+
+    /// <summary>Unlit flag.</summary>
+    public required bool Unlit { get; init; }
+
+    /// <summary>Texture bindings by usage.</summary>
+    public required ImmutableDictionary<GltfTextureUsage, GltfMaterialTextureBinding> Textures { get; init; }
+}
+
+/// <summary>Texture transcode state.</summary>
+public readonly record struct GltfTextureTranscodeState(
+    bool Success,
+    string? TranscoderId,
+    string? FailureReason,
+    GltfTextureFormat TargetFormat);
+
+/// <summary>Canonical texture asset.</summary>
+public sealed class GltfTextureAsset
+{
+    /// <summary>Texture identity.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Texture index.</summary>
+    public required int TextureIndex { get; init; }
+
+    /// <summary>Image index.</summary>
+    public required int ImageIndex { get; init; }
+
+    /// <summary>Sampler parameters.</summary>
+    public required GltfTextureSampler Sampler { get; init; }
+
+    /// <summary>Texture payload.</summary>
+    public required GltfTexturePayload Payload { get; init; }
+
+    /// <summary>Usage hints.</summary>
+    public required ImmutableArray<GltfTextureUsage> UsageHints { get; init; }
+
+    /// <summary>Runtime format.</summary>
+    public GltfTextureFormat RuntimeFormat { get; init; }
+
+    /// <summary>Transcode state.</summary>
+    public GltfTextureTranscodeState TranscodeState { get; init; }
+}
+
+/// <summary>Canonical import result.</summary>
+public sealed class GltfImportResult
+{
+    /// <summary>Document asset.</summary>
+    public required GltfDocumentAsset Document { get; init; }
+
+    /// <summary>Prefab assets.</summary>
+    public required ImmutableArray<GltfPrefabAsset> Prefabs { get; init; }
+
+    /// <summary>Mesh assets.</summary>
+    public required ImmutableArray<GltfMeshAsset> Meshes { get; init; }
+
+    /// <summary>Skin assets.</summary>
+    public required ImmutableArray<GltfSkinAsset> Skins { get; init; }
+
+    /// <summary>Animation assets.</summary>
+    public required ImmutableArray<GltfAnimationClipAsset> Animations { get; init; }
+
+    /// <summary>Material assets.</summary>
+    public required ImmutableArray<GltfMaterialAsset> Materials { get; init; }
+
+    /// <summary>Texture assets.</summary>
+    public required ImmutableArray<GltfTextureAsset> Textures { get; init; }
+
+    /// <summary>Import diagnostics.</summary>
+    public required ImmutableArray<GltfDiagnostic> Diagnostics { get; init; }
+}
