@@ -64,6 +64,48 @@ internal static class GltfAccessorRuntime
             _ => 1,
         };
 
+    /// <summary>Validates that an accessor fits inside its bufferView.</summary>
+    public static void ValidateAccessorRange(
+        GltfRawModel model,
+        int accessorIndex,
+        int componentCount)
+    {
+        GltfRawModel.Accessor accessor = model.Accessors[accessorIndex];
+        if (accessor.BufferView < 0)
+        {
+            return;
+        }
+
+        if (accessor.BufferView >= model.BufferViews.Count)
+        {
+            ThrowHelper.ThrowAccessor(accessorIndex, "references a missing bufferView.");
+        }
+
+        GltfRawModel.BufferView bufferView = model.BufferViews[accessor.BufferView];
+        int elementSize = componentCount * GetComponentByteSize(accessor.ComponentType);
+        if (elementSize <= 0 || accessor.Count < 0 || accessor.ByteOffset < 0)
+        {
+            ThrowHelper.ThrowAccessor(accessorIndex, "has invalid element metadata.");
+        }
+
+        long stride = bufferView.ByteStride > 0 ? bufferView.ByteStride : elementSize;
+        if (stride < elementSize)
+        {
+            ThrowHelper.ThrowAccessor(accessorIndex, "has a byteStride smaller than one element.");
+        }
+
+        long requiredEnd = accessor.Count == 0
+            ? accessor.ByteOffset
+            : accessor.ByteOffset + ((long)(accessor.Count - 1) * stride) + elementSize;
+
+        if (requiredEnd > bufferView.ByteLength)
+        {
+            ThrowHelper.ThrowAccessor(
+                accessorIndex,
+                $"exceeds its bufferView bounds ({requiredEnd} > {bufferView.ByteLength}).");
+        }
+    }
+
     /// <summary>Decodes accessor bytes into floats (normalized when requested).</summary>
     public static void DecodeFloats(
         ReadOnlySpan<byte> source,
