@@ -209,6 +209,23 @@ public sealed class GltfResourceRuntimeCache
         return resolved;
     }
 
+    /// <summary>Resolves an external image URI through the configured resolver.</summary>
+    public async ValueTask<ReadOnlyMemory<byte>?> TryResolveImageAsync(
+        string uri,
+        string? mimeType,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        if (_resolver == null)
+        {
+            return null;
+        }
+
+        var request = new GltfResourceRequest(uri, null, "image", mimeType);
+        GltfResolvedResource? result = await _resolver(request, cancellationToken).ConfigureAwait(false);
+        return result.HasValue && !result.Value.Data.IsEmpty ? result.Value.Data : null;
+    }
+
     /// <summary>Resolves a bufferView to bytes, decompressing meshopt when linked.</summary>
     public async ValueTask<ReadOnlyMemory<byte>> ResolveBufferViewAsync<TMeshoptPolicy>(
         int bufferViewIndex,
