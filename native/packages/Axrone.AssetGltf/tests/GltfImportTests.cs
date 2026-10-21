@@ -760,6 +760,19 @@ public sealed class GltfImportTests
             .Which.MaterialId.Should().Be("gltf/material/0");
     }
 
+    [Fact]
+    public async Task Import_MissingAssetVersion_ThrowsSchemaError()
+    {
+        const string json = """{"asset": {}}""";
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "no-version.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfSchemaError>())
+            .Which.Code.Should().Be("gltf.schema.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
