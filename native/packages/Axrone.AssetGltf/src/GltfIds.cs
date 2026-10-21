@@ -429,3 +429,114 @@ public readonly record struct TextureId(int Value) :
     public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
 
+/// <summary>Nominal sampler index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct SamplerId(int Value) :
+    IEquatable<SamplerId>,
+    IComparable<SamplerId>,
+    IComparisonOperators<SamplerId, SamplerId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static SamplerId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(SamplerId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(SamplerId left, SamplerId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(SamplerId left, SamplerId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(SamplerId left, SamplerId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(SamplerId left, SamplerId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>Nominal image index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct ImageId(int Value) :
+    IEquatable<ImageId>,
+    IComparable<ImageId>,
+    IComparisonOperators<ImageId, ImageId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static ImageId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(ImageId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(ImageId left, ImageId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(ImageId left, ImageId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(ImageId left, ImageId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(ImageId left, ImageId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>Nominal skin index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct SkinId(int Value) :
+    IEquatable<SkinId>,
+    IComparable<SkinId>,
+    IComparisonOperators<SkinId, SkinId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static SkinId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(SkinId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(SkinId left, SkinId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(SkinId left, SkinId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(SkinId left, SkinId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(SkinId left, SkinId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
