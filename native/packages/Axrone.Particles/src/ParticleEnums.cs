@@ -218,3 +218,140 @@ public enum ModuleFlags : ushort
     All = 2047,
 }
 
+/// <summary>Lighting mode.</summary>
+public enum LightingMode : byte
+{
+    /// <summary>No lighting.</summary>
+    None = 0,
+
+    /// <summary>Simple.</summary>
+    Simple = 1,
+
+    /// <summary>Advanced.</summary>
+    Advanced = 2,
+
+    /// <summary>Volumetric.</summary>
+    Volumetric = 3,
+}
+
+/// <summary>Light attenuation mode.</summary>
+public enum LightAttenuationMode : byte
+{
+    /// <summary>Linear.</summary>
+    Linear = 0,
+
+    /// <summary>Inverse square.</summary>
+    InverseSquare = 1,
+
+    /// <summary>Exponential.</summary>
+    Exponential = 2,
+
+    /// <summary>Smooth.</summary>
+    Smooth = 3,
+}
+
+/// <summary>Force type.</summary>
+public enum ForceType : byte
+{
+    /// <summary>Gravity.</summary>
+    Gravity = 0,
+
+    /// <summary>Drag.</summary>
+    Drag = 1,
+
+    /// <summary>Turbulence.</summary>
+    Turbulence = 2,
+
+    /// <summary>Vortex.</summary>
+    Vortex = 3,
+
+    /// <summary>Directional.</summary>
+    Directional = 4,
+
+    /// <summary>Point.</summary>
+    Point = 5,
+
+    /// <summary>Custom.</summary>
+    Custom = 6,
+}
+
+/// <summary>Falloff mode.</summary>
+public enum FalloffMode : byte
+{
+    /// <summary>No falloff.</summary>
+    None = 0,
+
+    /// <summary>Linear.</summary>
+    Linear = 1,
+
+    /// <summary>Quadratic.</summary>
+    Quadratic = 2,
+
+    /// <summary>Custom.</summary>
+    Custom = 3,
+}
+
+/// <summary>Noise type.</summary>
+public enum NoiseType : byte
+{
+    /// <summary>Perlin.</summary>
+    Perlin = 0,
+
+    /// <summary>Simplex.</summary>
+    Simplex = 1,
+
+    /// <summary>Worley.</summary>
+    Worley = 2,
+
+    /// <summary>Curl.</summary>
+    Curl = 3,
+
+    /// <summary>Turbulence.</summary>
+    Turbulence = 4,
+
+    /// <summary>Fractal.</summary>
+    Fractal = 5,
+}
+
+/// <summary>Collision primitive.</summary>
+public enum CollisionPrimitive : byte
+{
+    /// <summary>Plane.</summary>
+    Plane = 0,
+
+    /// <summary>Sphere.</summary>
+    Sphere = 1,
+
+    /// <summary>Box.</summary>
+    Box = 2,
+
+    /// <summary>Cylinder.</summary>
+    Cylinder = 3,
+
+    /// <summary>Mesh.</summary>
+    Mesh = 4,
+}
+
+/// <summary>Collision mode.</summary>
+public enum CollisionMode : byte
+{
+    /// <summary>Ignore.</summary>
+    Ignore = 0,
+
+    /// <summary>Kill.</summary>
+    Kill = 1,
+
+    /// <summary>Callback.</summary>
+    Callback = 2,
+}
+
+/// <summary>Trail mode.</summary>
+public enum TrailMode : byte
+{
+    /// <summary>Particles.</summary>
+    Particles = 0,
+
+    /// <summary>Ribbon.</summary>
+    Ribbon = 1,
+}
+
