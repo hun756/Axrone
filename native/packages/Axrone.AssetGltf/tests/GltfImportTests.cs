@@ -424,6 +424,32 @@ public sealed class GltfImportTests
         payload.MimeType.Should().Be("image/png");
     }
 
+    [Fact]
+    public async Task Import_AccessorOverrunsBufferView_ThrowsAccessorError()
+    {
+        byte[] bin = new byte[8];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 8}],
+              "buffers": [{"byteLength": 8}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "overrun.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
