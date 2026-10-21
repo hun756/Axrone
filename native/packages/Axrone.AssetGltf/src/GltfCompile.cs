@@ -14,6 +14,7 @@ public static class GltfCompileExtensions
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         GltfRawModel rawModel = pipeline.RawModel!;
         GltfResourceRuntimeCache resourceRuntime = pipeline.ResourceRuntime!;
@@ -22,7 +23,9 @@ public static class GltfCompileExtensions
         List<GltfTextureAsset> textures = await CompileTexturesAsync<TMeshoptPolicy, TTranscoderPolicy>(
             rawModel, resourceRuntime, options, diagnostics, cancellationToken).ConfigureAwait(false);
 
+        cancellationToken.ThrowIfCancellationRequested();
         List<GltfMaterialAsset> materials = CompileMaterials(rawModel, options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         (List<GltfMeshAsset> meshes, ImmutableArray<ImmutableArray<string>> meshKeysByMesh) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
             rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
@@ -32,6 +35,7 @@ public static class GltfCompileExtensions
 
         List<GltfAnimationClipAsset> animations = await CompileAnimationsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
         ImmutableArray<string> animIds = animations.ConvertAll(static a => a.Id).ToImmutableArray();
 
@@ -123,6 +127,7 @@ public static class GltfCompileExtensions
         var textures = new List<GltfTextureAsset>(rawModel.Textures.Count);
         for (int i = 0; i < rawModel.Textures.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Texture texDef = rawModel.Textures[i];
             GltfRawModel.Sampler sampDef = (texDef.Sampler.HasValue && texDef.Sampler.Value < rawModel.Samplers.Count)
                 ? rawModel.Samplers[texDef.Sampler.Value]
@@ -369,6 +374,7 @@ public static class GltfCompileExtensions
 
         for (int m = 0; m < rawModel.Meshes.Count; m++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Mesh meshDef = rawModel.Meshes[m];
             var primitiveKeys = ImmutableArray.CreateBuilder<string>(meshDef.Primitives.Count);
 
@@ -747,6 +753,7 @@ public static class GltfCompileExtensions
 
         for (int s = 0; s < rawModel.Skins.Count; s++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Skin skinDef = rawModel.Skins[s];
             string skinId = $"gltf/skin/{s}";
             skinKeyMap[s] = skinId;
@@ -845,6 +852,7 @@ public static class GltfCompileExtensions
 
         for (int a = 0; a < rawModel.Animations.Count; a++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Animation animDef = rawModel.Animations[a];
             string animId = $"gltf/animation/{a}";
 
@@ -1033,6 +1041,7 @@ public sealed class GltfImporter
         ReadOnlyMemory<byte> sourceBytes,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         GltfPipeline<StateUnparsed> pipeline = GltfPipeline<StateUnparsed>.Create(sourceBytes);
         GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
         GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
