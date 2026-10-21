@@ -416,6 +416,7 @@ public static class GltfCompileExtensions
 
                     int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
                     int elemSize = layout.ComponentCount * compSize;
+                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, accessorIndex, layout.ComponentCount);
                     var decodedFloats = new float[vertexCount * layout.ComponentCount];
 
                     if (prim.Draco != null && TDracoPolicy.IsSupported)
@@ -530,6 +531,8 @@ public static class GltfCompileExtensions
                         }
 
                         GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
+                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
+                        GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
                         GltfMorphTargetSemantic morphSemantic = kv.Key switch
                         {
                             "NORMAL" => GltfMorphTargetSemantic.Normal,
@@ -539,7 +542,6 @@ public static class GltfCompileExtensions
 
                         ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                             tAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
 
                         var deltaFloats = new float[tAcc.Count * targetCompCount];
                         {
@@ -562,6 +564,7 @@ public static class GltfCompileExtensions
                 if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
                 {
                     GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
+                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, prim.Indices.Value, 1);
                     ReadOnlyMemory<byte> indexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         indexAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -670,6 +673,7 @@ public static class GltfCompileExtensions
             if (skinDef.InverseBindMatrices.HasValue && skinDef.InverseBindMatrices.Value < rawModel.Accessors.Count)
             {
                 GltfRawModel.Accessor ibmAcc = rawModel.Accessors[skinDef.InverseBindMatrices.Value];
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, skinDef.InverseBindMatrices.Value, 16);
                 ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                     ibmAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -733,6 +737,7 @@ public static class GltfCompileExtensions
 
                 GltfRawModel.Accessor inAcc = rawModel.Accessors[samp.Input];
                 GltfRawModel.Accessor outAcc = rawModel.Accessors[samp.Output];
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, samp.Input, 1);
 
                 ReadOnlyMemory<byte> inBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                     inAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
@@ -790,6 +795,10 @@ public static class GltfCompileExtensions
                 }
 
                 int sampleStride = sampleMultiplier * valCompCount;
+                GltfAccessorRuntime.ValidateAccessorRange(
+                    rawModel,
+                    samp.Output,
+                    GltfAccessorRuntime.GetTypeElementCount(outAcc.Type));
                 var values = new float[keyframeCount * sampleStride];
                 {
                     ReadOnlySpan<byte> outSpan = outBytes.Span.Slice(outAcc.ByteOffset);
