@@ -30,6 +30,9 @@ public static class GltfCompileExtensions
         (List<GltfSkinAsset> skins, ImmutableDictionary<int, string> skinKeyMap) = await CompileSkinsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
 
+        List<GltfAnimationClipAsset> animations = await CompileAnimationsAsync<TMeshoptPolicy>(
+            rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
+
         return new GltfImportResult
         {
             Document = new GltfDocumentAsset
@@ -44,17 +47,17 @@ public static class GltfCompileExtensions
                 Scenes = ImmutableArray<GltfDocumentSceneAsset>.Empty,
                 MeshKeys = meshes.ConvertAll(static m => m.Id).ToImmutableArray(),
                 SkinKeys = skins.ConvertAll(static s => s.Id).ToImmutableArray(),
-                AnimationKeys = ImmutableArray<string>.Empty,
+                AnimationKeys = animations.ConvertAll(static a => a.Id).ToImmutableArray(),
                 MaterialKeys = materials.ConvertAll(static m => m.Id).ToImmutableArray(),
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
-                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, rawModel.Skins.Count, 0),
+                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, rawModel.Skins.Count, rawModel.Animations.Count),
             },
             Prefabs = ImmutableArray<GltfPrefabAsset>.Empty,
             Meshes = meshes.ToImmutableArray(),
             Skins = skins.ToImmutableArray(),
-            Animations = ImmutableArray<GltfAnimationClipAsset>.Empty,
+            Animations = animations.ToImmutableArray(),
             Materials = materials.ToImmutableArray(),
             Textures = textures.ToImmutableArray(),
             Diagnostics = diagnostics.ToImmutableArray(),
@@ -612,5 +615,111 @@ public static class GltfCompileExtensions
         }
 
         return (skins, skinKeyMap.ToImmutable());
+    }
+
+    internal static async ValueTask<List<GltfAnimationClipAsset>> CompileAnimationsAsync<TMeshoptPolicy>(
+        GltfRawModel rawModel,
+        GltfResourceRuntimeCache resourceRuntime,
+        CancellationToken cancellationToken)
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+    {
+        var animations = new List<GltfAnimationClipAsset>(rawModel.Animations.Count);
+
+        for (int a = 0; a < rawModel.Animations.Count; a++)
+        {
+            GltfRawModel.Animation animDef = rawModel.Animations[a];
+            string animId = $"gltf/animation/{a}";
+
+            var tracks = ImmutableArray.CreateBuilder<GltfAnimationTrackAsset>(animDef.Channels.Count);
+            float maxDuration = 0.0f;
+
+            for (int c = 0; c < animDef.Channels.Count; c++)
+            {
+                GltfRawModel.AnimationChannel chan = animDef.Channels[c];
+                GltfRawModel.AnimationSampler samp = animDef.Samplers[chan.Sampler];
+
+                GltfRawModel.Accessor inAcc = rawModel.Accessors[samp.Input];
+                GltfRawModel.Accessor outAcc = rawModel.Accessors[samp.Output];
+
+                ReadOnlyMemory<byte> inBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                    inAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+                ReadOnlyMemory<byte> outBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                    outAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                var times = new float[inAcc.Count];
+                {
+                    ReadOnlySpan<byte> inSpan = inBytes.Span.Slice(inAcc.ByteOffset);
+                    GltfAccessorRuntime.DecodeFloats(inSpan, inAcc.Count, inAcc.ComponentType, 1, rawModel.BufferViews[inAcc.BufferView].ByteStride, false, times);
+                }
+
+                if (times.Length > 0 && times[^1] > maxDuration)
+                {
+                    maxDuration = times[^1];
+                }
+
+                GltfAnimationPath path = chan.TargetPath.ToLowerInvariant() switch
+                {
+                    "rotation" => GltfAnimationPath.Rotation,
+                    "scale" => GltfAnimationPath.Scale,
+                    "weights" => GltfAnimationPath.Weights,
+                    _ => GltfAnimationPath.Translation,
+                };
+
+                GltfInterpolation interp = samp.Interpolation.ToUpperInvariant() switch
+                {
+                    "STEP" => GltfInterpolation.Step,
+                    "CUBICSPLINE" => GltfInterpolation.CubicSpline,
+                    _ => GltfInterpolation.Linear,
+                };
+
+                int valCompCount = path switch
+                {
+                    GltfAnimationPath.Rotation => 4,
+                    GltfAnimationPath.Weights => GltfAccessorRuntime.GetTypeElementCount(outAcc.Type),
+                    _ => 3,
+                };
+
+                int sampleStride = interp == GltfInterpolation.CubicSpline ? 3 * valCompCount : valCompCount;
+                var values = new float[inAcc.Count * sampleStride];
+                {
+                    ReadOnlySpan<byte> outSpan = outBytes.Span.Slice(outAcc.ByteOffset);
+                    GltfAccessorRuntime.DecodeFloats(
+                        outSpan,
+                        inAcc.Count * (interp == GltfInterpolation.CubicSpline ? 3 : 1),
+                        outAcc.ComponentType,
+                        valCompCount,
+                        rawModel.BufferViews[outAcc.BufferView].ByteStride,
+                        outAcc.Normalized,
+                        values);
+                }
+
+                tracks.Add(new GltfAnimationTrackAsset
+                {
+                    ChannelIndex = c,
+                    SamplerIndex = chan.Sampler,
+                    InputAccessor = samp.Input,
+                    OutputAccessor = samp.Output,
+                    TargetNodeIndex = chan.TargetNode,
+                    TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{rawModel.Nodes[chan.TargetNode].Name ?? "unnamed"}" : string.Empty,
+                    Path = path,
+                    Interpolation = interp,
+                    KeyframeCount = inAcc.Count,
+                    ValueComponentCount = valCompCount,
+                    SampleStride = sampleStride,
+                    Times = times,
+                    Values = values,
+                });
+            }
+
+            animations.Add(new GltfAnimationClipAsset
+            {
+                Id = animId,
+                AnimationIndex = a,
+                Duration = maxDuration,
+                Tracks = tracks.MoveToImmutable(),
+            });
+        }
+
+        return animations;
     }
 }
