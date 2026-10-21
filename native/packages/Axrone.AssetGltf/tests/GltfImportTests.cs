@@ -728,6 +728,38 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.schema.invalid");
     }
 
+    [Fact]
+    public async Task Import_PrefabMaterialKeys_ArePopulated()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[44];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "material": 0}]}],
+              "materials": [{"name": "M"}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "prefab-material.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Prefabs[0].MaterialKeys.Should().Equal("gltf/material/0");
+        result.Prefabs[0].Definition.Actors
+            .SelectMany(static actor => actor.Components)
+            .OfType<GltfMeshRendererComponent>()
+            .Should().ContainSingle()
+            .Which.MaterialId.Should().Be("gltf/material/0");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
