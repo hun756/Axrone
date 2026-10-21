@@ -969,6 +969,91 @@ public sealed class GltfImportTests
             .Which.Limit.Should().Be("MaxDecodedBytes");
     }
 
+    [Fact]
+    public async Task Import_ModernMaterialExtensions_ProduceUniformsAndBindings()
+    {
+        byte[] bin = [137, 80, 78, 71];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": [
+                "KHR_materials_specular",
+                "KHR_materials_sheen",
+                "KHR_materials_transmission",
+                "KHR_materials_volume",
+                "KHR_materials_ior",
+                "KHR_materials_iridescence",
+                "KHR_materials_anisotropy",
+                "KHR_materials_dispersion"
+              ],
+              "buffers": [{"byteLength": 4}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 4}],
+              "images": [{"bufferView": 0, "mimeType": "image/png"}],
+              "textures": [{"source": 0}],
+              "materials": [{
+                "name": "Modern",
+                "extensions": {
+                  "KHR_materials_specular": {
+                    "specularFactor": 0.5,
+                    "specularColorFactor": [0.9, 0.8, 0.7],
+                    "specularTexture": {"index": 0}
+                  },
+                  "KHR_materials_sheen": {
+                    "sheenColorFactor": [1, 0.5, 0.25],
+                    "sheenColorTexture": {"index": 0},
+                    "sheenRoughnessFactor": 0.4
+                  },
+                  "KHR_materials_transmission": {"transmissionFactor": 0.8},
+                  "KHR_materials_volume": {
+                    "thicknessFactor": 0.2,
+                    "attenuationDistance": 3,
+                    "attenuationColor": [0.5, 0.6, 0.7]
+                  },
+                  "KHR_materials_ior": {"ior": 1.4},
+                  "KHR_materials_iridescence": {
+                    "iridescenceFactor": 0.6,
+                    "iridescenceIor": 1.2,
+                    "iridescenceThicknessMinimum": 120,
+                    "iridescenceThicknessMaximum": 300
+                  },
+                  "KHR_materials_anisotropy": {
+                    "anisotropyStrength": 0.7,
+                    "anisotropyRotation": 0.3
+                  },
+                  "KHR_materials_dispersion": {"dispersion": 0.1}
+                }
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "modern.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Diagnostics.Should().BeEmpty();
+        GltfMaterialAsset material = result.Materials.Should().ContainSingle().Subject;
+        material.Definition.ScalarUniforms["_SpecularFactor"].Should().Be(0.5f);
+        material.Definition.FloatUniforms["_SpecularColorFactor"].Should().Equal(0.9f, 0.8f, 0.7f);
+        material.Definition.FloatUniforms["_SheenColorFactor"].Should().Equal(1f, 0.5f, 0.25f);
+        material.Definition.ScalarUniforms["_SheenRoughnessFactor"].Should().Be(0.4f);
+        material.Definition.ScalarUniforms["_TransmissionFactor"].Should().Be(0.8f);
+        material.Definition.ScalarUniforms["_ThicknessFactor"].Should().Be(0.2f);
+        material.Definition.ScalarUniforms["_AttenuationDistance"].Should().Be(3f);
+        material.Definition.FloatUniforms["_AttenuationColor"].Should().Equal(0.5f, 0.6f, 0.7f);
+        material.Definition.ScalarUniforms["_IorFactor"].Should().Be(1.4f);
+        material.Definition.ScalarUniforms["_IridescenceFactor"].Should().Be(0.6f);
+        material.Definition.ScalarUniforms["_IridescenceIor"].Should().Be(1.2f);
+        material.Definition.ScalarUniforms["_IridescenceThicknessMinimum"].Should().Be(120f);
+        material.Definition.ScalarUniforms["_IridescenceThicknessMaximum"].Should().Be(300f);
+        material.Definition.ScalarUniforms["_AnisotropyStrength"].Should().Be(0.7f);
+        material.Definition.ScalarUniforms["_AnisotropyRotation"].Should().Be(0.3f);
+        material.Definition.ScalarUniforms["_Dispersion"].Should().Be(0.1f);
+        material.Textures.Should().ContainKey(GltfTextureUsage.Specular);
+        material.Textures.Should().ContainKey(GltfTextureUsage.SheenColor);
+        material.Definition.ScalarUniforms.Should().ContainKey("_SpecularTexture_Scale");
+        material.Definition.ScalarUniforms.Should().ContainKey("_SheenColorTexture_Scale");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
