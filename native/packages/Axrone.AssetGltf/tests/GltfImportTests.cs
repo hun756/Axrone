@@ -914,6 +914,61 @@ public sealed class GltfImportTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task Import_NodeLimitExceeded_ThrowsLimitError()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "nodes": [{"name": "A"}, {"name": "B"}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "limit.glb",
+            Limits = new GltfImportLimits { MaxNodeCount = 1 },
+        });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfLimitExceededError>())
+            .Which.Limit.Should().Be("MaxNodeCount");
+    }
+
+    [Fact]
+    public async Task Import_DecodedByteLimitExceeded_ThrowsLimitError()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[44];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "decoded-limit.glb",
+            Limits = new GltfImportLimits { MaxDecodedBytes = 1 },
+        });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfLimitExceededError>())
+            .Which.Limit.Should().Be("MaxDecodedBytes");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
