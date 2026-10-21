@@ -114,7 +114,91 @@ public sealed unsafe class SpatialHashGrid3D : IDisposable
         float radiusSq = radius * radius;
         WorldToGrid(center - new Vec3(radius), out int minX, out int minY, out int minZ);
         WorldToGrid(center + new Vec3(radius), out int maxX, out int maxY, out int maxZ);
+        QueryCells<TVisitor, TState>(minX, minY, minZ, maxX, maxY, maxZ, center, radiusSq, null, ref state);
+    }
 
+    /// <summary>Queries particles inside bounds.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void QueryBounds<TVisitor, TState>(in ParticleBounds bounds, scoped ref TState state)
+        where TVisitor : struct, ISpatialVisitor<TState>
+        where TState : allows ref struct
+    {
+        WorldToGrid(bounds.Min, out int minX, out int minY, out int minZ);
+        WorldToGrid(bounds.Max, out int maxX, out int maxY, out int maxZ);
+        QueryCells<TVisitor, TState>(minX, minY, minZ, maxX, maxY, maxZ, default, float.PositiveInfinity, bounds, ref state);
+    }
+
+    /// <summary>Finds up to maxCount nearest particles, sorted ascending.</summary>
+    /// <returns>Filled result count.</returns>
+    public int QueryNearest(in Vec3 center, int maxCount, float maxRadius, Span<ParticleId> destination)
+    {
+        if (maxCount <= 0 || destination.IsEmpty)
+        {
+            return 0;
+        }
+
+        int limit = Math.Min(maxCount, destination.Length);
+        float maxRadiusSq = maxRadius * maxRadius;
+        int found = 0;
+
+        while (found < limit)
+        {
+            uint best = uint.MaxValue;
+            float bestDsq = float.PositiveInfinity;
+            bool hasBest = false;
+
+            for (int b = 0; b < _tableCapacity; b++)
+            {
+                int curr = _buckets[b];
+                while (curr != -1)
+                {
+                    Vec3 delta = _entries[curr].Position - center;
+                    float dsq = delta.LengthSquared();
+                    if (dsq <= maxRadiusSq && dsq < bestDsq && !ContainsId(destination[..found], _entries[curr].Id))
+                    {
+                        best = (uint)curr;
+                        bestDsq = dsq;
+                        hasBest = true;
+                    }
+
+                    curr = _entries[curr].NextEntry;
+                }
+            }
+
+            if (!hasBest)
+            {
+                break;
+            }
+
+            destination[found++] = _entries[(int)best].Id;
+        }
+
+        return found;
+    }
+
+    private static bool ContainsId(ReadOnlySpan<ParticleId> ids, ParticleId id)
+    {
+        for (int i = 0; i < ids.Length; i++)
+        {
+            if (ids[i] == id)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void QueryCells<TVisitor, TState>(
+        int minX, int minY, int minZ,
+        int maxX, int maxY, int maxZ,
+        in Vec3 center,
+        float radiusSq,
+        ParticleBounds? bounds,
+        scoped ref TState state)
+        where TVisitor : struct, ISpatialVisitor<TState>
+        where TState : allows ref struct
+    {
         for (int x = minX; x <= maxX; x++)
         {
             for (int y = minY; y <= maxY; y++)
@@ -128,7 +212,11 @@ public sealed unsafe class SpatialHashGrid3D : IDisposable
                     {
                         Vec3 delta = _entries[curr].Position - center;
                         float dsq = delta.LengthSquared();
-                        if (dsq <= radiusSq)
+                        bool inside = bounds.HasValue
+                            ? bounds.Value.Contains(_entries[curr].Position)
+                            : dsq <= radiusSq;
+
+                        if (inside)
                         {
                             if (!TVisitor.OnFound(_entries[curr].Id, _entries[curr].Position, dsq, ref state))
                             {
