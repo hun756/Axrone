@@ -579,6 +579,39 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_AnimationInputMustBeFloatScalar()
+    {
+        byte[] bin = new byte[60];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "nodes": [{"name": "Target"}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC2"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 24},
+                {"buffer": 0, "byteOffset": 24, "byteLength": 36}
+              ],
+              "buffers": [{"byteLength": 60}],
+              "animations": [{
+                "samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}],
+                "channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}]
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "animation-type.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
