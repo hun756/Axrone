@@ -59,6 +59,7 @@ internal static class GltfPrefabEngine
         var rootNodeIds = new List<string>();
         var allNodeIds = new HashSet<string>(StringComparer.Ordinal);
 
+        bool primaryCameraAssigned = false;
         bool primaryDirectionalAllocated = false;
         int localLightCount = 0;
 
@@ -100,7 +101,7 @@ internal static class GltfPrefabEngine
             if (node.Camera.HasValue && node.Camera.Value >= 0 && node.Camera.Value < model.Cameras.Count)
             {
                 GltfRawModel.Camera cam = model.Cameras[node.Camera.Value];
-                bool isPrimaryCam = isDefaultScene && parentId == null;
+                bool isPrimaryCam = isDefaultScene && parentId == null && !primaryCameraAssigned;
                 bool isOrtho = string.Equals(cam.Type, "orthographic", StringComparison.OrdinalIgnoreCase);
 
                 compBuilder.Add(new GltfCameraComponent(
@@ -110,6 +111,8 @@ internal static class GltfPrefabEngine
                     cam.Yfov,
                     isOrtho,
                     cam.Ymag));
+
+                primaryCameraAssigned |= isPrimaryCam;
             }
 
             if (node.Light.HasValue && node.Light.Value >= 0 && node.Light.Value < model.Lights.Count)

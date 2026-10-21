@@ -36,6 +36,10 @@ internal static class GltfJsonParser
             {
                 ParseScenes(ref reader, model);
             }
+            else if (prop.SequenceEqual("cameras"u8))
+            {
+                ParseCameras(ref reader, model);
+            }
             else if (prop.SequenceEqual("nodes"u8))
             {
                 ParseNodes(ref reader, model);
@@ -172,6 +176,128 @@ internal static class GltfJsonParser
             }
 
             model.Scenes.Add(scene);
+        }
+    }
+
+    private static void ParseCameras(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var camera = new GltfRawModel.Camera();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("name"u8))
+                {
+                    camera.Name = reader.GetString();
+                }
+                else if (prop.SequenceEqual("type"u8))
+                {
+                    camera.Type = reader.GetString() ?? "perspective";
+                }
+                else if (prop.SequenceEqual("perspective"u8))
+                {
+                    ParseCameraPerspective(ref reader, camera);
+                }
+                else if (prop.SequenceEqual("orthographic"u8))
+                {
+                    ParseCameraOrthographic(ref reader, camera);
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Cameras.Add(camera);
+        }
+    }
+
+    private static void ParseCameraPerspective(ref Utf8JsonReader reader, GltfRawModel.Camera camera)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("yfov"u8))
+            {
+                camera.Yfov = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("zfar"u8))
+            {
+                camera.Zfar = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("znear"u8))
+            {
+                camera.Znear = reader.GetSingle();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseCameraOrthographic(ref Utf8JsonReader reader, GltfRawModel.Camera camera)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("xmag"u8))
+            {
+                camera.Xmag = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("ymag"u8))
+            {
+                camera.Ymag = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("zfar"u8))
+            {
+                camera.Zfar = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("znear"u8))
+            {
+                camera.Znear = reader.GetSingle();
+            }
+            else
+            {
+                reader.Skip();
+            }
         }
     }
 
