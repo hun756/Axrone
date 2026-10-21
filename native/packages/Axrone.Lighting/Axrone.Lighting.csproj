@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Lighting</RootNamespace>
+    <AssemblyName>Axrone.Lighting</AssemblyName>
+    <Description>Zero-allocation lighting rig, frame resolver and uniform metadata for the Axrone engine: native value-type idioms and AOT-safe parsing.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: byte-backed light enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1040: Empty marker interfaces drive the typestate builder phases. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1051: Visible instance fields — explicit-layout payloads are
+         intentional wire layouts. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — lighting errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy structs carry
+         no state to compare. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — policy monomorphization
+         exposes static abstracts on generic structs by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1002: Do not expose generic lists — raw schema bags are mutable
+         parser outputs; the parser needs Add/Clear/List semantics. -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1819: Properties should not return arrays — float[] tuples are the
+         JSON array vocabulary for vectors. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
+    <!-- CA2227: Collection properties should be read-only — STJ DTOs require
+         mutable setters for deserialization. -->
+    <NoWarn>$(NoWarn);CA2227</NoWarn>
+    <!-- CA1031: Catching general exceptions — intentional for partial document
+         parsing; failures are reported as issues, never silently swallowed. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1308: Lowercase tokens are the wire format (light kinds);
+         Invariant culture keeps the mapping deterministic. -->
+    <NoWarn>$(NoWarn);CA1308</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Lighting.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
