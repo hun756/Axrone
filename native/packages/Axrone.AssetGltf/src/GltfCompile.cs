@@ -727,20 +727,37 @@ public static class GltfCompileExtensions
                     _ => GltfInterpolation.Linear,
                 };
 
-                int valCompCount = path switch
-                {
-                    GltfAnimationPath.Rotation => 4,
-                    GltfAnimationPath.Weights => GltfAccessorRuntime.GetTypeElementCount(outAcc.Type),
-                    _ => 3,
-                };
+                int keyframeCount = inAcc.Count;
+                int sampleMultiplier = interp == GltfInterpolation.CubicSpline ? 3 : 1;
+                int expectedOutputElements = keyframeCount * sampleMultiplier;
+                int valCompCount;
 
-                int sampleStride = interp == GltfInterpolation.CubicSpline ? 3 * valCompCount : valCompCount;
-                var values = new float[inAcc.Count * sampleStride];
+                if (path == GltfAnimationPath.Weights)
+                {
+                    if (expectedOutputElements <= 0 || outAcc.Count % expectedOutputElements != 0)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "morph weight output count does not align with its keyframes.");
+                    }
+
+                    valCompCount = outAcc.Count / expectedOutputElements;
+                }
+                else
+                {
+                    valCompCount = GltfAccessorRuntime.GetTypeElementCount(outAcc.Type);
+                    int expectedComponentCount = path == GltfAnimationPath.Rotation ? 4 : 3;
+                    if (valCompCount != expectedComponentCount || outAcc.Count != expectedOutputElements * valCompCount)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "animation output count does not match its keyframes and component type.");
+                    }
+                }
+
+                int sampleStride = sampleMultiplier * valCompCount;
+                var values = new float[keyframeCount * sampleStride];
                 {
                     ReadOnlySpan<byte> outSpan = outBytes.Span.Slice(outAcc.ByteOffset);
                     GltfAccessorRuntime.DecodeFloats(
                         outSpan,
-                        inAcc.Count * (interp == GltfInterpolation.CubicSpline ? 3 : 1),
+                        expectedOutputElements,
                         outAcc.ComponentType,
                         valCompCount,
                         rawModel.BufferViews[outAcc.BufferView].ByteStride,
@@ -758,7 +775,7 @@ public static class GltfCompileExtensions
                     TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{rawModel.Nodes[chan.TargetNode].Name ?? "unnamed"}" : string.Empty,
                     Path = path,
                     Interpolation = interp,
-                    KeyframeCount = inAcc.Count,
+                    KeyframeCount = keyframeCount,
                     ValueComponentCount = valCompCount,
                     SampleStride = sampleStride,
                     Times = times,
