@@ -60,6 +60,18 @@ internal static class GltfJsonParser
             {
                 ParseMaterials(ref reader, model);
             }
+            else if (prop.SequenceEqual("textures"u8))
+            {
+                ParseTextures(ref reader, model);
+            }
+            else if (prop.SequenceEqual("images"u8))
+            {
+                ParseImages(ref reader, model);
+            }
+            else if (prop.SequenceEqual("samplers"u8))
+            {
+                ParseSamplers(ref reader, model);
+            }
             else if (prop.SequenceEqual("extensions"u8))
             {
                 ParseRootExtensions(ref reader, model);
@@ -1071,6 +1083,157 @@ internal static class GltfJsonParser
             {
                 reader.Skip();
             }
+        }
+    }
+
+    private static void ParseTextures(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var tex = new GltfRawModel.Texture();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("sampler"u8))
+                {
+                    tex.Sampler = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("source"u8))
+                {
+                    tex.Source = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("extensions"u8))
+                {
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                    {
+                        if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("KHR_texture_basisu"u8))
+                        {
+                            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                            {
+                                if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("source"u8))
+                                {
+                                    reader.Read();
+                                    tex.Source = reader.GetInt32();
+                                }
+                                else
+                                {
+                                    reader.Skip();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+                    }
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Textures.Add(tex);
+        }
+    }
+
+    private static void ParseImages(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var img = new GltfRawModel.Image();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("uri"u8))
+                {
+                    img.Uri = reader.GetString();
+                }
+                else if (prop.SequenceEqual("mimeType"u8))
+                {
+                    img.MimeType = reader.GetString();
+                }
+                else if (prop.SequenceEqual("bufferView"u8))
+                {
+                    img.BufferView = reader.GetInt32();
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Images.Add(img);
+        }
+    }
+
+    private static void ParseSamplers(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var samp = new GltfRawModel.Sampler();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("magFilter"u8))
+                {
+                    samp.MagFilter = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("minFilter"u8))
+                {
+                    samp.MinFilter = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("wrapS"u8))
+                {
+                    samp.WrapS = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("wrapT"u8))
+                {
+                    samp.WrapT = reader.GetInt32();
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Samplers.Add(samp);
         }
     }
 
