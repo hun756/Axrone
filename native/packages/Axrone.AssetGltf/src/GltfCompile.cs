@@ -596,13 +596,27 @@ public static class GltfCompileExtensions
                                 $"morph target vertex count {tAcc.Count} does not match the primitive vertex count {vertexCount}.");
                         }
 
-                        GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
-                        GltfMorphTargetSemantic morphSemantic = kv.Key switch
+                        GltfMorphTargetSemantic morphSemantic;
+                        switch (kv.Key)
                         {
-                            "NORMAL" => GltfMorphTargetSemantic.Normal,
-                            "TANGENT" => GltfMorphTargetSemantic.Tangent,
-                            _ => GltfMorphTargetSemantic.Position,
-                        };
+                            case "POSITION":
+                                morphSemantic = GltfMorphTargetSemantic.Position;
+                                break;
+                            case "NORMAL":
+                                morphSemantic = GltfMorphTargetSemantic.Normal;
+                                break;
+                            case "TANGENT":
+                                morphSemantic = GltfMorphTargetSemantic.Tangent;
+                                break;
+                            default:
+                                diagnostics.Add(new GltfDiagnostic(
+                                    GltfDiagnosticLevel.Warning,
+                                    "gltf.mesh.target.attribute.unsupported",
+                                    $"Morph target attribute '{kv.Key}' bypassed."));
+                                continue;
+                        }
+
+                        GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
 
                         ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                             tAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
@@ -628,6 +642,14 @@ public static class GltfCompileExtensions
                 if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
                 {
                     GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
+                    if (!string.Equals(indexAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                        indexAcc.ComponentType is not (5121 or 5123 or 5125))
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            prim.Indices.Value,
+                            "index accessors must use an unsigned SCALAR component type.");
+                    }
+
                     GltfAccessorRuntime.ValidateAccessorRange(rawModel, prim.Indices.Value, 1);
                     ReadOnlyMemory<byte> indexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         indexAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
