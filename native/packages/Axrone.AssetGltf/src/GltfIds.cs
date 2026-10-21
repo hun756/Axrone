@@ -93,6 +93,33 @@ public enum GltfTextureUsage : byte
 
     /// <summary>Clearcoat normal.</summary>
     ClearcoatNormal = 7,
+
+    /// <summary>Specular intensity.</summary>
+    Specular = 8,
+
+    /// <summary>Specular color.</summary>
+    SpecularColor = 9,
+
+    /// <summary>Sheen color.</summary>
+    SheenColor = 10,
+
+    /// <summary>Sheen roughness.</summary>
+    SheenRoughness = 11,
+
+    /// <summary>Transmission.</summary>
+    Transmission = 12,
+
+    /// <summary>Volume thickness.</summary>
+    Thickness = 13,
+
+    /// <summary>Iridescence.</summary>
+    Iridescence = 14,
+
+    /// <summary>Iridescence thickness.</summary>
+    IridescenceThickness = 15,
+
+    /// <summary>Anisotropy.</summary>
+    Anisotropy = 16,
 }
 
 /// <summary>Animation channel target path.</summary>
