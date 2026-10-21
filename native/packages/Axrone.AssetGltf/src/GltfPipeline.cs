@@ -110,6 +110,8 @@ public static class GltfPipelineExtensions
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.Ordinal)
     {
         "EXT_meshopt_compression",
+        "EXT_texture_avif",
+        "EXT_texture_webp",
         "KHR_draco_mesh_compression",
         "KHR_lights_punctual",
         "KHR_materials_anisotropy",

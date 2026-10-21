@@ -1605,13 +1605,34 @@ internal static class GltfJsonParser
                 {
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                     {
-                        if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("KHR_texture_basisu"u8))
+                        if (reader.TokenType != JsonTokenType.PropertyName)
                         {
+                            continue;
+                        }
+
+                        ReadOnlySpan<byte> extension = reader.ValueSpan;
+                        reader.Read();
+                        if (extension.SequenceEqual("KHR_texture_basisu"u8) ||
+                            extension.SequenceEqual("EXT_texture_webp"u8) ||
+                            extension.SequenceEqual("EXT_texture_avif"u8))
+                        {
+                            if (reader.TokenType != JsonTokenType.StartObject)
+                            {
+                                reader.Skip();
+                                continue;
+                            }
+
                             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                             {
-                                if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("source"u8))
+                                if (reader.TokenType != JsonTokenType.PropertyName)
                                 {
-                                    reader.Read();
+                                    continue;
+                                }
+
+                                ReadOnlySpan<byte> extensionProp = reader.ValueSpan;
+                                reader.Read();
+                                if (extensionProp.SequenceEqual("source"u8))
+                                {
                                     tex.Source = reader.GetInt32();
                                 }
                                 else
