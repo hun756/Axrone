@@ -1,4 +1,4 @@
-namespace Axrone.Particles;
+﻿namespace Axrone.Particles;
 
 /// <summary>1024-entry gradient lookup table over aligned native memory.</summary>
 public unsafe struct GradientLUT : IDisposable
@@ -56,7 +56,7 @@ public unsafe struct GradientLUT : IDisposable
         {
             if (_table != null)
             {
-                NativeMemory.Free(_table);
+                NativeMemory.AlignedFree(_table);
                 _table = null;
             }
         }

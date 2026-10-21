@@ -1,4 +1,4 @@
-namespace Axrone.Particles;
+﻿namespace Axrone.Particles;
 
 /// <summary>Spatial query visitor contract.</summary>
 public interface ISpatialVisitor
@@ -153,17 +153,17 @@ public sealed unsafe class SpatialHashGrid3D : IDisposable
         {
             if (_buckets != null)
             {
-                NativeMemory.Free(_buckets);
+                NativeMemory.AlignedFree(_buckets);
             }
 
             if (_entries != null)
             {
-                NativeMemory.Free(_entries);
+                NativeMemory.AlignedFree(_entries);
             }
 
             if (_freeEntries != null)
             {
-                NativeMemory.Free(_freeEntries);
+                NativeMemory.AlignedFree(_freeEntries);
             }
 
             _buckets = null;

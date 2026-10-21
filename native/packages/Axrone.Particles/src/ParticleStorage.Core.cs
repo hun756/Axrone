@@ -220,17 +220,17 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
             {
                 if (_storageMemoryBlock != null)
                 {
-                    NativeMemory.Free(_storageMemoryBlock);
+                    NativeMemory.AlignedFree(_storageMemoryBlock);
                 }
 
                 if (_handles != null)
                 {
-                    NativeMemory.Free(_handles);
+                    NativeMemory.AlignedFree(_handles);
                 }
 
                 if (_freeHandles != null)
                 {
-                    NativeMemory.Free(_freeHandles);
+                    NativeMemory.AlignedFree(_freeHandles);
                 }
 
                 _disposed = true;

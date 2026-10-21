@@ -56,7 +56,7 @@ public unsafe struct CurveLUT : IDisposable
         {
             if (_table != null)
             {
-                NativeMemory.Free(_table);
+                NativeMemory.AlignedFree(_table);
                 _table = null;
             }
         }

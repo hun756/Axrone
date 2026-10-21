@@ -214,7 +214,7 @@ public unsafe struct TrailModule : IParticleModulePolicy<TrailModule>, IDisposab
     {
         if (_history != null)
         {
-            NativeMemory.Free(_history);
+            NativeMemory.AlignedFree(_history);
             _history = null;
         }
     }
