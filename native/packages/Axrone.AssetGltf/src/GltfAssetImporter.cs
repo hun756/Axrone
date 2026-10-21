@@ -40,7 +40,11 @@ public sealed class GltfAssetImporter : IAssetImporter
         }
 
         string id = context.SourceUri?.Value ?? context.BaseKey.Value ?? "asset.gltf";
-        var importer = new GltfImporter(new GltfImporterOptions { Id = id });
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = id,
+            SourceUri = context.SourceUri?.Value,
+        });
         GltfImportResult result = await importer.ImportAsync(bytes, cancellationToken).ConfigureAwait(false);
 
         return MapResult(context, result);

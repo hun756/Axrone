@@ -22,6 +22,9 @@ public sealed class GltfImporterOptions
         init => field = string.IsNullOrWhiteSpace(value) ? "asset.gltf" : value;
     } = "asset.gltf";
 
+    /// <summary>Source document URI, when known.</summary>
+    public string? SourceUri { get; init; }
+
     /// <summary>External resource resolver.</summary>
     public GltfResourceResolver? ResourceResolver { get; init; }
 
