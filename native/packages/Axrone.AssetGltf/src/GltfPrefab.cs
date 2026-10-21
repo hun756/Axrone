@@ -226,7 +226,7 @@ internal static class GltfPrefabEngine
                 NodeId = nodeId,
                 ParentNodeId = parentId,
                 Name = node.Name ?? $"Node_{nodeIdx}",
-                Components = compBuilder.MoveToImmutable(),
+                Components = compBuilder.ToImmutable(),
             });
 
             for (int c = node.Children.Count - 1; c >= 0; c--)
