@@ -24,7 +24,7 @@ public static class GltfCompileExtensions
 
         List<GltfMaterialAsset> materials = CompileMaterials(rawModel, options);
 
-        (List<GltfMeshAsset> meshes, ImmutableDictionary<int, string> meshKeyMap) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+        (List<GltfMeshAsset> meshes, ImmutableArray<ImmutableArray<string>> meshKeysByMesh) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
             rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
 
         (List<GltfSkinAsset> skins, ImmutableDictionary<int, string> skinKeyMap) = await CompileSkinsAsync<TMeshoptPolicy>(
@@ -48,7 +48,7 @@ public static class GltfCompileExtensions
                 rawModel,
                 s == defaultSceneIdx,
                 diagnostics,
-                meshKeyMap,
+                meshKeysByMesh,
                 skinKeyMap,
                 animIds);
 
@@ -306,7 +306,7 @@ public static class GltfCompileExtensions
         scalarUniforms.Add($"{uniformPrefix}_Strength", info.Strength);
     }
 
-    internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableDictionary<int, string> MeshKeyMap)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+    internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableArray<ImmutableArray<string>> MeshKeysByMesh)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
         GltfRawModel rawModel,
         GltfResourceRuntimeCache resourceRuntime,
         List<GltfDiagnostic> diagnostics,
@@ -315,19 +315,18 @@ public static class GltfCompileExtensions
         where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
     {
         var meshes = new List<GltfMeshAsset>();
-        var meshKeyMap = ImmutableDictionary.CreateBuilder<int, string>();
+        var meshKeysByMesh = ImmutableArray.CreateBuilder<ImmutableArray<string>>(rawModel.Meshes.Count);
 
         for (int m = 0; m < rawModel.Meshes.Count; m++)
         {
             GltfRawModel.Mesh meshDef = rawModel.Meshes[m];
+            var primitiveKeys = ImmutableArray.CreateBuilder<string>(meshDef.Primitives.Count);
+
             for (int p = 0; p < meshDef.Primitives.Count; p++)
             {
                 GltfRawModel.Primitive prim = meshDef.Primitives[p];
-                string meshAssetId = $"gltf/mesh/{m}:{p}";
-                if (p == 0)
-                {
-                    meshKeyMap[m] = meshAssetId;
-                }
+                string meshAssetId = GltfKeys.Mesh(m, p);
+                primitiveKeys.Add(meshAssetId);
 
                 int vertexCount = 0;
                 var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
@@ -560,9 +559,11 @@ public static class GltfCompileExtensions
                     MaterialKey = prim.Material.HasValue ? $"gltf/material/{prim.Material.Value}" : null,
                 });
             }
+
+            meshKeysByMesh.Add(primitiveKeys.MoveToImmutable());
         }
 
-        return (meshes, meshKeyMap.ToImmutable());
+        return (meshes, meshKeysByMesh.MoveToImmutable());
     }
 
     private static bool TryParseSemantic(string name, out GltfMeshSemantic semantic)
