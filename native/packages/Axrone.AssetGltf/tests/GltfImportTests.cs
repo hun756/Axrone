@@ -55,6 +55,62 @@ public sealed class GltfImportTests
         result.Document.Format.Should().Be("glb");
     }
 
+    [Fact]
+    public async Task Import_MultiPrimitiveMesh_UsesCompiledPrimitiveKeys()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] posBytes = new byte[positions.Length * 4];
+        Buffer.BlockCopy(positions, 0, posBytes, 0, posBytes.Length);
+        byte[] idxBytes = [0, 0, 1, 0, 2, 0];
+
+        byte[] bin = new byte[posBytes.Length + idxBytes.Length];
+        Buffer.BlockCopy(posBytes, 0, bin, 0, posBytes.Length);
+        Buffer.BlockCopy(idxBytes, 0, bin, posBytes.Length, idxBytes.Length);
+
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"name": "S", "nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"name": "M", "primitives": [
+                {"attributes": {"POSITION": 0}, "indices": 1, "mode": 4},
+                {"attributes": {"POSITION": 0}, "indices": 1, "mode": 4}
+              ]}],
+              "accessors": [
+                {"bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 6}
+              ],
+              "buffers": [{"byteLength": 42}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "multi.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        string[] expectedKeys = ["gltf/mesh/0:0", "gltf/mesh/0:1"];
+        result.Meshes.Select(static mesh => mesh.Id).Should().Equal(expectedKeys);
+        result.Prefabs.Should().ContainSingle();
+        result.Prefabs[0].MeshKeys.Should().Equal(expectedKeys);
+
+        GltfPrefabAsset prefab = result.Prefabs[0];
+        prefab.Definition.Actors.Should().HaveCount(3);
+
+        string[] rendererMeshIds = prefab.Definition.Actors
+            .SelectMany(static actor => actor.Components)
+            .OfType<GltfMeshRendererComponent>()
+            .Select(static component => component.MeshId)
+            .ToArray();
+
+        rendererMeshIds.Should().Equal(expectedKeys);
+        rendererMeshIds.Should().OnlyContain(id => result.Meshes.Any(mesh => mesh.Id == id));
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
