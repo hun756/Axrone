@@ -200,15 +200,31 @@ internal static class GltfAccessorRuntime
 
     /// <summary>Merges sparse accessor deltas into a dense float buffer.</summary>
     public static void MergeSparseFloats(
+        int accessorIndex,
         ReadOnlySpan<byte> indicesBytes,
         int indicesComponentType,
         ReadOnlySpan<byte> valuesBytes,
         int sparseCount,
+        int destinationElementCount,
         int componentType,
         int componentCount,
         bool normalized,
         Span<float> destination)
     {
+        if (indicesComponentType is not (5121 or 5123 or 5125))
+        {
+            ThrowHelper.ThrowAccessor(
+                accessorIndex,
+                "sparse indices must use UNSIGNED_BYTE, UNSIGNED_SHORT, or UNSIGNED_INT components.");
+        }
+
+        if (sparseCount < 0 || sparseCount > destinationElementCount)
+        {
+            ThrowHelper.ThrowAccessor(
+                accessorIndex,
+                $"sparse count {sparseCount} exceeds the accessor element count {destinationElementCount}.");
+        }
+
         int indexCompSize = GetComponentByteSize(indicesComponentType);
         int valueCompSize = GetComponentByteSize(componentType);
         int valueElemSize = valueCompSize * componentCount;
@@ -229,6 +245,13 @@ internal static class GltfAccessorRuntime
                 5125 => BinaryPrimitives.ReadUInt32LittleEndian(indicesBytes.Slice(indexOffset, 4)),
                 _ => 0u,
             };
+
+            if (targetIndex >= (uint)destinationElementCount)
+            {
+                ThrowHelper.ThrowAccessor(
+                    accessorIndex,
+                    $"sparse index {targetIndex} exceeds the accessor element count {destinationElementCount}.");
+            }
 
             int valueOffset = (int)(i * uValueElemSize);
             ReadOnlySpan<byte> elemValueBytes = valuesBytes.Slice(valueOffset, valueElemSize);
