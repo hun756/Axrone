@@ -16,6 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="../Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
     <PackageReference Include="Alimer.Bindings.MeshOptimizer" />
+    <PackageReference Include="BasisUniversal.NET" />
+    <PackageReference Include="BasisUniversal.Native" />
   </ItemGroup>
 
   <ItemGroup>
