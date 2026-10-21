@@ -72,6 +72,22 @@ internal static class GltfJsonParser
             {
                 ParseSamplers(ref reader, model);
             }
+            else if (prop.SequenceEqual("skins"u8))
+            {
+                ParseSkins(ref reader, model);
+            }
+            else if (prop.SequenceEqual("animations"u8))
+            {
+                ParseAnimations(ref reader, model);
+            }
+            else if (prop.SequenceEqual("extensionsUsed"u8))
+            {
+                ParseStringArray(ref reader, model.ExtensionsUsed);
+            }
+            else if (prop.SequenceEqual("extensionsRequired"u8))
+            {
+                ParseStringArray(ref reader, model.ExtensionsRequired);
+            }
             else if (prop.SequenceEqual("extensions"u8))
             {
                 ParseRootExtensions(ref reader, model);
@@ -1234,6 +1250,173 @@ internal static class GltfJsonParser
             }
 
             model.Samplers.Add(samp);
+        }
+    }
+
+    private static void ParseSkins(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var skin = new GltfRawModel.Skin();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("name"u8))
+                {
+                    skin.Name = reader.GetString();
+                }
+                else if (prop.SequenceEqual("inverseBindMatrices"u8))
+                {
+                    skin.InverseBindMatrices = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("skeleton"u8))
+                {
+                    skin.Skeleton = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("joints"u8))
+                {
+                    ParseIntArray(ref reader, skin.Joints);
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Skins.Add(skin);
+        }
+    }
+
+    private static void ParseAnimations(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var anim = new GltfRawModel.Animation();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("name"u8))
+                {
+                    anim.Name = reader.GetString();
+                }
+                else if (prop.SequenceEqual("samplers"u8))
+                {
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        var samp = new GltfRawModel.AnimationSampler();
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                        {
+                            if (reader.TokenType != JsonTokenType.PropertyName)
+                            {
+                                continue;
+                            }
+
+                            ReadOnlySpan<byte> sprop = reader.ValueSpan;
+                            reader.Read();
+                            if (sprop.SequenceEqual("input"u8))
+                            {
+                                samp.Input = reader.GetInt32();
+                            }
+                            else if (sprop.SequenceEqual("interpolation"u8))
+                            {
+                                samp.Interpolation = reader.GetString() ?? "LINEAR";
+                            }
+                            else if (sprop.SequenceEqual("output"u8))
+                            {
+                                samp.Output = reader.GetInt32();
+                            }
+                            else
+                            {
+                                reader.Skip();
+                            }
+                        }
+
+                        anim.Samplers.Add(samp);
+                    }
+                }
+                else if (prop.SequenceEqual("channels"u8))
+                {
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        var chan = new GltfRawModel.AnimationChannel();
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                        {
+                            if (reader.TokenType != JsonTokenType.PropertyName)
+                            {
+                                continue;
+                            }
+
+                            ReadOnlySpan<byte> cprop = reader.ValueSpan;
+                            reader.Read();
+                            if (cprop.SequenceEqual("sampler"u8))
+                            {
+                                chan.Sampler = reader.GetInt32();
+                            }
+                            else if (cprop.SequenceEqual("target"u8))
+                            {
+                                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                                {
+                                    if (reader.TokenType != JsonTokenType.PropertyName)
+                                    {
+                                        continue;
+                                    }
+
+                                    ReadOnlySpan<byte> tprop = reader.ValueSpan;
+                                    reader.Read();
+                                    if (tprop.SequenceEqual("node"u8))
+                                    {
+                                        chan.TargetNode = reader.GetInt32();
+                                    }
+                                    else if (tprop.SequenceEqual("path"u8))
+                                    {
+                                        chan.TargetPath = reader.GetString() ?? "translation";
+                                    }
+                                    else
+                                    {
+                                        reader.Skip();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                reader.Skip();
+                            }
+                        }
+
+                        anim.Channels.Add(chan);
+                    }
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Animations.Add(anim);
         }
     }
 
