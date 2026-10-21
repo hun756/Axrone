@@ -84,7 +84,8 @@ public readonly record struct AssetWriteInput<TData>(
     TData Data,
     IReadOnlyList<AssetKey>? Aliases = null,
     AssetMetadata? Metadata = null,
-    IReadOnlyList<AssetId>? DependencyIds = null);
+    IReadOnlyList<AssetDependencyInput>? Dependencies = null,
+    AssetFingerprint? Fingerprint = null);
 
 /// <summary>
 /// Source binding: an external source identity pinned to one asset.

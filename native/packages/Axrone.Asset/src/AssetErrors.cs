@@ -23,6 +23,17 @@ public sealed class AssetDisposedError() : AssetError("The AssetDatabase instanc
 /// <summary>No importer accepts the source.</summary>
 public sealed class AssetImporterNotFoundError(string message) : AssetError(message, "importer.not-found");
 
+/// <summary>Import failed after exhausting retries.</summary>
+public sealed class AssetImportError(string message, string importerId, int attempt, Exception? inner = null)
+    : AssetError(message, "asset.import.failed", inner)
+{
+    /// <summary>Failing importer identity.</summary>
+    public string ImporterId { get; } = importerId;
+
+    /// <summary>Attempts made.</summary>
+    public int Attempt { get; } = attempt;
+}
+
 /// <summary>Invalid asset reference.</summary>
 public sealed class AssetReferenceError(string message) : AssetError(message, "reference.invalid");
 

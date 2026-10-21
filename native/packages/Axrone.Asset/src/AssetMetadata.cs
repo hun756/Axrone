@@ -1,6 +1,6 @@
 namespace Axrone.Asset;
 
-/// <summary>Asset metadata: location, mime, locale, tags and string properties.</summary>
+/// <summary>Asset metadata: location, mime, locale, tags and JSON properties.</summary>
 public sealed record AssetMetadata
 {
     /// <summary>Empty metadata.</summary>
@@ -18,7 +18,7 @@ public sealed record AssetMetadata
     /// <summary>Search tags.</summary>
     public IReadOnlyList<string> Tags { get; init; } = [];
 
-    /// <summary>Custom string properties.</summary>
-    public IReadOnlyDictionary<string, string> Properties { get; init; } =
-        System.Collections.Frozen.FrozenDictionary<string, string>.Empty;
+    /// <summary>Custom JSON properties.</summary>
+    public IReadOnlyDictionary<string, AssetJsonValue> Properties { get; init; } =
+        System.Collections.Frozen.FrozenDictionary<string, AssetJsonValue>.Empty;
 }

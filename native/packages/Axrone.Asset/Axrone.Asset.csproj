@@ -43,6 +43,9 @@
     <!-- CA1710: Exception names mirror the web asset contract (AssetError,
          AssetConfigurationError); renaming would break the contract. -->
     <NoWarn>$(NoWarn);CA1710</NoWarn>
+    <!-- CA1720: FromObject mirrors the JSON domain term (JsonObject);
+         renaming would corrupt the JSON vocabulary. -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
     <!-- CA1040: Empty marker interfaces drive the typestate builder phases. -->
     <NoWarn>$(NoWarn);CA1040</NoWarn>
     <!-- CA1054: String-to-URI conversion is the branded nominal's job. -->

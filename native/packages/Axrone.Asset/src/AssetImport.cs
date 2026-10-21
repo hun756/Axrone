@@ -42,6 +42,35 @@ public readonly record struct AssetTextSource(string Text) : IAssetSource
     public object RawData => Text;
 }
 
+/// <summary>JSON import source.</summary>
+public readonly record struct AssetJsonSource(object? Data) : IAssetSource
+{
+    /// <summary>Source kind.</summary>
+    public string Kind => "json";
+
+    /// <summary>JSON payload.</summary>
+    public object? JsonData => Data;
+
+    /// <inheritdoc/>
+    public object RawData => Data!;
+}
+
+/// <summary>Custom import source.</summary>
+public readonly record struct AssetCustomSource(object? Data, string? Format = null) : IAssetSource
+{
+    /// <summary>Source kind.</summary>
+    public string Kind => "custom";
+
+    /// <summary>Custom payload.</summary>
+    public object? CustomData => Data;
+
+    /// <summary>Format discriminator.</summary>
+    public string? Format { get; } = Format;
+
+    /// <inheritdoc/>
+    public object RawData => Data!;
+}
+
 /// <summary>One import diagnostic.</summary>
 public readonly record struct AssetImportDiagnostic(string Severity, string Code, string Message);
 
@@ -121,6 +150,15 @@ public interface IAssetImporter
     /// <summary>Priority; higher wins.</summary>
     int Priority { get; }
 
+    /// <summary>Accepted source kinds; empty matches all.</summary>
+    IReadOnlyList<string> SourceKinds => [];
+
+    /// <summary>Accepted path extensions (with or without dot); empty matches all.</summary>
+    IReadOnlyList<string> Extensions => [];
+
+    /// <summary>Accepted mime types; empty matches all.</summary>
+    IReadOnlyList<string> MimeTypes => [];
+
     /// <summary>Whether this importer accepts the source.</summary>
     bool CanImport(AssetImportContext context);
 
@@ -136,6 +174,9 @@ public sealed class RawBytesImporter : IAssetImporter
 
     /// <inheritdoc/>
     public int Priority => 0;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["bytes"];
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -169,6 +210,9 @@ public sealed class TextImporter : IAssetImporter
 
     /// <inheritdoc/>
     public int Priority => 0;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SourceKinds => ["text"];
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

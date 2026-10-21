@@ -20,6 +20,9 @@ public readonly record struct AssetQuery
 
     /// <summary>Tag filter; all listed tags must match.</summary>
     public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>Property filter; every entry must match exactly.</summary>
+    public IReadOnlyDictionary<string, AssetJsonValue>? Properties { get; init; }
 }
 
 /// <summary>Zero-copy stack visitor over stored assets.</summary>
@@ -39,6 +42,14 @@ internal sealed class AssetQueryCatalog
     private readonly Dictionary<ulong, HashSet<AssetId>> _mimeTypeIndex = new();
     private readonly Dictionary<ulong, HashSet<AssetId>> _localeIndex = new();
     private readonly Dictionary<ulong, HashSet<AssetId>> _tagIndex = new();
+    private readonly Dictionary<ulong, HashSet<AssetId>> _propertyIndex = new();
+
+    private static ulong PropertySlot(string name, AssetJsonValue value)
+    {
+        ulong nameHash = Fnv1a64.ComputeUtf8Chars(name.AsSpan());
+        ulong valueHash = Fnv1a64.ComputeUtf8Chars(value.ToString().AsSpan());
+        return nameHash ^ (valueHash * 1099511628211UL);
+    }
 
     /// <summary>Indexes a stored asset.</summary>
     public void IndexAsset(in StoredAsset asset)
@@ -80,6 +91,14 @@ internal sealed class AssetQueryCatalog
                 ref HashSet<AssetId>? tagSlot = ref CollectionsMarshal.GetValueRefOrAddDefault(_tagIndex, tagHash, out _);
                 tagSlot ??= new HashSet<AssetId>();
                 tagSlot.Add(id);
+            }
+
+            foreach (KeyValuePair<string, AssetJsonValue> property in meta.Properties)
+            {
+                ulong slot = PropertySlot(property.Key, property.Value);
+                ref HashSet<AssetId>? propSlot = ref CollectionsMarshal.GetValueRefOrAddDefault(_propertyIndex, slot, out _);
+                propSlot ??= new HashSet<AssetId>();
+                propSlot.Add(id);
             }
         }
     }
@@ -141,6 +160,19 @@ internal sealed class AssetQueryCatalog
                     if (tagSet.Count == 0)
                     {
                         _tagIndex.Remove(tagHash);
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<string, AssetJsonValue> property in meta.Properties)
+            {
+                ulong slot = PropertySlot(property.Key, property.Value);
+                if (_propertyIndex.TryGetValue(slot, out HashSet<AssetId>? propSet))
+                {
+                    propSet.Remove(id);
+                    if (propSet.Count == 0)
+                    {
+                        _propertyIndex.Remove(slot);
                     }
                 }
             }
@@ -209,6 +241,19 @@ internal sealed class AssetQueryCatalog
                 }
             }
 
+            if (query.Properties is not null)
+            {
+                foreach (KeyValuePair<string, AssetJsonValue> property in query.Properties)
+                {
+                    if (!_propertyIndex.TryGetValue(PropertySlot(property.Key, property.Value), out HashSet<AssetId>? set))
+                    {
+                        return null;
+                    }
+
+                    matches.Add(set);
+                }
+            }
+
             if (matches.Count == 0)
             {
                 return null;
@@ -239,6 +284,7 @@ internal sealed class AssetQueryCatalog
             _mimeTypeIndex.Clear();
             _localeIndex.Clear();
             _tagIndex.Clear();
+            _propertyIndex.Clear();
         }
     }
 }

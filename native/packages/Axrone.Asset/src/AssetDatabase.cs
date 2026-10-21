@@ -30,7 +30,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
     private readonly Dictionary<AssetId, HashSet<AssetId>> _dependentsById = new();
     private readonly Dictionary<AssetSourceIdentity, AssetSourceBinding> _sourceBindings = new();
     private readonly AssetQueryCatalog _catalog = new();
-    private readonly List<IAssetImporter> _importers = new();
+    private readonly AssetImporterRegistry _importerRegistry = new();
+    private readonly AssetImportStageRegistry _stageRegistry = new();
 
     private CachePaddedCounters _counters;
     private int _disposed;
@@ -57,8 +58,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         _binaryStore = _binaryOptions.Store ?? new InMemoryBinaryStore();
         ThrowHelper.MessageResolver = opt.MessageResolver;
 
-        _importers.Add(new RawBytesImporter());
-        _importers.Add(new TextImporter());
+        _importerRegistry.Register(new RawBytesImporter());
+        _importerRegistry.Register(new TextImporter());
     }
 
     /// <summary>Stored asset count.</summary>
@@ -93,8 +94,58 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         EnsureNotDisposed();
         lock (_gate)
         {
-            _importers.Add(importer);
-            _importers.Sort(static (a, b) => b.Priority.CompareTo(a.Priority));
+            _importerRegistry.Register(importer);
+        }
+    }
+
+    /// <summary>Unregisters an importer by identity.</summary>
+    public bool UnregisterImporter(AssetImporterId id)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _importerRegistry.Unregister(id);
+        }
+    }
+
+    /// <summary>Lists registered importers in priority order.</summary>
+    public IReadOnlyList<IAssetImporter> ListImporters()
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _importerRegistry.List();
+        }
+    }
+
+    /// <summary>Registers an import stage; higher priority runs first.</summary>
+    public void RegisterStage(IAssetImportStage stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            _stageRegistry.Register(stage);
+        }
+    }
+
+    /// <summary>Unregisters an import stage by identity.</summary>
+    public bool UnregisterStage(AssetImporterId id)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _stageRegistry.Unregister(id);
+        }
+    }
+
+    /// <summary>Lists registered stages in priority order.</summary>
+    public IReadOnlyList<IAssetImportStage> ListStages()
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            return _stageRegistry.List();
         }
     }
 
@@ -147,13 +198,13 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
     }
 
-    /// <summary>Gets an asset or throws <see cref="KeyNotFoundException"/>.</summary>
+    /// <summary>Gets an asset or throws <see cref="AssetReferenceError"/>.</summary>
     public AssetRecord<TData> Require<TData>(in AssetSelector selector)
     {
         AssetRecord<TData>? record = Get<TData>(in selector);
         if (record is null)
         {
-            throw new KeyNotFoundException(string.Create(
+            ThrowHelper.ThrowReferenceError(string.Create(
                 CultureInfo.InvariantCulture,
                 $"Asset selector could not be resolved (kind {selector.Kind})."));
         }
@@ -173,100 +224,13 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         lock (_gate)
         {
             long now = _clock();
-            AssetMetadata meta = input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) };
-            AssetFingerprint fingerprint = DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
+            AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
+            AssetFingerprint fingerprint = input.Fingerprint ?? DeterministicFingerprinter.Compute<TData, DefaultDataCodecPolicy<TData>>(
                 input.Kind, input.Key, in inputData, meta);
+            AssetId finalId = ResolveFinalId(in input, null);
+            IReadOnlyList<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies);
 
-            AssetId finalId;
-            if (_keyIndex.TryGetValue(input.Key, out AssetId bound))
-            {
-                if (input.Id.HasValue && input.Id.Value != bound)
-                {
-                    ThrowHelper.ThrowConflictError(
-                        string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{bound}'."),
-                        "key-bound");
-                }
-
-                finalId = bound;
-            }
-            else
-            {
-                finalId = input.Id ?? AssetId.CreateNew();
-            }
-
-            if (input.DependencyIds is not null)
-            {
-                foreach (AssetId dep in input.DependencyIds)
-                {
-                    if (!_assetsById.ContainsKey(dep))
-                    {
-                        ThrowHelper.ThrowDependencyError(
-                            string.Create(CultureInfo.InvariantCulture, $"Dependency '{dep}' does not exist."),
-                            dep.ToString());
-                    }
-                }
-            }
-
-            AssetRevision finalRev;
-            if (_assetsById.TryGetValue(finalId, out StoredAsset? existing))
-            {
-                isInsert = false;
-                if (!string.Equals(existing.Kind, input.Kind, StringComparison.Ordinal))
-                {
-                    ThrowHelper.ThrowConflictError(
-                        string.Create(CultureInfo.InvariantCulture, $"Asset kind mismatch for '{finalId}'."),
-                        "kind-mismatch");
-                }
-
-                ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, finalId, out _);
-                ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
-                ring.Push(existing);
-
-                _catalog.UnindexAsset(existing);
-
-                finalRev = existing.Revision.Next();
-                stored = existing.CloneWithNewRevision(
-                    finalRev,
-                    input.Data,
-                    fingerprint,
-                    now,
-                    meta,
-                    input.DependencyIds ?? [],
-                    input.Aliases,
-                    input.Name);
-                RemoveDependencyEdges(finalId, existing.DependencyIds);
-            }
-            else
-            {
-                isInsert = true;
-                finalRev = AssetRevision.Initial;
-                stored = new StoredAsset
-                {
-                    Kind = input.Kind,
-                    Id = finalId,
-                    Key = input.Key,
-                    Aliases = input.Aliases ?? [],
-                    Name = input.Name,
-                    Data = input.Data,
-                    Revision = finalRev,
-                    Fingerprint = fingerprint,
-                    CreatedAtEpochMs = now,
-                    UpdatedAtEpochMs = now,
-                    Metadata = meta,
-                    DependencyIds = input.DependencyIds ?? [],
-                };
-            }
-
-            _assetsById[finalId] = stored;
-            _keyIndex[stored.Key] = finalId;
-            foreach (AssetKey alias in stored.Aliases)
-            {
-                _aliasIndex[alias] = finalId;
-            }
-
-            AddDependencyEdges(finalId, stored.DependencyIds);
-            _catalog.IndexAsset(stored);
-            Interlocked.Increment(ref _counters.Upserts);
+            (stored, isInsert) = CommitWrite(in input, meta, fingerprint, finalId, dependencyIds, now);
         }
 
         AssetRecord<TData> record = stored.ToRecord<TData>();
@@ -289,16 +253,171 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         return record;
     }
 
-    /// <summary>Inserts or updates many assets.</summary>
+    /// <summary>Resolves the final identity, asserting key ownership.</summary>
+    private AssetId ResolveFinalId<TData>(in AssetWriteInput<TData> input, Dictionary<AssetKey, AssetId>? staged)
+    {
+        if (staged is not null && staged.TryGetValue(input.Key, out AssetId stagedId))
+        {
+            if (input.Id.HasValue && input.Id.Value != stagedId)
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{stagedId}'."),
+                    "key-bound");
+            }
+
+            return stagedId;
+        }
+
+        if (_keyIndex.TryGetValue(input.Key, out AssetId bound))
+        {
+            if (input.Id.HasValue && input.Id.Value != bound)
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset key '{input.Key}' is already bound to '{bound}'."),
+                    "key-bound");
+            }
+
+            staged?.Add(input.Key, bound);
+            return bound;
+        }
+
+        AssetId finalId = input.Id ?? AssetId.CreateNew();
+        staged?.Add(input.Key, finalId);
+        return finalId;
+    }
+
+    /// <summary>Applies one prepared write to the live indexes.</summary>
+    private (StoredAsset Stored, bool IsInsert) CommitWrite<TData>(
+        in AssetWriteInput<TData> input,
+        AssetMetadata meta,
+        AssetFingerprint fingerprint,
+        AssetId finalId,
+        IReadOnlyList<AssetId> dependencyIds,
+        long now)
+    {
+        StoredAsset stored;
+        bool isInsert;
+        AssetRevision finalRev;
+        if (_assetsById.TryGetValue(finalId, out StoredAsset? existing))
+        {
+            isInsert = false;
+            if (!string.Equals(existing.Kind, input.Kind, StringComparison.Ordinal))
+            {
+                ThrowHelper.ThrowConflictError(
+                    string.Create(CultureInfo.InvariantCulture, $"Asset kind mismatch for '{finalId}'."),
+                    "kind-mismatch");
+            }
+
+            ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, finalId, out _);
+            ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
+            ring.Push(existing);
+
+            _catalog.UnindexAsset(existing);
+
+            finalRev = existing.Revision.Next();
+            stored = existing.CloneWithNewRevision(
+                finalRev,
+                input.Data,
+                fingerprint,
+                now,
+                meta,
+                dependencyIds,
+                input.Aliases,
+                input.Name);
+            RemoveDependencyEdges(finalId, existing.DependencyIds);
+        }
+        else
+        {
+            isInsert = true;
+            finalRev = AssetRevision.Initial;
+            stored = new StoredAsset
+            {
+                Kind = input.Kind,
+                Id = finalId,
+                Key = input.Key,
+                Aliases = input.Aliases ?? [],
+                Name = input.Name,
+                Data = input.Data,
+                Revision = finalRev,
+                Fingerprint = fingerprint,
+                CreatedAtEpochMs = now,
+                UpdatedAtEpochMs = now,
+                Metadata = meta,
+                DependencyIds = dependencyIds,
+            };
+        }
+
+        _assetsById[finalId] = stored;
+        _keyIndex[stored.Key] = finalId;
+        foreach (AssetKey alias in stored.Aliases)
+        {
+            _aliasIndex[alias] = finalId;
+        }
+
+        AddDependencyEdges(finalId, stored.DependencyIds);
+        _catalog.IndexAsset(stored);
+        Interlocked.Increment(ref _counters.Upserts);
+        return (stored, isInsert);
+    }
+
+    /// <summary>Inserts or updates many assets atomically.</summary>
     public IReadOnlyList<AssetRecord<object>> UpsertMany(IReadOnlyList<AssetWriteInput<object>> inputs)
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(inputs);
-        var records = new List<AssetRecord<object>>(inputs.Count);
-        for (int i = 0; i < inputs.Count; i++)
+
+        var staged = new List<(StoredAsset Stored, bool IsInsert)>(inputs.Count);
+        lock (_gate)
         {
-            AssetWriteInput<object> input = inputs[i];
-            records.Add(Upsert(in input));
+            long now = _clock();
+            var stagedKeys = new Dictionary<AssetKey, AssetId>(inputs.Count);
+            var stagedIds = new HashSet<AssetId>();
+            var prepared = new List<(AssetWriteInput<object> Input, AssetMetadata Meta, AssetFingerprint Fingerprint, AssetId FinalId, List<AssetId> Dependencies)>(inputs.Count);
+
+            foreach (AssetWriteInput<object> input in inputs)
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(input.Kind);
+                stagedIds.Add(ResolveFinalId(in input, stagedKeys));
+            }
+
+            foreach (AssetWriteInput<object> input in inputs)
+            {
+                object inputData = input.Data;
+                AssetMetadata meta = NormalizeMetadata(input.Metadata ?? new AssetMetadata { Locale = new AssetLocale(_defaultLocale) });
+                AssetFingerprint fingerprint = input.Fingerprint ?? DeterministicFingerprinter.Compute<object, DefaultDataCodecPolicy<object>>(
+                    input.Kind, input.Key, in inputData, meta);
+                AssetId finalId = stagedKeys[input.Key];
+                List<AssetId> dependencyIds = ResolveDependencyIds(input.Dependencies, stagedKeys, stagedIds);
+                prepared.Add((input, meta, fingerprint, finalId, dependencyIds));
+            }
+
+            foreach (var (input, meta, fingerprint, finalId, dependencyIds) in prepared)
+            {
+                staged.Add(CommitWrite(in input, meta, fingerprint, finalId, dependencyIds, now));
+            }
+        }
+
+        var records = new List<AssetRecord<object>>(staged.Count);
+        foreach ((StoredAsset stored, bool isInsert) in staged)
+        {
+            AssetRecord<object> record = stored.ToRecord<object>();
+            object boxed = record.Data!;
+            if (isInsert)
+            {
+                TLifecycle.OnCreated(in boxed);
+            }
+            else
+            {
+                AssetRevision revision = record.Revision;
+                TLifecycle.OnUpdated(in boxed, in revision);
+            }
+
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Upsert,
+                stored.Id,
+                stored.Revision,
+                Fnv1a64.ComputeUtf8Chars(stored.Kind.AsSpan())));
+            records.Add(record);
         }
 
         return records;
@@ -349,6 +468,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
                 _catalog.UnindexAsset(existing);
                 RemoveDependencyEdges(target, existing.DependencyIds);
+                UnbindSourceIdentitiesForAsset(target);
                 _revisionsById.Remove(target);
                 removed.Add(existing);
                 Interlocked.Increment(ref _counters.Deletes);
@@ -418,10 +538,29 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             {
                 foreach (AssetId id in candidates)
                 {
-                    if (_assetsById.TryGetValue(id, out StoredAsset? asset) && MatchesKind(asset, query.Kind))
+                    if (_assetsById.TryGetValue(id, out StoredAsset? asset) &&
+                        MatchesKind(asset, query.Kind) &&
+                        MatchesProperties(asset, query.Properties))
                     {
                         results.Add(asset.ToRecord<object>());
                     }
+                }
+
+                return results;
+            }
+
+            bool hasFilters = query.Kind is not null
+                || query.Fingerprint.HasValue
+                || query.Uri.HasValue
+                || query.MimeType is not null
+                || query.Locale.HasValue
+                || (query.Tags is not null && query.Tags.Count > 0)
+                || (query.Properties is not null && query.Properties.Count > 0);
+            if (!hasFilters)
+            {
+                foreach (StoredAsset asset in _assetsById.Values)
+                {
+                    results.Add(asset.ToRecord<object>());
                 }
 
                 return results;
@@ -434,7 +573,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
             foreach (StoredAsset asset in _assetsById.Values)
             {
-                if (MatchesKind(asset, query.Kind))
+                if (MatchesKind(asset, query.Kind) && MatchesProperties(asset, query.Properties))
                 {
                     results.Add(asset.ToRecord<object>());
                 }
@@ -445,10 +584,29 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
         static bool MatchesKind(StoredAsset asset, string? kind) =>
             kind is null || string.Equals(asset.Kind, kind, StringComparison.Ordinal);
+
+        static bool MatchesProperties(StoredAsset asset, IReadOnlyDictionary<string, AssetJsonValue>? properties)
+        {
+            if (properties is null || properties.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (KeyValuePair<string, AssetJsonValue> expected in properties)
+            {
+                if (!asset.Metadata.Properties.TryGetValue(expected.Key, out AssetJsonValue actual) ||
+                    !actual.Equals(expected.Value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
-    /// <summary>Lists every stored asset.</summary>
-    public IReadOnlyList<AssetRecord<object>> List()
+    /// <summary>Lists every stored asset, optionally filtered to a kind.</summary>
+    public IReadOnlyList<AssetRecord<object>> List(string? kind = null)
     {
         EnsureNotDisposed();
         lock (_gate)
@@ -456,7 +614,10 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             var results = new List<AssetRecord<object>>(_assetsById.Count);
             foreach (StoredAsset asset in _assetsById.Values)
             {
-                results.Add(asset.ToRecord<object>());
+                if (kind is null || string.Equals(asset.Kind, kind, StringComparison.Ordinal))
+                {
+                    results.Add(asset.ToRecord<object>());
+                }
             }
 
             return results;
@@ -470,23 +631,19 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         AssetUri? sourceUri = null,
         AssetSourceIdentity? sourceIdentity = null,
         AssetMetadata? metadata = null,
+        AssetImportOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         EnsureNotDisposed();
         ArgumentNullException.ThrowIfNull(source);
 
         AssetImportContext context = new(source, baseKey, sourceUri, sourceIdentity, metadata);
-        IAssetImporter? selected = null;
+        await RunStagesAsync(AssetImportStagePhase.Source, context, null, cancellationToken).ConfigureAwait(false);
+
+        IAssetImporter? selected;
         lock (_gate)
         {
-            for (int i = 0; i < _importers.Count; i++)
-            {
-                if (_importers[i].CanImport(context))
-                {
-                    selected = _importers[i];
-                    break;
-                }
-            }
+            selected = _importerRegistry.Find(context);
         }
 
         if (selected is null)
@@ -496,24 +653,50 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                 $"No eligible importer found for source kind '{source.Kind}'."));
         }
 
-        AssetImportResult result = await selected.ImportAsync(context, cancellationToken).ConfigureAwait(false);
+        AssetImportResult? beforeResult = await RunStagesAsync(
+            AssetImportStagePhase.BeforeImport, context, null, cancellationToken).ConfigureAwait(false);
+
+        AssetImportResult result = beforeResult
+            ?? await ImportWithRetryAsync(selected, context, options?.Retry, cancellationToken).ConfigureAwait(false);
+
+        AssetImportResult? afterResult = await RunStagesAsync(
+            AssetImportStagePhase.AfterImport, context, result, cancellationToken).ConfigureAwait(false);
+        result = afterResult ?? result;
+
+        AssetId? primaryId = result.Primary.Id;
+        if (sourceIdentity.HasValue && primaryId is null)
+        {
+            lock (_gate)
+            {
+                if (_sourceBindings.TryGetValue(sourceIdentity.Value, out AssetSourceBinding binding) &&
+                    _assetsById.ContainsKey(binding.TargetId))
+                {
+                    primaryId = binding.TargetId;
+                }
+            }
+        }
 
         AssetRecord<TData> primary = Upsert(new AssetWriteInput<TData>(
             result.Primary.Kind,
-            result.Primary.Id,
+            primaryId,
             result.Primary.Key,
             result.Primary.Name,
             (TData)result.Primary.Data!,
             result.Primary.Aliases,
             result.Primary.Metadata,
-            result.Primary.DependencyIds));
+            NormalizeDependencies(result.Primary.Dependencies, baseKey),
+            result.Primary.Fingerprint));
 
         List<AssetRecord<object>> imported = new() { primary.ToUntypedRecord() };
         if (result.Additional is not null)
         {
             for (int i = 0; i < result.Additional.Count; i++)
             {
-                imported.Add(Upsert(result.Additional[i]));
+                AssetWriteInput<object> additional = result.Additional[i] with
+                {
+                    Dependencies = NormalizeDependencies(result.Additional[i].Dependencies, baseKey),
+                };
+                imported.Add(Upsert(additional));
             }
         }
 
@@ -524,7 +707,7 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
         return new AssetImportReceipt<TData>(
             selected.Id,
-            source.Kind,
+            context.Source.Kind,
             sourceUri,
             baseKey,
             sourceIdentity,
@@ -532,6 +715,217 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             result.Diagnostics ?? context.Diagnostics,
             primary,
             imported);
+    }
+
+    /// <summary>Imports many sources, optionally concurrently.</summary>
+    public async ValueTask<IReadOnlyList<AssetImportReceipt<TData>>> ImportManyAsync<TData>(
+        IEnumerable<AssetImportRequest> requests,
+        AssetImportOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNotDisposed();
+        ArgumentNullException.ThrowIfNull(requests);
+
+        var list = new List<AssetImportRequest>(requests);
+        int concurrency = options?.Concurrency ?? 1;
+        if (concurrency <= 1)
+        {
+            var receipts = new List<AssetImportReceipt<TData>>(list.Count);
+            foreach (AssetImportRequest request in list)
+            {
+                receipts.Add(await ImportAsync<TData>(
+                    request.Source,
+                    request.BaseKey,
+                    request.SourceUri,
+                    request.SourceIdentity,
+                    request.Metadata,
+                    options,
+                    cancellationToken).ConfigureAwait(false));
+            }
+
+            return receipts;
+        }
+
+        using var gate = new SemaphoreSlim(concurrency);
+        var tasks = new Task<AssetImportReceipt<TData>>[list.Count];
+        for (int i = 0; i < list.Count; i++)
+        {
+            AssetImportRequest request = list[i];
+            tasks[i] = Task.Run(async () =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await ImportAsync<TData>(
+                        request.Source,
+                        request.BaseKey,
+                        request.SourceUri,
+                        request.SourceIdentity,
+                        request.Metadata,
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }, cancellationToken);
+        }
+
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private static IReadOnlyList<AssetDependencyInput>? NormalizeDependencies(
+        IReadOnlyList<AssetDependencyInput>? dependencies,
+        AssetKey baseKey)
+    {
+        if (dependencies is null || dependencies.Count == 0)
+        {
+            return dependencies;
+        }
+
+        string prefix = baseKey.Value ?? baseKey.Hash.ToString("x16", CultureInfo.InvariantCulture);
+        List<AssetDependencyInput>? rewritten = null;
+        for (int i = 0; i < dependencies.Count; i++)
+        {
+            AssetDependencyInput input = dependencies[i];
+            AssetDependencyInput normalized = input switch
+            {
+                AssetDependencyInput.TokenDependency token when token.Token.StartsWith('#') =>
+                    AssetDependencyInput.FromToken(prefix + token.Token),
+                AssetDependencyInput.LookupDependency lookup
+                    when lookup.Lookup.Key.Value is not null && lookup.Lookup.Key.Value.StartsWith('#') =>
+                    AssetDependencyInput.FromLookup(new AssetLookupByKey(
+                        new AssetKey(prefix + lookup.Lookup.Key.Value),
+                        lookup.Lookup.KindHash)),
+                _ => input,
+            };
+
+            if (!ReferenceEquals(normalized, input))
+            {
+                rewritten ??= new List<AssetDependencyInput>(dependencies);
+                rewritten[i] = normalized;
+            }
+        }
+
+        return rewritten ?? dependencies;
+    }
+
+    private async ValueTask<AssetImportResult?> RunStagesAsync(
+        AssetImportStagePhase phase,
+        AssetImportContext context,
+        AssetImportResult? current,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IAssetImportStage> stages;
+        lock (_gate)
+        {
+            stages = _stageRegistry.ListByPhase(phase);
+        }
+
+        foreach (IAssetImportStage stage in stages)
+        {
+            IReadOnlyList<string> kinds = stage.SourceKinds;
+            if (kinds.Count > 0)
+            {
+                bool kindMatch = false;
+                foreach (string kind in kinds)
+                {
+                    if (string.Equals(kind, context.Source.Kind, StringComparison.OrdinalIgnoreCase))
+                    {
+                        kindMatch = true;
+                        break;
+                    }
+                }
+
+                if (!kindMatch)
+                {
+                    continue;
+                }
+            }
+
+            if (!stage.CanProcess(context))
+            {
+                continue;
+            }
+
+            AssetStageOutput? output = await stage.RunAsync(context, cancellationToken).ConfigureAwait(false);
+            if (output is null)
+            {
+                continue;
+            }
+
+            if (output.Diagnostics is not null)
+            {
+                foreach (AssetImportDiagnostic diagnostic in output.Diagnostics)
+                {
+                    context.AddDiagnostic(in diagnostic);
+                }
+            }
+
+            if (output.Source is not null)
+            {
+                context.Source = output.Source;
+            }
+
+            if (output.Result is not null)
+            {
+                if (phase == AssetImportStagePhase.Source)
+                {
+                    ThrowHelper.ThrowConfigurationError(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Import stage '{stage.Id.Value}' must not produce a result in the source phase."));
+                }
+
+                current = output.Result;
+            }
+        }
+
+        return current;
+    }
+
+    private static async ValueTask<AssetImportResult> ImportWithRetryAsync(
+        IAssetImporter importer,
+        AssetImportContext context,
+        AssetRetryPolicy? policy,
+        CancellationToken cancellationToken)
+    {
+        int maxAttempts = Math.Max(1, policy?.Attempts ?? 1);
+        int baseDelayMs = Math.Max(0, policy?.BaseDelayMs ?? 0);
+        int maxDelayMs = Math.Max(0, policy?.MaxDelayMs ?? 0);
+
+        for (int attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await importer.ImportAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                bool retry = attempt < maxAttempts && (policy?.ShouldRetry?.Invoke(ex, attempt) ?? true);
+                if (!retry)
+                {
+                    throw new AssetImportError(
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Import through '{importer.Id.Value}' failed after {attempt} attempt(s)."),
+                        importer.Id.Value,
+                        attempt,
+                        ex);
+                }
+
+                int delayMs = maxDelayMs > 0 ? Math.Min(maxDelayMs, baseDelayMs * attempt) : baseDelayMs * attempt;
+                if (delayMs > 0)
+                {
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     /// <summary>Binds a source identity to an asset.</summary>
@@ -649,11 +1043,39 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         }
 
         bool replace = options?.Replace ?? false;
+        List<StoredAsset> restored = new();
         lock (_gate)
         {
+            var stagedIds = new HashSet<AssetId>();
+            foreach (AssetSnapshotRecord record in snapshot.Assets)
+            {
+                ValidateSnapshotRecord(record, stagedIds);
+                stagedIds.Add(new AssetId(record.Id));
+            }
+
             if (replace)
             {
                 ClearInternal();
+            }
+            else
+            {
+                foreach (AssetSnapshotRecord record in snapshot.Assets)
+                {
+                    var id = new AssetId(record.Id);
+                    if (_assetsById.ContainsKey(id))
+                    {
+                        continue;
+                    }
+
+                    var key = new AssetKey(record.Key);
+                    if ((_keyIndex.TryGetValue(key, out AssetId bound) && bound != id) ||
+                        (_aliasIndex.TryGetValue(key, out bound) && bound != id))
+                    {
+                        ThrowHelper.ThrowConflictError(
+                            string.Create(CultureInfo.InvariantCulture, $"Asset key '{record.Key}' is already bound to '{bound}'."),
+                            "key-bound");
+                    }
+                }
             }
 
             foreach (AssetSnapshotRecord record in snapshot.Assets)
@@ -664,35 +1086,16 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                     continue;
                 }
 
-                object? data = DeserializeDataFromSnapshot(record.SerializedData);
-                AssetMetadata metadata = record.Metadata;
-                AssetKey[] aliases = new AssetKey[record.Aliases.Count];
-                for (int ai = 0; ai < aliases.Length; ai++)
+                StoredAsset stored = BuildStoredAsset(record, id);
+                foreach (AssetId dep in stored.DependencyIds)
                 {
-                    aliases[ai] = new AssetKey(record.Aliases[ai]);
+                    if (!stagedIds.Contains(dep) && !_assetsById.ContainsKey(dep))
+                    {
+                        ThrowHelper.ThrowSnapshotError(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Snapshot asset '{record.Key}' references missing dependency '{dep}'."));
+                    }
                 }
-
-                AssetId[] dependencies = new AssetId[record.DependencyIds.Count];
-                for (int di = 0; di < dependencies.Length; di++)
-                {
-                    dependencies[di] = new AssetId(record.DependencyIds[di]);
-                }
-
-                var stored = new StoredAsset
-                {
-                    Kind = record.Kind,
-                    Id = id,
-                    Key = new AssetKey(record.Key),
-                    Aliases = aliases,
-                    Name = record.Name,
-                    Data = data,
-                    Revision = new AssetRevision((uint)record.Revision),
-                    Fingerprint = AssetFingerprint.FromHex(record.Fingerprint.AsSpan()),
-                    CreatedAtEpochMs = record.CreatedAtEpochMs,
-                    UpdatedAtEpochMs = record.UpdatedAtEpochMs,
-                    Metadata = metadata,
-                    DependencyIds = dependencies,
-                };
 
                 _assetsById[id] = stored;
                 _keyIndex[stored.Key] = id;
@@ -703,6 +1106,18 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
 
                 AddDependencyEdges(id, stored.DependencyIds);
                 _catalog.IndexAsset(stored);
+
+                if (record.History is not null && record.History.Count > 0)
+                {
+                    ref RevisionHistoryRingBuffer? ring = ref CollectionsMarshal.GetValueRefOrAddDefault(_revisionsById, id, out _);
+                    ring ??= new RevisionHistoryRingBuffer(_maxRevisions);
+                    foreach (AssetSnapshotRecord historyRecord in record.History)
+                    {
+                        ring.Push(BuildStoredAsset(historyRecord, id));
+                    }
+                }
+
+                restored.Add(stored);
             }
 
             if (snapshot.SourceBindings is not null)
@@ -710,10 +1125,104 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
                 foreach (AssetSnapshotSourceBindingRecord binding in snapshot.SourceBindings)
                 {
                     AssetSourceIdentity identity = new(binding.Identity);
-                    _sourceBindings[identity] = new AssetSourceBinding(identity, new AssetId(binding.TargetId), binding.BoundAtEpochMs);
+                    var target = new AssetId(binding.TargetId);
+                    if (!_assetsById.ContainsKey(target))
+                    {
+                        ThrowHelper.ThrowSnapshotError(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Snapshot binding '{binding.Identity}' targets missing asset '{target}'."));
+                    }
+
+                    _sourceBindings[identity] = new AssetSourceBinding(identity, target, binding.BoundAtEpochMs);
                 }
             }
         }
+
+        foreach (StoredAsset asset in restored)
+        {
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Upsert,
+                asset.Id,
+                asset.Revision,
+                Fnv1a64.ComputeUtf8Chars(asset.Kind.AsSpan())));
+        }
+    }
+
+    private static void ValidateSnapshotRecord(AssetSnapshotRecord record, HashSet<AssetId> stagedIds)
+    {
+        if (string.IsNullOrWhiteSpace(record.Kind))
+        {
+            ThrowHelper.ThrowSnapshotError($"Snapshot asset '{record.Id}' has no kind.");
+        }
+
+        if (record.Revision < 1)
+        {
+            ThrowHelper.ThrowSnapshotError($"Snapshot asset '{record.Key}' has an invalid revision.");
+        }
+
+        if (record.History is not null)
+        {
+            long previous = 0;
+            foreach (AssetSnapshotRecord history in record.History)
+            {
+                if (string.IsNullOrWhiteSpace(history.Kind) || history.Kind != record.Kind)
+                {
+                    ThrowHelper.ThrowSnapshotError($"Snapshot history for '{record.Key}' mismatches asset kind.");
+                }
+
+                if (history.Revision <= previous || history.Revision >= record.Revision)
+                {
+                    ThrowHelper.ThrowSnapshotError($"Snapshot history for '{record.Key}' is not monotonic.");
+                }
+
+                previous = history.Revision;
+            }
+        }
+    }
+
+    private StoredAsset BuildStoredAsset(AssetSnapshotRecord record, AssetId id)
+    {
+        object? data = DeserializeDataFromSnapshot(record.SerializedData);
+        AssetMetadata metadata = record.Metadata;
+        AssetKey[] aliases = new AssetKey[record.Aliases.Count];
+        for (int ai = 0; ai < aliases.Length; ai++)
+        {
+            aliases[ai] = new AssetKey(record.Aliases[ai]);
+        }
+
+        AssetId[] dependencies = new AssetId[record.DependencyIds.Count];
+        for (int di = 0; di < dependencies.Length; di++)
+        {
+            dependencies[di] = new AssetId(record.DependencyIds[di]);
+        }
+
+        AssetFingerprint fingerprint;
+        try
+        {
+            fingerprint = AssetFingerprint.FromHex(record.Fingerprint.AsSpan());
+        }
+        catch (AssetConfigurationError ex)
+        {
+            throw new AssetSnapshotError(
+                string.Create(CultureInfo.InvariantCulture, $"Snapshot asset '{record.Key}' has an invalid fingerprint."),
+                ex);
+        }
+
+        return new StoredAsset
+        {
+            Kind = record.Kind,
+            Id = id,
+            Key = new AssetKey(record.Key),
+            Aliases = aliases,
+            Name = record.Name,
+            Data = data,
+            Revision = new AssetRevision((uint)record.Revision),
+            Fingerprint = fingerprint,
+            CreatedAtEpochMs = record.CreatedAtEpochMs,
+            UpdatedAtEpochMs = record.UpdatedAtEpochMs,
+            Metadata = metadata,
+            DependencyIds = dependencies,
+        };
     }
 
     private static AssetSnapshotRecord ToSnapshotRecord(StoredAsset asset, string serializedData)
@@ -836,6 +1345,257 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         return serialized;
     }
 
+    private List<AssetId> ResolveDependencyIds(
+        IReadOnlyList<AssetDependencyInput>? inputs,
+        Dictionary<AssetKey, AssetId>? stagedKeys = null,
+        HashSet<AssetId>? stagedIds = null)
+    {
+        if (inputs is null || inputs.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = new List<AssetId>(inputs.Count);
+        foreach (AssetDependencyInput input in inputs)
+        {
+            AssetSelector selector = input switch
+            {
+                AssetDependencyInput.IdDependency d => AssetSelector.FromId(d.Id),
+                AssetDependencyInput.KeyDependency d => AssetSelector.FromKey(d.Key, null),
+                AssetDependencyInput.TokenDependency d => ResolveTokenSelector(d.Token),
+                AssetDependencyInput.LookupDependency d => AssetSelector.FromKey(d.Lookup.Key, null),
+                _ => default,
+            };
+
+            AssetId resolved = default;
+            bool found = selector.Kind != SelectorKind.None && TryResolveId(in selector, out resolved);
+            if (!found && stagedKeys is not null && selector.Kind == SelectorKind.Key &&
+                stagedKeys.TryGetValue(selector.Key, out AssetId stagedKeyId))
+            {
+                resolved = stagedKeyId;
+                found = true;
+            }
+
+            if (!found && stagedIds is not null && selector.Kind == SelectorKind.Id && stagedIds.Contains(selector.Id))
+            {
+                resolved = selector.Id;
+                found = true;
+            }
+
+            if (!found)
+            {
+                string descriptor = input switch
+                {
+                    AssetDependencyInput.IdDependency d => d.Id.ToString(),
+                    AssetDependencyInput.KeyDependency d => d.Key.ToString(),
+                    AssetDependencyInput.TokenDependency d => d.Token,
+                    AssetDependencyInput.LookupDependency d => d.Lookup.Key.ToString(),
+                    _ => input.ToString() ?? "unknown",
+                };
+
+                ThrowHelper.ThrowDependencyError(
+                    string.Create(CultureInfo.InvariantCulture, $"Dependency '{descriptor}' does not exist."),
+                    descriptor);
+            }
+
+            if (input is AssetDependencyInput.KeyDependency keyed && keyed.KindHash != 0UL)
+            {
+                if (!_assetsById.TryGetValue(resolved, out StoredAsset? keyedAsset) ||
+                    Fnv1a64.ComputeUtf8Chars(keyedAsset.Kind.AsSpan()) != keyed.KindHash)
+                {
+                    ThrowHelper.ThrowDependencyError(
+                        string.Create(CultureInfo.InvariantCulture, $"Dependency '{keyed.Key}' does not exist."),
+                        keyed.Key.ToString());
+                }
+            }
+
+            if (input is AssetDependencyInput.LookupDependency looked && looked.Lookup.KindHash != 0UL)
+            {
+                if (!_assetsById.TryGetValue(resolved, out StoredAsset? lookedAsset) ||
+                    Fnv1a64.ComputeUtf8Chars(lookedAsset.Kind.AsSpan()) != looked.Lookup.KindHash)
+                {
+                    ThrowHelper.ThrowDependencyError(
+                        string.Create(CultureInfo.InvariantCulture, $"Dependency '{looked.Lookup.Key}' does not exist."),
+                        looked.Lookup.Key.ToString());
+                }
+            }
+
+            if (!ids.Contains(resolved))
+            {
+                ids.Add(resolved);
+            }
+        }
+
+        return ids;
+    }
+
+    /// <summary>Resolves a token to a selector: structured, hex id, then key.</summary>
+    private AssetSelector ResolveTokenSelector(string token)
+    {
+        if (token.StartsWith("asset:", StringComparison.Ordinal))
+        {
+            return AssetSelector.Parse(token.AsSpan());
+        }
+
+        if (ulong.TryParse(token.AsSpan(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong hex))
+        {
+            var id = new AssetId(hex);
+            if (_assetsById.ContainsKey(id))
+            {
+                return AssetSelector.FromId(id);
+            }
+        }
+
+        return AssetSelector.FromKey(new AssetKey(token));
+    }
+
+    /// <summary>Normalizes metadata on write: trims, dedupes and sorts.</summary>
+    private static AssetMetadata NormalizeMetadata(AssetMetadata metadata)
+    {
+        string? mime = metadata.MimeType?.Trim();
+        if (mime is not null && mime.Length == 0)
+        {
+            mime = null;
+        }
+
+        AssetUri? uri = metadata.Uri;
+        if (uri.HasValue)
+        {
+            string normalized = uri.Value.Value.Replace('\\', '/').Trim();
+            if (normalized.Length == 0)
+            {
+                uri = null;
+            }
+            else if (!string.Equals(normalized, uri.Value.Value, StringComparison.Ordinal))
+            {
+                uri = new AssetUri(normalized);
+            }
+        }
+
+        AssetLocale? locale = metadata.Locale;
+        if (locale.HasValue)
+        {
+            string trimmed = locale.Value.Value.Trim();
+            if (!string.Equals(trimmed, locale.Value.Value, StringComparison.Ordinal))
+            {
+                locale = new AssetLocale(trimmed);
+            }
+        }
+
+        List<string>? tags = null;
+        if (metadata.Tags.Count > 0)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            tags = new List<string>(metadata.Tags.Count);
+            foreach (string tag in metadata.Tags)
+            {
+                string trimmed = tag.Trim();
+                if (trimmed.Length > 0 && seen.Add(trimmed))
+                {
+                    tags.Add(trimmed);
+                }
+            }
+
+            tags.Sort(StringComparer.Ordinal);
+        }
+
+        bool mimeChanged = !string.Equals(mime, metadata.MimeType, StringComparison.Ordinal);
+        bool uriChanged = uri?.Value != metadata.Uri?.Value;
+        bool localeChanged = locale?.Value != metadata.Locale?.Value;
+        bool tagsChanged = tags is null
+            ? metadata.Tags.Count != 0
+            : tags.Count != metadata.Tags.Count || !tags.SequenceEqual(metadata.Tags);
+
+        if (!mimeChanged && !uriChanged && !localeChanged && !tagsChanged)
+        {
+            return metadata;
+        }
+
+        return new AssetMetadata
+        {
+            Uri = uri,
+            MimeType = mime,
+            Locale = locale,
+            Tags = tags ?? [],
+            Properties = metadata.Properties,
+        };
+    }
+
+    private void UnbindSourceIdentitiesForAsset(AssetId id)
+    {
+        bool removed;
+        do
+        {
+            removed = false;
+            AssetSourceIdentity doomed = default;
+            foreach (KeyValuePair<AssetSourceIdentity, AssetSourceBinding> kvp in _sourceBindings)
+            {
+                if (kvp.Value.TargetId == id)
+                {
+                    doomed = kvp.Key;
+                    removed = true;
+                    break;
+                }
+            }
+
+            if (removed)
+            {
+                _sourceBindings.Remove(doomed);
+            }
+        }
+        while (removed);
+    }
+
+    /// <summary>Lists the assets a selector's target depends on.</summary>
+    public IReadOnlyList<AssetRecord<object>> GetDependencies(AssetSelector selector)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            if (!TryResolveId(in selector, out AssetId id) ||
+                !_assetsById.TryGetValue(id, out StoredAsset? stored))
+            {
+                return [];
+            }
+
+            var records = new List<AssetRecord<object>>(stored.DependencyIds.Count);
+            foreach (AssetId dep in stored.DependencyIds)
+            {
+                if (_assetsById.TryGetValue(dep, out StoredAsset? target))
+                {
+                    records.Add(target.ToRecord<object>());
+                }
+            }
+
+            return records;
+        }
+    }
+
+    /// <summary>Lists the assets depending on a selector's target.</summary>
+    public IReadOnlyList<AssetRecord<object>> GetDependents(AssetSelector selector)
+    {
+        EnsureNotDisposed();
+        lock (_gate)
+        {
+            if (!TryResolveId(in selector, out AssetId id) ||
+                !_dependentsById.TryGetValue(id, out HashSet<AssetId>? dependents))
+            {
+                return [];
+            }
+
+            var records = new List<AssetRecord<object>>(dependents.Count);
+            foreach (AssetId dependent in dependents)
+            {
+                if (_assetsById.TryGetValue(dependent, out StoredAsset? target))
+                {
+                    records.Add(target.ToRecord<object>());
+                }
+            }
+
+            return records;
+        }
+    }
+
     private bool TryResolveId(in AssetSelector selector, out AssetId id)
     {
         switch (selector.Kind)
@@ -927,6 +1687,27 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
         _catalog.Clear();
     }
 
+    /// <summary>Removes every asset, emitting a delete event per asset.</summary>
+    public void Clear()
+    {
+        EnsureNotDisposed();
+        List<StoredAsset> removed;
+        lock (_gate)
+        {
+            removed = new List<StoredAsset>(_assetsById.Values);
+            ClearInternal();
+        }
+
+        foreach (StoredAsset asset in removed)
+        {
+            _bus.Publish(new AssetEvent(
+                AssetEventType.Delete,
+                asset.Id,
+                asset.Revision,
+                Fnv1a64.ComputeUtf8Chars(asset.Kind.AsSpan())));
+        }
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -940,6 +1721,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
+        _importerRegistry.Dispose();
+        _stageRegistry.Dispose();
         _bus.DisposeAsync().AsTask().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
     }
@@ -957,6 +1740,8 @@ public sealed class AssetDatabase<TSchema, TCodec, TLifecycle> : IDisposable, IA
             ClearInternal();
         }
 
+        _importerRegistry.Dispose();
+        _stageRegistry.Dispose();
         await _bus.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }
