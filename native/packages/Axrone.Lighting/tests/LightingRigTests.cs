@@ -104,4 +104,31 @@ public sealed class LightingRigTests : IDisposable
         result.Success.Should().BeFalse();
         result.Issues.Should().ContainSingle().Which.Code.Should().Be("lighting.parse.version");
     }
+
+    [Fact]
+    public void ForEach_VisitsAllLights()
+    {
+        using var rig = RigBuilder<StageInitial>.Create().Seal().Build();
+        rig.Add(LightData.CreateDirectional(
+            rig.NextLightId(), 1, Vec3.UnitY, Vec3.One, Vec3.Zero,
+            LightIntensity.Default, LightPriority.Zero));
+        rig.Add(LightData.CreatePoint(
+            rig.NextLightId(), 2, Vec3.Zero, Vec3.One,
+            LightIntensity.Default, LightPriority.Zero,
+            LightRange.Default, AttenuationFactor.Default));
+
+        var state = new CounterState();
+        rig.ForEach<Counter, CounterState>(ref state);
+        state.Count.Should().Be(2);
+    }
+
+    private struct CounterState
+    {
+        public int Count;
+    }
+
+    private struct Counter : ILightVisitor<CounterState>
+    {
+        public static void Visit(ref readonly LightData light, scoped ref CounterState state) => state.Count++;
+    }
 }
