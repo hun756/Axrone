@@ -90,4 +90,32 @@ public sealed class ParticleEngineTests
         engine.ParticleCount.Should().Be(0);
         reasons.Should().ContainSingle().Which.Should().Be(ParticleDeathReason.Bounds);
     }
+
+    [Fact]
+    public void Engine_Emitter_SpawnsParticlesWithEmitterId()
+    {
+        var sink = new DelegateEventSink();
+        var emitterIds = new List<uint>();
+        sink.Birth = e => emitterIds.Add(e.EmitterId);
+
+        using var engine = ParticleSystemBuilder<UnconfiguredPhase>.Create()
+            .WithCapacity((ParticleCapacity)256)
+            .Build(
+                new PipelineStage<VelocityModule, PipelineEnd>(new VelocityModule(), new PipelineEnd()),
+                sink);
+
+        engine.Play();
+        uint emitterId = engine.AddEmitter(new ParticleEmitter(0));
+        emitterId.Should().NotBe(0u);
+
+        engine.Update(DeltaTime.FromSingle(1.0f));
+
+        engine.ParticleCount.Should().Be(10);
+        emitterIds.Should().HaveCount(10);
+        emitterIds.Should().AllBeEquivalentTo(emitterId);
+
+        engine.RemoveEmitter(emitterId).Should().BeTrue();
+        engine.Update(DeltaTime.FromSingle(1.0f));
+        engine.ParticleCount.Should().Be(10);
+    }
 }
