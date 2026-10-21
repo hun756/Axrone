@@ -240,8 +240,8 @@ public sealed class GltfRawModel
         /// <summary>Alpha mode string.</summary>
         public string AlphaMode { get; set; } = "OPAQUE";
 
-        /// <summary>Alpha cutoff.</summary>
-        public float AlphaCutoff { get; set; } = 0.5f;
+        /// <summary>Alpha cutoff, or null when the document omits it.</summary>
+        public float? AlphaCutoff { get; set; }
 
         /// <summary>Double-sided flag.</summary>
         public bool DoubleSided { get; set; }

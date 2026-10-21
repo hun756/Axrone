@@ -265,8 +265,9 @@ public static class GltfCompileExtensions
                 "BLEND" => GltfAlphaMode.Blend,
                 _ => GltfAlphaMode.Opaque,
             };
+            float alphaCutoff = mDef.AlphaCutoff ?? options.AlphaCutoffThreshold;
             intUniforms.Add("_AlphaMode", (int)alphaMode);
-            scalarUniforms.Add("_AlphaCutoff", mDef.AlphaCutoff);
+            scalarUniforms.Add("_AlphaCutoff", alphaCutoff);
             intUniforms.Add("_DoubleSided", mDef.DoubleSided ? 1 : 0);
 
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.BaseColor, mDef.Pbr.BaseColorTexture, "_BaseColorTexture");
@@ -292,7 +293,7 @@ public static class GltfCompileExtensions
                 MaterialIndex = i,
                 Definition = definition,
                 AlphaMode = alphaMode,
-                AlphaCutoff = mDef.AlphaCutoff,
+                AlphaCutoff = alphaCutoff,
                 DoubleSided = mDef.DoubleSided,
                 Unlit = mDef.Unlit,
                 Textures = texBindings.ToImmutable(),
