@@ -655,6 +655,30 @@ public sealed class GltfImportTests
             .Should().HaveCount(3);
     }
 
+    [Fact]
+    public async Task Import_MaterialWithoutAlphaCutoff_UsesConfiguredThreshold()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "materials": [{"name": "Masked", "alphaMode": "MASK"}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "alpha.glb",
+            AlphaCutoffThreshold = 0.25f,
+        });
+
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfMaterialAsset material = result.Materials.Should().ContainSingle().Subject;
+        material.AlphaCutoff.Should().Be(0.25f);
+        material.Definition.ScalarUniforms["_AlphaCutoff"].Should().Be(0.25f);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
