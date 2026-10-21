@@ -5,7 +5,7 @@ public sealed class ShapeSerializationTests
     [Fact]
     public void Fingerprint_Is_Stable_And_Prefixed()
     {
-        Shape2D rect = ShapeFactory.CreateRectangle(0f, 0f, 4f, 2f, ShapeFactory.CreateSolidPaint("red"));
+        Shape2D rect = ShapeFactory.CreateRectangle(0f, 0f, 4f, 2f, ShapePaintFactory.CreateSolidPaint("red"));
         string first = rect.Fingerprint;
         string second = rect.Fingerprint;
         first.Should().Be(second);
@@ -17,8 +17,8 @@ public sealed class ShapeSerializationTests
     {
         Shape2D rect = ShapeFactory.CreateRectangle(
             1f, 2f, 4f, 2f,
-            ShapeFactory.CreateSolidPaint("red"),
-            ShapeFactory.CreateStroke(ShapeFactory.CreateSolidPaint("white"), 1f),
+            ShapePaintFactory.CreateSolidPaint("red"),
+            ShapePaintFactory.CreateStroke(ShapePaintFactory.CreateSolidPaint("white"), 1f),
             opacity: 0.5f,
             name: "hero");
         Shape2D restored = ShapeSerializer.DeserializeShape(ShapeSerializer.StringifyShape(rect));
@@ -34,7 +34,7 @@ public sealed class ShapeSerializationTests
     [Fact]
     public void Gradient_RoundTrips_With_Stops()
     {
-        var gradient = ShapeFactory.CreateLinearGradient(
+        var gradient = ShapePaintFactory.CreateLinearGradient(
             new Vec2(0f, 0f), new Vec2(1f, 0f),
             [new GradientStop(0f, ColorParser.ParseColor("black")), new GradientStop(1f, ColorParser.ParseColor("white"))],
             spread: GradientSpread.Repeat,
@@ -66,7 +66,7 @@ public sealed class ShapeSerializationTests
     [Fact]
     public void Line_Stroke_Forced_Center()
     {
-        var stroke = ShapePaintFactory.CreateStroke(ShapeFactory.CreateSolidPaint("red"), 2f, ShapeStrokeAlignment.Center);
+        var stroke = ShapePaintFactory.CreateStroke(ShapePaintFactory.CreateSolidPaint("red"), 2f, ShapeStrokeAlignment.Center);
         Shape2D line = ShapeFactory.CreateLine(new Vec2(0f, 0f), new Vec2(3f, 4f), stroke);
         Shape2D restored = ShapeSerializer.DeserializeShape(ShapeSerializer.StringifyShape(line));
         restored.Should().BeOfType<LineShape>();
@@ -84,3 +84,4 @@ public sealed class ShapeSerializationTests
         missing.Should().Throw<SerializationException>();
     }
 }
+
