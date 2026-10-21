@@ -6,7 +6,7 @@ public interface ILightVisitor<TState>
     where TState : allows ref struct
 {
     /// <summary>Visits a light.</summary>
-    void Visit(ref readonly LightData light, scoped ref TState state);
+    static abstract void Visit(ref readonly LightData light, scoped ref TState state);
 }
 
 /// <summary>Zero-alloc light predicate contract.</summary>
