@@ -56,6 +56,7 @@ internal static class GltfPrefabEngine
         var actorList = new List<GltfActorSnapshot>();
         var rootNodeIds = new List<string>();
         var allNodeIds = new HashSet<string>(StringComparer.Ordinal);
+        var materialKeys = new SortedSet<string>(StringComparer.Ordinal);
 
         bool primaryCameraAssigned = false;
         bool primaryDirectionalAllocated = false;
@@ -181,6 +182,10 @@ internal static class GltfPrefabEngine
                         : GltfKeys.Mesh(node.Mesh.Value, 0);
                     int? material = mesh.Primitives[0].Material;
                     string? matKey = material.HasValue ? $"gltf/material/{material.Value}" : null;
+                    if (matKey != null)
+                    {
+                        materialKeys.Add(matKey);
+                    }
 
                     compBuilder.Add(new GltfMeshRendererComponent(
                         meshKey,
@@ -202,6 +207,10 @@ internal static class GltfPrefabEngine
                             : GltfKeys.Mesh(node.Mesh.Value, p);
                         int? primMaterial = mesh.Primitives[p].Material;
                         string? matKey = primMaterial.HasValue ? $"gltf/material/{primMaterial.Value}" : null;
+                        if (matKey != null)
+                        {
+                            materialKeys.Add(matKey);
+                        }
 
                         var childComps = ImmutableArray.Create<GltfComponentSnapshot>(
                             new GltfTransformComponent(Vec3.Zero, Quat.Identity, Vec3.One),
@@ -267,7 +276,7 @@ internal static class GltfPrefabEngine
             MeshKeys = prefabMeshKeys.MoveToImmutable(),
             SkinKeys = skinKeyMap.Values.ToImmutableArray(),
             AnimationKeys = animationClipIds,
-            MaterialKeys = ImmutableArray<string>.Empty,
+            MaterialKeys = materialKeys.ToImmutableArray(),
             AnimationController = animationClipIds.Length > 0 ? new GltfAnimationControllerMetadata { Clips = animationClipIds } : null,
         };
     }

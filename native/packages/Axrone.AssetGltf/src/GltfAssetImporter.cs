@@ -151,7 +151,8 @@ public sealed class GltfAssetImporter : IAssetImporter
         {
             AssetKey key = SubKey($"scene/{prefab.SceneIndex}/prefab");
 
-            var deps = new List<AssetDependencyInput>(prefab.MeshKeys.Length + prefab.SkinKeys.Length + prefab.AnimationKeys.Length);
+            var deps = new List<AssetDependencyInput>(
+                prefab.MeshKeys.Length + prefab.SkinKeys.Length + prefab.AnimationKeys.Length + prefab.MaterialKeys.Length);
             foreach (string meshId in prefab.MeshKeys)
             {
                 if (meshKeys.TryGetValue(meshId, out AssetKey meshKey))
@@ -173,6 +174,14 @@ public sealed class GltfAssetImporter : IAssetImporter
                 if (animationKeys.TryGetValue(animationId, out AssetKey animationKey))
                 {
                     deps.Add(animationKey);
+                }
+            }
+
+            foreach (string materialId in prefab.MaterialKeys)
+            {
+                if (materialKeys.TryGetValue(materialId, out AssetKey materialKey))
+                {
+                    deps.Add(materialKey);
                 }
             }
 
