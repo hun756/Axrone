@@ -1,4 +1,4 @@
-namespace Axrone.AssetGltf;
+﻿namespace Axrone.AssetGltf;
 
 /// <summary>Manual Utf8JsonReader glTF parser (AOT-safe, no reflection).</summary>
 internal static class GltfJsonParser
@@ -55,6 +55,10 @@ internal static class GltfJsonParser
             else if (prop.SequenceEqual("buffers"u8))
             {
                 ParseBuffers(ref reader, model);
+            }
+            else if (prop.SequenceEqual("materials"u8))
+            {
+                ParseMaterials(ref reader, model);
             }
             else if (prop.SequenceEqual("extensions"u8))
             {
@@ -778,6 +782,295 @@ internal static class GltfJsonParser
             }
 
             model.Buffers.Add(buffer);
+        }
+    }
+
+    private static void ParseMaterials(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var mat = new GltfRawModel.Material();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+                if (prop.SequenceEqual("name"u8))
+                {
+                    mat.Name = reader.GetString();
+                }
+                else if (prop.SequenceEqual("alphaMode"u8))
+                {
+                    mat.AlphaMode = reader.GetString() ?? "OPAQUE";
+                }
+                else if (prop.SequenceEqual("alphaCutoff"u8))
+                {
+                    mat.AlphaCutoff = reader.GetSingle();
+                }
+                else if (prop.SequenceEqual("doubleSided"u8))
+                {
+                    mat.DoubleSided = reader.GetBoolean();
+                }
+                else if (prop.SequenceEqual("emissiveFactor"u8))
+                {
+                    mat.EmissiveFactor = ReadFloatArray(ref reader);
+                }
+                else if (prop.SequenceEqual("pbrMetallicRoughness"u8))
+                {
+                    ParsePbr(ref reader, mat);
+                }
+                else if (prop.SequenceEqual("normalTexture"u8))
+                {
+                    mat.NormalTexture = ParseTextureInfo(ref reader);
+                }
+                else if (prop.SequenceEqual("occlusionTexture"u8))
+                {
+                    mat.OcclusionTexture = ParseTextureInfo(ref reader);
+                }
+                else if (prop.SequenceEqual("emissiveTexture"u8))
+                {
+                    mat.EmissiveTexture = ParseTextureInfo(ref reader);
+                }
+                else if (prop.SequenceEqual("extensions"u8))
+                {
+                    ParseMaterialExtensions(ref reader, mat);
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            model.Materials.Add(mat);
+        }
+    }
+
+    private static void ParsePbr(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("baseColorFactor"u8))
+            {
+                mat.Pbr.BaseColorFactor = ReadFloatArray(ref reader);
+            }
+            else if (prop.SequenceEqual("metallicFactor"u8))
+            {
+                mat.Pbr.MetallicFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("roughnessFactor"u8))
+            {
+                mat.Pbr.RoughnessFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("baseColorTexture"u8))
+            {
+                mat.Pbr.BaseColorTexture = ParseTextureInfo(ref reader);
+            }
+            else if (prop.SequenceEqual("metallicRoughnessTexture"u8))
+            {
+                mat.Pbr.MetallicRoughnessTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static GltfRawModel.TextureInfo ParseTextureInfo(ref Utf8JsonReader reader)
+    {
+        var info = new GltfRawModel.TextureInfo();
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return info;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("index"u8))
+            {
+                info.Index = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("texCoord"u8))
+            {
+                info.TexCoord = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("scale"u8))
+            {
+                info.Scale = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("strength"u8))
+            {
+                info.Strength = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("extensions"u8))
+            {
+                ParseTextureTransformExtension(ref reader, info);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        return info;
+    }
+
+    private static void ParseTextureTransformExtension(ref Utf8JsonReader reader, GltfRawModel.TextureInfo info)
+    {
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("KHR_texture_transform"u8))
+            {
+                var offset = Vec2.Zero;
+                var scale = Vec2.One;
+                float rotation = 0.0f;
+                int texCoord = info.TexCoord;
+
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                    {
+                        continue;
+                    }
+
+                    ReadOnlySpan<byte> prop = reader.ValueSpan;
+                    reader.Read();
+                    if (prop.SequenceEqual("offset"u8))
+                    {
+                        float[]? arr = ReadFloatArray(ref reader);
+                        if (arr != null && arr.Length >= 2)
+                        {
+                            offset = new Vec2(arr[0], arr[1]);
+                        }
+                    }
+                    else if (prop.SequenceEqual("scale"u8))
+                    {
+                        float[]? arr = ReadFloatArray(ref reader);
+                        if (arr != null && arr.Length >= 2)
+                        {
+                            scale = new Vec2(arr[0], arr[1]);
+                        }
+                    }
+                    else if (prop.SequenceEqual("rotation"u8))
+                    {
+                        rotation = reader.GetSingle();
+                    }
+                    else if (prop.SequenceEqual("texCoord"u8))
+                    {
+                        texCoord = reader.GetInt32();
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+                }
+
+                info.Transform = new GltfTextureTransform(offset, scale, rotation, texCoord);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseMaterialExtensions(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> ext = reader.ValueSpan;
+            reader.Read();
+            if (ext.SequenceEqual("KHR_materials_unlit"u8))
+            {
+                mat.Unlit = true;
+                reader.Skip();
+            }
+            else if (ext.SequenceEqual("KHR_materials_clearcoat"u8))
+            {
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                    {
+                        continue;
+                    }
+
+                    ReadOnlySpan<byte> prop = reader.ValueSpan;
+                    reader.Read();
+                    if (prop.SequenceEqual("clearcoatFactor"u8))
+                    {
+                        mat.ClearcoatFactor = reader.GetSingle();
+                    }
+                    else if (prop.SequenceEqual("clearcoatRoughnessFactor"u8))
+                    {
+                        mat.ClearcoatRoughnessFactor = reader.GetSingle();
+                    }
+                    else if (prop.SequenceEqual("clearcoatTexture"u8))
+                    {
+                        mat.ClearcoatTexture = ParseTextureInfo(ref reader);
+                    }
+                    else if (prop.SequenceEqual("clearcoatRoughnessTexture"u8))
+                    {
+                        mat.ClearcoatRoughnessTexture = ParseTextureInfo(ref reader);
+                    }
+                    else if (prop.SequenceEqual("clearcoatNormalTexture"u8))
+                    {
+                        mat.ClearcoatNormalTexture = ParseTextureInfo(ref reader);
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+                }
+            }
+            else if (ext.SequenceEqual("KHR_materials_emissive_strength"u8))
+            {
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("emissiveStrength"u8))
+                    {
+                        reader.Read();
+                        mat.EmissiveStrength = reader.GetSingle();
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+                }
+            }
+            else
+            {
+                reader.Skip();
+            }
         }
     }
 
