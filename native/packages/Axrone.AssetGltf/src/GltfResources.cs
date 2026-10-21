@@ -128,3 +128,157 @@ public static class Ktx2Decoder
             _ => GltfTextureFormat.Unknown,
         };
 }
+
+/// <summary>Buffer and bufferView resolution with meshopt support.</summary>
+public sealed class GltfResourceRuntimeCache
+{
+    private readonly ReadOnlyMemory<byte>? _glbBinaryChunk;
+    private readonly GltfResourceResolver? _resolver;
+    private readonly Dictionary<int, ReadOnlyMemory<byte>> _bufferCache = new();
+    private readonly Dictionary<int, ReadOnlyMemory<byte>> _bufferViewCache = new();
+    private readonly Lock _gate = new();
+
+    /// <summary>Creates a cache.</summary>
+    public GltfResourceRuntimeCache(
+        ReadOnlyMemory<byte>? glbBinaryChunk,
+        GltfResourceResolver? resolver)
+    {
+        _glbBinaryChunk = glbBinaryChunk;
+        _resolver = resolver;
+    }
+
+    /// <summary>Resolves a buffer to bytes.</summary>
+    public async ValueTask<ReadOnlyMemory<byte>> ResolveBufferAsync(
+        int bufferIndex,
+        GltfRawModel.Buffer bufferDef,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(bufferDef);
+        lock (_gate)
+        {
+            if (_bufferCache.TryGetValue(bufferIndex, out ReadOnlyMemory<byte> cached))
+            {
+                return cached;
+            }
+        }
+
+        ReadOnlyMemory<byte> resolved;
+
+        if (string.IsNullOrEmpty(bufferDef.Uri))
+        {
+            if (bufferIndex == 0 && _glbBinaryChunk.HasValue)
+            {
+                resolved = _glbBinaryChunk.Value.Slice(0, Math.Min(bufferDef.ByteLength, _glbBinaryChunk.Value.Length));
+            }
+            else
+            {
+                ThrowHelper.ThrowResource($"[buffer:{bufferIndex}]", "buffer", "GLB BIN chunk missing or requested buffer out of range.");
+                resolved = default;
+            }
+        }
+        else if (bufferDef.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            resolved = DecodeDataUri(bufferDef.Uri);
+        }
+        else
+        {
+            if (_resolver == null)
+            {
+                ThrowHelper.ThrowResource(bufferDef.Uri, "buffer", "External resource resolver callback not attached.");
+            }
+
+            var request = new GltfResourceRequest(bufferDef.Uri, null, "buffer", "application/octet-stream");
+            GltfResolvedResource? result = await _resolver!(request, cancellationToken).ConfigureAwait(false);
+
+            if (result == null || result.Value.Data.IsEmpty)
+            {
+                ThrowHelper.ThrowResource(bufferDef.Uri, "buffer", "Unable to resolve external binary URI.");
+            }
+
+            resolved = result.Value.Data;
+        }
+
+        lock (_gate)
+        {
+            _bufferCache[bufferIndex] = resolved;
+        }
+
+        return resolved;
+    }
+
+    /// <summary>Resolves a bufferView to bytes, decompressing meshopt when linked.</summary>
+    public async ValueTask<ReadOnlyMemory<byte>> ResolveBufferViewAsync<TMeshoptPolicy>(
+        int bufferViewIndex,
+        GltfRawModel rawModel,
+        CancellationToken cancellationToken)
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+    {
+        ArgumentNullException.ThrowIfNull(rawModel);
+        lock (_gate)
+        {
+            if (_bufferViewCache.TryGetValue(bufferViewIndex, out ReadOnlyMemory<byte> cached))
+            {
+                return cached;
+            }
+        }
+
+        GltfRawModel.BufferView bv = rawModel.BufferViews[bufferViewIndex];
+        ReadOnlyMemory<byte> result;
+
+        if (bv.Meshopt != null)
+        {
+            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(bv.Meshopt.Buffer, rawModel.Buffers[bv.Meshopt.Buffer], cancellationToken).ConfigureAwait(false);
+            int uncompressedSize = bv.Meshopt.Count * bv.Meshopt.ByteStride;
+            byte[] decompressed = GC.AllocateUninitializedArray<byte>(uncompressedSize, pinned: true);
+
+            bool ok;
+            {
+                ReadOnlySpan<byte> compressed = raw.Span.Slice(bv.Meshopt.ByteOffset, bv.Meshopt.ByteLength);
+                ok = TMeshoptPolicy.IsSupported
+                    && TMeshoptPolicy.TryDecompressBufferView(compressed, bv.Meshopt.Count, bv.Meshopt.ByteStride, bv.Meshopt.Mode.AsSpan(), decompressed);
+            }
+
+            if (!ok)
+            {
+                ThrowHelper.ThrowContainer($"EXT_meshopt_compression decompression failed for bufferView [{bufferViewIndex}].");
+            }
+
+            result = decompressed;
+        }
+        else
+        {
+            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(bv.Buffer, rawModel.Buffers[bv.Buffer], cancellationToken).ConfigureAwait(false);
+            result = raw.Slice(bv.ByteOffset, bv.ByteLength);
+        }
+
+        lock (_gate)
+        {
+            _bufferViewCache[bufferViewIndex] = result;
+        }
+
+        return result;
+    }
+
+    /// <summary>Decodes a data: URI payload.</summary>
+    public static ReadOnlyMemory<byte> DecodeDataUri(string uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        int commaIndex = uri.IndexOf(',', StringComparison.Ordinal);
+        if (commaIndex < 0)
+        {
+            ThrowHelper.ThrowContainer("Malformed glTF data URI.");
+        }
+
+        ReadOnlySpan<char> meta = uri.AsSpan(5, commaIndex - 5);
+        ReadOnlySpan<char> data = uri.AsSpan(commaIndex + 1);
+
+        if (meta.EndsWith("base64", StringComparison.OrdinalIgnoreCase))
+        {
+            return Convert.FromBase64String(data.ToString());
+        }
+        else
+        {
+            return Encoding.UTF8.GetBytes(Uri.UnescapeDataString(data.ToString()));
+        }
+    }
+}
