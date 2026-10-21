@@ -5,7 +5,7 @@ global using System.Linq;
 global using System.Threading;
 global using System.Threading.Tasks;
 global using Xunit;
-global using FluentAssertions;
+global using AwesomeAssertions;
 global using Axrone.Asset;
 global using Axrone.AssetGltf;
 global using Axrone.Numeric;

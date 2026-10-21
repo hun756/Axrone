@@ -7,6 +7,7 @@
   <PropertyGroup Label="CentralizedPackageVersions">
     <BenchmarkDotNetVersion>0.14.0</BenchmarkDotNetVersion>
     <FluentAssertionsVersion>8.3.0</FluentAssertionsVersion>
+    <AwesomeAssertionsVersion>9.6.0</AwesomeAssertionsVersion>
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVersion>2.8.2</XunitRunnerVersion>
     <CoverletVersion>6.0.4</CoverletVersion>
@@ -20,6 +21,7 @@
     <PackageVersion Include="xunit" Version="$(XunitVersion)" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="$(XunitRunnerVersion)" />
     <PackageVersion Include="FluentAssertions" Version="$(FluentAssertionsVersion)" />
+    <PackageVersion Include="AwesomeAssertions" Version="$(AwesomeAssertionsVersion)" />
     <PackageVersion Include="coverlet.collector" Version="$(CoverletVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
   </ItemGroup>
