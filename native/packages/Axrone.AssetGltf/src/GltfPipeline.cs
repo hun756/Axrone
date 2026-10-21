@@ -55,6 +55,9 @@ public sealed class GltfImporterOptions
         get => field;
         init => field = value;
     } = GltfTextureFormat.BC7_RGBA;
+
+    /// <summary>Resource limits for untrusted input.</summary>
+    public GltfImportLimits Limits { get; init; } = GltfImportLimits.Default;
 }
 
 /// <summary>Typestate import pipeline container (transitions are extensions).</summary>

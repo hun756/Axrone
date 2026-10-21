@@ -20,6 +20,8 @@ public static class GltfCompileExtensions
         GltfResourceRuntimeCache resourceRuntime = pipeline.ResourceRuntime!;
         List<GltfDiagnostic> diagnostics = pipeline.Diagnostics;
 
+        GltfLimitsValidator.Validate(pipeline.SourceBytes.Length, rawModel, options.Limits);
+
         List<GltfTextureAsset> textures = await CompileTexturesAsync<TMeshoptPolicy, TTranscoderPolicy>(
             rawModel, resourceRuntime, options, diagnostics, cancellationToken).ConfigureAwait(false);
 
@@ -1042,6 +1044,11 @@ public sealed class GltfImporter
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (sourceBytes.Length > _options.Limits.MaxSourceBytes)
+        {
+            ThrowHelper.ThrowLimit("MaxSourceBytes", sourceBytes.Length, _options.Limits.MaxSourceBytes);
+        }
+
         GltfPipeline<StateUnparsed> pipeline = GltfPipeline<StateUnparsed>.Create(sourceBytes);
         GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
         GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
