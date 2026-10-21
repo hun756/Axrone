@@ -84,6 +84,7 @@ public static class GltfCompileExtensions
             Document = new GltfDocumentAsset
             {
                 Id = options.Id,
+                Uri = options.SourceUri,
                 Name = Path.GetFileNameWithoutExtension(options.Id),
                 Format = pipeline.ContainerFormat,
                 Version = rawModel.Version,
