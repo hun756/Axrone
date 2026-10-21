@@ -165,18 +165,30 @@ public static class GltfCompileExtensions
                             runtimeFormat = Ktx2Decoder.MapVkFormat(compressed.VkFormat);
 
                             if (options.TranscodeTargetFormat != GltfTextureFormat.Unknown
-                                && TTranscoderPolicy.CanTranscode(runtimeFormat, options.TranscodeTargetFormat))
+                                && TTranscoderPolicy.CanTranscode(
+                                    imgBytes.Span,
+                                    runtimeFormat,
+                                    options.TranscodeTargetFormat))
                             {
-                                if (TTranscoderPolicy.TryTranscode(imgBytes, runtimeFormat, options.TranscodeTargetFormat, out ReadOnlyMemory<byte> transcoded, out string? failureReason))
+                                if (TTranscoderPolicy.TryTranscode(
+                                        imgBytes,
+                                        runtimeFormat,
+                                        options.TranscodeTargetFormat,
+                                        out GltfTranscodeOutput? transcodeOutput,
+                                        out string? failureReason) &&
+                                    transcodeOutput.HasValue)
                                 {
                                     transcodeState = new GltfTextureTranscodeState(true, TTranscoderPolicy.PolicyId, null, options.TranscodeTargetFormat);
-                                    runtimeFormat = options.TranscodeTargetFormat;
-                                    payload = new GltfRawTexturePayload(transcoded, "application/octet-stream");
+                                    runtimeFormat = transcodeOutput.Value.Format;
+                                    payload = transcodeOutput.Value.Payload;
                                 }
                                 else
                                 {
                                     transcodeState = new GltfTextureTranscodeState(false, null, failureReason, options.TranscodeTargetFormat);
-                                    diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.texture.transcode.failed", failureReason!));
+                                    diagnostics.Add(new GltfDiagnostic(
+                                        GltfDiagnosticLevel.Warning,
+                                        "gltf.texture.transcode.failed",
+                                        failureReason ?? "Texture transcode failed."));
                                 }
                             }
                         }

@@ -33,7 +33,25 @@ public sealed record GltfCompressedTexturePayload(
     int Height,
     int LevelCount,
     int SupercompressionScheme,
-    ImmutableArray<ReadOnlyMemory<byte>> Levels) : GltfTexturePayload;
+    ImmutableArray<ReadOnlyMemory<byte>> Levels) : GltfTexturePayload
+{
+    /// <summary>Mip level metadata for packed transcoded output.</summary>
+    public ImmutableArray<GltfTextureMipLevel> MipLevels { get; init; } = ImmutableArray<GltfTextureMipLevel>.Empty;
+}
+
+/// <summary>Transcoded texture payload with packed mip levels.</summary>
+public sealed record GltfTranscodedTexturePayload(
+    ReadOnlyMemory<byte> Bytes,
+    GltfTextureFormat Format,
+    ImmutableArray<GltfTextureMipLevel> Levels) : GltfTexturePayload;
+
+/// <summary>Packed mip level metadata.</summary>
+public readonly record struct GltfTextureMipLevel(
+    int Level,
+    int Width,
+    int Height,
+    int ByteOffset,
+    int ByteLength);
 
 /// <summary>KTX2 fast header parser.</summary>
 public static class Ktx2Decoder
