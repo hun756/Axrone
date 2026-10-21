@@ -343,6 +343,30 @@ public sealed class GltfImportTests
             .Which.FieldOfView.Should().Be(0.7f);
     }
 
+    [Fact]
+    public async Task Import_EncodedPngPayload_DoesNotClaimDecodedFormat()
+    {
+        byte[] bin = [137, 80, 78, 71];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "images": [{"bufferView": 0, "mimeType": "image/png"}],
+              "textures": [{"source": 0}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 4}],
+              "buffers": [{"byteLength": 4}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "texture.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfTextureAsset texture = result.Textures.Should().ContainSingle().Subject;
+        texture.RuntimeFormat.Should().Be(GltfTextureFormat.Unknown);
+        texture.Payload.Should().BeOfType<GltfRawTexturePayload>()
+            .Which.MimeType.Should().Be("image/png");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
