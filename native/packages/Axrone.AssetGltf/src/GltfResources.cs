@@ -133,7 +133,7 @@ public static class Ktx2Decoder
 }
 
 /// <summary>Buffer and bufferView resolution with meshopt support.</summary>
-public sealed class GltfResourceRuntimeCache
+internal sealed class GltfResourceRuntimeCache
 {
     private readonly ReadOnlyMemory<byte>? _glbBinaryChunk;
     private readonly GltfResourceResolver? _resolver;

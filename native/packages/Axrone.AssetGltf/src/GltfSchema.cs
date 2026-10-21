@@ -1,7 +1,7 @@
 namespace Axrone.AssetGltf;
 
 /// <summary>Raw glTF schema model (parsed JSON, unresolved).</summary>
-public sealed class GltfRawModel
+internal sealed class GltfRawModel
 {
     /// <summary>Raw buffer descriptor.</summary>
     public sealed class Buffer
