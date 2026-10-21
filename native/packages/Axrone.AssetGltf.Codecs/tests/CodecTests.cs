@@ -110,6 +110,84 @@ public sealed class CodecTests
         decoded.ToArray().Should().Equal(positions);
     }
 
+
+    [Fact]
+    public void BasisPolicy_TranscodesKtx2ToBc7()
+    {
+        byte[] rgba = new byte[4 * 4 * 4];
+        for (int i = 0; i < rgba.Length; i++)
+        {
+            rgba[i] = (byte)(i * 11);
+        }
+
+        byte[] ktx2 = BasisUniversal.BasisUniversalCodec.EncodeKtx2(
+            rgba,
+            4,
+            4,
+            new BasisUniversal.BasisEncoderOptions
+            {
+                Format = BasisUniversal.BasisTextureFormat.UastcLdr4x4,
+                QualityLevel = 50,
+            });
+
+        bool result = BasisKtx2TranscoderPolicy.TryTranscode(
+            ktx2,
+            GltfTextureFormat.Unknown,
+            GltfTextureFormat.BC7_RGBA,
+            out GltfTranscodeOutput? output,
+            out string? failureReason);
+
+        result.Should().BeTrue(failureReason);
+        output.Should().NotBeNull();
+        output!.Value.Format.Should().Be(GltfTextureFormat.BC7_RGBA);
+        output.Value.Payload.Should().BeOfType<GltfTranscodedTexturePayload>()
+            .Which.Levels.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task BasisPolicy_TranscodesDuringGlbImport()
+    {
+        byte[] rgba = new byte[4 * 4 * 4];
+        for (int i = 0; i < rgba.Length; i++)
+        {
+            rgba[i] = (byte)(i * 7);
+        }
+
+        byte[] ktx2 = BasisUniversal.BasisUniversalCodec.EncodeKtx2(
+            rgba,
+            4,
+            4,
+            new BasisUniversal.BasisEncoderOptions
+            {
+                Format = BasisUniversal.BasisTextureFormat.UastcLdr4x4,
+                QualityLevel = 50,
+            });
+
+        string json = $$$"""
+        {
+          "asset": {"version": "2.0"},
+          "extensionsUsed": ["KHR_texture_basisu"],
+          "images": [{"bufferView": 0, "mimeType": "image/ktx2"}],
+          "textures": [{"source": 0}],
+          "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": {{{ktx2.Length}}}}],
+          "buffers": [{"byteLength": {{{ktx2.Length}}}}]
+        }
+        """;
+
+        byte[] glb = Glb(json, ktx2);
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = "ktx2.glb",
+            TranscodeTargetFormat = GltfTextureFormat.BC7_RGBA,
+        });
+        GltfImportResult result = await importer
+            .ImportAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, BasisKtx2TranscoderPolicy>(glb);
+
+        result.Diagnostics.Should().BeEmpty();
+        result.Textures[0].RuntimeFormat.Should().Be(GltfTextureFormat.BC7_RGBA);
+        result.Textures[0].Payload.Should().BeOfType<GltfTranscodedTexturePayload>();
+    }
+
     private static byte[] Glb(string json, byte[] bin)
     {
         byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
