@@ -114,7 +114,7 @@ public enum AccessibilityLevel : byte
 /// blending, metrics, harmonies and formatting.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
-public readonly record struct Color : IEquatable<Color>
+public readonly partial record struct Color : IEquatable<Color>
 {
     private const float Epsilon = 1e-6f;
     private const float D65X = 0.95047f;
