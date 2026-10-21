@@ -367,6 +367,28 @@ public sealed class GltfImportTests
             .Which.MimeType.Should().Be("image/png");
     }
 
+    [Fact]
+    public async Task Import_EmbeddedImageDataUri_DecodesPayload()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "images": [{"uri": "data:image/png;base64,iVBORw0KGgo="}],
+              "textures": [{"source": 0}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "embedded.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfTextureAsset texture = result.Textures.Should().ContainSingle().Subject;
+        GltfRawTexturePayload payload = texture.Payload.Should().BeOfType<GltfRawTexturePayload>().Subject;
+        payload.MimeType.Should().Be("image/png");
+        payload.Bytes.Length.Should().Be(8);
+        texture.RuntimeFormat.Should().Be(GltfTextureFormat.Unknown);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
