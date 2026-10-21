@@ -4,7 +4,7 @@ namespace Axrone.Shapes2D;
 public readonly record struct PolygonRing
 {
     /// <summary>Ring points.</summary>
-    public Vec2[] Points { get; }
+    public ImmutableArray<Vec2> Points { get; }
 
     /// <summary>Ring winding.</summary>
     public PolygonWinding Winding { get; }
@@ -17,7 +17,7 @@ public readonly record struct PolygonRing
             ThrowHelper.ThrowShapeValidation("Polygon ring must contain at least 3 points.");
         }
 
-        Points = points.ToArray();
+        Points = ImmutableCollectionsMarshal.AsImmutableArray(points.ToArray());
         Winding = winding;
     }
 }
@@ -211,7 +211,7 @@ public static class PolygonMath
         ref PolygonRing baseHoles = ref MemoryMarshal.GetReference(holes);
         for (nuint i = 0; i < holeLen; i++)
         {
-            if (PointInPolygon(Unsafe.Add(ref baseHoles, i).Points, point))
+            if (PointInPolygon(Unsafe.Add(ref baseHoles, i).Points.AsSpan(), point))
             {
                 return false;
             }
