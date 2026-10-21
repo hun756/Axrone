@@ -35,7 +35,7 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
 
     private CachePaddedCounters _counters;
 
-    private readonly void* _storageMemoryBlock;
+    private void* _storageMemoryBlock;
     private readonly nuint _storageSizeBytes;
 
     private HandleEntry* _handles;

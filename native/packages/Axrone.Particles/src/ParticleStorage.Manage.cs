@@ -1,4 +1,4 @@
-namespace Axrone.Particles;
+﻿namespace Axrone.Particles;
 
 /// <summary>Storage capacity management.</summary>
 public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
@@ -22,7 +22,6 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
             nuint streamFloats = (nuint)aligned * sizeof(float);
             nuint streamIds = (nuint)aligned * (nuint)sizeof(ParticleId);
             nuint newSizeBytes = (streamFloats * 28) + streamIds;
-
             void* newBlock = NativeMemory.AlignedAlloc(newSizeBytes, Alignment);
             if (newBlock == null)
             {
@@ -99,6 +98,7 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
 
             ReassignStreams((byte*)newBlock, streamFloats);
             DenseToId = newIds;
+            _storageMemoryBlock = newBlock;
             _handles = newHandles;
             _freeHandles = newFree;
             _freeHandleTop = top;
