@@ -38,6 +38,9 @@
     <NoWarn>$(NoWarn);CA1031</NoWarn>
     <!-- CA1040: Empty marker interfaces drive the typestate builder phases. -->
     <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1308: Lowercase tokens are the JSON wire format; Invariant culture
+         keeps the mapping deterministic. -->
+    <NoWarn>$(NoWarn);CA1308</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

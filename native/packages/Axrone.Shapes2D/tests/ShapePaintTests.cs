@@ -19,8 +19,8 @@ public sealed class ShapePaintTests
         var paint = ShapePaintFactory.CreateSolidPaint("red");
         paint.Kind.Should().Be("solid");
         paint.KindTag.Should().Be(PaintKind.Solid);
-        paint.GetFingerprint().Should().Be(paint.GetFingerprint());
-        paint.GetFingerprint().Should().StartWith("solid:1:0:0:1");
+        paint.Fingerprint.Should().Be(paint.Fingerprint);
+        paint.Fingerprint.Should().StartWith("solid:1:0:0:1");
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class ShapePaintTests
         gradient.Stops[0].Offset.Should().Be(0f);
         gradient.Stops[1].Offset.Should().Be(1f);
         gradient.Kind.Should().Be("linear-gradient");
-        gradient.GetFingerprint().Should().Be(gradient.GetFingerprint());
+        gradient.Fingerprint.Should().Be(gradient.Fingerprint);
 
         Action empty = () => ShapePaintFactory.CreateLinearGradient(new Vec2(0f, 0f), new Vec2(1f, 0f), []);
         empty.Should().Throw<PaintValidationException>();
@@ -104,3 +104,4 @@ public sealed class ShapePaintTests
         zeroWidth.Should().Throw<ShapeValidationException>();
     }
 }
+

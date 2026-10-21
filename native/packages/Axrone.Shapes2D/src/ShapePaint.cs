@@ -12,7 +12,7 @@ public abstract class ShapePaint
     public abstract string Kind { get; }
 
     /// <summary>Memoized fingerprint.</summary>
-    public string GetFingerprint() => _cachedFingerprint ??= ComputeFingerprint();
+    public string Fingerprint => _cachedFingerprint ??= ComputeFingerprint();
 
     /// <summary>Computes the fingerprint.</summary>
     protected abstract string ComputeFingerprint();
