@@ -555,6 +555,30 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.accessor.invalid");
     }
 
+    [Fact]
+    public async Task Import_SkinInverseBindMatrices_RequireFloatMat4()
+    {
+        byte[] bin = new byte[48];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "nodes": [{"name": "Joint"}],
+              "skins": [{"joints": [0], "inverseBindMatrices": 0}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 1, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 48}],
+              "buffers": [{"byteLength": 48}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "skin.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
