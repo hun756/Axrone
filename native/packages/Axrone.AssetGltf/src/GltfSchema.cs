@@ -266,6 +266,81 @@ public sealed class GltfRawModel
 
         /// <summary>KHR_materials_emissive_strength value.</summary>
         public float EmissiveStrength { get; set; } = 1.0f;
+
+        /// <summary>KHR_materials_specular factor.</summary>
+        public float SpecularFactor { get; set; } = 1.0f;
+
+        /// <summary>KHR_materials_specular color factor.</summary>
+        public float[]? SpecularColorFactor { get; set; }
+
+        /// <summary>KHR_materials_specular specular texture (alpha channel).</summary>
+        public TextureInfo? SpecularTexture { get; set; }
+
+        /// <summary>KHR_materials_specular color texture (RGB channels).</summary>
+        public TextureInfo? SpecularColorTexture { get; set; }
+
+        /// <summary>KHR_materials_sheen color factor.</summary>
+        public float[]? SheenColorFactor { get; set; }
+
+        /// <summary>KHR_materials_sheen color texture.</summary>
+        public TextureInfo? SheenColorTexture { get; set; }
+
+        /// <summary>KHR_materials_sheen roughness factor.</summary>
+        public float SheenRoughnessFactor { get; set; }
+
+        /// <summary>KHR_materials_sheen roughness texture (alpha channel).</summary>
+        public TextureInfo? SheenRoughnessTexture { get; set; }
+
+        /// <summary>KHR_materials_transmission factor.</summary>
+        public float TransmissionFactor { get; set; }
+
+        /// <summary>KHR_materials_transmission texture (red channel).</summary>
+        public TextureInfo? TransmissionTexture { get; set; }
+
+        /// <summary>KHR_materials_volume thickness factor.</summary>
+        public float ThicknessFactor { get; set; }
+
+        /// <summary>KHR_materials_volume thickness texture (green channel).</summary>
+        public TextureInfo? ThicknessTexture { get; set; }
+
+        /// <summary>KHR_materials_volume attenuation distance.</summary>
+        public float AttenuationDistance { get; set; } = float.PositiveInfinity;
+
+        /// <summary>KHR_materials_volume attenuation color.</summary>
+        public float[]? AttenuationColor { get; set; }
+
+        /// <summary>KHR_materials_ior index of refraction.</summary>
+        public float Ior { get; set; } = 1.5f;
+
+        /// <summary>KHR_materials_iridescence factor.</summary>
+        public float IridescenceFactor { get; set; }
+
+        /// <summary>KHR_materials_iridescence texture.</summary>
+        public TextureInfo? IridescenceTexture { get; set; }
+
+        /// <summary>KHR_materials_iridescence index of refraction.</summary>
+        public float IridescenceIor { get; set; } = 1.3f;
+
+        /// <summary>KHR_materials_iridescence minimum thickness in nanometers.</summary>
+        public float IridescenceThicknessMinimum { get; set; } = 100.0f;
+
+        /// <summary>KHR_materials_iridescence maximum thickness in nanometers.</summary>
+        public float IridescenceThicknessMaximum { get; set; } = 400.0f;
+
+        /// <summary>KHR_materials_iridescence thickness texture (green channel).</summary>
+        public TextureInfo? IridescenceThicknessTexture { get; set; }
+
+        /// <summary>KHR_materials_anisotropy strength.</summary>
+        public float AnisotropyStrength { get; set; }
+
+        /// <summary>KHR_materials_anisotropy rotation in radians.</summary>
+        public float AnisotropyRotation { get; set; }
+
+        /// <summary>KHR_materials_anisotropy texture.</summary>
+        public TextureInfo? AnisotropyTexture { get; set; }
+
+        /// <summary>KHR_materials_dispersion strength.</summary>
+        public float Dispersion { get; set; }
     }
 
     /// <summary>Raw texture.</summary>

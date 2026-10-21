@@ -1254,6 +1254,318 @@ internal static class GltfJsonParser
                     }
                 }
             }
+            else if (ext.SequenceEqual("KHR_materials_specular"u8))
+            {
+                ParseSpecularExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_sheen"u8))
+            {
+                ParseSheenExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_transmission"u8))
+            {
+                ParseTransmissionExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_volume"u8))
+            {
+                ParseVolumeExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_ior"u8))
+            {
+                ParseIorExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_iridescence"u8))
+            {
+                ParseIridescenceExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_anisotropy"u8))
+            {
+                ParseAnisotropyExtension(ref reader, mat);
+            }
+            else if (ext.SequenceEqual("KHR_materials_dispersion"u8))
+            {
+                ParseDispersionExtension(ref reader, mat);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseSpecularExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("specularFactor"u8))
+            {
+                mat.SpecularFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("specularColorFactor"u8))
+            {
+                mat.SpecularColorFactor = ReadFloatArray(ref reader);
+            }
+            else if (prop.SequenceEqual("specularTexture"u8))
+            {
+                mat.SpecularTexture = ParseTextureInfo(ref reader);
+            }
+            else if (prop.SequenceEqual("specularColorTexture"u8))
+            {
+                mat.SpecularColorTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseSheenExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("sheenColorFactor"u8))
+            {
+                mat.SheenColorFactor = ReadFloatArray(ref reader);
+            }
+            else if (prop.SequenceEqual("sheenColorTexture"u8))
+            {
+                mat.SheenColorTexture = ParseTextureInfo(ref reader);
+            }
+            else if (prop.SequenceEqual("sheenRoughnessFactor"u8))
+            {
+                mat.SheenRoughnessFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("sheenRoughnessTexture"u8))
+            {
+                mat.SheenRoughnessTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseTransmissionExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("transmissionFactor"u8))
+            {
+                mat.TransmissionFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("transmissionTexture"u8))
+            {
+                mat.TransmissionTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseVolumeExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("thicknessFactor"u8))
+            {
+                mat.ThicknessFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("thicknessTexture"u8))
+            {
+                mat.ThicknessTexture = ParseTextureInfo(ref reader);
+            }
+            else if (prop.SequenceEqual("attenuationDistance"u8))
+            {
+                mat.AttenuationDistance = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("attenuationColor"u8))
+            {
+                mat.AttenuationColor = ReadFloatArray(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseIorExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("ior"u8))
+            {
+                reader.Read();
+                mat.Ior = reader.GetSingle();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseIridescenceExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("iridescenceFactor"u8))
+            {
+                mat.IridescenceFactor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("iridescenceTexture"u8))
+            {
+                mat.IridescenceTexture = ParseTextureInfo(ref reader);
+            }
+            else if (prop.SequenceEqual("iridescenceIor"u8))
+            {
+                mat.IridescenceIor = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("iridescenceThicknessMinimum"u8))
+            {
+                mat.IridescenceThicknessMinimum = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("iridescenceThicknessMaximum"u8))
+            {
+                mat.IridescenceThicknessMaximum = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("iridescenceThicknessTexture"u8))
+            {
+                mat.IridescenceThicknessTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseAnisotropyExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("anisotropyStrength"u8))
+            {
+                mat.AnisotropyStrength = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("anisotropyRotation"u8))
+            {
+                mat.AnisotropyRotation = reader.GetSingle();
+            }
+            else if (prop.SequenceEqual("anisotropyTexture"u8))
+            {
+                mat.AnisotropyTexture = ParseTextureInfo(ref reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseDispersionExtension(ref Utf8JsonReader reader, GltfRawModel.Material mat)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("dispersion"u8))
+            {
+                reader.Read();
+                mat.Dispersion = reader.GetSingle();
+            }
             else
             {
                 reader.Skip();

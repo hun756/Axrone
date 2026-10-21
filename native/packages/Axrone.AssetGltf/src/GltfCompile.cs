@@ -250,6 +250,15 @@ public static class GltfCompileExtensions
             ValidateTextureBinding(mDef.ClearcoatTexture, i, rawModel.Textures.Count, "clearcoatTexture");
             ValidateTextureBinding(mDef.ClearcoatRoughnessTexture, i, rawModel.Textures.Count, "clearcoatRoughnessTexture");
             ValidateTextureBinding(mDef.ClearcoatNormalTexture, i, rawModel.Textures.Count, "clearcoatNormalTexture");
+            ValidateTextureBinding(mDef.SpecularTexture, i, rawModel.Textures.Count, "specularTexture");
+            ValidateTextureBinding(mDef.SpecularColorTexture, i, rawModel.Textures.Count, "specularColorTexture");
+            ValidateTextureBinding(mDef.SheenColorTexture, i, rawModel.Textures.Count, "sheenColorTexture");
+            ValidateTextureBinding(mDef.SheenRoughnessTexture, i, rawModel.Textures.Count, "sheenRoughnessTexture");
+            ValidateTextureBinding(mDef.TransmissionTexture, i, rawModel.Textures.Count, "transmissionTexture");
+            ValidateTextureBinding(mDef.ThicknessTexture, i, rawModel.Textures.Count, "thicknessTexture");
+            ValidateTextureBinding(mDef.IridescenceTexture, i, rawModel.Textures.Count, "iridescenceTexture");
+            ValidateTextureBinding(mDef.IridescenceThicknessTexture, i, rawModel.Textures.Count, "iridescenceThicknessTexture");
+            ValidateTextureBinding(mDef.AnisotropyTexture, i, rawModel.Textures.Count, "anisotropyTexture");
 
             var floatUniforms = ImmutableDictionary.CreateBuilder<string, float[]>(StringComparer.Ordinal);
             var scalarUniforms = ImmutableDictionary.CreateBuilder<string, float>(StringComparer.Ordinal);
@@ -262,6 +271,23 @@ public static class GltfCompileExtensions
             scalarUniforms.Add("_RoughnessFactor", mDef.Pbr.RoughnessFactor);
             scalarUniforms.Add("_ClearcoatFactor", mDef.ClearcoatFactor);
             scalarUniforms.Add("_ClearcoatRoughnessFactor", mDef.ClearcoatRoughnessFactor);
+
+            floatUniforms.Add("_SpecularColorFactor", mDef.SpecularColorFactor ?? [1.0f, 1.0f, 1.0f]);
+            scalarUniforms.Add("_SpecularFactor", mDef.SpecularFactor);
+            floatUniforms.Add("_SheenColorFactor", mDef.SheenColorFactor ?? [0.0f, 0.0f, 0.0f]);
+            scalarUniforms.Add("_SheenRoughnessFactor", mDef.SheenRoughnessFactor);
+            scalarUniforms.Add("_TransmissionFactor", mDef.TransmissionFactor);
+            scalarUniforms.Add("_ThicknessFactor", mDef.ThicknessFactor);
+            scalarUniforms.Add("_AttenuationDistance", mDef.AttenuationDistance);
+            floatUniforms.Add("_AttenuationColor", mDef.AttenuationColor ?? [1.0f, 1.0f, 1.0f]);
+            scalarUniforms.Add("_IorFactor", mDef.Ior);
+            scalarUniforms.Add("_IridescenceFactor", mDef.IridescenceFactor);
+            scalarUniforms.Add("_IridescenceIor", mDef.IridescenceIor);
+            scalarUniforms.Add("_IridescenceThicknessMinimum", mDef.IridescenceThicknessMinimum);
+            scalarUniforms.Add("_IridescenceThicknessMaximum", mDef.IridescenceThicknessMaximum);
+            scalarUniforms.Add("_AnisotropyStrength", mDef.AnisotropyStrength);
+            scalarUniforms.Add("_AnisotropyRotation", mDef.AnisotropyRotation);
+            scalarUniforms.Add("_Dispersion", mDef.Dispersion);
 
             float[] emissive = mDef.EmissiveFactor ?? [0.0f, 0.0f, 0.0f];
             if (mDef.EmissiveStrength != 1.0f)
@@ -295,6 +321,15 @@ public static class GltfCompileExtensions
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Clearcoat, mDef.ClearcoatTexture, "_ClearcoatTexture");
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.ClearcoatRoughness, mDef.ClearcoatRoughnessTexture, "_ClearcoatRoughnessTexture");
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.ClearcoatNormal, mDef.ClearcoatNormalTexture, "_ClearcoatNormalTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Specular, mDef.SpecularTexture, "_SpecularTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SpecularColor, mDef.SpecularColorTexture, "_SpecularColorTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SheenColor, mDef.SheenColorTexture, "_SheenColorTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SheenRoughness, mDef.SheenRoughnessTexture, "_SheenRoughnessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Transmission, mDef.TransmissionTexture, "_TransmissionTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Thickness, mDef.ThicknessTexture, "_ThicknessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Iridescence, mDef.IridescenceTexture, "_IridescenceTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.IridescenceThickness, mDef.IridescenceThicknessTexture, "_IridescenceThicknessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Anisotropy, mDef.AnisotropyTexture, "_AnisotropyTexture");
 
             var definition = new GltfMaterialDefinition
             {
