@@ -355,3 +355,117 @@ public enum TrailMode : byte
     Ribbon = 1,
 }
 
+/// <summary>Particle death reason.</summary>
+public enum ParticleDeathReason : byte
+{
+    /// <summary>Expired.</summary>
+    Expired = 0,
+
+    /// <summary>Killed.</summary>
+    Killed = 1,
+
+    /// <summary>Collision.</summary>
+    Collision = 2,
+
+    /// <summary>Out of bounds.</summary>
+    Bounds = 3,
+}
+
+/// <summary>Particle system error code.</summary>
+public enum ParticleSystemErrorCode : uint
+{
+    /// <summary>No error.</summary>
+    None = 0,
+
+    /// <summary>System not initialized.</summary>
+    SystemNotInitialized = 1,
+
+    /// <summary>Particle not found.</summary>
+    ParticleNotFound = 2,
+
+    /// <summary>Module not found.</summary>
+    ModuleNotFound = 3,
+
+    /// <summary>Capacity exceeded.</summary>
+    CapacityExceeded = 4,
+
+    /// <summary>Invalid configuration.</summary>
+    InvalidConfiguration = 5,
+
+    /// <summary>Resource not available.</summary>
+    ResourceNotAvailable = 6,
+
+    /// <summary>Operation not supported.</summary>
+    OperationNotSupported = 7,
+
+    /// <summary>Memory allocation failed.</summary>
+    MemoryAllocationFailed = 8,
+
+    /// <summary>Invalid state.</summary>
+    InvalidState = 9,
+
+    /// <summary>Thread safety violation.</summary>
+    ThreadSafetyViolation = 10,
+}
+
+/// <summary>Gradient color space.</summary>
+public enum ColorSpace : byte
+{
+    /// <summary>RGB.</summary>
+    Rgb = 0,
+
+    /// <summary>HSV.</summary>
+    Hsv = 1,
+
+    /// <summary>HSL.</summary>
+    Hsl = 2,
+
+    /// <summary>LAB.</summary>
+    Lab = 3,
+
+    /// <summary>LCH.</summary>
+    Lch = 4,
+}
+
+/// <summary>Gradient blend mode.</summary>
+public enum BlendMode : byte
+{
+    /// <summary>Normal.</summary>
+    Normal = 0,
+
+    /// <summary>Additive.</summary>
+    Additive = 1,
+
+    /// <summary>Multiply.</summary>
+    Multiply = 2,
+
+    /// <summary>Screen.</summary>
+    Screen = 3,
+
+    /// <summary>Overlay.</summary>
+    Overlay = 4,
+
+    /// <summary>Soft light.</summary>
+    SoftLight = 5,
+
+    /// <summary>Hard light.</summary>
+    HardLight = 6,
+
+    /// <summary>Color dodge.</summary>
+    ColorDodge = 7,
+
+    /// <summary>Color burn.</summary>
+    ColorBurn = 8,
+
+    /// <summary>Darken.</summary>
+    Darken = 9,
+
+    /// <summary>Lighten.</summary>
+    Lighten = 10,
+
+    /// <summary>Difference.</summary>
+    Difference = 11,
+
+    /// <summary>Exclusion.</summary>
+    Exclusion = 12,
+}
