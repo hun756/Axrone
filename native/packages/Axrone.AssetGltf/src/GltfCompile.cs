@@ -373,7 +373,8 @@ public static class GltfCompileExtensions
                 {
                     GltfVertexAttribute layout = attrLayouts[a];
                     string semStr = GetSemanticString(layout.Semantic);
-                    GltfRawModel.Accessor acc = rawModel.Accessors[prim.Attributes[semStr]];
+                    int accessorIndex = prim.Attributes[semStr];
+                    GltfRawModel.Accessor acc = rawModel.Accessors[accessorIndex];
 
                     int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
                     int elemSize = layout.ComponentCount * compSize;
@@ -399,35 +400,43 @@ public static class GltfCompileExtensions
                     }
                     else
                     {
-                        ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
-                            acc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-
+                        if (acc.BufferView >= 0)
                         {
+                            ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                                acc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
                             ReadOnlySpan<byte> srcSpan = viewBytes.Span.Slice(acc.ByteOffset);
                             int srcStride = rawModel.BufferViews[acc.BufferView].ByteStride;
                             GltfAccessorRuntime.DecodeFloats(srcSpan, vertexCount, acc.ComponentType, layout.ComponentCount, srcStride, acc.Normalized, decodedFloats);
                         }
+                        else if (acc.Sparse == null)
+                        {
+                            ThrowHelper.ThrowAccessor(accessorIndex, "has neither a base bufferView nor sparse data.");
+                        }
 
                         if (acc.Sparse != null)
                         {
+                            if (acc.Sparse.Indices.BufferView < 0 || acc.Sparse.Values.BufferView < 0)
+                            {
+                                ThrowHelper.ThrowAccessor(accessorIndex, "has an invalid sparse bufferView reference.");
+                            }
+
                             ReadOnlyMemory<byte> sparseIndexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                                 acc.Sparse.Indices.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
                             ReadOnlyMemory<byte> sparseValueBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                                 acc.Sparse.Values.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
-                            {
-                                ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
-                                ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
-                                GltfAccessorRuntime.MergeSparseFloats(
-                                    idxSpan,
-                                    acc.Sparse.Indices.ComponentType,
-                                    valSpan,
-                                    acc.Sparse.Count,
-                                    acc.ComponentType,
-                                    layout.ComponentCount,
-                                    acc.Normalized,
-                                    decodedFloats);
-                            }
+                            ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
+                            ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
+                            GltfAccessorRuntime.MergeSparseFloats(
+                                idxSpan,
+                                acc.Sparse.Indices.ComponentType,
+                                valSpan,
+                                acc.Sparse.Count,
+                                acc.ComponentType,
+                                layout.ComponentCount,
+                                acc.Normalized,
+                                decodedFloats);
                         }
                     }
 
