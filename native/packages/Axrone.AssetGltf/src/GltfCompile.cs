@@ -24,6 +24,9 @@ public static class GltfCompileExtensions
 
         List<GltfMaterialAsset> materials = CompileMaterials(rawModel, options);
 
+        (List<GltfMeshAsset> meshes, ImmutableDictionary<int, string> meshKeyMap) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+            rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
+
         return new GltfImportResult
         {
             Document = new GltfDocumentAsset
@@ -36,17 +39,17 @@ public static class GltfCompileExtensions
                 Copyright = rawModel.Copyright,
                 DefaultScene = 0,
                 Scenes = ImmutableArray<GltfDocumentSceneAsset>.Empty,
-                MeshKeys = ImmutableArray<string>.Empty,
+                MeshKeys = meshes.ConvertAll(static m => m.Id).ToImmutableArray(),
                 SkinKeys = ImmutableArray<string>.Empty,
                 AnimationKeys = ImmutableArray<string>.Empty,
                 MaterialKeys = materials.ConvertAll(static m => m.Id).ToImmutableArray(),
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
-                Stats = new GltfDocumentStats(0, 0, 0, 0, 0, 0, rawModel.Materials.Count, rawModel.Textures.Count, 0, 0),
+                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, 0, 0),
             },
             Prefabs = ImmutableArray<GltfPrefabAsset>.Empty,
-            Meshes = ImmutableArray<GltfMeshAsset>.Empty,
+            Meshes = meshes.ToImmutableArray(),
             Skins = ImmutableArray<GltfSkinAsset>.Empty,
             Animations = ImmutableArray<GltfAnimationClipAsset>.Empty,
             Materials = materials.ToImmutableArray(),
@@ -253,4 +256,293 @@ public static class GltfCompileExtensions
         scalarUniforms.Add($"{uniformPrefix}_Scale", info.Scale);
         scalarUniforms.Add($"{uniformPrefix}_Strength", info.Strength);
     }
+
+    internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableDictionary<int, string> MeshKeyMap)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+        GltfRawModel rawModel,
+        GltfResourceRuntimeCache resourceRuntime,
+        List<GltfDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+        where TDracoPolicy : struct, IDracoMeshPolicy
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+    {
+        var meshes = new List<GltfMeshAsset>();
+        var meshKeyMap = ImmutableDictionary.CreateBuilder<int, string>();
+
+        for (int m = 0; m < rawModel.Meshes.Count; m++)
+        {
+            GltfRawModel.Mesh meshDef = rawModel.Meshes[m];
+            for (int p = 0; p < meshDef.Primitives.Count; p++)
+            {
+                GltfRawModel.Primitive prim = meshDef.Primitives[p];
+                string meshAssetId = $"gltf/mesh/{m}:{p}";
+                if (p == 0)
+                {
+                    meshKeyMap[m] = meshAssetId;
+                }
+
+                int vertexCount = 0;
+                var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
+                int totalInterleavedStride = 0;
+
+                foreach (KeyValuePair<string, int> kv in prim.Attributes)
+                {
+                    if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
+                    {
+                        continue;
+                    }
+
+                    GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
+                    vertexCount = acc.Count;
+
+                    if (!TryParseSemantic(kv.Key, out GltfMeshSemantic semantic))
+                    {
+                        diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.mesh.attribute.unsupported", $"Attribute '{kv.Key}' bypassed."));
+                        continue;
+                    }
+
+                    int compCount = GltfAccessorRuntime.GetTypeElementCount(acc.Type);
+                    int compByteSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
+                    int attrSize = compCount * compByteSize;
+
+                    attrLayouts.Add(new GltfVertexAttribute(
+                        totalInterleavedStride,
+                        0,
+                        acc.ComponentType,
+                        semantic,
+                        (byte)compCount,
+                        acc.Normalized,
+                        acc.ComponentType != 5126));
+
+                    totalInterleavedStride += attrSize;
+                }
+
+                byte[] interleavedVertices = GC.AllocateUninitializedArray<byte>(vertexCount * totalInterleavedStride, pinned: true);
+                GltfMeshBounds bounds = GltfMeshBounds.Empty;
+
+                for (int a = 0; a < attrLayouts.Count; a++)
+                {
+                    GltfVertexAttribute layout = attrLayouts[a];
+                    string semStr = GetSemanticString(layout.Semantic);
+                    GltfRawModel.Accessor acc = rawModel.Accessors[prim.Attributes[semStr]];
+
+                    int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
+                    int elemSize = layout.ComponentCount * compSize;
+                    var decodedFloats = new float[vertexCount * layout.ComponentCount];
+
+                    if (prim.Draco != null && TDracoPolicy.IsSupported)
+                    {
+                        ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                            prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                        byte[] tempAttr = GC.AllocateUninitializedArray<byte>(vertexCount * elemSize, pinned: true);
+                        bool decoded;
+                        int dracoVertexCount;
+                        {
+                            ReadOnlySpan<byte> dracoSpan = dracoBytes.Span;
+                            decoded = TDracoPolicy.TryDecodePrimitive(dracoSpan, layout.Semantic, acc.ComponentType, tempAttr, out dracoVertexCount);
+                        }
+
+                        if (decoded)
+                        {
+                            GltfAccessorRuntime.DecodeFloats(tempAttr, dracoVertexCount, acc.ComponentType, layout.ComponentCount, elemSize, acc.Normalized, decodedFloats);
+                        }
+                    }
+                    else
+                    {
+                        ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                            acc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                        {
+                            ReadOnlySpan<byte> srcSpan = viewBytes.Span.Slice(acc.ByteOffset);
+                            int srcStride = rawModel.BufferViews[acc.BufferView].ByteStride;
+                            GltfAccessorRuntime.DecodeFloats(srcSpan, vertexCount, acc.ComponentType, layout.ComponentCount, srcStride, acc.Normalized, decodedFloats);
+                        }
+
+                        if (acc.Sparse != null)
+                        {
+                            ReadOnlyMemory<byte> sparseIndexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                                acc.Sparse.Indices.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+                            ReadOnlyMemory<byte> sparseValueBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                                acc.Sparse.Values.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                            {
+                                ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
+                                ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
+                                GltfAccessorRuntime.MergeSparseFloats(
+                                    idxSpan,
+                                    acc.Sparse.Indices.ComponentType,
+                                    valSpan,
+                                    acc.Sparse.Count,
+                                    acc.ComponentType,
+                                    layout.ComponentCount,
+                                    acc.Normalized,
+                                    decodedFloats);
+                            }
+                        }
+                    }
+
+                    for (int v = 0; v < vertexCount; v++)
+                    {
+                        int dstOffset = (v * totalInterleavedStride) + layout.Offset;
+                        for (int c = 0; c < layout.ComponentCount; c++)
+                        {
+                            float val = decodedFloats[(v * layout.ComponentCount) + c];
+                            int compDst = dstOffset + (c * compSize);
+
+                            switch (acc.ComponentType)
+                            {
+                                case 5126:
+                                    BinaryPrimitives.WriteSingleLittleEndian(interleavedVertices.AsSpan(compDst, 4), val);
+                                    break;
+                                case 5120:
+                                    interleavedVertices[compDst] = (byte)(sbyte)(layout.Normalized ? val * 127.0f : val);
+                                    break;
+                                case 5121:
+                                    interleavedVertices[compDst] = (byte)(layout.Normalized ? val * 255.0f : val);
+                                    break;
+                                case 5122:
+                                    BinaryPrimitives.WriteInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (short)(layout.Normalized ? val * 32767.0f : val));
+                                    break;
+                                case 5123:
+                                    BinaryPrimitives.WriteUInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (ushort)(layout.Normalized ? val * 65535.0f : val));
+                                    break;
+                                case 5125:
+                                    BinaryPrimitives.WriteUInt32LittleEndian(interleavedVertices.AsSpan(compDst, 4), (uint)(layout.Normalized ? val * 4294967295.0f : val));
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+
+                    if (layout.Semantic == GltfMeshSemantic.Position)
+                    {
+                        bounds = GltfMeshPipeline.ComputeBounds(decodedFloats);
+                    }
+                }
+
+                var morphTargetsBuilder = ImmutableArray.CreateBuilder<GltfMorphTargetDefinition>(prim.Targets.Count);
+                for (int t = 0; t < prim.Targets.Count; t++)
+                {
+                    Dictionary<string, int> targetDict = prim.Targets[t];
+                    foreach (KeyValuePair<string, int> kv in targetDict)
+                    {
+                        if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
+                        {
+                            continue;
+                        }
+
+                        GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
+                        GltfMorphTargetSemantic morphSemantic = kv.Key switch
+                        {
+                            "NORMAL" => GltfMorphTargetSemantic.Normal,
+                            "TANGENT" => GltfMorphTargetSemantic.Tangent,
+                            _ => GltfMorphTargetSemantic.Position,
+                        };
+
+                        ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                            tAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
+
+                        var deltaFloats = new float[tAcc.Count * targetCompCount];
+                        {
+                            ReadOnlySpan<byte> targetSpan = targetBytes.Span.Slice(tAcc.ByteOffset);
+                            GltfAccessorRuntime.DecodeFloats(targetSpan, tAcc.Count, tAcc.ComponentType, targetCompCount, rawModel.BufferViews[tAcc.BufferView].ByteStride, false, deltaFloats);
+                        }
+
+                        byte[] deltaBytes = GC.AllocateUninitializedArray<byte>(deltaFloats.Length * 4, pinned: true);
+                        MemoryMarshal.Cast<float, byte>(deltaFloats).CopyTo(deltaBytes);
+
+                        morphTargetsBuilder.Add(new GltfMorphTargetDefinition(
+                            morphSemantic,
+                            deltaBytes,
+                            targetCompCount * 4,
+                            targetCompCount));
+                    }
+                }
+
+                uint[] expandedIndices;
+                if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
+                {
+                    GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
+                    ReadOnlyMemory<byte> indexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                        indexAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                    var decodedRawIndices = new uint[indexAcc.Count];
+                    {
+                        ReadOnlySpan<byte> indexSpan = indexBytes.Span.Slice(indexAcc.ByteOffset);
+                        GltfAccessorRuntime.DecodeIndices(indexSpan, indexAcc.Count, indexAcc.ComponentType, rawModel.BufferViews[indexAcc.BufferView].ByteStride, decodedRawIndices);
+                    }
+
+                    expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, decodedRawIndices, vertexCount);
+                }
+                else
+                {
+                    expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, ReadOnlySpan<uint>.Empty, vertexCount);
+                }
+
+                (ReadOnlyMemory<byte> downcastedBytes, bool is16Bit) = GltfMeshPipeline.DowncastIndices(expandedIndices);
+
+                var finalAttributes = ImmutableArray.CreateBuilder<GltfVertexAttribute>(attrLayouts.Count);
+                for (int a = 0; a < attrLayouts.Count; a++)
+                {
+                    GltfVertexAttribute la = attrLayouts[a];
+                    finalAttributes.Add(new GltfVertexAttribute(la.Offset, totalInterleavedStride, la.ComponentType, la.Semantic, la.ComponentCount, la.Normalized, la.Integer));
+                }
+
+                var definition = new GltfMeshDefinition(
+                    meshAssetId,
+                    interleavedVertices,
+                    finalAttributes.MoveToImmutable(),
+                    morphTargetsBuilder.ToImmutable(),
+                    downcastedBytes,
+                    vertexCount,
+                    expandedIndices.Length,
+                    is16Bit,
+                    prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles));
+
+                meshes.Add(new GltfMeshAsset
+                {
+                    Id = meshAssetId,
+                    MeshIndex = m,
+                    PrimitiveIndex = p,
+                    Definition = definition,
+                    Bounds = bounds,
+                    MaterialKey = prim.Material.HasValue ? $"gltf/material/{prim.Material.Value}" : null,
+                });
+            }
+        }
+
+        return (meshes, meshKeyMap.ToImmutable());
+    }
+
+    private static bool TryParseSemantic(string name, out GltfMeshSemantic semantic)
+    {
+        switch (name)
+        {
+            case "POSITION": semantic = GltfMeshSemantic.Position; return true;
+            case "NORMAL": semantic = GltfMeshSemantic.Normal; return true;
+            case "TEXCOORD_0": semantic = GltfMeshSemantic.Uv0; return true;
+            case "TEXCOORD_1": semantic = GltfMeshSemantic.Uv1; return true;
+            case "TANGENT": semantic = GltfMeshSemantic.Tangent; return true;
+            case "COLOR_0": semantic = GltfMeshSemantic.Color0; return true;
+            case "JOINTS_0": semantic = GltfMeshSemantic.Joints0; return true;
+            case "WEIGHTS_0": semantic = GltfMeshSemantic.Weights0; return true;
+            default: semantic = default; return false;
+        }
+    }
+
+    private static string GetSemanticString(GltfMeshSemantic semantic) =>
+        semantic switch
+        {
+            GltfMeshSemantic.Position => "POSITION",
+            GltfMeshSemantic.Normal => "NORMAL",
+            GltfMeshSemantic.Uv0 => "TEXCOORD_0",
+            GltfMeshSemantic.Uv1 => "TEXCOORD_1",
+            GltfMeshSemantic.Tangent => "TANGENT",
+            GltfMeshSemantic.Color0 => "COLOR_0",
+            GltfMeshSemantic.Joints0 => "JOINTS_0",
+            GltfMeshSemantic.Weights0 => "WEIGHTS_0",
+            _ => string.Empty,
+        };
 }
