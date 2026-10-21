@@ -71,11 +71,11 @@ public sealed class ShapeNominalTests
     public void ResolvedColor_Interops_With_Shared_Color()
     {
         ResolvedColor local = new(0.2f, 0.4f, 0.6f, 1f);
-        Color shared = local;
-        shared.Should().Be(new Color(0.2f, 0.4f, 0.6f, 1f));
+        Rgba128Float shared = local;
+        shared.Should().Be(new Rgba128Float(0.2f, 0.4f, 0.6f, 1f));
         ResolvedColor back = shared;
         back.Should().Be(local);
-        HslColor hsl = ((Color)local).ToHsl();
+        HslColor hsl = ColorOps.ToHsl(shared);
         hsl.IsFinite.Should().BeTrue();
     }
 

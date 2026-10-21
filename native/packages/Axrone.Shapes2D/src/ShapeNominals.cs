@@ -177,13 +177,13 @@ public readonly record struct ResolvedColor(float R, float G, float B, float A)
     public ResolvedColor ModulateAlpha(float opacity) => new(
         R, G, B, Math.Clamp(A * Math.Clamp(opacity, 0f, 1f), 0f, 1f));
 
-    /// <summary>Converts to the shared numeric color.</summary>
+    /// <summary>Converts to the shared linear color.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Color(ResolvedColor color) => new(color.R, color.G, color.B, color.A);
+    public static implicit operator Rgba128Float(ResolvedColor color) => new(color.R, color.G, color.B, color.A);
 
-    /// <summary>Converts from the shared numeric color.</summary>
+    /// <summary>Converts from the shared linear color.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ResolvedColor(Color color) => new(color.R, color.G, color.B, color.A);
+    public static implicit operator ResolvedColor(Rgba128Float color) => new(color.R, color.G, color.B, color.A);
 }
 
 /// <summary>
