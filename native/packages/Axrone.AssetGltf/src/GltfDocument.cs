@@ -248,6 +248,9 @@ public sealed class GltfAnimationTrackAsset
     /// <summary>Target path.</summary>
     public required GltfAnimationPath Path { get; init; }
 
+    /// <summary>KHR_animation_pointer JSON pointer, when present.</summary>
+    public string? Pointer { get; init; }
+
     /// <summary>Interpolation.</summary>
     public required GltfInterpolation Interpolation { get; init; }
 

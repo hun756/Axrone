@@ -450,6 +450,9 @@ internal sealed class GltfRawModel
 
         /// <summary>Target path string.</summary>
         public string TargetPath { get; set; } = "translation";
+
+        /// <summary>KHR_animation_pointer JSON pointer, when present.</summary>
+        public string? Pointer { get; set; }
     }
 
     /// <summary>Raw animation.</summary>

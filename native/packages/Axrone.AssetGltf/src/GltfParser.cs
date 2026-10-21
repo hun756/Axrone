@@ -2019,6 +2019,51 @@ internal static class GltfJsonParser
                                     {
                                         chan.TargetPath = reader.GetString() ?? "translation";
                                     }
+                                    else if (tprop.SequenceEqual("extensions"u8))
+                                    {
+                                        if (reader.TokenType != JsonTokenType.StartObject)
+                                        {
+                                            reader.Skip();
+                                            continue;
+                                        }
+
+                                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                                        {
+                                            if (reader.TokenType != JsonTokenType.PropertyName)
+                                            {
+                                                continue;
+                                            }
+
+                                            ReadOnlySpan<byte> extension = reader.ValueSpan;
+                                            reader.Read();
+                                            if (extension.SequenceEqual("KHR_animation_pointer"u8) &&
+                                                reader.TokenType == JsonTokenType.StartObject)
+                                            {
+                                                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                                                {
+                                                    if (reader.TokenType != JsonTokenType.PropertyName)
+                                                    {
+                                                        continue;
+                                                    }
+
+                                                    ReadOnlySpan<byte> pointerProp = reader.ValueSpan;
+                                                    reader.Read();
+                                                    if (pointerProp.SequenceEqual("pointer"u8))
+                                                    {
+                                                        chan.Pointer = reader.GetString();
+                                                    }
+                                                    else
+                                                    {
+                                                        reader.Skip();
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                reader.Skip();
+                                            }
+                                        }
+                                    }
                                     else
                                     {
                                         reader.Skip();

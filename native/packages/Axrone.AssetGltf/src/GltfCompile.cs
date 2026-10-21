@@ -1002,7 +1002,15 @@ public static class GltfCompileExtensions
                     ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} references a missing accessor.");
                 }
 
-                if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.Nodes.Count)
+                bool isPointer = !string.IsNullOrEmpty(chan.Pointer);
+                if (isPointer)
+                {
+                    if (chan.TargetNode >= rawModel.Nodes.Count)
+                    {
+                        ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
+                    }
+                }
+                else if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.Nodes.Count)
                 {
                     ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
                 }
@@ -1053,19 +1061,27 @@ public static class GltfCompileExtensions
                     maxDuration = times[^1];
                 }
 
-                string pathText = chan.TargetPath.ToLowerInvariant();
-                if (pathText is not ("translation" or "rotation" or "scale" or "weights"))
+                GltfAnimationPath path;
+                if (isPointer)
                 {
-                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} has unsupported target path '{chan.TargetPath}'.");
+                    path = GltfAnimationPath.Pointer;
                 }
-
-                GltfAnimationPath path = pathText switch
+                else
                 {
-                    "rotation" => GltfAnimationPath.Rotation,
-                    "scale" => GltfAnimationPath.Scale,
-                    "weights" => GltfAnimationPath.Weights,
-                    _ => GltfAnimationPath.Translation,
-                };
+                    string pathText = chan.TargetPath.ToLowerInvariant();
+                    if (pathText is not ("translation" or "rotation" or "scale" or "weights"))
+                    {
+                        ThrowHelper.ThrowSchema($"Animation {a} channel {c} has unsupported target path '{chan.TargetPath}'.");
+                    }
+
+                    path = pathText switch
+                    {
+                        "rotation" => GltfAnimationPath.Rotation,
+                        "scale" => GltfAnimationPath.Scale,
+                        "weights" => GltfAnimationPath.Weights,
+                        _ => GltfAnimationPath.Translation,
+                    };
+                }
 
                 string interpolationText = samp.Interpolation.ToUpperInvariant();
                 if (interpolationText is not ("LINEAR" or "STEP" or "CUBICSPLINE"))
@@ -1094,11 +1110,19 @@ public static class GltfCompileExtensions
 
                     valCompCount = outAcc.Count / expectedOutputElements;
                 }
+                else if (path == GltfAnimationPath.Pointer)
+                {
+                    valCompCount = GltfAccessorRuntime.GetTypeElementCount(outAcc.Type);
+                    if (valCompCount <= 0 || outAcc.Count != expectedOutputElements)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "animation pointer output count does not match its keyframes and component type.");
+                    }
+                }
                 else
                 {
                     valCompCount = GltfAccessorRuntime.GetTypeElementCount(outAcc.Type);
                     int expectedComponentCount = path == GltfAnimationPath.Rotation ? 4 : 3;
-                    if (valCompCount != expectedComponentCount || outAcc.Count != expectedOutputElements * valCompCount)
+                    if (valCompCount != expectedComponentCount || outAcc.Count != expectedOutputElements)
                     {
                         ThrowHelper.ThrowAccessor(samp.Output, "animation output count does not match its keyframes and component type.");
                     }
@@ -1131,6 +1155,7 @@ public static class GltfCompileExtensions
                     TargetNodeIndex = chan.TargetNode,
                     TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{rawModel.Nodes[chan.TargetNode].Name ?? "unnamed"}" : string.Empty,
                     Path = path,
+                    Pointer = chan.Pointer,
                     Interpolation = interp,
                     KeyframeCount = keyframeCount,
                     ValueComponentCount = valCompCount,
