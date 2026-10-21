@@ -33,6 +33,49 @@ public static class GltfCompileExtensions
         List<GltfAnimationClipAsset> animations = await CompileAnimationsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
 
+        ImmutableArray<string> animIds = animations.ConvertAll(static a => a.Id).ToImmutableArray();
+
+        var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(Math.Max(1, rawModel.Scenes.Count));
+        var sceneAssets = ImmutableArray.CreateBuilder<GltfDocumentSceneAsset>(rawModel.Scenes.Count);
+        int defaultSceneIdx = rawModel.DefaultScene >= 0 && rawModel.DefaultScene < rawModel.Scenes.Count
+            ? rawModel.DefaultScene
+            : 0;
+
+        for (int s = 0; s < rawModel.Scenes.Count; s++)
+        {
+            GltfPrefabAsset prefab = GltfPrefabEngine.BuildPrefab(
+                s,
+                rawModel,
+                s == defaultSceneIdx,
+                diagnostics,
+                meshKeyMap,
+                skinKeyMap,
+                animIds);
+
+            prefabs.Add(prefab);
+
+            sceneAssets.Add(new GltfDocumentSceneAsset
+            {
+                SceneIndex = s,
+                Name = rawModel.Scenes[s].Name ?? $"Scene_{s}",
+                PrefabKey = prefab.Id,
+                RootNodeIds = prefab.RootNodeIds,
+                AnimationController = prefab.AnimationController,
+            });
+        }
+
+        var stats = new GltfDocumentStats(
+            rawModel.Scenes.Count,
+            rawModel.Nodes.Count,
+            rawModel.Cameras.Count,
+            rawModel.Lights.Count,
+            rawModel.Meshes.Count,
+            meshes.Count,
+            rawModel.Materials.Count,
+            rawModel.Textures.Count,
+            rawModel.Skins.Count,
+            rawModel.Animations.Count);
+
         return new GltfImportResult
         {
             Document = new GltfDocumentAsset
@@ -43,18 +86,18 @@ public static class GltfCompileExtensions
                 Version = rawModel.Version,
                 Generator = rawModel.Generator,
                 Copyright = rawModel.Copyright,
-                DefaultScene = 0,
-                Scenes = ImmutableArray<GltfDocumentSceneAsset>.Empty,
+                DefaultScene = defaultSceneIdx,
+                Scenes = sceneAssets.MoveToImmutable(),
                 MeshKeys = meshes.ConvertAll(static m => m.Id).ToImmutableArray(),
                 SkinKeys = skins.ConvertAll(static s => s.Id).ToImmutableArray(),
-                AnimationKeys = animations.ConvertAll(static a => a.Id).ToImmutableArray(),
+                AnimationKeys = animIds,
                 MaterialKeys = materials.ConvertAll(static m => m.Id).ToImmutableArray(),
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
-                Stats = new GltfDocumentStats(0, 0, 0, 0, rawModel.Meshes.Count, meshes.Count, rawModel.Materials.Count, rawModel.Textures.Count, rawModel.Skins.Count, rawModel.Animations.Count),
+                Stats = stats,
             },
-            Prefabs = ImmutableArray<GltfPrefabAsset>.Empty,
+            Prefabs = prefabs.MoveToImmutable(),
             Meshes = meshes.ToImmutableArray(),
             Skins = skins.ToImmutableArray(),
             Animations = animations.ToImmutableArray(),
@@ -721,5 +764,31 @@ public static class GltfCompileExtensions
         }
 
         return animations;
+    }
+}
+
+/// <summary>Convenience importer with default (null) compression policies.</summary>
+public sealed class GltfImporter
+{
+    private readonly GltfImporterOptions _options;
+
+    /// <summary>Creates an importer.</summary>
+    public GltfImporter(GltfImporterOptions? options = null)
+    {
+        _options = options ?? new GltfImporterOptions();
+    }
+
+    /// <summary>Imports glTF or GLB bytes.</summary>
+    public async ValueTask<GltfImportResult> ImportAsync(
+        ReadOnlyMemory<byte> sourceBytes,
+        CancellationToken cancellationToken = default)
+    {
+        GltfPipeline<StateUnparsed> pipeline = GltfPipeline<StateUnparsed>.Create(sourceBytes);
+        GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
+        GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
+
+        return await resolved.CompileAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+            _options,
+            cancellationToken).ConfigureAwait(false);
     }
 }
