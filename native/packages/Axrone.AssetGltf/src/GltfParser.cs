@@ -377,15 +377,40 @@ internal static class GltfJsonParser
 
     private static void ParseNodeExtensions(ref Utf8JsonReader reader, GltfRawModel.Node node)
     {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("KHR_lights_punctual"u8))
+            if (reader.TokenType != JsonTokenType.PropertyName)
             {
+                continue;
+            }
+
+            ReadOnlySpan<byte> extension = reader.ValueSpan;
+            reader.Read();
+            if (extension.SequenceEqual("KHR_lights_punctual"u8))
+            {
+                if (reader.TokenType != JsonTokenType.StartObject)
+                {
+                    reader.Skip();
+                    continue;
+                }
+
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                 {
-                    if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("light"u8))
+                    if (reader.TokenType != JsonTokenType.PropertyName)
                     {
-                        reader.Read();
+                        continue;
+                    }
+
+                    ReadOnlySpan<byte> prop = reader.ValueSpan;
+                    reader.Read();
+                    if (prop.SequenceEqual("light"u8))
+                    {
                         node.Light = reader.GetInt32();
                     }
                     else
