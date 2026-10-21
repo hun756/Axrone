@@ -1,10 +1,12 @@
 ﻿namespace Axrone.Particles;
 
 /// <summary>Spatial query visitor contract.</summary>
-public interface ISpatialVisitor
+/// <typeparam name="TState">Visitor state.</typeparam>
+public interface ISpatialVisitor<TState>
+    where TState : allows ref struct
 {
     /// <summary>Visits a found particle.</summary>
-    static abstract bool OnFound(ParticleId id, in Vec3 position, float distanceSquared);
+    static abstract bool OnFound(ParticleId id, in Vec3 position, float distanceSquared, scoped ref TState state);
 }
 
 /// <summary>3D spatial hash grid.</summary>
@@ -105,8 +107,9 @@ public sealed unsafe class SpatialHashGrid3D : IDisposable
 
     /// <summary>Queries particles within a radius.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public void QueryRadius<TVisitor>(in Vec3 center, float radius)
-        where TVisitor : struct, ISpatialVisitor
+    public void QueryRadius<TVisitor, TState>(in Vec3 center, float radius, scoped ref TState state)
+        where TVisitor : struct, ISpatialVisitor<TState>
+        where TState : allows ref struct
     {
         float radiusSq = radius * radius;
         WorldToGrid(center - new Vec3(radius), out int minX, out int minY, out int minZ);
@@ -127,7 +130,7 @@ public sealed unsafe class SpatialHashGrid3D : IDisposable
                         float dsq = delta.LengthSquared();
                         if (dsq <= radiusSq)
                         {
-                            if (!TVisitor.OnFound(_entries[curr].Id, _entries[curr].Position, dsq))
+                            if (!TVisitor.OnFound(_entries[curr].Id, _entries[curr].Position, dsq, ref state))
                             {
                                 return;
                             }
