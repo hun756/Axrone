@@ -773,6 +773,45 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.schema.invalid");
     }
 
+    [Fact]
+    public async Task Import_SparseIndexOutsideAccessor_ThrowsAccessorError()
+    {
+        byte[] bin = new byte[16];
+        BinaryPrimitives.WriteUInt16LittleEndian(bin.AsSpan(0, 2), 3);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+              "accessors": [{
+                "componentType": 5126,
+                "count": 3,
+                "type": "VEC3",
+                "sparse": {
+                  "count": 1,
+                  "indices": {"bufferView": 0, "componentType": 5123},
+                  "values": {"bufferView": 1}
+                }
+              }],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 2},
+                {"buffer": 0, "byteOffset": 4, "byteLength": 12}
+              ],
+              "buffers": [{"byteLength": 16}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "sparse-range.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfAccessorError>())
+            .Which.Code.Should().Be("gltf.accessor.invalid");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;

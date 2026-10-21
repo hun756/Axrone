@@ -67,7 +67,7 @@ public sealed class GltfAccessorTests
         float[] vals = [9.0f, 9.0f];
         byte[] valBytes = new byte[8];
         Buffer.BlockCopy(vals, 0, valBytes, 0, 8);
-        GltfAccessorRuntime.MergeSparseFloats(idx, 5123, valBytes, 1, 5126, 2, false, dense);
+        GltfAccessorRuntime.MergeSparseFloats(0, idx, 5123, valBytes, 1, 2, 5126, 2, false, dense);
         dense[0].Should().Be(1.0f);
         dense[1].Should().Be(2.0f);
         dense[2].Should().Be(9.0f);
