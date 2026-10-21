@@ -3,9 +3,6 @@ namespace Axrone.AssetGltf;
 /// <summary>Scene graph synthesizer: prefabs from raw nodes.</summary>
 internal static class GltfPrefabEngine
 {
-    /// <summary>Local light budget per scene.</summary>
-    public const int MaxSceneLocalLights = 4;
-
     /// <summary>Decomposes a node matrix or TRS into translation/rotation/scale.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void DecomposeTransform(
@@ -50,7 +47,8 @@ internal static class GltfPrefabEngine
         List<GltfDiagnostic> diagnostics,
         ImmutableArray<ImmutableArray<string>> meshKeysByMesh,
         ImmutableDictionary<int, string> skinKeyMap,
-        ImmutableArray<string> animationClipIds)
+        ImmutableArray<string> animationClipIds,
+        int maxLocalLights)
     {
         string prefabId = $"gltf/scene/{sceneIndex}";
         GltfRawModel.Scene scene = model.Scenes[sceneIndex];
@@ -129,12 +127,12 @@ internal static class GltfPrefabEngine
                 else if (string.Equals(light.Type, "point", StringComparison.OrdinalIgnoreCase))
                 {
                     localLightCount++;
-                    if (localLightCount > MaxSceneLocalLights)
+                    if (localLightCount > maxLocalLights)
                     {
                         diagnostics.Add(new GltfDiagnostic(
                             GltfDiagnosticLevel.Warning,
                             "gltf.light.local.runtime-limit",
-                            $"Local lights exceed engine budget limit of {MaxSceneLocalLights}."));
+                            $"Local lights exceed engine budget limit of {maxLocalLights}."));
                     }
 
                     compBuilder.Add(new GltfPointLightComponent(color, light.Intensity, light.Range ?? 0.0f));
@@ -142,12 +140,12 @@ internal static class GltfPrefabEngine
                 else if (string.Equals(light.Type, "spot", StringComparison.OrdinalIgnoreCase))
                 {
                     localLightCount++;
-                    if (localLightCount > MaxSceneLocalLights)
+                    if (localLightCount > maxLocalLights)
                     {
                         diagnostics.Add(new GltfDiagnostic(
                             GltfDiagnosticLevel.Warning,
                             "gltf.light.local.runtime-limit",
-                            $"Local lights exceed engine budget limit of {MaxSceneLocalLights}."));
+                            $"Local lights exceed engine budget limit of {maxLocalLights}."));
                     }
 
                     compBuilder.Add(new GltfSpotLightComponent(

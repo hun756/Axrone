@@ -52,7 +52,8 @@ public static class GltfCompileExtensions
                 diagnostics,
                 meshKeysByMesh,
                 skinKeyMap,
-                animIds);
+                animIds,
+                options.MaxLocalLightsBudget);
 
             prefabs.Add(prefab);
 
