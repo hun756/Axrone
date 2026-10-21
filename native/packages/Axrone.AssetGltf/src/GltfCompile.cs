@@ -330,6 +330,21 @@ public static class GltfCompileExtensions
                 string meshAssetId = GltfKeys.Mesh(m, p);
                 primitiveKeys.Add(meshAssetId);
 
+                if (prim.Draco != null && !TDracoPolicy.IsSupported)
+                {
+                    if (rawModel.ExtensionsRequired.Contains("KHR_draco_mesh_compression"))
+                    {
+                        ThrowHelper.ThrowUnsupportedExtension(
+                            "KHR_draco_mesh_compression",
+                            "no Draco decoder is linked for this import.");
+                    }
+
+                    diagnostics.Add(new GltfDiagnostic(
+                        GltfDiagnosticLevel.Warning,
+                        "gltf.extension.unsupported",
+                        "KHR_draco_mesh_compression was ignored because no Draco decoder is linked."));
+                }
+
                 int vertexCount = 0;
                 var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
                 int totalInterleavedStride = 0;
