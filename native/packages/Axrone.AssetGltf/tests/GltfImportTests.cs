@@ -305,6 +305,44 @@ public sealed class GltfImportTests
             .Which.Code.Should().Be("gltf.schema.invalid");
     }
 
+    [Fact]
+    public async Task Import_Cameras_ParsesPerspectiveAndOrthographicSettings()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0, 1]}],
+              "nodes": [
+                {"name": "Perspective", "camera": 0},
+                {"name": "Orthographic", "camera": 1}
+              ],
+              "cameras": [
+                {"name": "P", "type": "perspective", "perspective": {"yfov": 0.7, "zfar": 200, "znear": 0.1}},
+                {"name": "O", "type": "orthographic", "orthographic": {"xmag": 2, "ymag": 4, "zfar": 50, "znear": 0.5}}
+              ]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "cameras.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Document.Stats.CameraCount.Should().Be(2);
+
+        GltfCameraComponent[] cameras = result.Prefabs[0].Definition.Actors
+            .SelectMany(static actor => actor.Components)
+            .OfType<GltfCameraComponent>()
+            .ToArray();
+
+        cameras.Should().HaveCount(2);
+        cameras.Count(static camera => camera.Primary).Should().Be(1);
+        cameras.Should().ContainSingle(static camera => camera.Orthographic)
+            .Which.OrthographicSize.Should().Be(4f);
+        cameras.Should().ContainSingle(static camera => !camera.Orthographic)
+            .Which.FieldOfView.Should().Be(0.7f);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
