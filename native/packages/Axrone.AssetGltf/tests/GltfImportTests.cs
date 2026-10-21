@@ -1134,6 +1134,59 @@ public sealed class GltfImportTests
         mesh.MaterialVariants[1].MaterialIndex.Should().Be(2);
     }
 
+    [Fact]
+    public async Task Import_SecondaryVertexSemantics_ArePreserved()
+    {
+        byte[] bin = new byte[168];
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {
+                "POSITION": 0,
+                "JOINTS_1": 1,
+                "WEIGHTS_1": 2,
+                "TEXCOORD_2": 3,
+                "COLOR_1": 4
+              }}]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4"},
+                {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4"},
+                {"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2"},
+                {"bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 12},
+                {"buffer": 0, "byteOffset": 48, "byteLength": 48},
+                {"buffer": 0, "byteOffset": 96, "byteLength": 24},
+                {"buffer": 0, "byteOffset": 120, "byteLength": 48}
+              ],
+              "buffers": [{"byteLength": 168}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "semantics.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Meshes[0].Definition.Attributes
+            .Select(static attribute => attribute.Semantic)
+            .Should().BeEquivalentTo(
+            [
+                GltfMeshSemantic.Position,
+                GltfMeshSemantic.Joints1,
+                GltfMeshSemantic.Weights1,
+                GltfMeshSemantic.Uv2,
+                GltfMeshSemantic.Color1,
+            ]);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
