@@ -14,6 +14,7 @@ internal static class GltfJsonParser
             ThrowHelper.ThrowContainer("Root glTF JSON payload must be an object.");
         }
 
+        bool hasAsset = false;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName)
@@ -26,6 +27,7 @@ internal static class GltfJsonParser
 
             if (prop.SequenceEqual("asset"u8))
             {
+                hasAsset = true;
                 ParseAsset(ref reader, model);
             }
             else if (prop.SequenceEqual("scene"u8))
@@ -102,11 +104,17 @@ internal static class GltfJsonParser
             }
         }
 
+        if (!hasAsset)
+        {
+            ThrowHelper.ThrowSchema("glTF document is missing the required 'asset' object.");
+        }
+
         return model;
     }
 
     private static void ParseAsset(ref Utf8JsonReader reader, GltfRawModel model)
     {
+        model.Version = string.Empty;
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             reader.Skip();
@@ -124,7 +132,7 @@ internal static class GltfJsonParser
             reader.Read();
             if (prop.SequenceEqual("version"u8))
             {
-                model.Version = reader.GetString() ?? "2.0";
+                model.Version = reader.GetString() ?? string.Empty;
             }
             else if (prop.SequenceEqual("generator"u8))
             {
