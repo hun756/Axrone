@@ -368,7 +368,7 @@ public static class GltfCompileExtensions
                         "KHR_draco_mesh_compression was ignored because no Draco decoder is linked."));
                 }
 
-                int vertexCount = 0;
+                int vertexCount = -1;
                 var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
                 int totalInterleavedStride = 0;
 
@@ -380,12 +380,22 @@ public static class GltfCompileExtensions
                     }
 
                     GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
-                    vertexCount = acc.Count;
 
                     if (!TryParseSemantic(kv.Key, out GltfMeshSemantic semantic))
                     {
                         diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.mesh.attribute.unsupported", $"Attribute '{kv.Key}' bypassed."));
                         continue;
+                    }
+
+                    if (vertexCount < 0)
+                    {
+                        vertexCount = acc.Count;
+                    }
+                    else if (acc.Count != vertexCount)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            kv.Value,
+                            $"attribute vertex count {acc.Count} does not match the primitive vertex count {vertexCount}.");
                     }
 
                     int compCount = GltfAccessorRuntime.GetTypeElementCount(acc.Type);
@@ -402,6 +412,11 @@ public static class GltfCompileExtensions
                         acc.ComponentType != 5126));
 
                     totalInterleavedStride += attrSize;
+                }
+
+                if (vertexCount < 0)
+                {
+                    ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} has no supported vertex attributes.");
                 }
 
                 byte[] interleavedVertices = GC.AllocateUninitializedArray<byte>(vertexCount * totalInterleavedStride, pinned: true);
@@ -532,6 +547,13 @@ public static class GltfCompileExtensions
 
                         GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
                         int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
+                        if (tAcc.Count != vertexCount)
+                        {
+                            ThrowHelper.ThrowAccessor(
+                                kv.Value,
+                                $"morph target vertex count {tAcc.Count} does not match the primitive vertex count {vertexCount}.");
+                        }
+
                         GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
                         GltfMorphTargetSemantic morphSemantic = kv.Key switch
                         {
