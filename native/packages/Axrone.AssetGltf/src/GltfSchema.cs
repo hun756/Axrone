@@ -143,6 +143,16 @@ public sealed class GltfRawModel
         public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
     }
 
+    /// <summary>Material variant mapping for one primitive.</summary>
+    public sealed class PrimitiveMaterialVariant
+    {
+        /// <summary>Variant indices.</summary>
+        public List<int> Variants { get; } = new();
+
+        /// <summary>Material index.</summary>
+        public int? Material { get; set; }
+    }
+
     /// <summary>Raw mesh primitive.</summary>
     public sealed class Primitive
     {
@@ -160,6 +170,9 @@ public sealed class GltfRawModel
 
         /// <summary>Morph target attribute maps.</summary>
         public List<Dictionary<string, int>> Targets { get; } = new();
+
+        /// <summary>KHR_materials_variants mappings.</summary>
+        public List<PrimitiveMaterialVariant> MaterialVariants { get; } = new();
 
         /// <summary>Draco extension payload.</summary>
         public DracoPrimitiveExtension? Draco { get; set; }
@@ -572,6 +585,16 @@ public sealed class GltfRawModel
 
     /// <summary>Lights.</summary>
     public List<Light> Lights { get; } = new();
+
+    /// <summary>Named material variants.</summary>
+    public sealed class MaterialVariant
+    {
+        /// <summary>Variant name.</summary>
+        public string? Name { get; set; }
+    }
+
+    /// <summary>Material variants.</summary>
+    public List<MaterialVariant> Variants { get; } = new();
 
     /// <summary>Cameras.</summary>
     public List<Camera> Cameras { get; } = new();

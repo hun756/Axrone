@@ -51,9 +51,20 @@ public sealed class GltfDocumentAsset
     /// <summary>Required extensions.</summary>
     public required ImmutableArray<string> ExtensionsRequired { get; init; }
 
+    /// <summary>Named material variants.</summary>
+    public ImmutableArray<GltfMaterialVariant> MaterialVariants { get; init; } = ImmutableArray<GltfMaterialVariant>.Empty;
+
     /// <summary>Import statistics.</summary>
     public required GltfDocumentStats Stats { get; init; }
 }
+
+/// <summary>Named material variant.</summary>
+public sealed record GltfMaterialVariant(int Index, string Name);
+
+/// <summary>Primitive material selection for one or more variants.</summary>
+public readonly record struct GltfMaterialVariantMapping(
+    ImmutableArray<int> Variants,
+    int? MaterialIndex);
 
 /// <summary>Import statistics.</summary>
 public readonly record struct GltfDocumentStats(
@@ -144,6 +155,10 @@ public sealed class GltfMeshAsset
 
     /// <summary>Extras payload.</summary>
     public ImmutableDictionary<string, object>? Extras { get; init; }
+
+    /// <summary>KHR_materials_variants mappings.</summary>
+    public ImmutableArray<GltfMaterialVariantMapping> MaterialVariants { get; init; } =
+        ImmutableArray<GltfMaterialVariantMapping>.Empty;
 }
 
 /// <summary>Morph target delta buffer.</summary>

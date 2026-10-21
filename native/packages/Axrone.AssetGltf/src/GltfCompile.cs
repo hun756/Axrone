@@ -41,6 +41,14 @@ public static class GltfCompileExtensions
 
         ImmutableArray<string> animIds = animations.ConvertAll(static a => a.Id).ToImmutableArray();
 
+        var materialVariants = ImmutableArray.CreateBuilder<GltfMaterialVariant>(rawModel.Variants.Count);
+        for (int i = 0; i < rawModel.Variants.Count; i++)
+        {
+            materialVariants.Add(new GltfMaterialVariant(
+                i,
+                rawModel.Variants[i].Name ?? $"Variant_{i}"));
+        }
+
         var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(rawModel.Scenes.Count);
         var sceneAssets = ImmutableArray.CreateBuilder<GltfDocumentSceneAsset>(rawModel.Scenes.Count);
         int defaultSceneIdx = rawModel.DefaultScene >= 0 && rawModel.DefaultScene < rawModel.Scenes.Count
@@ -105,6 +113,7 @@ public static class GltfCompileExtensions
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
+                MaterialVariants = materialVariants.MoveToImmutable(),
                 Stats = stats,
             },
             Prefabs = prefabs.MoveToImmutable(),
@@ -732,6 +741,32 @@ public static class GltfCompileExtensions
                     is16Bit,
                     prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles));
 
+                var variantMappings = ImmutableArray.CreateBuilder<GltfMaterialVariantMapping>(prim.MaterialVariants.Count);
+                for (int v = 0; v < prim.MaterialVariants.Count; v++)
+                {
+                    GltfRawModel.PrimitiveMaterialVariant mapping = prim.MaterialVariants[v];
+                    for (int variantIndex = 0; variantIndex < mapping.Variants.Count; variantIndex++)
+                    {
+                        int index = mapping.Variants[variantIndex];
+                        if (index < 0 || index >= rawModel.Variants.Count)
+                        {
+                            ThrowHelper.ThrowSchema(
+                                $"Mesh {m} primitive {p} maps an unknown material variant {index}.");
+                        }
+                    }
+
+                    if (mapping.Material.HasValue &&
+                        (mapping.Material.Value < 0 || mapping.Material.Value >= rawModel.Materials.Count))
+                    {
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} maps variant material {mapping.Material.Value} which does not exist.");
+                    }
+
+                    variantMappings.Add(new GltfMaterialVariantMapping(
+                        mapping.Variants.ToImmutableArray(),
+                        mapping.Material));
+                }
+
                 meshes.Add(new GltfMeshAsset
                 {
                     Id = meshAssetId,
@@ -740,6 +775,7 @@ public static class GltfCompileExtensions
                     Definition = definition,
                     Bounds = bounds,
                     MaterialKey = prim.Material.HasValue ? $"gltf/material/{prim.Material.Value}" : null,
+                    MaterialVariants = variantMappings.MoveToImmutable(),
                 });
             }
 
