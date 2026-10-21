@@ -60,6 +60,8 @@ public sealed class ParticleSystemEngine<TPipeline, TSink> : IDisposable
     private TPipeline _pipeline;
     private TSink _eventSink;
     private SimulationTime _currentTime;
+    private uint _nextEmitterId = 1;
+    private readonly List<ParticleEmitter> _emitters = new();
     private bool _disposed;
 
     internal ParticleSystemEngine(
@@ -108,6 +110,31 @@ public sealed class ParticleSystemEngine<TPipeline, TSink> : IDisposable
         Play();
     }
 
+    /// <summary>Adds an emitter.</summary>
+    public uint AddEmitter(ParticleEmitter emitter)
+    {
+        emitter.EmitterId = _nextEmitterId++;
+        _emitters.Add(emitter);
+        return emitter.EmitterId;
+    }
+
+    /// <summary>Removes an emitter.</summary>
+    public bool RemoveEmitter(uint emitterId)
+    {
+        for (int i = 0; i < _emitters.Count; i++)
+        {
+            if (_emitters[i].EmitterId == emitterId)
+            {
+                _emitters[i].Emission.Dispose();
+                _emitters[i] = _emitters[_emitters.Count - 1];
+                _emitters.RemoveAt(_emitters.Count - 1);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Emits one particle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public ParticleId Emit(in Vec3 position, in Vec3 velocity)
@@ -151,6 +178,8 @@ public sealed class ParticleSystemEngine<TPipeline, TSink> : IDisposable
 
             ModuleExecutionContext context = new(deltaTime, _currentTime, EnableSpatialOptimization ? SpatialGrid : null);
             _pipeline.Execute(Storage, context);
+
+            EmitFromEmitters(context);
 
             if (EnableSpatialOptimization)
             {
@@ -197,6 +226,39 @@ public sealed class ParticleSystemEngine<TPipeline, TSink> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    private void EmitFromEmitters(in ModuleExecutionContext context)
+    {
+        for (int e = 0; e < _emitters.Count; e++)
+        {
+            ParticleEmitter emitter = _emitters[e];
+            if (!emitter.Enabled)
+            {
+                continue;
+            }
+
+            EmissionModule emission = emitter.Emission;
+            EmissionModule.Process(Storage, context, ref emission);
+            emitter.Emission = emission;
+
+            ShapeModule shape = emitter.Shape;
+            int pending = emission.DrainPendingEmissions();
+            for (int n = 0; n < pending; n++)
+            {
+                shape.ComputeEmission(out Vec3 offset, out Vec3 direction);
+                Vec3 pos = emitter.Position + offset;
+                Vec3 vel = direction * StartSpeed;
+                if (Storage.TryAllocate(pos, vel, StartLifetime, StartSize, StartColor, out ParticleId id))
+                {
+                    _eventSink.OnBirth(new ParticleBirthEvent(id, emitter.EmitterId, StartLifetime));
+                }
+            }
+
+            emitter.Shape = shape;
+            _emitters[e] = emitter;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private unsafe void RebuildSpatialIndex()
     {
         SpatialGrid.Clear();
@@ -227,6 +289,12 @@ public sealed class ParticleSystemEngine<TPipeline, TSink> : IDisposable
             {
                 if (disposing)
                 {
+                    for (int i = 0; i < _emitters.Count; i++)
+                    {
+                        _emitters[i].Emission.Dispose();
+                    }
+
+                    _emitters.Clear();
                     Storage.Dispose();
                     SpatialGrid.Dispose();
                 }
