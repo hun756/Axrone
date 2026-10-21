@@ -86,6 +86,13 @@ public sealed class GltfParserTests
     }
 
     [Fact]
+    public void Parse_MissingAsset_Throws()
+    {
+        Action act = () => GltfJsonParser.Parse("{}"u8.ToArray());
+        act.Should().Throw<GltfSchemaError>();
+    }
+
+    [Fact]
     public void Parse_InvalidRoot_Throws()
     {
         Action act = () => GltfJsonParser.Parse("[]"u8.ToArray());
