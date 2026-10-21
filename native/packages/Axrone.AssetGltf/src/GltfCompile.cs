@@ -789,10 +789,43 @@ public static class GltfCompileExtensions
             for (int c = 0; c < animDef.Channels.Count; c++)
             {
                 GltfRawModel.AnimationChannel chan = animDef.Channels[c];
+                if (chan.Sampler < 0 || chan.Sampler >= animDef.Samplers.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing sampler {chan.Sampler}.");
+                }
+
                 GltfRawModel.AnimationSampler samp = animDef.Samplers[chan.Sampler];
+                if (samp.Input < 0 || samp.Input >= rawModel.Accessors.Count ||
+                    samp.Output < 0 || samp.Output >= rawModel.Accessors.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} references a missing accessor.");
+                }
+
+                if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
+                }
 
                 GltfRawModel.Accessor inAcc = rawModel.Accessors[samp.Input];
                 GltfRawModel.Accessor outAcc = rawModel.Accessors[samp.Output];
+                if (!string.Equals(inAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                    inAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(samp.Input, "animation input must use FLOAT SCALAR accessors.");
+                }
+
+                if (outAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(samp.Output, "animation output must use FLOAT components.");
+                }
+
+                if (inAcc.BufferView < 0 || outAcc.BufferView < 0)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inAcc.BufferView < 0 ? samp.Input : samp.Output,
+                        "animation accessors must be backed by a bufferView.");
+                }
+
                 GltfAccessorRuntime.ValidateAccessorRange(rawModel, samp.Input, 1);
 
                 ReadOnlyMemory<byte> inBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
@@ -806,12 +839,26 @@ public static class GltfCompileExtensions
                     GltfAccessorRuntime.DecodeFloats(inSpan, inAcc.Count, inAcc.ComponentType, 1, rawModel.BufferViews[inAcc.BufferView].ByteStride, false, times);
                 }
 
+                for (int t = 1; t < times.Length; t++)
+                {
+                    if (times[t] < 0.0f || times[t] < times[t - 1])
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Input, "animation input times must be non-negative and sorted.");
+                    }
+                }
+
                 if (times.Length > 0 && times[^1] > maxDuration)
                 {
                     maxDuration = times[^1];
                 }
 
-                GltfAnimationPath path = chan.TargetPath.ToLowerInvariant() switch
+                string pathText = chan.TargetPath.ToLowerInvariant();
+                if (pathText is not ("translation" or "rotation" or "scale" or "weights"))
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} has unsupported target path '{chan.TargetPath}'.");
+                }
+
+                GltfAnimationPath path = pathText switch
                 {
                     "rotation" => GltfAnimationPath.Rotation,
                     "scale" => GltfAnimationPath.Scale,
@@ -819,7 +866,13 @@ public static class GltfCompileExtensions
                     _ => GltfAnimationPath.Translation,
                 };
 
-                GltfInterpolation interp = samp.Interpolation.ToUpperInvariant() switch
+                string interpolationText = samp.Interpolation.ToUpperInvariant();
+                if (interpolationText is not ("LINEAR" or "STEP" or "CUBICSPLINE"))
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} has unsupported interpolation '{samp.Interpolation}'.");
+                }
+
+                GltfInterpolation interp = interpolationText switch
                 {
                     "STEP" => GltfInterpolation.Step,
                     "CUBICSPLINE" => GltfInterpolation.CubicSpline,
