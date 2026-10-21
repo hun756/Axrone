@@ -255,7 +255,7 @@ internal sealed class GltfResourceRuntimeCache
             {
                 ReadOnlySpan<byte> compressed = raw.Span.Slice(bv.Meshopt.ByteOffset, bv.Meshopt.ByteLength);
                 ok = TMeshoptPolicy.IsSupported
-                    && TMeshoptPolicy.TryDecompressBufferView(compressed, bv.Meshopt.Count, bv.Meshopt.ByteStride, bv.Meshopt.Mode.AsSpan(), decompressed);
+                    && TMeshoptPolicy.TryDecompressBufferView(compressed, bv.Meshopt.Count, bv.Meshopt.ByteStride, bv.Meshopt.Mode.AsSpan(), bv.Meshopt.Filter.AsSpan(), decompressed);
             }
 
             if (!ok)

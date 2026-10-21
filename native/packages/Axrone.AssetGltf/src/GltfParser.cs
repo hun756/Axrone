@@ -1049,6 +1049,10 @@ internal static class GltfJsonParser
                     {
                         bv.Meshopt.Mode = reader.GetString() ?? "ATTRIBUTES";
                     }
+                    else if (prop.SequenceEqual("filter"u8))
+                    {
+                        bv.Meshopt.Filter = reader.GetString() ?? "NONE";
+                    }
                     else
                     {
                         reader.Skip();

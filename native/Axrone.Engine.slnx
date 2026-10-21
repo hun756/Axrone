@@ -50,6 +50,8 @@
     <Project Path="packages/Axrone.AssetShader/tests/Axrone.AssetShader.Tests.csproj" />
     <Project Path="packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
     <Project Path="packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj" />
+    <Project Path="packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj" />
+    <Project Path="packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj" />
     <Project Path="packages/Axrone.Lighting/Axrone.Lighting.csproj" />
     <Project Path="packages/Axrone.Lighting/tests/Axrone.Lighting.Tests.csproj" />
     <Project Path="packages/Axrone.Particles/Axrone.Particles.csproj" />
