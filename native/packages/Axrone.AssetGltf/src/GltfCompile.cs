@@ -171,7 +171,7 @@ public static class GltfCompileExtensions
                     else
                     {
                         payload = new GltfRawTexturePayload(imgBytes, img.MimeType ?? "image/png");
-                        runtimeFormat = GltfTextureFormat.R8G8B8A8_UNorm;
+                        runtimeFormat = GltfTextureFormat.Unknown;
                     }
                 }
                 else if (!string.IsNullOrEmpty(img.Uri))
