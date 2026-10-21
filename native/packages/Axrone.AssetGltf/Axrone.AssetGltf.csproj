@@ -46,6 +46,9 @@
     <!-- CA1720: Integer is the glTF accessor flag vocabulary; renaming would
          corrupt the JSON mapping. -->
     <NoWarn>$(NoWarn);CA1720</NoWarn>
+    <!-- CA1308: Lowercase tokens are the wire format (animation paths,
+         extension names); Invariant culture keeps the mapping deterministic. -->
+    <NoWarn>$(NoWarn);CA1308</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
