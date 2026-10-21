@@ -234,6 +234,15 @@ public static class GltfCompileExtensions
         for (int i = 0; i < rawModel.Materials.Count; i++)
         {
             GltfRawModel.Material mDef = rawModel.Materials[i];
+            ValidateTextureBinding(mDef.Pbr.BaseColorTexture, i, rawModel.Textures.Count, "baseColorTexture");
+            ValidateTextureBinding(mDef.Pbr.MetallicRoughnessTexture, i, rawModel.Textures.Count, "metallicRoughnessTexture");
+            ValidateTextureBinding(mDef.NormalTexture, i, rawModel.Textures.Count, "normalTexture");
+            ValidateTextureBinding(mDef.OcclusionTexture, i, rawModel.Textures.Count, "occlusionTexture");
+            ValidateTextureBinding(mDef.EmissiveTexture, i, rawModel.Textures.Count, "emissiveTexture");
+            ValidateTextureBinding(mDef.ClearcoatTexture, i, rawModel.Textures.Count, "clearcoatTexture");
+            ValidateTextureBinding(mDef.ClearcoatRoughnessTexture, i, rawModel.Textures.Count, "clearcoatRoughnessTexture");
+            ValidateTextureBinding(mDef.ClearcoatNormalTexture, i, rawModel.Textures.Count, "clearcoatNormalTexture");
+
             var floatUniforms = ImmutableDictionary.CreateBuilder<string, float[]>(StringComparer.Ordinal);
             var scalarUniforms = ImmutableDictionary.CreateBuilder<string, float>(StringComparer.Ordinal);
             var intUniforms = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
@@ -303,6 +312,19 @@ public static class GltfCompileExtensions
         return materials;
     }
 
+    private static void ValidateTextureBinding(
+        GltfRawModel.TextureInfo? info,
+        int materialIndex,
+        int textureCount,
+        string slot)
+    {
+        if (info != null && info.Index >= 0 && info.Index >= textureCount)
+        {
+            ThrowHelper.ThrowSchema(
+                $"Material {materialIndex} references missing texture {info.Index} in '{slot}'.");
+        }
+    }
+
     private static void BindTexture(
         ImmutableDictionary<GltfTextureUsage, GltfMaterialTextureBinding>.Builder texBindings,
         ImmutableDictionary<string, float[]>.Builder floatUniforms,
@@ -355,6 +377,20 @@ public static class GltfCompileExtensions
                 string meshAssetId = GltfKeys.Mesh(m, p);
                 primitiveKeys.Add(meshAssetId);
 
+                if (prim.Material.HasValue &&
+                    (prim.Material.Value < 0 || prim.Material.Value >= rawModel.Materials.Count))
+                {
+                    ThrowHelper.ThrowSchema(
+                        $"Mesh {m} primitive {p} references a missing material {prim.Material.Value}.");
+                }
+
+                if (prim.Indices.HasValue &&
+                    (prim.Indices.Value < 0 || prim.Indices.Value >= rawModel.Accessors.Count))
+                {
+                    ThrowHelper.ThrowSchema(
+                        $"Mesh {m} primitive {p} references a missing index accessor {prim.Indices.Value}.");
+                }
+
                 if (prim.Draco != null && !TDracoPolicy.IsSupported)
                 {
                     if (rawModel.ExtensionsRequired.Contains("KHR_draco_mesh_compression"))
@@ -378,7 +414,8 @@ public static class GltfCompileExtensions
                 {
                     if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
                     {
-                        continue;
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
                     }
 
                     GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
@@ -544,7 +581,8 @@ public static class GltfCompileExtensions
                     {
                         if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
                         {
-                            continue;
+                            ThrowHelper.ThrowSchema(
+                                $"Mesh {m} primitive {p} morph target {t} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
                         }
 
                         GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
