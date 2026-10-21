@@ -55,7 +55,7 @@ public sealed class ShapeSerializationTests
     public void Polygon_RoundTrips_With_Holes()
     {
         Vec2[] outer = [new(0f, 0f), new(4f, 0f), new(4f, 4f), new(0f, 4f)];
-        var hole = new PolygonRing([new Vec2(1f, 1f), new Vec2(2f, 1f), new Vec2(2f, 2f), new Vec2(1f, 2f)], PolygonWinding.Cw);
+        var hole = new PolygonRing([new Vec2(1f, 1f), new Vec2(1f, 2f), new Vec2(2f, 2f), new Vec2(2f, 1f)], PolygonWinding.Cw);
         PolygonShape poly = ShapeFactory.CreatePolygon(outer, [hole]);
 
         Shape2D restored = ShapeSerializer.DeserializeShape(ShapeSerializer.StringifyShape(poly));

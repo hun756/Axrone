@@ -81,7 +81,7 @@ public sealed class ShapeModelTests
     [Fact]
     public void Builder_Requires_Outer_Ring()
     {
-        Vec2[] hole = [new Vec2(1f, 1f), new Vec2(2f, 1f), new Vec2(2f, 2f), new Vec2(1f, 2f)];
+        Vec2[] hole = [new Vec2(1f, 1f), new Vec2(1f, 2f), new Vec2(2f, 2f), new Vec2(2f, 1f)];
         PolygonShape poly = PolygonBuilder<PhaseEmpty>.Create()
             .WithOuter(Square)
             .AddHole(hole)
