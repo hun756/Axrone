@@ -111,6 +111,28 @@ public sealed class GltfImportTests
         rendererMeshIds.Should().OnlyContain(id => result.Meshes.Any(mesh => mesh.Id == id));
     }
 
+    [Fact]
+    public async Task Import_SceneLessDocument_ProducesEmptySceneGraph()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "materials": [{"name": "LibraryMaterial"}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "library.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Document.Scenes.Should().BeEmpty();
+        result.Prefabs.Should().BeEmpty();
+        result.Document.DefaultScene.Should().Be(-1);
+        result.Materials.Should().ContainSingle();
+        result.Materials[0].Id.Should().Be("gltf/material/0");
+        result.Diagnostics.Should().BeEmpty();
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
