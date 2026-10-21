@@ -240,6 +240,38 @@ public sealed class GltfImportTests
         track.Values.Span.ToArray().Should().Equal(weights);
     }
 
+    [Fact]
+    public async Task Import_RequiredDracoWithoutDecoder_ThrowsCodedError()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["KHR_draco_mesh_compression"],
+              "extensionsRequired": ["KHR_draco_mesh_compression"],
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "extensions": {
+                  "KHR_draco_mesh_compression": {"bufferView": 0, "attributes": {"POSITION": 0}}
+                }
+              }]}],
+              "accessors": [{"componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 0}],
+              "buffers": [{"byteLength": 0}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco.glb" });
+
+        Func<Task> act = () => importer.ImportAsync(glb).AsTask();
+
+        (await act.Should().ThrowAsync<GltfUnsupportedExtensionError>())
+            .Which.Code.Should().Be("gltf.extension.unsupported");
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
