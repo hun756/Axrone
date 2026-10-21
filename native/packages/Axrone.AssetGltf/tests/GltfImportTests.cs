@@ -1081,6 +1081,59 @@ public sealed class GltfImportTests
             .Which.Uri.Should().Be("preferred.webp");
     }
 
+    [Fact]
+    public async Task Import_MaterialVariants_ProduceDocumentAndMeshMappings()
+    {
+        float[] positions = [0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f];
+        byte[] bin = new byte[44];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["KHR_materials_variants"],
+              "extensions": {
+                "KHR_materials_variants": {
+                  "variants": [{"name": "Red"}, {"name": "Blue"}]
+                }
+              },
+              "materials": [{"name": "Base"}, {"name": "RedMat"}, {"name": "BlueMat"}],
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "material": 0,
+                "extensions": {
+                  "KHR_materials_variants": {
+                    "mappings": [
+                      {"variants": [0], "material": 1},
+                      {"variants": [1], "material": 2}
+                    ]
+                  }
+                }
+              }]}],
+              "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "variants.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Document.MaterialVariants.Should().HaveCount(2);
+        result.Document.MaterialVariants[0].Name.Should().Be("Red");
+        result.Document.MaterialVariants[1].Name.Should().Be("Blue");
+
+        GltfMeshAsset mesh = result.Meshes.Should().ContainSingle().Subject;
+        mesh.MaterialVariants.Should().HaveCount(2);
+        mesh.MaterialVariants[0].Variants.Should().Equal(0);
+        mesh.MaterialVariants[0].MaterialIndex.Should().Be(1);
+        mesh.MaterialVariants[1].Variants.Should().Equal(1);
+        mesh.MaterialVariants[1].MaterialIndex.Should().Be(2);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
