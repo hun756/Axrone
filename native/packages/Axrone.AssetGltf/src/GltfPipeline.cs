@@ -122,6 +122,12 @@ public static class GltfPipelineExtensions
         GltfContainerData container = GltfContainer.Parse(pipeline.SourceBytes);
         GltfRawModel rawModel = GltfJsonParser.Parse(container.JsonBytes.Span);
 
+        ReadOnlySpan<char> version = rawModel.Version.AsSpan();
+        if (version.Length < 3 || version[0] != '2' || version[1] != '.')
+        {
+            ThrowHelper.ThrowSchema($"Unsupported glTF version '{rawModel.Version}'. Only glTF 2.x is supported.");
+        }
+
         return new GltfPipeline<StateSchemaParsed>(
             pipeline.SourceBytes,
             container.Format,
