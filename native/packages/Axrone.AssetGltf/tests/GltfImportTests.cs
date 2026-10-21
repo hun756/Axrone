@@ -900,6 +900,20 @@ public sealed class GltfImportTests
         result.Document.Uri.Should().Be("models/uri.gltf");
     }
 
+    [Fact]
+    public async Task Import_PreCancelledToken_Throws()
+    {
+        const string json = """{"asset": {"version": "2.0"}}""";
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), []);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "cancelled.glb" });
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Func<Task> act = () => importer.ImportAsync(glb, cancellation.Token).AsTask();
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
