@@ -651,3 +651,40 @@ public readonly record struct SceneId(int Value) :
     public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
 
+/// <summary>Axis-aligned mesh bounds in model space.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GltfMeshBounds(Vec3 Min, Vec3 Max)
+{
+    /// <summary>Empty (inverted) bounds.</summary>
+    public static GltfMeshBounds Empty => new(
+        new Vec3(float.PositiveInfinity),
+        new Vec3(float.NegativeInfinity));
+
+    /// <summary>Returns bounds expanded to include a point.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public GltfMeshBounds Encapsulate(in Vec3 point) =>
+        new(Vec3.Min(Min, point), Vec3.Max(Max, point));
+}
+
+/// <summary>KHR_texture_transform payload.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GltfTextureTransform(Vec2 Offset, Vec2 Scale, float Rotation, int TexCoord)
+{
+    /// <summary>Identity transform.</summary>
+    public static GltfTextureTransform Default => new(Vec2.Zero, Vec2.One, 0.0f, 0);
+}
+
+/// <summary>Runtime sampler parameters (raw glTF filter/wrap values).</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GltfTextureSampler(int MagFilter, int MinFilter, int WrapS, int WrapT);
+
+/// <summary>Interleaved vertex attribute layout.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct GltfVertexAttribute(
+    int Offset,
+    int Stride,
+    int ComponentType,
+    GltfMeshSemantic Semantic,
+    byte ComponentCount,
+    bool Normalized,
+    bool Integer);
