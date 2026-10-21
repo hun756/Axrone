@@ -206,3 +206,115 @@ public enum GltfDiagnosticLevel : byte
 
 /// <summary>One import diagnostic.</summary>
 public readonly record struct GltfDiagnostic(GltfDiagnosticLevel Level, string Code, string Message);
+
+/// <summary>Nominal accessor index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct AccessorId(int Value) :
+    IEquatable<AccessorId>,
+    IComparable<AccessorId>,
+    IComparisonOperators<AccessorId, AccessorId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static AccessorId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(AccessorId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(AccessorId left, AccessorId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(AccessorId left, AccessorId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(AccessorId left, AccessorId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(AccessorId left, AccessorId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>Nominal buffer index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct BufferId(int Value) :
+    IEquatable<BufferId>,
+    IComparable<BufferId>,
+    IComparisonOperators<BufferId, BufferId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static BufferId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(BufferId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(BufferId left, BufferId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(BufferId left, BufferId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(BufferId left, BufferId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(BufferId left, BufferId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>Nominal bufferView index.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public readonly record struct BufferViewId(int Value) :
+    IEquatable<BufferViewId>,
+    IComparable<BufferViewId>,
+    IComparisonOperators<BufferViewId, BufferViewId, bool>
+{
+    /// <summary>Invalid sentinel.</summary>
+    public static BufferViewId Invalid => new(-1);
+
+    /// <summary>Whether the index is valid.</summary>
+    public bool IsValid => Value >= 0;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(BufferViewId other) => Value.CompareTo(other.Value);
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >(BufferViewId left, BufferViewId right) => left.Value > right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator >=(BufferViewId left, BufferViewId right) => left.Value >= right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <(BufferViewId left, BufferViewId right) => left.Value < right.Value;
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator <=(BufferViewId left, BufferViewId right) => left.Value <= right.Value;
+
+    /// <inheritdoc/>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
