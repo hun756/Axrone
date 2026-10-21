@@ -28,7 +28,7 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
     private const nuint Alignment = 64;
 
     /// <summary>Capacity.</summary>
-    public int Capacity { get; }
+    public int Capacity { get; private set; }
 
     /// <summary>Active count.</summary>
     public int ActiveCount => _counters.ActiveCount;
@@ -38,96 +38,96 @@ public sealed unsafe partial class NativeSoaParticleStorage : IDisposable
     private readonly void* _storageMemoryBlock;
     private readonly nuint _storageSizeBytes;
 
-    private readonly HandleEntry* _handles;
-    private readonly int* _freeHandles;
+    private HandleEntry* _handles;
+    private int* _freeHandles;
     private int _freeHandleTop;
 
     /// <summary>Position X stream.</summary>
-    public readonly float* PosX;
+    public float* PosX;
 
     /// <summary>Position Y stream.</summary>
-    public readonly float* PosY;
+    public float* PosY;
 
     /// <summary>Position Z stream.</summary>
-    public readonly float* PosZ;
+    public float* PosZ;
 
     /// <summary>Velocity X stream.</summary>
-    public readonly float* VelX;
+    public float* VelX;
 
     /// <summary>Velocity Y stream.</summary>
-    public readonly float* VelY;
+    public float* VelY;
 
     /// <summary>Velocity Z stream.</summary>
-    public readonly float* VelZ;
+    public float* VelZ;
 
     /// <summary>Acceleration X stream.</summary>
-    public readonly float* AccX;
+    public float* AccX;
 
     /// <summary>Acceleration Y stream.</summary>
-    public readonly float* AccY;
+    public float* AccY;
 
     /// <summary>Acceleration Z stream.</summary>
-    public readonly float* AccZ;
+    public float* AccZ;
 
     /// <summary>Scale X stream.</summary>
-    public readonly float* ScaleX;
+    public float* ScaleX;
 
     /// <summary>Scale Y stream.</summary>
-    public readonly float* ScaleY;
+    public float* ScaleY;
 
     /// <summary>Scale Z stream.</summary>
-    public readonly float* ScaleZ;
+    public float* ScaleZ;
 
     /// <summary>Rotation X stream.</summary>
-    public readonly float* RotX;
+    public float* RotX;
 
     /// <summary>Rotation Y stream.</summary>
-    public readonly float* RotY;
+    public float* RotY;
 
     /// <summary>Rotation Z stream.</summary>
-    public readonly float* RotZ;
+    public float* RotZ;
 
     /// <summary>Angular velocity X stream.</summary>
-    public readonly float* AngVelX;
+    public float* AngVelX;
 
     /// <summary>Angular velocity Y stream.</summary>
-    public readonly float* AngVelY;
+    public float* AngVelY;
 
     /// <summary>Angular velocity Z stream.</summary>
-    public readonly float* AngVelZ;
+    public float* AngVelZ;
 
     /// <summary>Color R stream.</summary>
-    public readonly float* ColR;
+    public float* ColR;
 
     /// <summary>Color G stream.</summary>
-    public readonly float* ColG;
+    public float* ColG;
 
     /// <summary>Color B stream.</summary>
-    public readonly float* ColB;
+    public float* ColB;
 
     /// <summary>Color A stream.</summary>
-    public readonly float* ColA;
+    public float* ColA;
 
     /// <summary>Lifetime stream.</summary>
-    public readonly float* Lifetime;
+    public float* Lifetime;
 
     /// <summary>Age stream.</summary>
-    public readonly float* Age;
+    public float* Age;
 
     /// <summary>Custom channel 0.</summary>
-    public readonly float* Custom0;
+    public float* Custom0;
 
     /// <summary>Custom channel 1.</summary>
-    public readonly float* Custom1;
+    public float* Custom1;
 
     /// <summary>Custom channel 2.</summary>
-    public readonly float* Custom2;
+    public float* Custom2;
 
     /// <summary>Custom channel 3.</summary>
-    public readonly float* Custom3;
+    public float* Custom3;
 
     /// <summary>Dense index to identity.</summary>
-    public readonly ParticleId* DenseToId;
+    public ParticleId* DenseToId;
 
     private readonly Lock _lock = new();
     private bool _disposed;
