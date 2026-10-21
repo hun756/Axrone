@@ -215,7 +215,7 @@ public static class GltfCompileExtensions
             var intUniforms = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
             var texBindings = ImmutableDictionary.CreateBuilder<GltfTextureUsage, GltfMaterialTextureBinding>();
 
-            float[] baseColor = mDef.Pbr.BaseColorFactor ?? [0.84f, 0.84f, 0.86f, 1.0f];
+            float[] baseColor = mDef.Pbr.BaseColorFactor ?? [1.0f, 1.0f, 1.0f, 1.0f];
             floatUniforms.Add("_BaseColorFactor", baseColor);
             scalarUniforms.Add("_MetallicFactor", mDef.Pbr.MetallicFactor);
             scalarUniforms.Add("_RoughnessFactor", mDef.Pbr.RoughnessFactor);
