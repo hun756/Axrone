@@ -381,3 +381,200 @@ public struct NoiseModule : IParticleModulePolicy<NoiseModule>
         return MathF.Sin(MathF.FusedMultiplyAdd(fx, s1 - s0, s0) + fy + fz);
     }
 }
+
+// 7. Rotation Module (Priority 500)
+/// <summary>Angular rotation module.</summary>
+public struct RotationModule : IParticleModulePolicy<RotationModule>
+{
+    /// <inheritdoc/>
+    public static int Priority => 500;
+
+    /// <summary>Angular drag.</summary>
+    public Vec3 AngularDrag = new(0.1f, 0.1f, 0.1f);
+
+    /// <summary>Creates a module.</summary>
+    public RotationModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref RotationModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        int count = storage.ActiveCount;
+        float dt = context.DeltaTime.Seconds;
+
+        float* rx = storage.RotX;
+        float* ry = storage.RotY;
+        float* rz = storage.RotZ;
+
+        float* wx = storage.AngVelX;
+        float* wy = storage.AngVelY;
+        float* wz = storage.AngVelZ;
+
+        float dragX = Math.Clamp(1.0f - (state.AngularDrag.X * dt), 0.0f, 1.0f);
+        float dragY = Math.Clamp(1.0f - (state.AngularDrag.Y * dt), 0.0f, 1.0f);
+        float dragZ = Math.Clamp(1.0f - (state.AngularDrag.Z * dt), 0.0f, 1.0f);
+
+        for (int i = 0; i < count; i++)
+        {
+            rx[i] += wx[i] * dt;
+            ry[i] += wy[i] * dt;
+            rz[i] += wz[i] * dt;
+
+            wx[i] *= dragX;
+            wy[i] *= dragY;
+            wz[i] *= dragZ;
+        }
+    }
+}
+
+// 8. Size Module (Priority 400)
+// CA1001: false positive on generic types. SizeModule does implement
+// IDisposable (Dispose below forwards to the curve), but the analyzer
+// does not resolve the IDisposable constraint on a generic type
+// declaration, so it reports the disposable curve field as undisposed.
+#pragma warning disable CA1001
+
+/// <summary>Curve-driven size module.</summary>
+public struct SizeModule : IParticleModulePolicy<SizeModule>, IDisposable
+{
+    /// <inheritdoc/>
+    public static int Priority => 400;
+
+    /// <summary>Size curve.</summary>
+    public Curve SizeCurve = new(CurveMode.Constant, 1.0f);
+
+    /// <summary>Creates a module.</summary>
+    public SizeModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() => SizeCurve.Dispose();
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref SizeModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        int count = storage.ActiveCount;
+        float* sx = storage.ScaleX;
+        float* sy = storage.ScaleY;
+        float* sz = storage.ScaleZ;
+        float* age = storage.Age;
+        float* life = storage.Lifetime;
+
+        for (int i = 0; i < count; i++)
+        {
+            float normAge = age[i] / Math.Max(life[i], 1e-5f);
+            float s = state.SizeCurve.Evaluate(normAge);
+            sx[i] = s;
+            sy[i] = s;
+            sz[i] = s;
+        }
+    }
+}
+#pragma warning restore CA1001
+
+// CA1001: false positive on generic types. ColorModule does implement
+// IDisposable (Dispose below forwards to the gradient), but the analyzer
+// does not resolve the IDisposable constraint on a generic type
+// declaration, so it reports the disposable gradient field as undisposed.
+#pragma warning disable CA1001
+
+// 9. Color Module (Priority 300)
+/// <summary>Gradient-driven color module.</summary>
+public struct ColorModule : IParticleModulePolicy<ColorModule>, IDisposable
+{
+    /// <inheritdoc/>
+    public static int Priority => 300;
+
+    /// <summary>Color gradient.</summary>
+    public Gradient ColorGradient = new(GradientMode.Color);
+
+    /// <summary>Creates a module.</summary>
+    public ColorModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() => ColorGradient.Dispose();
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref ColorModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        int count = storage.ActiveCount;
+        float* cr = storage.ColR;
+        float* cg = storage.ColG;
+        float* cb = storage.ColB;
+        float* ca = storage.ColA;
+        float* age = storage.Age;
+        float* life = storage.Lifetime;
+
+        for (int i = 0; i < count; i++)
+        {
+            float normAge = age[i] / Math.Max(life[i], 1e-5f);
+            Vec4 col = state.ColorGradient.Evaluate(normAge);
+            cr[i] = col.X;
+            cg[i] = col.Y;
+            cb[i] = col.Z;
+            ca[i] = col.W;
+        }
+    }
+}
+#pragma warning restore CA1001
+
+// 10. Limit Velocity Module (Priority 300)
+/// <summary>Speed limit module.</summary>
+public struct LimitVelocityModule : IParticleModulePolicy<LimitVelocityModule>
+{
+    /// <inheritdoc/>
+    public static int Priority => 300;
+
+    /// <summary>Maximum speed.</summary>
+    public float MaxSpeed = 100.0f;
+
+    /// <summary>Dampen ratio.</summary>
+    public float Dampen = 0.5f;
+
+    /// <summary>Creates a module.</summary>
+    public LimitVelocityModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref LimitVelocityModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        int count = storage.ActiveCount;
+        float maxSpdSq = state.MaxSpeed * state.MaxSpeed;
+        float dt = context.DeltaTime.Seconds;
+
+        float* vx = storage.VelX;
+        float* vy = storage.VelY;
+        float* vz = storage.VelZ;
+
+        for (int i = 0; i < count; i++)
+        {
+            float sq = MathF.FusedMultiplyAdd(vx[i], vx[i], MathF.FusedMultiplyAdd(vy[i], vy[i], vz[i] * vz[i]));
+            if (sq > maxSpdSq)
+            {
+                float speed = MathF.Sqrt(sq);
+                float newSpeed = speed - ((speed - state.MaxSpeed) * state.Dampen * dt);
+                float scale = newSpeed / speed;
+                vx[i] *= scale;
+                vy[i] *= scale;
+                vz[i] *= scale;
+            }
+        }
+    }
+}
