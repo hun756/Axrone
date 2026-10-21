@@ -1,4 +1,4 @@
-﻿namespace Axrone.AssetGltf;
+namespace Axrone.AssetGltf;
 
 /// <summary>Zero-allocation duck-typed span enumerator.</summary>
 /// <typeparam name="T">Element type.</typeparam>

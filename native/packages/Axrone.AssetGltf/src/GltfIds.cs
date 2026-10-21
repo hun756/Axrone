@@ -1,4 +1,4 @@
-﻿namespace Axrone.AssetGltf;
+namespace Axrone.AssetGltf;
 
 /// <summary>Mesh vertex attribute semantic.</summary>
 public enum GltfMeshSemantic : byte

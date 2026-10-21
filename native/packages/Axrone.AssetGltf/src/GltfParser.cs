@@ -1,4 +1,4 @@
-﻿namespace Axrone.AssetGltf;
+namespace Axrone.AssetGltf;
 
 /// <summary>Manual Utf8JsonReader glTF parser (AOT-safe, no reflection).</summary>
 internal static class GltfJsonParser
