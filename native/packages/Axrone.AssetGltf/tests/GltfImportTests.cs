@@ -133,6 +133,53 @@ public sealed class GltfImportTests
         result.Diagnostics.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Import_SparseOnlyPositionAccessor_AppliesZeroBasedPatch()
+    {
+        byte[] bin = new byte[16];
+        BinaryPrimitives.WriteUInt16LittleEndian(bin.AsSpan(0, 2), 1);
+        BinaryPrimitives.WriteSingleLittleEndian(bin.AsSpan(4, 4), 0f);
+        BinaryPrimitives.WriteSingleLittleEndian(bin.AsSpan(8, 4), 1f);
+        BinaryPrimitives.WriteSingleLittleEndian(bin.AsSpan(12, 4), 0f);
+
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+              "accessors": [{
+                "componentType": 5126,
+                "count": 3,
+                "type": "VEC3",
+                "sparse": {
+                  "count": 1,
+                  "indices": {"bufferView": 0, "componentType": 5123},
+                  "values": {"bufferView": 1}
+                }
+              }],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 2},
+                {"buffer": 0, "byteOffset": 4, "byteLength": 12}
+              ],
+              "buffers": [{"byteLength": 16}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "sparse.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        result.Diagnostics.Should().BeEmpty();
+        GltfMeshDefinition definition = result.Meshes[0].Definition;
+        ReadOnlySpan<float> vertices = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(definition.Vertices.Span);
+        vertices.ToArray().Should().Equal(0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f);
+        definition.VertexCount.Should().Be(3);
+        result.Meshes[0].Bounds!.Value.Min.Should().Be(new Vec3(0f, 0f, 0f));
+        result.Meshes[0].Bounds!.Value.Max.Should().Be(new Vec3(0f, 1f, 0f));
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
