@@ -48,6 +48,8 @@
     <Project Path="packages/Axrone.Asset2D/tests/Axrone.Asset2D.Tests.csproj" />
     <Project Path="packages/Axrone.AssetShader/Axrone.AssetShader.csproj" />
     <Project Path="packages/Axrone.AssetShader/tests/Axrone.AssetShader.Tests.csproj" />
+    <Project Path="packages/Axrone.Shapes2D/Axrone.Shapes2D.csproj" />
+    <Project Path="packages/Axrone.Shapes2D/tests/Axrone.Shapes2D.Tests.csproj" />
     <Project Path="packages/Axrone.Execution/Axrone.Execution.csproj" />
     <Project Path="packages/Axrone.Execution/tests/Axrone.Execution.Tests.csproj" />
     <Project Path="packages/Axrone.Random/Axrone.Random.csproj" />
