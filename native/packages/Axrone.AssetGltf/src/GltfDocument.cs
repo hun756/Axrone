@@ -164,3 +164,90 @@ public readonly record struct GltfMeshDefinition(
     int IndexCount,
     bool Index16Bit,
     GltfMeshTopology Topology);
+
+/// <summary>Canonical skin asset.</summary>
+public sealed class GltfSkinAsset
+{
+    /// <summary>Skin identity.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Skin index.</summary>
+    public required int SkinIndex { get; init; }
+
+    /// <summary>Joint node ids.</summary>
+    public required ImmutableArray<string> JointNodeIds { get; init; }
+
+    /// <summary>Joint node indices.</summary>
+    public required ImmutableArray<int> JointNodeIndices { get; init; }
+
+    /// <summary>Skeleton node id.</summary>
+    public string? SkeletonNodeId { get; init; }
+
+    /// <summary>Skeleton node index.</summary>
+    public int? SkeletonNodeIndex { get; init; }
+
+    /// <summary>Row-major inverse bind matrices.</summary>
+    public ReadOnlyMemory<float> InverseBindMatrices { get; init; }
+}
+
+/// <summary>Canonical animation clip asset.</summary>
+public sealed class GltfAnimationClipAsset
+{
+    /// <summary>Clip identity.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Animation index.</summary>
+    public required int AnimationIndex { get; init; }
+
+    /// <summary>Duration seconds.</summary>
+    public required float Duration { get; init; }
+
+    /// <summary>Tracks.</summary>
+    public required ImmutableArray<GltfAnimationTrackAsset> Tracks { get; init; }
+
+    /// <summary>Tags.</summary>
+    public ImmutableArray<string> Tags { get; init; } = ImmutableArray<string>.Empty;
+}
+
+/// <summary>Canonical animation track asset.</summary>
+public sealed class GltfAnimationTrackAsset
+{
+    /// <summary>Channel index.</summary>
+    public required int ChannelIndex { get; init; }
+
+    /// <summary>Sampler index.</summary>
+    public required int SamplerIndex { get; init; }
+
+    /// <summary>Input accessor.</summary>
+    public required int InputAccessor { get; init; }
+
+    /// <summary>Output accessor.</summary>
+    public required int OutputAccessor { get; init; }
+
+    /// <summary>Target node index.</summary>
+    public required int TargetNodeIndex { get; init; }
+
+    /// <summary>Target node id.</summary>
+    public required string TargetNodeId { get; init; }
+
+    /// <summary>Target path.</summary>
+    public required GltfAnimationPath Path { get; init; }
+
+    /// <summary>Interpolation.</summary>
+    public required GltfInterpolation Interpolation { get; init; }
+
+    /// <summary>Keyframe count.</summary>
+    public required int KeyframeCount { get; init; }
+
+    /// <summary>Value component count.</summary>
+    public required int ValueComponentCount { get; init; }
+
+    /// <summary>Sample stride.</summary>
+    public required int SampleStride { get; init; }
+
+    /// <summary>Keyframe times.</summary>
+    public required ReadOnlyMemory<float> Times { get; init; }
+
+    /// <summary>Keyframe values.</summary>
+    public required ReadOnlyMemory<float> Values { get; init; }
+}
