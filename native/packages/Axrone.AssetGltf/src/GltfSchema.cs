@@ -132,4 +132,49 @@ public sealed class GltfRawModel
 
     /// <summary>Buffers.</summary>
     public List<Buffer> Buffers { get; } = new();
+
+    /// <summary>KHR_draco_mesh_compression primitive extension.</summary>
+    public sealed class DracoPrimitiveExtension
+    {
+        /// <summary>BufferView index.</summary>
+        public int BufferView { get; set; }
+
+        /// <summary>Semantic to attribute-index mapping.</summary>
+        public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
+    }
+
+    /// <summary>Raw mesh primitive.</summary>
+    public sealed class Primitive
+    {
+        /// <summary>Semantic to accessor-index mapping.</summary>
+        public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>Indices accessor index.</summary>
+        public int? Indices { get; set; }
+
+        /// <summary>Material index.</summary>
+        public int? Material { get; set; }
+
+        /// <summary>Topology mode (default triangles).</summary>
+        public int Mode { get; set; } = 4;
+
+        /// <summary>Morph target attribute maps.</summary>
+        public List<Dictionary<string, int>> Targets { get; } = new();
+
+        /// <summary>Draco extension payload.</summary>
+        public DracoPrimitiveExtension? Draco { get; set; }
+    }
+
+    /// <summary>Raw mesh.</summary>
+    public sealed class Mesh
+    {
+        /// <summary>Mesh name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>Primitives.</summary>
+        public List<Primitive> Primitives { get; } = new();
+    }
+
+    /// <summary>Meshes.</summary>
+    public List<Mesh> Meshes { get; } = new();
 }
