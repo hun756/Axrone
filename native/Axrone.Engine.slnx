@@ -69,6 +69,7 @@
     <Project Path="packages/Axrone.Render.OpenGL.Mock/Axrone.Render.OpenGL.Mock.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
+    <Project Path="packages/Axrone.AssetGltf/benchmarks/Axrone.AssetGltf.Benchmarks.csproj" />
     <Project Path="packages/Axrone.Batching/benchmarks/Axrone.Batching.Benchmarks.csproj" />
   </Folder>
 </Solution>
