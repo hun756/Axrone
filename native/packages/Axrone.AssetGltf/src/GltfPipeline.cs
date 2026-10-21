@@ -9,9 +9,6 @@ public readonly struct StateSchemaParsed;
 /// <summary>Resource-resolved pipeline state.</summary>
 public readonly struct StateResolved;
 
-/// <summary>Compiled pipeline state (reserved).</summary>
-public readonly struct StateCompiled;
-
 /// <summary>Importer options.</summary>
 public sealed class GltfImporterOptions
 {

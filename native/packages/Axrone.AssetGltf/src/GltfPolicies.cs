@@ -1,14 +1,5 @@
 namespace Axrone.AssetGltf;
 
-/// <summary>Zero-copy span visitor contract.</summary>
-/// <typeparam name="T">Element type.</typeparam>
-public interface ISpanVisitor<T>
-{
-    /// <summary>Visits a span.</summary>
-    /// <param name="span">Span to visit.</param>
-    void Visit(scoped ReadOnlySpan<T> span);
-}
-
 /// <summary>Draco mesh decompression policy (monomorphized per importer).</summary>
 public interface IDracoMeshPolicy
 {

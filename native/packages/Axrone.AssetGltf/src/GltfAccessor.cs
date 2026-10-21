@@ -1,40 +1,5 @@
 namespace Axrone.AssetGltf;
 
-/// <summary>Zero-allocation duck-typed span enumerator.</summary>
-/// <typeparam name="T">Element type.</typeparam>
-public ref struct DuckSpanEnumerator<T>
-{
-    private readonly ReadOnlySpan<T> _span;
-    private int _index;
-
-    /// <summary>Creates an enumerator.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public DuckSpanEnumerator(ReadOnlySpan<T> span)
-    {
-        _span = span;
-        _index = -1;
-    }
-
-    /// <summary>Advances to the next element.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool MoveNext()
-    {
-        _index++;
-        return (uint)_index < (uint)_span.Length;
-    }
-
-    /// <summary>Current element.</summary>
-    public ref readonly T Current
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ref _span[_index];
-    }
-
-    /// <summary>Returns this enumerator.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public DuckSpanEnumerator<T> GetEnumerator() => this;
-}
-
 /// <summary>glTF accessor decoding (component types, sparse merge).</summary>
 internal static class GltfAccessorRuntime
 {
