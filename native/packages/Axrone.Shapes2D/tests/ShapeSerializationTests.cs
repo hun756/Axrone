@@ -66,7 +66,7 @@ public sealed class ShapeSerializationTests
     [Fact]
     public void Line_Stroke_Forced_Center()
     {
-        var stroke = ShapeFactory.CreateStroke(ShapeFactory.CreateSolidPaint("red"), 2f, ShapeStrokeAlignment.Center);
+        var stroke = ShapePaintFactory.CreateStroke(ShapeFactory.CreateSolidPaint("red"), 2f, ShapeStrokeAlignment.Center);
         Shape2D line = ShapeFactory.CreateLine(new Vec2(0f, 0f), new Vec2(3f, 4f), stroke);
         Shape2D restored = ShapeSerializer.DeserializeShape(ShapeSerializer.StringifyShape(line));
         restored.Should().BeOfType<LineShape>();
