@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="../Axrone.AssetGltf.csproj" />
     <ProjectReference Include="../../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../../Axrone.Asset/Axrone.Asset.csproj" />
   </ItemGroup>
 
 </Project>
