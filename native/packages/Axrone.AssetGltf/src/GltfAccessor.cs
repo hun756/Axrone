@@ -198,3 +198,169 @@ internal static class GltfAccessorRuntime
         }
     }
 }
+
+/// <summary>Mesh topology expansion, index downcast and bounds.</summary>
+internal static class GltfMeshPipeline
+{
+    /// <summary>Expands glTF primitive modes into a triangle/line/point index list.</summary>
+    public static uint[] ExpandTopology(int mode, ReadOnlySpan<uint> sourceIndices, int vertexFallbackCount)
+    {
+        uint[] source = sourceIndices.ToArray();
+        if (source.Length == 0)
+        {
+            if (vertexFallbackCount < 0)
+            {
+                ThrowHelper.ThrowTopology(mode, "Negative vertex fallback count.");
+            }
+
+            source = new uint[vertexFallbackCount];
+            for (uint i = 0; i < (uint)vertexFallbackCount; i++)
+            {
+                source[i] = i;
+            }
+        }
+
+        switch (mode)
+        {
+            case 0:
+            case 1:
+            case 4:
+                return source;
+
+            case 2:
+                {
+                    if (source.Length < 2)
+                    {
+                        return Array.Empty<uint>();
+                    }
+
+                    var output = GC.AllocateUninitializedArray<uint>(source.Length * 2);
+                    int dst = 0;
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        output[dst++] = source[i];
+                        output[dst++] = source[(i + 1) % source.Length];
+                    }
+
+                    return output;
+                }
+
+            case 3:
+                {
+                    if (source.Length < 2)
+                    {
+                        return Array.Empty<uint>();
+                    }
+
+                    var output = GC.AllocateUninitializedArray<uint>((source.Length - 1) * 2);
+                    int dst = 0;
+                    for (int i = 0; i < source.Length - 1; i++)
+                    {
+                        output[dst++] = source[i];
+                        output[dst++] = source[i + 1];
+                    }
+
+                    return output;
+                }
+
+            case 5:
+                {
+                    if (source.Length < 3)
+                    {
+                        return Array.Empty<uint>();
+                    }
+
+                    var output = GC.AllocateUninitializedArray<uint>((source.Length - 2) * 3);
+                    int dst = 0;
+                    for (int i = 0; i < source.Length - 2; i++)
+                    {
+                        if ((i & 1) == 0)
+                        {
+                            output[dst++] = source[i];
+                            output[dst++] = source[i + 1];
+                            output[dst++] = source[i + 2];
+                        }
+                        else
+                        {
+                            output[dst++] = source[i + 1];
+                            output[dst++] = source[i];
+                            output[dst++] = source[i + 2];
+                        }
+                    }
+
+                    return output;
+                }
+
+            case 6:
+                {
+                    if (source.Length < 3)
+                    {
+                        return Array.Empty<uint>();
+                    }
+
+                    var output = GC.AllocateUninitializedArray<uint>((source.Length - 2) * 3);
+                    int dst = 0;
+                    uint root = source[0];
+                    for (int i = 1; i < source.Length - 1; i++)
+                    {
+                        output[dst++] = root;
+                        output[dst++] = source[i];
+                        output[dst++] = source[i + 1];
+                    }
+
+                    return output;
+                }
+
+            default:
+                ThrowHelper.ThrowTopology(mode, "Unrecognized glTF topology primitive mode.");
+                return Array.Empty<uint>();
+        }
+    }
+
+    /// <summary>Downcasts uint32 indices to the smallest wire width.</summary>
+    public static (ReadOnlyMemory<byte> IndexBytes, bool Is16Bit) DowncastIndices(ReadOnlySpan<uint> indices)
+    {
+        uint maxVal = 0;
+        nuint len = (nuint)indices.Length;
+        for (nuint i = 0; i < len; i++)
+        {
+            if (indices[(int)i] > maxVal)
+            {
+                maxVal = indices[(int)i];
+            }
+        }
+
+        if (maxVal <= 65535)
+        {
+            byte[] buffer = GC.AllocateUninitializedArray<byte>(indices.Length * 2, pinned: true);
+            Span<ushort> target = MemoryMarshal.Cast<byte, ushort>(buffer.AsSpan());
+            for (nuint i = 0; i < len; i++)
+            {
+                target[(int)i] = (ushort)indices[(int)i];
+            }
+
+            return (buffer, true);
+        }
+        else
+        {
+            byte[] buffer = GC.AllocateUninitializedArray<byte>(indices.Length * 4, pinned: true);
+            Span<uint> target = MemoryMarshal.Cast<byte, uint>(buffer.AsSpan());
+            indices.CopyTo(target);
+            return (buffer, false);
+        }
+    }
+
+    /// <summary>Computes axis-aligned bounds over a packed position buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static GltfMeshBounds ComputeBounds(ReadOnlySpan<float> positions)
+    {
+        GltfMeshBounds bounds = GltfMeshBounds.Empty;
+        nuint vertexSpan = (nuint)positions.Length;
+        for (nuint i = 0; i < vertexSpan; i += 3)
+        {
+            bounds = bounds.Encapsulate(new Vec3(positions[(int)i], positions[(int)(i + 1)], positions[(int)(i + 2)]));
+        }
+
+        return bounds;
+    }
+}
