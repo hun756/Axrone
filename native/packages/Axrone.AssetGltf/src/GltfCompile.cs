@@ -35,11 +35,13 @@ public static class GltfCompileExtensions
 
         ImmutableArray<string> animIds = animations.ConvertAll(static a => a.Id).ToImmutableArray();
 
-        var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(Math.Max(1, rawModel.Scenes.Count));
+        var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(rawModel.Scenes.Count);
         var sceneAssets = ImmutableArray.CreateBuilder<GltfDocumentSceneAsset>(rawModel.Scenes.Count);
         int defaultSceneIdx = rawModel.DefaultScene >= 0 && rawModel.DefaultScene < rawModel.Scenes.Count
             ? rawModel.DefaultScene
-            : 0;
+            : rawModel.Scenes.Count > 0
+                ? 0
+                : -1;
 
         for (int s = 0; s < rawModel.Scenes.Count; s++)
         {
