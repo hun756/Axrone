@@ -578,3 +578,380 @@ public struct LimitVelocityModule : IParticleModulePolicy<LimitVelocityModule>
         }
     }
 }
+
+// 11. Velocity Module (Priority 200)
+/// <summary>Euler integration module with gravity and damping.</summary>
+public struct VelocityModule : IParticleModulePolicy<VelocityModule>
+{
+    /// <inheritdoc/>
+    public static int Priority => 200;
+
+    /// <summary>Gravity.</summary>
+    public Vec3 Gravity = new(0f, -9.81f, 0f);
+
+    /// <summary>Damping.</summary>
+    public float Damping = 0.0f;
+
+    /// <summary>Creates a module.</summary>
+    public VelocityModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref VelocityModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        int count = storage.ActiveCount;
+        if (count == 0)
+        {
+            return;
+        }
+
+        float dt = context.DeltaTime.Seconds;
+        float halfDtSq = 0.5f * dt * dt;
+        float dampFactor = Math.Clamp(1.0f - (state.Damping * dt), 0.0f, 1.0f);
+
+        float* px = storage.PosX;
+        float* py = storage.PosY;
+        float* pz = storage.PosZ;
+
+        float* vx = storage.VelX;
+        float* vy = storage.VelY;
+        float* vz = storage.VelZ;
+
+        float* ax = storage.AccX;
+        float* ay = storage.AccY;
+        float* az = storage.AccZ;
+
+        Vec3 g = state.Gravity;
+        int vectorSpan = Vector<float>.Count;
+        int i = 0;
+
+        if (Vector.IsHardwareAccelerated && count >= vectorSpan)
+        {
+            Vector<float> vDt = new(dt);
+            Vector<float> vHalfDtSq = new(halfDtSq);
+            Vector<float> vGx = new(g.X);
+            Vector<float> vGy = new(g.Y);
+            Vector<float> vGz = new(g.Z);
+            Vector<float> vDamp = new(dampFactor);
+
+            int limit = count - vectorSpan;
+            for (; i <= limit; i += vectorSpan)
+            {
+                Vector<float> totalAx = Vector.Load(ax + i) + vGx;
+                Vector<float> totalAy = Vector.Load(ay + i) + vGy;
+                Vector<float> totalAz = Vector.Load(az + i) + vGz;
+
+                Vector<float> curVx = Vector.Load(vx + i);
+                Vector<float> curVy = Vector.Load(vy + i);
+                Vector<float> curVz = Vector.Load(vz + i);
+
+                Vector<float> curPx = Vector.Load(px + i) + (curVx * vDt) + (totalAx * vHalfDtSq);
+                Vector<float> curPy = Vector.Load(py + i) + (curVy * vDt) + (totalAy * vHalfDtSq);
+                Vector<float> curPz = Vector.Load(pz + i) + (curVz * vDt) + (totalAz * vHalfDtSq);
+
+                curPx.Store(px + i);
+                curPy.Store(py + i);
+                curPz.Store(pz + i);
+
+                curVx = (curVx + (totalAx * vDt)) * vDamp;
+                curVy = (curVy + (totalAy * vDt)) * vDamp;
+                curVz = (curVz + (totalAz * vDt)) * vDamp;
+
+                curVx.Store(vx + i);
+                curVy.Store(vy + i);
+                curVz.Store(vz + i);
+            }
+        }
+
+        for (; i < count; i++)
+        {
+            float totalAx = ax[i] + g.X;
+            float totalAy = ay[i] + g.Y;
+            float totalAz = az[i] + g.Z;
+
+            px[i] += (vx[i] * dt) + (totalAx * halfDtSq);
+            py[i] += (vy[i] * dt) + (totalAy * halfDtSq);
+            pz[i] += (vz[i] * dt) + (totalAz * halfDtSq);
+
+            vx[i] = (vx[i] + (totalAx * dt)) * dampFactor;
+            vy[i] = (vy[i] + (totalAy * dt)) * dampFactor;
+            vz[i] = (vz[i] + (totalAz * dt)) * dampFactor;
+        }
+    }
+}
+
+// 12. Force Module (Priority 150)
+/// <summary>Force field module.</summary>
+public struct ForceModule : IParticleModulePolicy<ForceModule>
+{
+    /// <inheritdoc/>
+    public static int Priority => 150;
+
+    /// <summary>Force definition.</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct ParticleForce
+    {
+        /// <summary>Force type.</summary>
+        public ForceType Type;
+
+        /// <summary>Falloff mode.</summary>
+        public FalloffMode Falloff;
+
+        /// <summary>Force position.</summary>
+        public Vec3 Position;
+
+        /// <summary>Force direction.</summary>
+        public Vec3 Direction;
+
+        /// <summary>Strength.</summary>
+        public float Strength;
+
+        /// <summary>Enabled flag.</summary>
+        public bool Enabled;
+    }
+
+    private readonly ParticleForce[] _forces = new ParticleForce[8];
+    private int _forceCount;
+
+    /// <summary>Creates a module.</summary>
+    public ForceModule()
+    {
+    }
+
+    /// <summary>Adds a force.</summary>
+    public void AddForce(in ParticleForce force)
+    {
+        if (_forceCount < _forces.Length)
+        {
+            _forces[_forceCount++] = force;
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref ForceModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        if (state._forceCount == 0)
+        {
+            return;
+        }
+
+        int count = storage.ActiveCount;
+        float dt = context.DeltaTime.Seconds;
+
+        float* px = storage.PosX;
+        float* py = storage.PosY;
+        float* pz = storage.PosZ;
+
+        float* vx = storage.VelX;
+        float* vy = storage.VelY;
+        float* vz = storage.VelZ;
+
+        for (int i = 0; i < count; i++)
+        {
+            Vec3 pPos = new(px[i], py[i], pz[i]);
+            Vec3 totalAcc = Vec3.Zero;
+
+            for (int f = 0; f < state._forceCount; f++)
+            {
+                ref readonly ParticleForce force = ref state._forces[f];
+                if (!force.Enabled)
+                {
+                    continue;
+                }
+
+                Vec3 dir = force.Type == ForceType.Directional ? force.Direction : force.Position - pPos;
+                float dist = dir.LengthSquared();
+                if (dist > 1e-8f)
+                {
+                    dist = MathF.Sqrt(dist);
+                    float att = force.Falloff switch
+                    {
+                        FalloffMode.Linear => Math.Max(0f, 1.0f - (dist / 50.0f)),
+                        FalloffMode.Quadratic => 1.0f / (1.0f + (dist * dist)),
+                        _ => 1.0f,
+                    };
+                    totalAcc += (dir / dist) * (force.Strength * att);
+                }
+            }
+
+            vx[i] += totalAcc.X * dt;
+            vy[i] += totalAcc.Y * dt;
+            vz[i] += totalAcc.Z * dt;
+        }
+    }
+}
+
+// 13. Emission Module (Priority 100)
+// CA1001: false positive on generic types (see size/color modules above).
+#pragma warning disable CA1001
+
+/// <summary>Emission rate module.</summary>
+public struct EmissionModule : IParticleModulePolicy<EmissionModule>, IDisposable
+{
+    /// <inheritdoc/>
+    public static int Priority => 100;
+
+    /// <summary>Rate over time.</summary>
+    public Curve RateOverTime = new(CurveMode.Constant, 10.0f);
+
+    /// <summary>Emission duration.</summary>
+    public float Duration = 5.0f;
+
+    /// <summary>Looping flag.</summary>
+    public bool Looping = true;
+
+    private float _emissionTimer;
+    private float _emittedFraction;
+
+    /// <summary>Creates a module.</summary>
+    public EmissionModule()
+    {
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() => RateOverTime.Dispose();
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref EmissionModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        state._emissionTimer += context.DeltaTime.Seconds;
+        if (state._emissionTimer > state.Duration && !state.Looping)
+        {
+            return;
+        }
+
+        float normTime = (state._emissionTimer % Math.Max(state.Duration, 1e-4f)) / state.Duration;
+        float rate = state.RateOverTime.Evaluate(normTime);
+
+        state._emittedFraction += rate * context.DeltaTime.Seconds;
+        int toEmit = (int)state._emittedFraction;
+        if (toEmit > 0)
+        {
+            state._emittedFraction -= toEmit;
+        }
+    }
+
+    /// <summary>Drains pending emissions.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int DrainPendingEmissions()
+    {
+        int emit = (int)_emittedFraction;
+        _emittedFraction -= emit;
+        return emit;
+    }
+}
+#pragma warning restore CA1001
+
+// 14. Shape Module (Priority 50)
+/// <summary>Emitter shape module.</summary>
+public struct ShapeModule : IParticleModulePolicy<ShapeModule>
+{
+    /// <inheritdoc/>
+    public static int Priority => 50;
+
+    /// <summary>Emitter shape.</summary>
+    public EmitterShape Shape = EmitterShape.Sphere;
+
+    /// <summary>Shape radius.</summary>
+    public float Radius = 1.0f;
+
+    /// <summary>Box extents.</summary>
+    public Vec3 BoxExtents = Vec3.One;
+
+    /// <summary>Cone angle.</summary>
+    public float ConeAngle = 0.5f;
+
+    private uint _rngState = 1337;
+
+    /// <summary>Creates a module.</summary>
+    public ShapeModule()
+    {
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private float NextFloat()
+    {
+        _rngState = (_rngState * 1664525u) + 1013904223u;
+        return (_rngState & 0x00FFFFFF) / 16777216.0f;
+    }
+
+    /// <summary>Computes an emission position and direction.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void ComputeEmission(out Vec3 position, out Vec3 direction)
+    {
+        switch (Shape)
+        {
+            case EmitterShape.Sphere:
+            {
+                float u = NextFloat();
+                float v = NextFloat();
+                float theta = u * 2.0f * MathF.PI;
+                float phi = MathF.Acos((2.0f * v) - 1.0f);
+                float r = MathF.Cbrt(NextFloat()) * Radius;
+                float sinPhi = MathF.Sin(phi);
+
+                direction = new Vec3(sinPhi * MathF.Cos(theta), sinPhi * MathF.Sin(theta), MathF.Cos(phi));
+                position = direction * r;
+                break;
+            }
+
+            case EmitterShape.Hemisphere:
+            {
+                float u = NextFloat();
+                float v = NextFloat();
+                float theta = u * 2.0f * MathF.PI;
+                float phi = MathF.Acos(v);
+                float r = MathF.Cbrt(NextFloat()) * Radius;
+                float sinPhi = MathF.Sin(phi);
+
+                direction = new Vec3(sinPhi * MathF.Cos(theta), MathF.Abs(MathF.Cos(phi)), sinPhi * MathF.Sin(theta));
+                position = direction * r;
+                break;
+            }
+
+            case EmitterShape.Cone:
+            {
+                float theta = NextFloat() * 2.0f * MathF.PI;
+                float r = NextFloat() * Radius;
+                position = new Vec3(r * MathF.Cos(theta), 0.0f, r * MathF.Sin(theta));
+                direction = new Vec3(MathF.Sin(ConeAngle) * MathF.Cos(theta), MathF.Cos(ConeAngle), MathF.Sin(ConeAngle) * MathF.Sin(theta));
+                direction = Vec3.Normalize(direction);
+                break;
+            }
+
+            case EmitterShape.Box:
+            {
+                position = new Vec3(
+                    (NextFloat() - 0.5f) * BoxExtents.X * 2.0f,
+                    (NextFloat() - 0.5f) * BoxExtents.Y * 2.0f,
+                    (NextFloat() - 0.5f) * BoxExtents.Z * 2.0f);
+                direction = Vec3.UnitY;
+                break;
+            }
+
+            default:
+            {
+                position = Vec3.Zero;
+                direction = Vec3.UnitY;
+                break;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Process(NativeSoaParticleStorage storage, in ModuleExecutionContext context, ref ShapeModule state)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+    }
+}
