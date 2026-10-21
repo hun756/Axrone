@@ -574,6 +574,7 @@ public static class GltfCompileExtensions
                         GltfAccessorRuntime.DecodeIndices(indexSpan, indexAcc.Count, indexAcc.ComponentType, rawModel.BufferViews[indexAcc.BufferView].ByteStride, decodedRawIndices);
                     }
 
+                    GltfAccessorRuntime.ValidateIndices(decodedRawIndices, vertexCount, prim.Indices.Value);
                     expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, decodedRawIndices, vertexCount);
                 }
                 else
