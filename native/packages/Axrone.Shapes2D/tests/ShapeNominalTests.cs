@@ -68,6 +68,18 @@ public sealed class ShapeNominalTests
     }
 
     [Fact]
+    public void ResolvedColor_Interops_With_Shared_Color()
+    {
+        ResolvedColor local = new(0.2f, 0.4f, 0.6f, 1f);
+        Color shared = local;
+        shared.Should().Be(new Color(0.2f, 0.4f, 0.6f, 1f));
+        ResolvedColor back = shared;
+        back.Should().Be(local);
+        HslColor hsl = ((Color)local).ToHsl();
+        hsl.IsFinite.Should().BeTrue();
+    }
+
+    [Fact]
     public void Errors_Carry_Codes()
     {
         new ShapeValidationException("bad").ErrorCode.Should().Be(Shapes2DErrorCode.InvalidShape);
