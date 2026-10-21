@@ -177,4 +177,145 @@ public sealed class GltfRawModel
 
     /// <summary>Meshes.</summary>
     public List<Mesh> Meshes { get; } = new();
+
+    /// <summary>Texture sampler binding with KHR_texture_transform.</summary>
+    public sealed class TextureInfo
+    {
+        /// <summary>Texture index (-1 when unset).</summary>
+        public int Index { get; set; } = -1;
+
+        /// <summary>UV set.</summary>
+        public int TexCoord { get; set; }
+
+        /// <summary>Texture scale (clearcoat/occlusion strength).</summary>
+        public float Scale { get; set; } = 1.0f;
+
+        /// <summary>Texture strength.</summary>
+        public float Strength { get; set; } = 1.0f;
+
+        /// <summary>UV transform.</summary>
+        public GltfTextureTransform Transform { get; set; } = GltfTextureTransform.Default;
+    }
+
+    /// <summary>PBR metallic-roughness block.</summary>
+    public sealed class PbrMetallicRoughness
+    {
+        /// <summary>Base color factor.</summary>
+        public float[]? BaseColorFactor { get; set; }
+
+        /// <summary>Base color texture.</summary>
+        public TextureInfo? BaseColorTexture { get; set; }
+
+        /// <summary>Metallic factor.</summary>
+        public float MetallicFactor { get; set; } = 1.0f;
+
+        /// <summary>Roughness factor.</summary>
+        public float RoughnessFactor { get; set; } = 1.0f;
+
+        /// <summary>Metallic-roughness texture.</summary>
+        public TextureInfo? MetallicRoughnessTexture { get; set; }
+    }
+
+    /// <summary>Raw material.</summary>
+    public sealed class Material
+    {
+        /// <summary>Material name.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>PBR block.</summary>
+        public PbrMetallicRoughness Pbr { get; set; } = new();
+
+        /// <summary>Normal texture.</summary>
+        public TextureInfo? NormalTexture { get; set; }
+
+        /// <summary>Occlusion texture.</summary>
+        public TextureInfo? OcclusionTexture { get; set; }
+
+        /// <summary>Emissive texture.</summary>
+        public TextureInfo? EmissiveTexture { get; set; }
+
+        /// <summary>Emissive factor.</summary>
+        public float[]? EmissiveFactor { get; set; }
+
+        /// <summary>Alpha mode string.</summary>
+        public string AlphaMode { get; set; } = "OPAQUE";
+
+        /// <summary>Alpha cutoff.</summary>
+        public float AlphaCutoff { get; set; } = 0.5f;
+
+        /// <summary>Double-sided flag.</summary>
+        public bool DoubleSided { get; set; }
+
+        /// <summary>KHR_materials_unlit flag.</summary>
+        public bool Unlit { get; set; }
+
+        /// <summary>Clearcoat factor.</summary>
+        public float ClearcoatFactor { get; set; }
+
+        /// <summary>Clearcoat roughness factor.</summary>
+        public float ClearcoatRoughnessFactor { get; set; }
+
+        /// <summary>Clearcoat texture.</summary>
+        public TextureInfo? ClearcoatTexture { get; set; }
+
+        /// <summary>Clearcoat roughness texture.</summary>
+        public TextureInfo? ClearcoatRoughnessTexture { get; set; }
+
+        /// <summary>Clearcoat normal texture.</summary>
+        public TextureInfo? ClearcoatNormalTexture { get; set; }
+
+        /// <summary>KHR_materials_emissive_strength value.</summary>
+        public float EmissiveStrength { get; set; } = 1.0f;
+    }
+
+    /// <summary>Raw texture.</summary>
+    public sealed class Texture
+    {
+        /// <summary>Sampler index.</summary>
+        public int? Sampler { get; set; }
+
+        /// <summary>Image index.</summary>
+        public int? Source { get; set; }
+    }
+
+    /// <summary>Raw image.</summary>
+    public sealed class Image
+    {
+        /// <summary>External or data URI.</summary>
+        public string? Uri { get; set; }
+
+        /// <summary>MIME type.</summary>
+        public string? MimeType { get; set; }
+
+        /// <summary>BufferView index.</summary>
+        public int? BufferView { get; set; }
+    }
+
+    /// <summary>Raw sampler.</summary>
+    public sealed class Sampler
+    {
+        /// <summary>Magnification filter.</summary>
+        public int MagFilter { get; set; } = 9729;
+
+        /// <summary>Minification filter.</summary>
+        public int MinFilter { get; set; } = 9729;
+
+        /// <summary>S wrap mode.</summary>
+        public int WrapS { get; set; } = 10497;
+
+        /// <summary>T wrap mode.</summary>
+        public int WrapT { get; set; } = 10497;
+    }
+
+    /// <summary>Materials.</summary>
+    public List<Material> Materials { get; } = new();
+
+    /// <summary>Textures.</summary>
+    public List<Texture> Textures { get; } = new();
+
+    /// <summary>Images.</summary>
+    public List<Image> Images { get; } = new();
+
+    /// <summary>Samplers.</summary>
+    public List<Sampler> Samplers { get; } = new();
 }
