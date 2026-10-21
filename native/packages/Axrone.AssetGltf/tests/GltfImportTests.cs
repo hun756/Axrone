@@ -1187,6 +1187,54 @@ public sealed class GltfImportTests
             ]);
     }
 
+    [Fact]
+    public async Task Import_AnimationPointer_ProducesPointerTrack()
+    {
+        byte[] bin = new byte[60];
+        float[] times = [0f, 1f, 2f];
+        Buffer.BlockCopy(times, 0, bin, 0, 12);
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["KHR_animation_pointer"],
+              "materials": [{"name": "M"}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC4"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 12},
+                {"buffer": 0, "byteOffset": 12, "byteLength": 48}
+              ],
+              "buffers": [{"byteLength": 60}],
+              "animations": [{
+                "samplers": [{"input": 0, "output": 1, "interpolation": "LINEAR"}],
+                "channels": [{
+                  "sampler": 0,
+                  "target": {
+                    "extensions": {
+                      "KHR_animation_pointer": {
+                        "pointer": "/materials/0/pbrMetallicRoughness/baseColorFactor"
+                      }
+                    }
+                  }
+                }]
+              }]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "pointer.glb" });
+        GltfImportResult result = await importer.ImportAsync(glb);
+
+        GltfAnimationTrackAsset track = result.Animations[0].Tracks[0];
+        track.Path.Should().Be(GltfAnimationPath.Pointer);
+        track.Pointer.Should().Be("/materials/0/pbrMetallicRoughness/baseColorFactor");
+        track.TargetNodeIndex.Should().Be(-1);
+        track.ValueComponentCount.Should().Be(4);
+        track.Values.Length.Should().Be(12);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
