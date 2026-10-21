@@ -26,6 +26,21 @@ public enum GltfMeshSemantic : byte
 
     /// <summary>WEIGHTS_0 attribute.</summary>
     Weights0 = 7,
+
+    /// <summary>TEXCOORD_2 attribute.</summary>
+    Uv2 = 8,
+
+    /// <summary>TEXCOORD_3 attribute.</summary>
+    Uv3 = 9,
+
+    /// <summary>COLOR_1 attribute.</summary>
+    Color1 = 10,
+
+    /// <summary>JOINTS_1 attribute.</summary>
+    Joints1 = 11,
+
+    /// <summary>WEIGHTS_1 attribute.</summary>
+    Weights1 = 12,
 }
 
 /// <summary>Morph target attribute semantic.</summary>

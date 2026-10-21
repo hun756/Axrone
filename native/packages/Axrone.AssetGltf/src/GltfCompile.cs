@@ -838,10 +838,15 @@ public static class GltfCompileExtensions
             case "NORMAL": semantic = GltfMeshSemantic.Normal; return true;
             case "TEXCOORD_0": semantic = GltfMeshSemantic.Uv0; return true;
             case "TEXCOORD_1": semantic = GltfMeshSemantic.Uv1; return true;
+            case "TEXCOORD_2": semantic = GltfMeshSemantic.Uv2; return true;
+            case "TEXCOORD_3": semantic = GltfMeshSemantic.Uv3; return true;
             case "TANGENT": semantic = GltfMeshSemantic.Tangent; return true;
             case "COLOR_0": semantic = GltfMeshSemantic.Color0; return true;
+            case "COLOR_1": semantic = GltfMeshSemantic.Color1; return true;
             case "JOINTS_0": semantic = GltfMeshSemantic.Joints0; return true;
+            case "JOINTS_1": semantic = GltfMeshSemantic.Joints1; return true;
             case "WEIGHTS_0": semantic = GltfMeshSemantic.Weights0; return true;
+            case "WEIGHTS_1": semantic = GltfMeshSemantic.Weights1; return true;
             default: semantic = default; return false;
         }
     }
@@ -853,10 +858,15 @@ public static class GltfCompileExtensions
             GltfMeshSemantic.Normal => "NORMAL",
             GltfMeshSemantic.Uv0 => "TEXCOORD_0",
             GltfMeshSemantic.Uv1 => "TEXCOORD_1",
+            GltfMeshSemantic.Uv2 => "TEXCOORD_2",
+            GltfMeshSemantic.Uv3 => "TEXCOORD_3",
             GltfMeshSemantic.Tangent => "TANGENT",
             GltfMeshSemantic.Color0 => "COLOR_0",
+            GltfMeshSemantic.Color1 => "COLOR_1",
             GltfMeshSemantic.Joints0 => "JOINTS_0",
+            GltfMeshSemantic.Joints1 => "JOINTS_1",
             GltfMeshSemantic.Weights0 => "WEIGHTS_0",
+            GltfMeshSemantic.Weights1 => "WEIGHTS_1",
             _ => string.Empty,
         };
 
