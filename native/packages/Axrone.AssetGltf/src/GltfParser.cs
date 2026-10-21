@@ -455,6 +455,67 @@ internal static class GltfJsonParser
             {
                 ParseLightsExtension(ref reader, model);
             }
+            else if (ext.SequenceEqual("KHR_materials_variants"u8))
+            {
+                ParseMaterialVariantsExtension(ref reader, model);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParseMaterialVariantsExtension(ref Utf8JsonReader reader, GltfRawModel model)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("variants"u8))
+            {
+                if (reader.TokenType != JsonTokenType.StartArray)
+                {
+                    reader.Skip();
+                    continue;
+                }
+
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    var variant = new GltfRawModel.MaterialVariant();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                    {
+                        if (reader.TokenType != JsonTokenType.PropertyName)
+                        {
+                            continue;
+                        }
+
+                        ReadOnlySpan<byte> variantProp = reader.ValueSpan;
+                        reader.Read();
+                        if (variantProp.SequenceEqual("name"u8))
+                        {
+                            variant.Name = reader.GetString();
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+                    }
+
+                    model.Variants.Add(variant);
+                }
+            }
             else
             {
                 reader.Skip();
@@ -673,6 +734,73 @@ internal static class GltfJsonParser
                     {
                         reader.Skip();
                     }
+                }
+            }
+            else if (reader.TokenType == JsonTokenType.PropertyName &&
+                     reader.ValueSpan.SequenceEqual("KHR_materials_variants"u8))
+            {
+                reader.Read();
+                ParsePrimitiveMaterialVariants(ref reader, prim);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+    }
+
+    private static void ParsePrimitiveMaterialVariants(ref Utf8JsonReader reader, GltfRawModel.Primitive prim)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("mappings"u8))
+            {
+                if (reader.TokenType != JsonTokenType.StartArray)
+                {
+                    reader.Skip();
+                    continue;
+                }
+
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    var mapping = new GltfRawModel.PrimitiveMaterialVariant();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                    {
+                        if (reader.TokenType != JsonTokenType.PropertyName)
+                        {
+                            continue;
+                        }
+
+                        ReadOnlySpan<byte> mappingProp = reader.ValueSpan;
+                        reader.Read();
+                        if (mappingProp.SequenceEqual("variants"u8))
+                        {
+                            ParseIntArray(ref reader, mapping.Variants);
+                        }
+                        else if (mappingProp.SequenceEqual("material"u8))
+                        {
+                            mapping.Material = reader.GetInt32();
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+                    }
+
+                    prim.MaterialVariants.Add(mapping);
                 }
             }
             else
