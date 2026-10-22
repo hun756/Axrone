@@ -13,16 +13,60 @@ public sealed class GltfDracoDecodedMesh
     public required ImmutableArray<uint> Indices { get; init; }
 }
 
+/// <summary>Outcome of one Draco mesh decode attempt.</summary>
+public enum GltfDracoDecodeStatus : byte
+{
+    /// <summary>Mesh decoded and output populated.</summary>
+    Success = 0,
+
+    /// <summary>Bitstream is malformed or not a triangular mesh.</summary>
+    InvalidData = 1,
+
+    /// <summary>Attribute layout or conversion is unsupported.</summary>
+    Unsupported = 2,
+
+    /// <summary>Decoded buffers would exceed <see cref="GltfDracoDecodeLimits.MaxDecodedBytes"/>.</summary>
+    LimitExceeded = 3,
+}
+
+/// <summary>Pre-allocation budget for one Draco decode.</summary>
+public readonly struct GltfDracoDecodeLimits
+{
+    /// <summary>Creates a budget.</summary>
+    /// <param name="maxDecodedBytes">Maximum bytes for decoded attributes and indices.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The budget is negative.</exception>
+    public GltfDracoDecodeLimits(long maxDecodedBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxDecodedBytes);
+        MaxDecodedBytes = maxDecodedBytes;
+    }
+
+    /// <summary>Maximum bytes for decoded attributes and indices.</summary>
+    public long MaxDecodedBytes { get; }
+
+    /// <summary>Budget that never rejects a payload.</summary>
+    public static GltfDracoDecodeLimits Unlimited { get; } = new(long.MaxValue);
+}
+
 /// <summary>Draco mesh decompression policy (monomorphized per importer).</summary>
 public interface IDracoMeshPolicy
 {
     /// <summary>Whether a decoder is linked.</summary>
     static abstract bool IsSupported { get; }
 
-    /// <summary>Decodes one Draco mesh into attributes and indices.</summary>
-    static abstract bool TryDecodeMesh(
+    /// <summary>
+    /// Decodes one Draco mesh into attributes and indices. Implementations
+    /// must check <paramref name="limits"/> before allocating decoded buffers.
+    /// </summary>
+    /// <param name="dracoBytes">Draco bitstream.</param>
+    /// <param name="limits">Decode budget.</param>
+    /// <param name="mesh">Decoded mesh on success.</param>
+    /// <param name="decodedBytes">Bytes required for the decoded buffers.</param>
+    static abstract GltfDracoDecodeStatus TryDecodeMesh(
         ReadOnlySpan<byte> dracoBytes,
-        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh);
+        GltfDracoDecodeLimits limits,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+        out long decodedBytes);
 }
 
 /// <summary>Null Draco policy: clean rejection when no decoder is linked.</summary>
@@ -33,12 +77,15 @@ public readonly struct NoDracoCompressionPolicy : IDracoMeshPolicy
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryDecodeMesh(
+    public static GltfDracoDecodeStatus TryDecodeMesh(
         ReadOnlySpan<byte> dracoBytes,
-        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh)
+        GltfDracoDecodeLimits limits,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+        out long decodedBytes)
     {
         mesh = null;
-        return false;
+        decodedBytes = 0;
+        return GltfDracoDecodeStatus.InvalidData;
     }
 }
 
