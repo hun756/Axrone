@@ -7,7 +7,7 @@ namespace Axrone.AssetGltf.Benchmarks;
 
 /// <summary>Import throughput and allocation benchmarks for the canonical glTF pipeline.</summary>
 [MemoryDiagnoser]
-public sealed class GltfImportBenchmarks
+public class GltfImportBenchmarks
 {
     private byte[] _glb = [];
 
