@@ -78,9 +78,11 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
 
             var uniqueIds = new int[attributeCount];
             var componentCounts = new int[attributeCount];
+            var dataTypes = new GltfDracoAttributeDataType[attributeCount];
             for (int i = 0; i < attributeCount; i++)
             {
-                if (NativeDracoInterop.AttributeInfo(handle, i, out uint uniqueId, out int components, out _) != NativeDracoInterop.Ok ||
+                if (NativeDracoInterop.AttributeInfo(
+                        handle, i, out uint uniqueId, out int components, out _, out int dataType) != NativeDracoInterop.Ok ||
                     components <= 0 ||
                     components > 4 ||
                     uniqueId > int.MaxValue)
@@ -98,10 +100,14 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                 required += attributeBytes;
                 uniqueIds[i] = (int)uniqueId;
                 componentCounts[i] = components;
+                dataTypes[i] = dataType is >= 0 and <= (int)GltfDracoAttributeDataType.Other
+                    ? (GltfDracoAttributeDataType)dataType
+                    : GltfDracoAttributeDataType.Other;
             }
 
             // Pass 2: allocate and pull the values.
             var attributes = ImmutableDictionary.CreateBuilder<int, float[]>();
+            var attributeDataTypes = ImmutableDictionary.CreateBuilder<int, GltfDracoAttributeDataType>();
             for (int i = 0; i < attributeCount; i++)
             {
                 int components = componentCounts[i];
@@ -116,6 +122,7 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                 }
 
                 attributes[uniqueIds[i]] = values;
+                attributeDataTypes[uniqueIds[i]] = dataTypes[i];
             }
 
             int indexCount = (int)indexLong;
@@ -135,6 +142,7 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
             {
                 VertexCount = vertexCount,
                 Attributes = attributes.ToImmutable(),
+                AttributeDataTypes = attributeDataTypes.ToImmutable(),
                 Indices = indices.ToImmutableArray(),
             };
 

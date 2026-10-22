@@ -67,7 +67,8 @@ internal static partial class NativeDracoInterop
         int attributeIndex,
         out uint uniqueId,
         out int components,
-        out int attributeType);
+        out int attributeType,
+        out int dataType);
 
     /// <summary>
     /// Converts every point of one attribute to float and writes

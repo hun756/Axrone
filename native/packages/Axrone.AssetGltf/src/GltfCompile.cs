@@ -597,7 +597,37 @@ public static class GltfCompileExtensions
                             ThrowHelper.ThrowAccessor(accessorIndex, "Draco attribute component count does not match its accessor.");
                         }
 
-                        dracoValues.AsSpan().CopyTo(decodedFloats);
+                        // Draco stores normalized integer accessors as raw
+                        // integers; float-backed attributes are already in
+                        // accessor units.
+                        double inverseMax = 1d;
+                        if (acc.Normalized)
+                        {
+                            if (!dracoMesh.AttributeDataTypes.TryGetValue(dracoAttributeId, out GltfDracoAttributeDataType dataType) ||
+                                dataType is GltfDracoAttributeDataType.Unknown or GltfDracoAttributeDataType.Other)
+                            {
+                                ThrowHelper.ThrowAccessor(
+                                    accessorIndex,
+                                    "has a normalized Draco attribute with an unknown storage type.");
+                            }
+
+                            if (dataType != GltfDracoAttributeDataType.Float32)
+                            {
+                                inverseMax = 1d / GetIntegerDataTypeMax(dataType);
+                            }
+                        }
+
+                        if (inverseMax == 1d)
+                        {
+                            dracoValues.AsSpan().CopyTo(decodedFloats);
+                        }
+                        else
+                        {
+                            for (int i = 0; i < dracoValues.Length; i++)
+                            {
+                                decodedFloats[i] = (float)(dracoValues[i] * inverseMax);
+                            }
+                        }
                     }
                     else
                     {
@@ -657,19 +687,29 @@ public static class GltfCompileExtensions
                                     BinaryPrimitives.WriteSingleLittleEndian(interleavedVertices.AsSpan(compDst, 4), val);
                                     break;
                                 case 5120:
-                                    interleavedVertices[compDst] = (byte)(sbyte)(layout.Normalized ? val * 127.0f : val);
+                                    interleavedVertices[compDst] = layout.Normalized
+                                        ? (byte)QuantizeSignedNormalized(val, 127f)
+                                        : (byte)(sbyte)val;
                                     break;
                                 case 5121:
-                                    interleavedVertices[compDst] = (byte)(layout.Normalized ? val * 255.0f : val);
+                                    interleavedVertices[compDst] = layout.Normalized
+                                        ? (byte)QuantizeUnsignedNormalized(val, 255f)
+                                        : (byte)val;
                                     break;
                                 case 5122:
-                                    BinaryPrimitives.WriteInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (short)(layout.Normalized ? val * 32767.0f : val));
+                                    BinaryPrimitives.WriteInt16LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 2),
+                                        layout.Normalized ? (short)QuantizeSignedNormalized(val, 32767f) : (short)val);
                                     break;
                                 case 5123:
-                                    BinaryPrimitives.WriteUInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (ushort)(layout.Normalized ? val * 65535.0f : val));
+                                    BinaryPrimitives.WriteUInt16LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 2),
+                                        layout.Normalized ? (ushort)QuantizeUnsignedNormalized(val, 65535f) : (ushort)val);
                                     break;
                                 case 5125:
-                                    BinaryPrimitives.WriteUInt32LittleEndian(interleavedVertices.AsSpan(compDst, 4), (uint)(layout.Normalized ? val * 4294967295.0f : val));
+                                    BinaryPrimitives.WriteUInt32LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 4),
+                                        layout.Normalized ? QuantizeUnsignedNormalized32(val) : (uint)val);
                                     break;
                                 default:
                                     break;
@@ -858,6 +898,27 @@ public static class GltfCompileExtensions
 
         return (meshes, meshKeysByMesh.MoveToImmutable());
     }
+
+    private static double GetIntegerDataTypeMax(GltfDracoAttributeDataType dataType) =>
+        dataType switch
+        {
+            GltfDracoAttributeDataType.Int8 => sbyte.MaxValue,
+            GltfDracoAttributeDataType.UInt8 => byte.MaxValue,
+            GltfDracoAttributeDataType.Int16 => short.MaxValue,
+            GltfDracoAttributeDataType.UInt16 => ushort.MaxValue,
+            GltfDracoAttributeDataType.Int32 => int.MaxValue,
+            GltfDracoAttributeDataType.UInt32 => uint.MaxValue,
+            _ => 1d,
+        };
+
+    private static sbyte QuantizeSignedNormalized(float value, float max) =>
+        (sbyte)MathF.Round(Math.Clamp(value, -1f, 1f) * max);
+
+    private static byte QuantizeUnsignedNormalized(float value, float max) =>
+        (byte)MathF.Round(Math.Clamp(value, 0f, 1f) * max);
+
+    private static uint QuantizeUnsignedNormalized32(float value) =>
+        (uint)Math.Round(Math.Clamp((double)value, 0d, 1d) * uint.MaxValue);
 
     private static bool TryParseSemantic(string name, out GltfMeshSemantic semantic)
     {

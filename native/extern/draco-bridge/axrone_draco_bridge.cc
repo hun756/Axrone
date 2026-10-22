@@ -11,9 +11,31 @@
 #include <memory>
 
 #include "draco/compression/decode.h"
+#include "draco/core/draco_types.h"
 #include "draco/mesh/mesh.h"
 
 namespace {
+
+inline int32_t MapDataType(draco::DataType type) {
+  switch (type) {
+    case draco::DT_INT8:
+      return AXR_DRACO_DATA_TYPE_INT8;
+    case draco::DT_UINT8:
+      return AXR_DRACO_DATA_TYPE_UINT8;
+    case draco::DT_INT16:
+      return AXR_DRACO_DATA_TYPE_INT16;
+    case draco::DT_UINT16:
+      return AXR_DRACO_DATA_TYPE_UINT16;
+    case draco::DT_INT32:
+      return AXR_DRACO_DATA_TYPE_INT32;
+    case draco::DT_UINT32:
+      return AXR_DRACO_DATA_TYPE_UINT32;
+    case draco::DT_FLOAT32:
+      return AXR_DRACO_DATA_TYPE_FLOAT32;
+    default:
+      return AXR_DRACO_DATA_TYPE_OTHER;
+  }
+}
 
 inline const draco::Mesh *AsMesh(const AxrDracoMesh *handle) {
   return reinterpret_cast<const draco::Mesh *>(handle);
@@ -92,9 +114,10 @@ AXR_DRACO_API int32_t axr_draco_attribute_info(const AxrDracoMesh *mesh,
                                               int32_t attribute_index,
                                               uint32_t *out_unique_id,
                                               int32_t *out_components,
-                                              int32_t *out_attribute_type) {
+                                              int32_t *out_attribute_type,
+                                              int32_t *out_data_type) {
   if (mesh == nullptr || out_unique_id == nullptr || out_components == nullptr ||
-      out_attribute_type == nullptr) {
+      out_attribute_type == nullptr || out_data_type == nullptr) {
     return 1;
   }
   const draco::Mesh *m = AsMesh(mesh);
@@ -113,6 +136,7 @@ AXR_DRACO_API int32_t axr_draco_attribute_info(const AxrDracoMesh *mesh,
   *out_components = static_cast<int32_t>(components);
   *out_attribute_type =
       static_cast<int32_t>(attribute->attribute_type());
+  *out_data_type = MapDataType(attribute->data_type());
   return 0;
 }
 
