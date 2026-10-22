@@ -175,6 +175,11 @@ internal sealed class GltfResourceRuntimeCache
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(bufferDef);
+        if (bufferDef.ByteLength < 0)
+        {
+            ThrowHelper.ThrowSchema($"Buffer {bufferIndex} has a negative byteLength.");
+        }
+
         lock (_gate)
         {
             if (_bufferCache.TryGetValue(bufferIndex, out ReadOnlyMemory<byte> cached))
@@ -252,6 +257,11 @@ internal sealed class GltfResourceRuntimeCache
         where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
     {
         ArgumentNullException.ThrowIfNull(rawModel);
+        if ((uint)bufferViewIndex >= (uint)rawModel.BufferViews.Count)
+        {
+            ThrowHelper.ThrowSchema($"BufferView index {bufferViewIndex} is out of range.");
+        }
+
         lock (_gate)
         {
             if (_bufferViewCache.TryGetValue(bufferViewIndex, out ReadOnlyMemory<byte> cached))
@@ -265,7 +275,28 @@ internal sealed class GltfResourceRuntimeCache
 
         if (bv.Meshopt != null)
         {
-            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(bv.Meshopt.Buffer, rawModel.Buffers[bv.Meshopt.Buffer], cancellationToken).ConfigureAwait(false);
+            int meshoptBuffer = bv.Meshopt.Buffer;
+            if ((uint)meshoptBuffer >= (uint)rawModel.Buffers.Count)
+            {
+                ThrowHelper.ThrowSchema($"BufferView {bufferViewIndex} references a missing buffer {meshoptBuffer}.");
+            }
+
+            if (bv.Meshopt.Count < 0 ||
+                bv.Meshopt.ByteStride <= 0 ||
+                bv.Meshopt.Count > int.MaxValue / bv.Meshopt.ByteStride)
+            {
+                ThrowHelper.ThrowSchema($"BufferView {bufferViewIndex} has an invalid meshopt element layout.");
+            }
+
+            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(meshoptBuffer, rawModel.Buffers[meshoptBuffer], cancellationToken).ConfigureAwait(false);
+
+            if (bv.Meshopt.ByteOffset < 0 ||
+                bv.Meshopt.ByteLength < 0 ||
+                (long)bv.Meshopt.ByteOffset + bv.Meshopt.ByteLength > raw.Length)
+            {
+                ThrowHelper.ThrowSchema($"BufferView {bufferViewIndex} meshopt range exceeds its buffer.");
+            }
+
             int uncompressedSize = bv.Meshopt.Count * bv.Meshopt.ByteStride;
             byte[] decompressed = GC.AllocateUninitializedArray<byte>(uncompressedSize, pinned: true);
 
@@ -285,7 +316,21 @@ internal sealed class GltfResourceRuntimeCache
         }
         else
         {
-            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(bv.Buffer, rawModel.Buffers[bv.Buffer], cancellationToken).ConfigureAwait(false);
+            int bufferIndex = bv.Buffer;
+            if ((uint)bufferIndex >= (uint)rawModel.Buffers.Count)
+            {
+                ThrowHelper.ThrowSchema($"BufferView {bufferViewIndex} references a missing buffer {bufferIndex}.");
+            }
+
+            ReadOnlyMemory<byte> raw = await ResolveBufferAsync(bufferIndex, rawModel.Buffers[bufferIndex], cancellationToken).ConfigureAwait(false);
+
+            if (bv.ByteOffset < 0 ||
+                bv.ByteLength < 0 ||
+                (long)bv.ByteOffset + bv.ByteLength > raw.Length)
+            {
+                ThrowHelper.ThrowSchema($"BufferView {bufferViewIndex} range exceeds its buffer.");
+            }
+
             result = raw.Slice(bv.ByteOffset, bv.ByteLength);
         }
 
@@ -324,8 +369,13 @@ internal sealed class GltfResourceRuntimeCache
     public static ReadOnlyMemory<byte> DecodeDataUri(string uri)
     {
         ArgumentNullException.ThrowIfNull(uri);
+        if (!uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            ThrowHelper.ThrowContainer("Malformed glTF data URI: missing the 'data:' scheme.");
+        }
+
         int commaIndex = uri.IndexOf(',', StringComparison.Ordinal);
-        if (commaIndex < 0)
+        if (commaIndex < 5)
         {
             ThrowHelper.ThrowContainer("Malformed glTF data URI.");
         }
@@ -335,11 +385,23 @@ internal sealed class GltfResourceRuntimeCache
 
         if (meta.EndsWith("base64", StringComparison.OrdinalIgnoreCase))
         {
-            return Convert.FromBase64String(data.ToString());
+            try
+            {
+                return Convert.FromBase64String(data.ToString());
+            }
+            catch (FormatException exception)
+            {
+                throw new GltfContainerError("Malformed base64 glTF data URI.", exception);
+            }
         }
-        else
+
+        try
         {
             return Encoding.UTF8.GetBytes(Uri.UnescapeDataString(data.ToString()));
+        }
+        catch (UriFormatException exception)
+        {
+            throw new GltfContainerError("Malformed percent-encoded glTF data URI.", exception);
         }
     }
 }
