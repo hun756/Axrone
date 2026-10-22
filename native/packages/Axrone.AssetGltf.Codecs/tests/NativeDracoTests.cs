@@ -1,4 +1,4 @@
-﻿namespace Axrone.AssetGltf.Codecs.Tests;
+namespace Axrone.AssetGltf.Codecs.Tests;
 
 /// <summary>
 /// Coverage for <see cref="NativeDracoMeshPolicy"/>.
