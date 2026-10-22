@@ -71,7 +71,7 @@ jobs:
       - name: Configure draco bridge
         run: cmake -S extern/draco-bridge -B ../build/draco-${{ matrix.rid }} -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_extra }}
       - name: Build draco bridge
-        run: cmake --build ../build/draco-${{ matrix.rid }} --config Release
+        run: cmake --build ../build/draco-${{ matrix.rid }} --config Release --target axrone_draco
       - name: Stage runtime asset
         run: |
           mkdir -p packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native
@@ -91,7 +91,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -104,9 +108,8 @@ jobs:
       - name: Download Draco natives
         uses: actions/download-artifact@v4
         with:
-          pattern: draco-runtimes-*
-          path: packages/Axrone.AssetGltf.Codecs/runtimes
-          merge-multiple: true
+          name: draco-runtimes-${{ matrix.rid }}
+          path: packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}
       - name: Restore
         run: dotnet restore Axrone.Engine.slnx
       - name: Build core and codecs
@@ -114,6 +117,8 @@ jobs:
           dotnet build packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj -c Release --no-restore
           dotnet build packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj -c Release --no-restore
       - name: Test core and codecs
+        env:
+          AXRONE_REQUIRE_NATIVE_DRACO: '1'
         run: |
           dotnet test packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj -c Release --no-restore
           dotnet test packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj -c Release --no-restore
@@ -137,10 +142,11 @@ jobs:
       - name: Download Draco natives
         uses: actions/download-artifact@v4
         with:
-          pattern: draco-runtimes-win-x64
-          path: packages/Axrone.AssetGltf.Codecs/runtimes
-          merge-multiple: true
+          name: draco-runtimes-win-x64
+          path: packages/Axrone.AssetGltf.Codecs/runtimes/win-x64
       - name: Publish Native AOT smoke
         run: dotnet publish packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.AotSmoke/Axrone.AssetGltf.AotSmoke.csproj -c Release -r win-x64 -p:PublishAot=true
       - name: Run Native AOT smoke
+        env:
+          AXRONE_REQUIRE_NATIVE_DRACO: '1'
         run: ./packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.AotSmoke/bin/Release/net10.0/win-x64/publish/Axrone.AssetGltf.AotSmoke.exe
