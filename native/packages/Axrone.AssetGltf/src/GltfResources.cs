@@ -246,7 +246,12 @@ internal sealed class GltfResourceRuntimeCache
 
         var request = new GltfResourceRequest(uri, null, "image", mimeType);
         GltfResolvedResource? result = await _resolver(request, cancellationToken).ConfigureAwait(false);
-        return result.HasValue && !result.Value.Data.IsEmpty ? result.Value.Data : null;
+        if (!result.HasValue || result.Value.Data.IsEmpty)
+        {
+            return null;
+        }
+
+        return result.Value.Data;
     }
 
     /// <summary>Resolves a bufferView to bytes, decompressing meshopt when linked.</summary>
