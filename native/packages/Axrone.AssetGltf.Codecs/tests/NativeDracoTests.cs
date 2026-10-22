@@ -8,13 +8,37 @@ namespace Axrone.AssetGltf.Codecs.Tests;
 /// </summary>
 public sealed class NativeDracoTests
 {
+    private const string RequireNativeVariable = "AXRONE_REQUIRE_NATIVE_DRACO";
+
     private static string TestData(string name) =>
         Path.Combine(AppContext.BaseDirectory, "TestData", name);
+
+    /// <summary>
+    /// Skips on machines without a C++ toolchain, but fails when
+    /// <c>AXRONE_REQUIRE_NATIVE_DRACO=1</c> is set (CI) so a missing or
+    /// mis-staged native library cannot silently disable this suite.
+    /// </summary>
+    private static bool NativeDracoAvailable()
+    {
+        if (NativeDracoMeshPolicy.IsNativeLibraryAvailable)
+        {
+            return true;
+        }
+
+        if (Environment.GetEnvironmentVariable(RequireNativeVariable) == "1")
+        {
+            throw new InvalidOperationException(
+                $"{RequireNativeVariable}=1 but the axrone_draco native library was not found. " +
+                "Build native/extern/draco-bridge and stage it under runtimes/<rid>/native.");
+        }
+
+        return false;
+    }
 
     [Fact]
     public void NativeDraco_DecodesGridMesh()
     {
-        if (!NativeDracoMeshPolicy.IsNativeLibraryAvailable)
+        if (!NativeDracoAvailable())
         {
             return;
         }
@@ -33,7 +57,7 @@ public sealed class NativeDracoTests
     [Fact]
     public void NativeDraco_DecodesBunnyMesh()
     {
-        if (!NativeDracoMeshPolicy.IsNativeLibraryAvailable)
+        if (!NativeDracoAvailable())
         {
             return;
         }
@@ -51,7 +75,7 @@ public sealed class NativeDracoTests
     [Fact]
     public async Task NativeDraco_ImportsGlbPrimitive()
     {
-        if (!NativeDracoMeshPolicy.IsNativeLibraryAvailable)
+        if (!NativeDracoAvailable())
         {
             return;
         }
@@ -95,9 +119,106 @@ public sealed class NativeDracoTests
     }
 
     [Fact]
+    public async Task NativeDraco_RejectsNonTriangleMode()
+    {
+        if (!NativeDracoAvailable())
+        {
+            return;
+        }
+
+        byte[] encoded = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
+        int positionId = NativeDracoMeshPolicy
+            .TryDecodeMesh(encoded, out GltfDracoDecodedMesh? probe)
+            ? probe!.Attributes.Keys.Single()
+            : 0;
+
+        string json = $$"""
+        {
+          "asset": {"version": "2.0"},
+          "extensionsUsed": ["KHR_draco_mesh_compression"],
+          "extensionsRequired": ["KHR_draco_mesh_compression"],
+          "scene": 0,
+          "scenes": [{"nodes": [0]}],
+          "nodes": [{"name": "Draco", "mesh": 0}],
+          "meshes": [{"primitives": [{
+            "attributes": {"POSITION": 0},
+            "mode": 1,
+            "extensions": {
+              "KHR_draco_mesh_compression": {
+                "bufferView": 0,
+                "attributes": {"POSITION": {{positionId}}}
+              }
+            }
+          }]}],
+          "accessors": [{"componentType": 5126, "count": 625, "type": "VEC3"}],
+          "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": {{encoded.Length}}}],
+          "buffers": [{"byteLength": {{encoded.Length}}}]
+        }
+        """;
+
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco-mode.glb" });
+        Func<Task> act = () => importer
+            .ImportAsync<NativeDracoMeshPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+                Glb(json, encoded))
+            .AsTask();
+
+        await act.Should().ThrowAsync<GltfSchemaError>();
+    }
+
+    [Fact]
+    public async Task NativeDraco_RejectsIndexCountMismatch()
+    {
+        if (!NativeDracoAvailable())
+        {
+            return;
+        }
+
+        byte[] encoded = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
+        int positionId = NativeDracoMeshPolicy
+            .TryDecodeMesh(encoded, out GltfDracoDecodedMesh? probe)
+            ? probe!.Attributes.Keys.Single()
+            : 0;
+
+        string json = $$"""
+        {
+          "asset": {"version": "2.0"},
+          "extensionsUsed": ["KHR_draco_mesh_compression"],
+          "extensionsRequired": ["KHR_draco_mesh_compression"],
+          "scene": 0,
+          "scenes": [{"nodes": [0]}],
+          "nodes": [{"name": "Draco", "mesh": 0}],
+          "meshes": [{"primitives": [{
+            "attributes": {"POSITION": 0},
+            "indices": 1,
+            "extensions": {
+              "KHR_draco_mesh_compression": {
+                "bufferView": 0,
+                "attributes": {"POSITION": {{positionId}}}
+              }
+            }
+          }]}],
+          "accessors": [
+            {"componentType": 5126, "count": 625, "type": "VEC3"},
+            {"componentType": 5125, "count": 100, "type": "SCALAR"}
+          ],
+          "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": {{encoded.Length}}}],
+          "buffers": [{"byteLength": {{encoded.Length}}}]
+        }
+        """;
+
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco-indices.glb" });
+        Func<Task> act = () => importer
+            .ImportAsync<NativeDracoMeshPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+                Glb(json, encoded))
+            .AsTask();
+
+        await act.Should().ThrowAsync<GltfAccessorError>();
+    }
+
+    [Fact]
     public void NativeDraco_RejectsInvalidData()
     {
-        if (!NativeDracoMeshPolicy.IsNativeLibraryAvailable)
+        if (!NativeDracoAvailable())
         {
             return;
         }
