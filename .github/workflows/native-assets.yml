@@ -126,6 +126,8 @@ jobs:
         run: |
           dotnet format packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj --verify-no-changes --no-restore
           dotnet format packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj --verify-no-changes --no-restore
+          dotnet format packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj --verify-no-changes --no-restore
+          dotnet format packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj --verify-no-changes --no-restore
 
   aot-smoke:
     name: native-aot-smoke (win-x64)
