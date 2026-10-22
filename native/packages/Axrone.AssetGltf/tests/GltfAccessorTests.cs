@@ -45,6 +45,37 @@ public sealed class GltfAccessorTests
         dst[2].Should().BeApproximately(128.0f / 255.0f, 1e-6f);
     }
 
+    [Theory]
+    [InlineData(5120, new byte[] { 0x80, 0x7F }, false, new[] { -128f, 127f })]
+    [InlineData(5120, new byte[] { 0x80, 0x7F, 0x40 }, true, new[] { -1f, 1f, 0.503937f })]
+    [InlineData(5121, new byte[] { 0, 255 }, false, new[] { 0f, 255f })]
+    [InlineData(5121, new byte[] { 0, 255 }, true, new[] { 0f, 1f })]
+    [InlineData(5122, new byte[] { 0x00, 0x80, 0xFF, 0x7F }, false, new[] { -32768f, 32767f })]
+    [InlineData(5122, new byte[] { 0x00, 0x80, 0xFF, 0x7F }, true, new[] { -1f, 1f })]
+    [InlineData(5123, new byte[] { 0, 0, 0xFF, 0xFF }, false, new[] { 0f, 65535f })]
+    [InlineData(5123, new byte[] { 0, 0, 0xFF, 0xFF }, true, new[] { 0f, 1f })]
+    [InlineData(5125, new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }, false, new[] { 0f, 16777216f })]
+    [InlineData(5125, new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }, true, new[] { 0f, 0.00390625f })]
+    [InlineData(5126, new byte[] { 0, 0, 0x80, 0x3F }, false, new[] { 1f })]
+    public void DecodeFloats_AllComponentTypes(int componentType, byte[] source, bool normalized, float[] expected)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        var destination = new float[expected.Length];
+
+        GltfAccessorRuntime.DecodeFloats(
+            source,
+            expected.Length,
+            componentType,
+            componentCount: 1,
+            byteStride: 0,
+            normalized,
+            destination);
+
+        destination.Should().Equal(expected);
+    }
+
     [Fact]
     public void DecodeIndices_UInt16()
     {

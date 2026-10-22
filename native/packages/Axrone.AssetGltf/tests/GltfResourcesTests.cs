@@ -55,6 +55,89 @@ public sealed class GltfResourcesTests
         resolved.ToArray().Should().Equal(10, 20, 30, 40);
     }
 
+    [Fact]
+    public async Task TryResolveImageAsync_WithoutResolver_ReturnsNull()
+    {
+        var cache = new GltfResourceRuntimeCache(glbBinaryChunk: null, resolver: null);
+
+        ReadOnlyMemory<byte>? result = await cache.TryResolveImageAsync("texture.png", "image/png", CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryResolveImageAsync_WithResolver_ReturnsBytes()
+    {
+        byte[] image = [1, 2, 3, 4];
+        var cache = new GltfResourceRuntimeCache(
+            glbBinaryChunk: null,
+            resolver: (request, _) =>
+            {
+                request.Kind.Should().Be("image");
+                return ValueTask.FromResult<GltfResolvedResource?>(
+                    new GltfResolvedResource(image, "image/png"));
+            });
+
+        ReadOnlyMemory<byte>? result = await cache.TryResolveImageAsync("texture.png", "image/png", CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Value.ToArray().Should().Equal(1, 2, 3, 4);
+    }
+
+    [Fact]
+    public async Task ResolveBufferView_OutOfRange_ThrowsSchemaError()
+    {
+        var cache = new GltfResourceRuntimeCache(glbBinaryChunk: null, resolver: null);
+        var model = new GltfRawModel();
+
+        Func<Task> act = () => cache
+            .ResolveBufferViewAsync<NoMeshoptCompressionPolicy>(0, model, CancellationToken.None)
+            .AsTask();
+
+        await act.Should().ThrowAsync<GltfSchemaError>();
+    }
+
+    [Fact]
+    public async Task ResolveBufferView_RangeExceedsBuffer_ThrowsSchemaError()
+    {
+        var cache = new GltfResourceRuntimeCache(new byte[] { 1, 2, 3, 4 }, resolver: null);
+        var model = new GltfRawModel();
+        model.Buffers.Add(new GltfRawModel.Buffer { ByteLength = 4 });
+        model.BufferViews.Add(new GltfRawModel.BufferView
+        {
+            Buffer = 0,
+            ByteOffset = 2,
+            ByteLength = 100,
+        });
+
+        Func<Task> act = () => cache
+            .ResolveBufferViewAsync<NoMeshoptCompressionPolicy>(0, model, CancellationToken.None)
+            .AsTask();
+
+        await act.Should().ThrowAsync<GltfSchemaError>();
+    }
+
+    [Fact]
+    public async Task TryResolveImageAsync_EmptyResolverResult_ReturnsNull()
+    {
+        var cache = new GltfResourceRuntimeCache(
+            glbBinaryChunk: null,
+            resolver: (_, _) => ValueTask.FromResult<GltfResolvedResource?>(null));
+
+        ReadOnlyMemory<byte>? result = await cache.TryResolveImageAsync("texture.png", null, CancellationToken.None);
+
+        result.Should().BeNull();
+        result.HasValue.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DecodeDataUri_PercentEncoded_RoundTrips()
+    {
+        ReadOnlyMemory<byte> bytes = GltfResourceRuntimeCache.DecodeDataUri("data:text/plain,hi%20there");
+
+        System.Text.Encoding.UTF8.GetString(bytes.Span).Should().Be("hi there");
+    }
+
     private static byte[] BuildKtx2(int vkFormat, int width, int height, byte[] payload)
     {
         const int headerSize = 80;
