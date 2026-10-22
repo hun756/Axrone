@@ -1,6 +1,7 @@
 name: Native Asset Pipeline
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'native/packages/Axrone.AssetGltf/**'
@@ -36,26 +37,43 @@ jobs:
             lib: axrone_draco.dll
             cmake_extra: '-A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
             ndk: false
+            apt: ''
+          - os: windows-latest
+            rid: win-arm64
+            lib: axrone_draco.dll
+            cmake_extra: '-A ARM64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
+            ndk: false
+            apt: ''
           - os: ubuntu-latest
             rid: linux-x64
             lib: libaxrone_draco.so
             cmake_extra: ''
             ndk: false
+            apt: ''
+          - os: ubuntu-latest
+            rid: linux-arm64
+            lib: libaxrone_draco.so
+            cmake_extra: '-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++'
+            ndk: false
+            apt: g++-aarch64-linux-gnu
           - os: macos-14
             rid: osx-x64
             lib: libaxrone_draco.dylib
             cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0'
             ndk: false
+            apt: ''
           - os: macos-14
             rid: osx-arm64
             lib: libaxrone_draco.dylib
             cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0'
             ndk: false
+            apt: ''
           - os: ubuntu-latest
             rid: android-arm64
             lib: libaxrone_draco.so
             cmake_extra: '-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24'
             ndk: true
+            apt: ''
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -68,6 +86,11 @@ jobs:
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27
+      - name: Install cross compiler
+        if: matrix.apt != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt }}
       - name: Configure draco bridge
         run: cmake -S extern/draco-bridge -B ../build/draco-${{ matrix.rid }} -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_extra }}
       - name: Build draco bridge
@@ -78,6 +101,15 @@ jobs:
           cp ../build/draco-${{ matrix.rid }}/${{ matrix.lib }} packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/ 2>/dev/null \
           || cp ../build/draco-${{ matrix.rid }}/Release/${{ matrix.lib }} packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/
           ls packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/
+      - name: Verify bridge exports
+        run: |
+          lib=$(find packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native -type f | head -n 1)
+          test -n "$lib"
+          for symbol in axr_draco_decode axr_draco_free axr_draco_point_count axr_draco_face_count \
+                        axr_draco_attribute_count axr_draco_attribute_info axr_draco_attribute_floats axr_draco_face_indices; do
+            grep -aq "$symbol" "$lib" || { echo "missing export: $symbol"; exit 1; }
+          done
+          echo "exports ok: $lib"
       - name: Upload runtime asset
         uses: actions/upload-artifact@v4
         with:
