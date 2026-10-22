@@ -152,8 +152,16 @@ jobs:
         env:
           AXRONE_REQUIRE_NATIVE_DRACO: '1'
         run: |
-          dotnet test packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj -c Release --no-restore
-          dotnet test packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj -c Release --no-restore
+          dotnet test packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj -c Release --no-restore \
+            --collect:"XPlat Code Coverage" --results-directory TestResults/${{ matrix.rid }}/core
+          dotnet test packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj -c Release --no-restore \
+            --collect:"XPlat Code Coverage" --results-directory TestResults/${{ matrix.rid }}/codecs
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.rid }}
+          path: native/TestResults/${{ matrix.rid }}
+          if-no-files-found: warn
       - name: Verify formatting
         run: |
           dotnet format packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj --verify-no-changes --no-restore
