@@ -47,7 +47,9 @@ if (!dracoAvailable)
 }
 
 byte[] drc = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "draco-grid-1k.drc"));
-if (!NativeDracoMeshPolicy.TryDecodeMesh(drc, out GltfDracoDecodedMesh? mesh))
+if (NativeDracoMeshPolicy.TryDecodeMesh(
+        drc, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? mesh, out _) !=
+    GltfDracoDecodeStatus.Success)
 {
     Console.Error.WriteLine("draco decode failed under Native AOT.");
     return 1;

@@ -537,8 +537,19 @@ public static class GltfCompileExtensions
                     ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
-                    if (!TDracoPolicy.TryDecodeMesh(dracoBytes.Span, out dracoMesh) || dracoMesh == null)
+                    GltfDracoDecodeStatus status = TDracoPolicy.TryDecodeMesh(
+                        dracoBytes.Span,
+                        new GltfDracoDecodeLimits(limits.MaxDecodedBytes),
+                        out dracoMesh,
+                        out long decodedBytes);
+
+                    if (status != GltfDracoDecodeStatus.Success || dracoMesh == null)
                     {
+                        if (status == GltfDracoDecodeStatus.LimitExceeded)
+                        {
+                            ThrowHelper.ThrowLimit("MaxDecodedBytes", decodedBytes, limits.MaxDecodedBytes);
+                        }
+
                         ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} Draco payload could not be decoded.");
                     }
 
@@ -547,19 +558,6 @@ public static class GltfCompileExtensions
                         ThrowHelper.ThrowAccessor(
                             prim.Attributes.GetValueOrDefault("POSITION", -1),
                             $"Draco vertex count {dracoMesh.VertexCount} does not match accessor count {vertexCount}.");
-                    }
-
-                    // Decoded attributes and indices are transient copies on top
-                    // of the interleaved output, so they get their own budget.
-                    long decodedBytes = (long)dracoMesh.Indices.Length * sizeof(uint);
-                    foreach (float[] values in dracoMesh.Attributes.Values)
-                    {
-                        decodedBytes += (long)values.Length * sizeof(float);
-                    }
-
-                    if (decodedBytes > limits.MaxDecodedBytes)
-                    {
-                        ThrowHelper.ThrowLimit("MaxDecodedBytes", decodedBytes, limits.MaxDecodedBytes);
                     }
                 }
 

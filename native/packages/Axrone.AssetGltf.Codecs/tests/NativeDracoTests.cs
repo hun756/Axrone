@@ -1,4 +1,4 @@
-namespace Axrone.AssetGltf.Codecs.Tests;
+﻿namespace Axrone.AssetGltf.Codecs.Tests;
 
 /// <summary>
 /// Coverage for <see cref="NativeDracoMeshPolicy"/>.
@@ -44,9 +44,10 @@ public sealed class NativeDracoTests
         }
 
         byte[] drc = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
-        bool decoded = NativeDracoMeshPolicy.TryDecodeMesh(drc, out GltfDracoDecodedMesh? mesh);
+        GltfDracoDecodeStatus status = NativeDracoMeshPolicy.TryDecodeMesh(
+            drc, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? mesh, out _);
 
-        decoded.Should().BeTrue();
+        status.Should().Be(GltfDracoDecodeStatus.Success);
         mesh.Should().NotBeNull();
         mesh!.VertexCount.Should().Be(625);
         mesh.Indices.Should().HaveCount(1152 * 3);
@@ -63,9 +64,10 @@ public sealed class NativeDracoTests
         }
 
         byte[] drc = File.ReadAllBytes(TestData("draco-bunny.drc"));
-        bool decoded = NativeDracoMeshPolicy.TryDecodeMesh(drc, out GltfDracoDecodedMesh? mesh);
+        GltfDracoDecodeStatus status = NativeDracoMeshPolicy.TryDecodeMesh(
+            drc, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? mesh, out _);
 
-        decoded.Should().BeTrue();
+        status.Should().Be(GltfDracoDecodeStatus.Success);
         mesh.Should().NotBeNull();
         mesh!.VertexCount.Should().Be(34834);
         mesh.Indices.Should().HaveCount(69451 * 3);
@@ -81,8 +83,9 @@ public sealed class NativeDracoTests
         }
 
         byte[] encoded = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
-        bool decoded = NativeDracoMeshPolicy.TryDecodeMesh(encoded, out GltfDracoDecodedMesh? probe);
-        decoded.Should().BeTrue();
+        GltfDracoDecodeStatus status = NativeDracoMeshPolicy.TryDecodeMesh(
+            encoded, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? probe, out _);
+        status.Should().Be(GltfDracoDecodeStatus.Success);
         probe!.Attributes.Should().HaveCount(1);
         int positionId = probe.Attributes.Keys.Single();
 
@@ -127,10 +130,11 @@ public sealed class NativeDracoTests
         }
 
         byte[] encoded = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
-        int positionId = NativeDracoMeshPolicy
-            .TryDecodeMesh(encoded, out GltfDracoDecodedMesh? probe)
-            ? probe!.Attributes.Keys.Single()
-            : 0;
+        int positionId = NativeDracoMeshPolicy.TryDecodeMesh(
+                encoded, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? probe, out _) ==
+            GltfDracoDecodeStatus.Success
+                ? probe!.Attributes.Keys.Single()
+                : 0;
 
         string json = $$"""
         {
@@ -174,10 +178,11 @@ public sealed class NativeDracoTests
         }
 
         byte[] encoded = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
-        int positionId = NativeDracoMeshPolicy
-            .TryDecodeMesh(encoded, out GltfDracoDecodedMesh? probe)
-            ? probe!.Attributes.Keys.Single()
-            : 0;
+        int positionId = NativeDracoMeshPolicy.TryDecodeMesh(
+                encoded, GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? probe, out _) ==
+            GltfDracoDecodeStatus.Success
+                ? probe!.Attributes.Keys.Single()
+                : 0;
 
         string json = $$"""
         {
@@ -223,8 +228,35 @@ public sealed class NativeDracoTests
             return;
         }
 
-        NativeDracoMeshPolicy.TryDecodeMesh([], out GltfDracoDecodedMesh? empty).Should().BeFalse();
-        NativeDracoMeshPolicy.TryDecodeMesh([1, 2, 3, 4], out GltfDracoDecodedMesh? garbage).Should().BeFalse();
+        NativeDracoMeshPolicy
+            .TryDecodeMesh([], GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? empty, out _)
+            .Should().Be(GltfDracoDecodeStatus.InvalidData);
+        empty.Should().BeNull();
+
+        NativeDracoMeshPolicy
+            .TryDecodeMesh([1, 2, 3, 4], GltfDracoDecodeLimits.Unlimited, out GltfDracoDecodedMesh? garbage, out _)
+            .Should().Be(GltfDracoDecodeStatus.InvalidData);
+        garbage.Should().BeNull();
+    }
+
+    [Fact]
+    public void NativeDraco_RejectsOversizedDecodeBeforeAllocating()
+    {
+        if (!NativeDracoAvailable())
+        {
+            return;
+        }
+
+        byte[] drc = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
+        GltfDracoDecodeStatus status = NativeDracoMeshPolicy.TryDecodeMesh(
+            drc,
+            new GltfDracoDecodeLimits(1024),
+            out GltfDracoDecodedMesh? mesh,
+            out long decodedBytes);
+
+        status.Should().Be(GltfDracoDecodeStatus.LimitExceeded);
+        mesh.Should().BeNull();
+        decodedBytes.Should().BeGreaterThan(1024);
     }
 
     private static byte[] Glb(string json, byte[] bin)

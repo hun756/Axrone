@@ -23,14 +23,17 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
     public static bool IsNativeLibraryAvailable => NativeDracoInterop.IsNativeLibraryAvailable;
 
     /// <inheritdoc/>
-    public static unsafe bool TryDecodeMesh(
+    public static unsafe GltfDracoDecodeStatus TryDecodeMesh(
         ReadOnlySpan<byte> dracoBytes,
-        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh)
+        GltfDracoDecodeLimits limits,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+        out long decodedBytes)
     {
         mesh = null;
+        decodedBytes = 0;
         if (dracoBytes.IsEmpty)
         {
-            return false;
+            return GltfDracoDecodeStatus.InvalidData;
         }
 
         nint handle = 0;
@@ -41,7 +44,7 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                 if (NativeDracoInterop.Decode(data, (nuint)dracoBytes.Length, out handle) != NativeDracoInterop.Ok ||
                     handle == 0)
                 {
-                    return false;
+                    return GltfDracoDecodeStatus.InvalidData;
                 }
             }
 
@@ -49,17 +52,32 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
             uint faces = NativeDracoInterop.FaceCount(handle);
             if (points == 0 || points > int.MaxValue)
             {
-                return false;
+                return GltfDracoDecodeStatus.InvalidData;
             }
 
             int vertexCount = (int)points;
             int attributeCount = NativeDracoInterop.AttributeCount(handle);
             if (attributeCount <= 0)
             {
-                return false;
+                return GltfDracoDecodeStatus.InvalidData;
             }
 
-            var attributes = ImmutableDictionary.CreateBuilder<int, float[]>();
+            long indexLong = (long)faces * 3;
+            if (indexLong > int.MaxValue)
+            {
+                return GltfDracoDecodeStatus.InvalidData;
+            }
+
+            // Pass 1: measure the decoded buffers before allocating anything.
+            long required = indexLong * sizeof(uint);
+            if (required > limits.MaxDecodedBytes)
+            {
+                decodedBytes = required;
+                return GltfDracoDecodeStatus.LimitExceeded;
+            }
+
+            var uniqueIds = new int[attributeCount];
+            var componentCounts = new int[attributeCount];
             for (int i = 0; i < attributeCount; i++)
             {
                 if (NativeDracoInterop.AttributeInfo(handle, i, out uint uniqueId, out int components, out _) != NativeDracoInterop.Ok ||
@@ -67,26 +85,37 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                     components > 4 ||
                     uniqueId > int.MaxValue)
                 {
-                    return false;
+                    return GltfDracoDecodeStatus.Unsupported;
                 }
 
-                int floatCount = checked(vertexCount * components);
+                long attributeBytes = (long)vertexCount * components * sizeof(float);
+                if (attributeBytes > limits.MaxDecodedBytes - required)
+                {
+                    decodedBytes = required + attributeBytes;
+                    return GltfDracoDecodeStatus.LimitExceeded;
+                }
+
+                required += attributeBytes;
+                uniqueIds[i] = (int)uniqueId;
+                componentCounts[i] = components;
+            }
+
+            // Pass 2: allocate and pull the values.
+            var attributes = ImmutableDictionary.CreateBuilder<int, float[]>();
+            for (int i = 0; i < attributeCount; i++)
+            {
+                int components = componentCounts[i];
+                int floatCount = vertexCount * components;
                 float[] values = new float[floatCount];
                 fixed (float* destination = values)
                 {
                     if (NativeDracoInterop.AttributeFloats(handle, i, destination, floatCount) != NativeDracoInterop.Ok)
                     {
-                        return false;
+                        return GltfDracoDecodeStatus.Unsupported;
                     }
                 }
 
-                attributes[(int)uniqueId] = values;
-            }
-
-            long indexLong = (long)faces * 3;
-            if (indexLong > int.MaxValue)
-            {
-                return false;
+                attributes[uniqueIds[i]] = values;
             }
 
             int indexCount = (int)indexLong;
@@ -97,7 +126,7 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                 {
                     if (NativeDracoInterop.FaceIndices(handle, destination, indexCount) != NativeDracoInterop.Ok)
                     {
-                        return false;
+                        return GltfDracoDecodeStatus.InvalidData;
                     }
                 }
             }
@@ -109,12 +138,13 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
                 Indices = indices.ToImmutableArray(),
             };
 
-            return true;
+            decodedBytes = required;
+            return GltfDracoDecodeStatus.Success;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             mesh = null;
-            return false;
+            return GltfDracoDecodeStatus.InvalidData;
         }
         finally
         {
