@@ -1,5 +1,36 @@
 namespace Axrone.AssetGltf;
 
+/// <summary>Storage type of one decoded Draco attribute.</summary>
+public enum GltfDracoAttributeDataType : byte
+{
+    /// <summary>Storage type was not reported.</summary>
+    Unknown = 0,
+
+    /// <summary>Signed 8-bit integer.</summary>
+    Int8 = 1,
+
+    /// <summary>Unsigned 8-bit integer.</summary>
+    UInt8 = 2,
+
+    /// <summary>Signed 16-bit integer.</summary>
+    Int16 = 3,
+
+    /// <summary>Unsigned 16-bit integer.</summary>
+    UInt16 = 4,
+
+    /// <summary>Signed 32-bit integer.</summary>
+    Int32 = 5,
+
+    /// <summary>Unsigned 32-bit integer.</summary>
+    UInt32 = 6,
+
+    /// <summary>32-bit float, already in accessor units.</summary>
+    Float32 = 7,
+
+    /// <summary>Any other storage type.</summary>
+    Other = 8,
+}
+
 /// <summary>Decoded Draco primitive: attributes keyed by Draco unique id.</summary>
 public sealed class GltfDracoDecodedMesh
 {
@@ -8,6 +39,13 @@ public sealed class GltfDracoDecodedMesh
 
     /// <summary>Attribute values keyed by Draco unique id, packed as floats.</summary>
     public required ImmutableDictionary<int, float[]> Attributes { get; init; }
+
+    /// <summary>
+    /// Storage type per attribute, keyed by Draco unique id. Normalized glTF
+    /// accessors backed by integer storage hold raw integers, not [0, 1] values.
+    /// </summary>
+    public ImmutableDictionary<int, GltfDracoAttributeDataType> AttributeDataTypes { get; init; } =
+        ImmutableDictionary<int, GltfDracoAttributeDataType>.Empty;
 
     /// <summary>Decoded triangle indices.</summary>
     public required ImmutableArray<uint> Indices { get; init; }

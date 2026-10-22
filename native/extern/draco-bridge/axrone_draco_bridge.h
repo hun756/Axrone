@@ -27,6 +27,21 @@ extern "C" {
 // Opaque handle. Backed by a heap-allocated draco::Mesh.
 typedef struct AxrDracoMesh AxrDracoMesh;
 
+// Decoded attribute storage type. Normalized glTF integer accessors are stored
+// as raw integers by Draco encoders, so callers must divide by the type's max
+// before treating a value as normalized.
+typedef enum AxrDracoDataType {
+  AXR_DRACO_DATA_TYPE_UNKNOWN = 0,
+  AXR_DRACO_DATA_TYPE_INT8 = 1,
+  AXR_DRACO_DATA_TYPE_UINT8 = 2,
+  AXR_DRACO_DATA_TYPE_INT16 = 3,
+  AXR_DRACO_DATA_TYPE_UINT16 = 4,
+  AXR_DRACO_DATA_TYPE_INT32 = 5,
+  AXR_DRACO_DATA_TYPE_UINT32 = 6,
+  AXR_DRACO_DATA_TYPE_FLOAT32 = 7,
+  AXR_DRACO_DATA_TYPE_OTHER = 8,
+} AxrDracoDataType;
+
 // Decodes one Draco bitstream into a heap-allocated mesh.
 // The caller owns *out_mesh and must release it with axr_draco_free.
 AXR_DRACO_API int32_t axr_draco_decode(const uint8_t *data, size_t size,
@@ -42,13 +57,15 @@ AXR_DRACO_API uint32_t axr_draco_face_count(const AxrDracoMesh *mesh);
 // Number of point attributes. Returns 0 for a null mesh.
 AXR_DRACO_API int32_t axr_draco_attribute_count(const AxrDracoMesh *mesh);
 
-// Describes one attribute: its Draco unique id, component count (1-4), and
-// attribute type (0 POSITION, 1 NORMAL, 2 COLOR, 3 TEX_COORD, 4 GENERIC).
+// Describes one attribute: its Draco unique id, component count (1-4),
+// attribute type (0 POSITION, 1 NORMAL, 2 COLOR, 3 TEX_COORD, 4 GENERIC), and
+// decoded storage type (AxrDracoDataType).
 AXR_DRACO_API int32_t axr_draco_attribute_info(const AxrDracoMesh *mesh,
                                               int32_t attribute_index,
                                               uint32_t *out_unique_id,
                                               int32_t *out_components,
-                                              int32_t *out_attribute_type);
+                                              int32_t *out_attribute_type,
+                                              int32_t *out_data_type);
 
 // Converts every point of one attribute to float and writes float_count
 // values (point count times component count) into out_values.
