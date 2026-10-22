@@ -1,29 +1,32 @@
 name: Native Asset Pipeline
 
+# TEMP-DISABLED (2026-10-22): remote CI load'unu kesmek icin push/PR tetikleri
+# kapatildi. En son duzeltmede asagidaki blok geri alinacak. Manuel kosum icin
+# Actions > Native Asset Pipeline > Run workflow kullanilabilir.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'native/packages/Axrone.AssetGltf/**'
-      - 'native/packages/Axrone.AssetGltf.Codecs/**'
-      - 'native/extern/draco-bridge/**'
-      - 'native/Directory.Build.props'
-      - 'native/Directory.Packages.props'
-      - 'native/Axrone.Engine.slnx'
-      - '.github/workflows/native-assets.yml'
-  push:
-    branches:
-      - main
-      - native
-      - fix/assetgltf-hardening
-    paths:
-      - 'native/packages/Axrone.AssetGltf/**'
-      - 'native/packages/Axrone.AssetGltf.Codecs/**'
-      - 'native/extern/draco-bridge/**'
-      - 'native/Directory.Build.props'
-      - 'native/Directory.Packages.props'
-      - 'native/Axrone.Engine.slnx'
-      - '.github/workflows/native-assets.yml'
+#   pull_request:
+#     paths:
+#       - 'native/packages/Axrone.AssetGltf/**'
+#       - 'native/packages/Axrone.AssetGltf.Codecs/**'
+#       - 'native/extern/draco-bridge/**'
+#       - 'native/Directory.Build.props'
+#       - 'native/Directory.Packages.props'
+#       - 'native/Axrone.Engine.slnx'
+#       - '.github/workflows/native-assets.yml'
+#   push:
+#     branches:
+#       - main
+#       - native
+#       - fix/assetgltf-hardening
+#     paths:
+#       - 'native/packages/Axrone.AssetGltf/**'
+#       - 'native/packages/Axrone.AssetGltf.Codecs/**'
+#       - 'native/extern/draco-bridge/**'
+#       - 'native/Directory.Build.props'
+#       - 'native/Directory.Packages.props'
+#       - 'native/Axrone.Engine.slnx'
+#       - '.github/workflows/native-assets.yml'
 
 jobs:
   draco-native:
