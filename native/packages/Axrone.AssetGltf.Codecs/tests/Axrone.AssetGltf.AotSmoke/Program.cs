@@ -31,4 +31,33 @@ const string json = """
 {"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"name":"N","mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":6}],"buffers":[{"byteLength":44}]}
 """;
 GltfImportResult result = await new GltfImporter().ImportAsync(Glb(Encoding.UTF8.GetBytes(json), bin)).ConfigureAwait(false);
-Console.WriteLine($"aot-ok meshes={result.Meshes.Length} draco={NoDracoCompressionPolicy.IsSupported} meshopt={MeshoptCompressionPolicy.IsSupported} basis={BasisKtx2TranscoderPolicy.PolicyId}");
+
+bool dracoAvailable = NativeDracoMeshPolicy.IsNativeLibraryAvailable;
+Console.WriteLine($"aot-ok meshes={result.Meshes.Length} draco={dracoAvailable} meshopt={MeshoptCompressionPolicy.IsSupported} basis={BasisKtx2TranscoderPolicy.PolicyId}");
+
+if (!dracoAvailable)
+{
+    if (Environment.GetEnvironmentVariable("AXRONE_REQUIRE_NATIVE_DRACO") == "1")
+    {
+        Console.Error.WriteLine("axrone_draco native library was not found next to the published app.");
+        return 1;
+    }
+
+    return 0;
+}
+
+byte[] drc = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "draco-grid-1k.drc"));
+if (!NativeDracoMeshPolicy.TryDecodeMesh(drc, out GltfDracoDecodedMesh? mesh))
+{
+    Console.Error.WriteLine("draco decode failed under Native AOT.");
+    return 1;
+}
+
+if (mesh!.VertexCount != 625 || mesh.Indices.Length != 1152 * 3)
+{
+    Console.Error.WriteLine($"unexpected draco mesh: vertices={mesh.VertexCount} indices={mesh.Indices.Length}");
+    return 1;
+}
+
+Console.WriteLine($"aot-draco-ok vertices={mesh.VertexCount} indices={mesh.Indices.Length}");
+return 0;
