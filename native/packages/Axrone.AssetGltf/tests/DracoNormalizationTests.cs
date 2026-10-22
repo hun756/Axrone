@@ -10,58 +10,117 @@ namespace Axrone.AssetGltf.Tests;
 /// </summary>
 public sealed class DracoNormalizationTests
 {
-    [Fact]
-    public async Task Import_NormalizedByteColorFromDraco_PreservesRawValues()
-    {
-        const string json = """
-            {
-              "asset": {"version": "2.0"},
-              "extensionsUsed": ["KHR_draco_mesh_compression"],
-              "extensionsRequired": ["KHR_draco_mesh_compression"],
-              "scene": 0,
-              "scenes": [{"nodes": [0]}],
-              "nodes": [{"name": "N", "mesh": 0}],
-              "meshes": [{"primitives": [{
-                "attributes": {"POSITION": 0, "COLOR_0": 1},
-                "extensions": {
-                  "KHR_draco_mesh_compression": {
-                    "bufferView": 0,
-                    "attributes": {"POSITION": 0, "COLOR_0": 1}
-                  }
-                }
-              }]}],
-              "accessors": [
-                {"componentType": 5126, "count": 3, "type": "VEC3"},
-                {"componentType": 5121, "normalized": true, "count": 3, "type": "VEC4"}
-              ],
-              "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 4}],
-              "buffers": [{"byteLength": 4}]
+    private const string ColorGlbJson = """
+        {
+          "asset": {"version": "2.0"},
+          "extensionsUsed": ["KHR_draco_mesh_compression"],
+          "extensionsRequired": ["KHR_draco_mesh_compression"],
+          "scene": 0,
+          "scenes": [{"nodes": [0]}],
+          "nodes": [{"name": "N", "mesh": 0}],
+          "meshes": [{"primitives": [{
+            "attributes": {"POSITION": 0, "COLOR_0": 1},
+            "extensions": {
+              "KHR_draco_mesh_compression": {
+                "bufferView": 0,
+                "attributes": {"POSITION": 0, "COLOR_0": 1}
+              }
             }
-            """;
+          }]}],
+          "accessors": [
+            {"componentType": 5126, "count": 3, "type": "VEC3"},
+            {"componentType": 5121, "normalized": true, "count": 3, "type": "VEC4"}
+          ],
+          "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 4}],
+          "buffers": [{"byteLength": 4}]
+        }
+        """;
 
-        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco-color.glb" });
-        GltfImportResult result = await importer
-            .ImportAsync<RawIntegerDracoPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
-                Glb(Encoding.UTF8.GetBytes(json), [1, 0, 0, 0]));
+    [Fact]
+    public async Task Import_RawIntegerColorFromDraco_PreservesValues()
+    {
+        GltfMeshDefinition definition = await ImportColorsAsync<RawIntegerDracoPolicy>();
 
-        GltfMeshDefinition definition = result.Meshes[0].Definition;
-        GltfVertexAttribute color = definition.Attributes.Single(static a => a.Semantic == GltfMeshSemantic.Color0);
-        ReadOnlySpan<byte> vertices = definition.Vertices.Span;
-
-        ReadColor(vertices, color, 0).Should().Equal(0, 0, 0, 255);
-        ReadColor(vertices, color, 1).Should().Equal(128, 64, 255, 255);
-        ReadColor(vertices, color, 2).Should().Equal(255, 255, 255, 255);
+        ReadColor(definition, 0).Should().Equal(0, 0, 0, 255);
+        ReadColor(definition, 1).Should().Equal(128, 64, 255, 255);
+        ReadColor(definition, 2).Should().Equal(255, 255, 255, 255);
     }
 
-    private static byte[] ReadColor(ReadOnlySpan<byte> vertices, GltfVertexAttribute attribute, int vertex) =>
-        vertices
-            .Slice(attribute.Offset + (vertex * attribute.Stride), attribute.ComponentCount)
-            .ToArray();
+    [Fact]
+    public async Task Import_PreNormalizedFloatColorFromDraco_UsesAccessorUnits()
+    {
+        GltfMeshDefinition definition = await ImportColorsAsync<PreNormalizedDracoPolicy>();
 
-    /// <summary>
-    /// Returns raw unsigned-byte color values, as the native bridge does for a
-    /// normalized COLOR_0 accessor.
-    /// </summary>
+        ReadColor(definition, 0).Should().Equal(0, 0, 0, 255);
+        ReadColor(definition, 1).Should().Equal(128, 64, 255, 255);
+        ReadColor(definition, 2).Should().Equal(255, 255, 255, 255);
+    }
+
+    [Fact]
+    public async Task Import_NormalizedColorWithUnknownStorageType_Throws()
+    {
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco-unknown.glb" });
+        Func<Task> act = () => importer
+            .ImportAsync<UnknownStorageDracoPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+                Glb(Encoding.UTF8.GetBytes(ColorGlbJson), [1, 0, 0, 0]))
+            .AsTask();
+
+        await act.Should().ThrowAsync<GltfAccessorError>();
+    }
+
+    private static async Task<GltfMeshDefinition> ImportColorsAsync<TDracoPolicy>()
+        where TDracoPolicy : struct, IDracoMeshPolicy
+    {
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "draco-color.glb" });
+        GltfImportResult result = await importer
+            .ImportAsync<TDracoPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+                Glb(Encoding.UTF8.GetBytes(ColorGlbJson), [1, 0, 0, 0]));
+        return result.Meshes[0].Definition;
+    }
+
+    private static byte[] ReadColor(GltfMeshDefinition definition, int vertex)
+    {
+        GltfVertexAttribute color = definition.Attributes.Single(static a => a.Semantic == GltfMeshSemantic.Color0);
+        return definition.Vertices.Span
+            .Slice(color.Offset + (vertex * color.Stride), color.ComponentCount)
+            .ToArray();
+    }
+
+    private static GltfDracoDecodedMesh CreateMesh(
+        float[] colors,
+        GltfDracoAttributeDataType colorDataType) =>
+        new()
+        {
+            VertexCount = 3,
+            Attributes = ImmutableDictionary.CreateRange(new Dictionary<int, float[]>
+            {
+                [0] = [0, 0, 0, 1, 0, 0, 0, 1, 0],
+                [1] = colors,
+            }),
+            AttributeDataTypes = ImmutableDictionary.CreateRange(new Dictionary<int, GltfDracoAttributeDataType>
+            {
+                [0] = GltfDracoAttributeDataType.Float32,
+                [1] = colorDataType,
+            }),
+            Indices = [0, 1, 2],
+        };
+
+    private static GltfDracoDecodeStatus Succeed(
+        GltfDracoDecodedMesh mesh,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? result,
+        out long decodedBytes)
+    {
+        result = mesh;
+        decodedBytes = mesh.Indices.Length * sizeof(uint);
+        foreach (float[] values in mesh.Attributes.Values)
+        {
+            decodedBytes += values.Length * sizeof(float);
+        }
+
+        return GltfDracoDecodeStatus.Success;
+    }
+
+    /// <summary>Raw unsigned-byte colors, as Draco stores normalized COLOR_0.</summary>
     private readonly struct RawIntegerDracoPolicy : IDracoMeshPolicy
     {
         public static bool IsSupported => true;
@@ -70,35 +129,49 @@ public sealed class DracoNormalizationTests
             ReadOnlySpan<byte> dracoBytes,
             GltfDracoDecodeLimits limits,
             [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
-            out long decodedBytes)
-        {
-            float[] positions = [0, 0, 0, 1, 0, 0, 0, 1, 0];
-            float[] colors =
-            [
-                0, 0, 0, 255,
-                128, 64, 255, 255,
-                255, 255, 255, 255,
-            ];
+            out long decodedBytes) =>
+            Succeed(
+                CreateMesh(
+                    [0, 0, 0, 255, 128, 64, 255, 255, 255, 255, 255, 255],
+                    GltfDracoAttributeDataType.UInt8),
+                out mesh,
+                out decodedBytes);
+    }
 
-            mesh = new GltfDracoDecodedMesh
-            {
-                VertexCount = 3,
-                Attributes = ImmutableDictionary.CreateRange(new Dictionary<int, float[]>
-                {
-                    [0] = positions,
-                    [1] = colors,
-                }),
-                AttributeDataTypes = ImmutableDictionary.CreateRange(new Dictionary<int, GltfDracoAttributeDataType>
-                {
-                    [0] = GltfDracoAttributeDataType.Float32,
-                    [1] = GltfDracoAttributeDataType.UInt8,
-                }),
-                Indices = [0, 1, 2],
-            };
+    /// <summary>Float colors already scaled into [0, 1] by the encoder.</summary>
+    private readonly struct PreNormalizedDracoPolicy : IDracoMeshPolicy
+    {
+        public static bool IsSupported => true;
 
-            decodedBytes = ((positions.Length + colors.Length) * sizeof(float)) + (3 * sizeof(uint));
-            return GltfDracoDecodeStatus.Success;
-        }
+        public static GltfDracoDecodeStatus TryDecodeMesh(
+            ReadOnlySpan<byte> dracoBytes,
+            GltfDracoDecodeLimits limits,
+            [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+            out long decodedBytes) =>
+            Succeed(
+                CreateMesh(
+                    [0, 0, 0, 1, 0.5f, 0.25f, 1, 1, 1, 1, 1, 1],
+                    GltfDracoAttributeDataType.Float32),
+                out mesh,
+                out decodedBytes);
+    }
+
+    /// <summary>Storage type is not reported for the normalized attribute.</summary>
+    private readonly struct UnknownStorageDracoPolicy : IDracoMeshPolicy
+    {
+        public static bool IsSupported => true;
+
+        public static GltfDracoDecodeStatus TryDecodeMesh(
+            ReadOnlySpan<byte> dracoBytes,
+            GltfDracoDecodeLimits limits,
+            [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+            out long decodedBytes) =>
+            Succeed(
+                CreateMesh(
+                    [0, 0, 0, 1, 0.5f, 0.25f, 1, 1, 1, 1, 1, 1],
+                    GltfDracoAttributeDataType.Unknown),
+                out mesh,
+                out decodedBytes);
     }
 
     private static byte[] Glb(byte[] json, byte[] bin)
