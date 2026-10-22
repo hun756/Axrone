@@ -769,11 +769,39 @@ internal static class GltfJsonParser
         {
             if (reader.TokenType == JsonTokenType.PropertyName)
             {
-                string key = reader.GetString()!;
+                string key = ReadSemanticName(ref reader);
                 reader.Read();
                 map[key] = reader.GetInt32();
             }
         }
+    }
+
+    /// <summary>
+    /// Returns the compiler-interned literal for standard semantics and only
+    /// allocates for application-specific names. Escaped strings fall back to
+    /// <see cref="Utf8JsonReader.GetString"/> so unescaping stays correct.
+    /// </summary>
+    private static string ReadSemanticName(ref Utf8JsonReader reader)
+    {
+        if (!reader.ValueIsEscaped)
+        {
+            ReadOnlySpan<byte> value = reader.ValueSpan;
+            if (value.SequenceEqual("POSITION"u8)) return "POSITION";
+            if (value.SequenceEqual("NORMAL"u8)) return "NORMAL";
+            if (value.SequenceEqual("TANGENT"u8)) return "TANGENT";
+            if (value.SequenceEqual("TEXCOORD_0"u8)) return "TEXCOORD_0";
+            if (value.SequenceEqual("TEXCOORD_1"u8)) return "TEXCOORD_1";
+            if (value.SequenceEqual("TEXCOORD_2"u8)) return "TEXCOORD_2";
+            if (value.SequenceEqual("TEXCOORD_3"u8)) return "TEXCOORD_3";
+            if (value.SequenceEqual("COLOR_0"u8)) return "COLOR_0";
+            if (value.SequenceEqual("COLOR_1"u8)) return "COLOR_1";
+            if (value.SequenceEqual("JOINTS_0"u8)) return "JOINTS_0";
+            if (value.SequenceEqual("JOINTS_1"u8)) return "JOINTS_1";
+            if (value.SequenceEqual("WEIGHTS_0"u8)) return "WEIGHTS_0";
+            if (value.SequenceEqual("WEIGHTS_1"u8)) return "WEIGHTS_1";
+        }
+
+        return reader.GetString() ?? string.Empty;
     }
 
     private static void ParsePrimitiveExtensions(ref Utf8JsonReader reader, GltfRawModel.Primitive prim)
