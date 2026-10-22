@@ -242,6 +242,44 @@ public sealed class NativeDracoTests
     }
 
     [Fact]
+    public void NativeDraco_SurvivesMutatedBitstreams()
+    {
+        if (!NativeDracoAvailable())
+        {
+            return;
+        }
+
+        byte[] baseline = File.ReadAllBytes(TestData("draco-grid-1k.drc"));
+#pragma warning disable CA5394 // Deterministic PRNG keeps fuzz failures reproducible.
+        var random = new Random(20261022);
+        for (int iteration = 0; iteration < 200; iteration++)
+        {
+            byte[] mutated = (byte[])baseline.Clone();
+            int mutations = random.Next(1, 5);
+            for (int m = 0; m < mutations; m++)
+            {
+                mutated[random.Next(mutated.Length)] = (byte)random.Next(256);
+            }
+
+            GltfDracoDecodeStatus status = NativeDracoMeshPolicy.TryDecodeMesh(
+                mutated,
+                GltfDracoDecodeLimits.Unlimited,
+                out GltfDracoDecodedMesh? mesh,
+                out _);
+
+            if (status == GltfDracoDecodeStatus.Success)
+            {
+                mesh.Should().NotBeNull();
+            }
+            else
+            {
+                mesh.Should().BeNull();
+            }
+        }
+#pragma warning restore CA5394
+    }
+
+    [Fact]
     public void NativeDraco_RejectsOversizedDecodeBeforeAllocating()
     {
         if (!NativeDracoAvailable())
