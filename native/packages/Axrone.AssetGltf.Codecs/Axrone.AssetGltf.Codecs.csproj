@@ -26,7 +26,7 @@
 
   <ItemGroup>
     <!-- Built by CI from native/extern/draco-bridge; absent on machines without a C++ toolchain. -->
-    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes\%(RecursiveDir)native\" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes/%(RecursiveDir)native/" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
