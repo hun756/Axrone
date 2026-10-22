@@ -3,7 +3,7 @@
   <PropertyGroup>
     <RootNamespace>Axrone.AssetGltf.Codecs</RootNamespace>
     <AssemblyName>Axrone.AssetGltf.Codecs</AssemblyName>
-    <Description>Optional meshopt decoder policies for the Axrone glTF import pipeline.</Description>
+    <Description>Optional native decoder policies (Draco, meshopt, Basis/KTX2) for the Axrone glTF import pipeline.</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
@@ -22,6 +22,11 @@
 
   <ItemGroup>
     <Compile Remove="tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Built by CI from native/extern/draco-bridge; absent on machines without a C++ toolchain. -->
+    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes\%(RecursiveDir)native\" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

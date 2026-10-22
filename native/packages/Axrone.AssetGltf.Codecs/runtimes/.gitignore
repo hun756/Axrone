@@ -1,0 +1,5 @@
+# CI-built google/draco natives land here (runtimes/<rid>/native/*).
+# They are packed from CI artifacts, never committed.
+*.dll
+*.so
+*.dylib

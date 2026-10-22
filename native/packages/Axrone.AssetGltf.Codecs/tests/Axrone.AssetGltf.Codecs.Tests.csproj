@@ -26,6 +26,7 @@
   <ItemGroup>
     <Compile Remove="Axrone.AssetGltf.AotSmoke/**" />
     <None Remove="Axrone.AssetGltf.AotSmoke/**" />
+    <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
