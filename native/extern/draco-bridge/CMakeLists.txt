@@ -64,6 +64,22 @@ if(UNIX AND NOT APPLE)
   target_link_options(axrone_draco PRIVATE "-Wl,--exclude-libs,ALL")
 endif()
 
+# Mach-O has no --exclude-libs, so export only the bridge entry points.
+if(APPLE)
+  set(AXR_DRACO_EXPORTS "${CMAKE_CURRENT_BINARY_DIR}/axrone_draco_exports.txt")
+  file(WRITE "${AXR_DRACO_EXPORTS}"
+    "_axr_draco_decode\n"
+    "_axr_draco_free\n"
+    "_axr_draco_point_count\n"
+    "_axr_draco_face_count\n"
+    "_axr_draco_attribute_count\n"
+    "_axr_draco_attribute_info\n"
+    "_axr_draco_attribute_floats\n"
+    "_axr_draco_face_indices\n")
+  target_link_options(axrone_draco PRIVATE
+    "-Wl,-exported_symbols_list,${AXR_DRACO_EXPORTS}")
+endif()
+
 if(TARGET draco_static)
   target_link_libraries(axrone_draco PRIVATE draco_static)
 elseif(TARGET draco)
