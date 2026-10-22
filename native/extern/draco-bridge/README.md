@@ -18,14 +18,16 @@ google/draco C++ sources** — no third-party managed port. The C# side uses
 
 `AXR_DRACO_TAG = 1.5.7` (CMake cache variable). This matches the
 `draco3dgltf@1.5.7` WASM decoders used by the web glTF pipeline, so native
-and web decode the same bitstream line.
+and web decode the same bitstream line. The archive is verified against a
+pinned SHA-256 (`URL_HASH`), so a moved tag cannot silently change sources.
 
 ## Local build (needs a C++ toolchain: MSVC / GCC / Clang + CMake)
 
 ```sh
 cmake -S native/extern/draco-bridge -B build/draco -DCMAKE_BUILD_TYPE=Release
-cmake --build build/draco --config Release
+cmake --build build/draco --config Release --target axrone_draco
 # -> build/draco/axrone_draco.dll | libaxrone_draco.so | libaxrone_draco.dylib
+# (build the target explicitly: draco 1.5.7 also builds its CLI tools)
 ```
 
 Stage next to the app for local runs:
@@ -46,7 +48,7 @@ cmake -S native/extern/draco-bridge -B build/draco-android \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24
-cmake --build build/draco-android --config Release
+cmake --build build/draco-android --config Release --target axrone_draco
 ```
 
 ## RIDs shipped by CI
