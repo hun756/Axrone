@@ -9,7 +9,7 @@ public sealed class GltfFuzzTests
     [Fact]
     public async Task Import_MutatedGlb_OnlyThrowsCodedErrors()
     {
-        byte[] baseline = BuildTriangleGlb();
+        byte[][] baselines = [BuildTriangleGlb(), BuildTexturedGlb()];
         var importer = new GltfImporter(new GltfImporterOptions
         {
             Id = "fuzz.glb",
@@ -23,27 +23,31 @@ public sealed class GltfFuzzTests
 
 #pragma warning disable CA5394 // Deterministic PRNG keeps fuzz failures reproducible.
         var random = new Random(20261022);
-        for (int iteration = 0; iteration < 500; iteration++)
+        for (int baselineIndex = 0; baselineIndex < baselines.Length; baselineIndex++)
         {
-            byte[] mutated = (byte[])baseline.Clone();
-            int mutations = random.Next(1, 6);
-            for (int m = 0; m < mutations; m++)
+            byte[] baseline = baselines[baselineIndex];
+            for (int iteration = 0; iteration < 250; iteration++)
             {
-                mutated[random.Next(mutated.Length)] = (byte)random.Next(256);
-            }
+                byte[] mutated = (byte[])baseline.Clone();
+                int mutations = random.Next(1, 6);
+                for (int m = 0; m < mutations; m++)
+                {
+                    mutated[random.Next(mutated.Length)] = (byte)random.Next(256);
+                }
 
-            try
-            {
-                await importer.ImportAsync(mutated);
-            }
-            catch (GltfException)
-            {
-                // Coded failures are the contract for untrusted input.
-            }
-            catch (Exception exception)
-            {
-                throw new Xunit.Sdk.XunitException(
-                    $"Import threw an uncoded exception at iteration {iteration}:{Environment.NewLine}{exception}");
+                try
+                {
+                    await importer.ImportAsync(mutated);
+                }
+                catch (GltfException)
+                {
+                    // Coded failures are the contract for untrusted input.
+                }
+                catch (Exception exception)
+                {
+                    throw new Xunit.Sdk.XunitException(
+                        $"Import threw an uncoded exception for baseline {baselineIndex} at iteration {iteration}:{Environment.NewLine}{exception}");
+                }
             }
         }
 #pragma warning restore CA5394
@@ -90,11 +94,43 @@ public sealed class GltfFuzzTests
             }
             """;
 
+        return Glb(System.Text.Encoding.UTF8.GetBytes(json), BuildTriangleBin());
+    }
+
+    private static byte[] BuildTexturedGlb()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1, "material": 0}]}],
+              "materials": [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}],
+              "textures": [{"source": 0, "sampler": 0}],
+              "images": [{"uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="}],
+              "samplers": [{}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 6}
+              ],
+              "buffers": [{"byteLength": 44}]
+            }
+            """;
+
+        return Glb(System.Text.Encoding.UTF8.GetBytes(json), BuildTriangleBin());
+    }
+
+    private static byte[] BuildTriangleBin()
+    {
         byte[] bin = new byte[44];
         float[] positions = [0, 0, 0, 1, 0, 0, 0, 1, 0];
         Buffer.BlockCopy(positions, 0, bin, 0, 36);
-
-        return Glb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        return bin;
     }
 
     private static byte[] Glb(byte[] json, byte[] bin)
