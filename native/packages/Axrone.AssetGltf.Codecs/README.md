@@ -39,6 +39,9 @@ policies and rejects required Draco payloads with a coded
   like the glTF extension requires.
 - Attribute values are converted to floats per point; layouts the bridge
   cannot represent are rejected instead of being silently misread.
+- Normalized integer accessors keep Draco's raw integer storage. The bridge
+  reports each attribute's storage type and the importer normalizes those
+  values before re-quantizing them, so colors and weights are not corrupted.
 - The decoded attribute and index sizes are measured before allocation and
   checked against `GltfImportLimits.MaxDecodedBytes`, so oversized payloads
   fail with `GltfLimitExceededError` instead of allocating first.
