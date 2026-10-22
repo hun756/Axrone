@@ -39,6 +39,9 @@ policies and rejects required Draco payloads with a coded
   like the glTF extension requires.
 - Attribute values are converted to floats per point; layouts the bridge
   cannot represent are rejected instead of being silently misread.
+- The decoded attribute and index sizes are measured before allocation and
+  checked against `GltfImportLimits.MaxDecodedBytes`, so oversized payloads
+  fail with `GltfLimitExceededError` instead of allocating first.
 - `IsSupported` reports whether the native library for the current RID is
   actually present, so a required extension is never accepted only to fail
   at decode time. CI ships `win-x64`, `linux-x64`, `osx-x64`, `osx-arm64`
