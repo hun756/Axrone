@@ -15,6 +15,20 @@ internal static partial class NativeDracoInterop
 
     internal const int Ok = 0;
 
+    static NativeDracoInterop()
+    {
+        // NativeAOT has no deps.json, so the default probing never looks in
+        // runtimes/<rid>/native. Resolve the RID asset explicitly; returning
+        // zero falls back to the host's normal resolution.
+        NativeLibrary.SetDllImportResolver(
+            typeof(NativeDracoInterop).Assembly,
+            static (libraryName, _, _) =>
+                string.Equals(libraryName, LibraryName, StringComparison.Ordinal) &&
+                FindNativeLibraryPath() is { } path
+                    ? NativeLibrary.Load(path)
+                    : 0);
+    }
+
     /// <summary>Decodes one Draco bitstream into a heap-allocated native mesh.</summary>
     /// <returns>0 on success; 1 on bad arguments; 2 when the data is not a Draco mesh.</returns>
     [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
@@ -78,6 +92,12 @@ internal static partial class NativeDracoInterop
     /// Locates the RID-specific native library without loading it.
     /// Mirrors the .NET <c>runtimes/&lt;rid&gt;/native</c> probing layout used at pack time.
     /// </summary>
+    /// <remarks>
+    /// <see cref="RuntimeInformation.RuntimeIdentifier"/> can be distro-specific
+    /// (for example <c>ubuntu.24.04-x64</c>) while the package ships portable
+    /// RIDs, so the portable RID and the host's native search directories are
+    /// probed as fallbacks.
+    /// </remarks>
     internal static string? FindNativeLibraryPath()
     {
         string fileName = OperatingSystem.IsWindows()
@@ -89,14 +109,71 @@ internal static partial class NativeDracoInterop
         string baseDirectory = AppContext.BaseDirectory;
         string rid = RuntimeInformation.RuntimeIdentifier;
 
-        string ridPath = Path.Combine(baseDirectory, "runtimes", rid, "native", fileName);
-        if (File.Exists(ridPath))
+        string? path = Probe(Path.Combine(baseDirectory, "runtimes", rid, "native"), fileName);
+        if (path is not null)
         {
-            return ridPath;
+            return path;
         }
 
-        string flatPath = Path.Combine(baseDirectory, fileName);
-        return File.Exists(flatPath) ? flatPath : null;
+        string portableRid = GetPortableRuntimeIdentifier();
+        if (!string.Equals(portableRid, rid, StringComparison.Ordinal))
+        {
+            path = Probe(Path.Combine(baseDirectory, "runtimes", portableRid, "native"), fileName);
+            if (path is not null)
+            {
+                return path;
+            }
+        }
+
+        if (AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is string searchDirectories)
+        {
+            foreach (string directory in searchDirectories.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                path = Probe(directory, fileName);
+                if (path is not null)
+                {
+                    return path;
+                }
+            }
+        }
+
+        return Probe(baseDirectory, fileName);
+
+        static string? Probe(string directory, string fileName)
+        {
+            string candidate = Path.Combine(directory, fileName);
+            return File.Exists(candidate) ? candidate : null;
+        }
+    }
+
+    /// <summary>Portable RID for the current OS and process architecture.</summary>
+    internal static string GetPortableRuntimeIdentifier()
+    {
+        string architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.X86 => "x86",
+            Architecture.Arm64 => "arm64",
+            Architecture.Arm => "arm",
+            _ => "x64",
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            return "win-" + architecture;
+        }
+
+        if (OperatingSystem.IsAndroid())
+        {
+            return "android-" + architecture;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return "osx-" + architecture;
+        }
+
+        return "linux-" + architecture;
     }
 
     internal static bool IsOperatingSystemSupported =>

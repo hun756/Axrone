@@ -13,8 +13,11 @@ namespace Axrone.AssetGltf.Codecs;
 /// </summary>
 public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
 {
-    /// <inheritdoc/>
-    public static bool IsSupported => NativeDracoInterop.IsOperatingSystemSupported;
+    /// <summary>
+    /// Whether the RID-specific native library is present, so a required
+    /// <c>KHR_draco_mesh_compression</c> payload can actually be decoded.
+    /// </summary>
+    public static bool IsSupported => NativeDracoInterop.IsNativeLibraryAvailable;
 
     /// <summary>Whether the RID-specific native library was found next to the app.</summary>
     public static bool IsNativeLibraryAvailable => NativeDracoInterop.IsNativeLibraryAvailable;
@@ -61,7 +64,8 @@ public readonly struct NativeDracoMeshPolicy : IDracoMeshPolicy
             {
                 if (NativeDracoInterop.AttributeInfo(handle, i, out uint uniqueId, out int components, out _) != NativeDracoInterop.Ok ||
                     components <= 0 ||
-                    components > 4)
+                    components > 4 ||
+                    uniqueId > int.MaxValue)
                 {
                     return false;
                 }
