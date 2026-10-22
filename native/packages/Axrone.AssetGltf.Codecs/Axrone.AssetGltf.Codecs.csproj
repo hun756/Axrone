@@ -4,6 +4,9 @@
     <RootNamespace>Axrone.AssetGltf.Codecs</RootNamespace>
     <AssemblyName>Axrone.AssetGltf.Codecs</AssemblyName>
     <Description>Optional native decoder policies (Draco, meshopt, Basis/KTX2) for the Axrone glTF import pipeline.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>gltf;draco;meshopt;basisu;ktx2;codecs;3d</PackageTags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
@@ -26,7 +29,20 @@
 
   <ItemGroup>
     <!-- Built by CI from native/extern/draco-bridge; absent on machines without a C++ toolchain. -->
-    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes/%(RecursiveDir)native/" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup Label="Packaging">
+    <None Update="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- BasisUniversal.Native injects its runtimes as Content via buildTransitive.
+       Consumers receive them through the package dependency; packing them again
+       collides with the dependency's content folder (NU5118/NU5100). -->
+  <Target Name="ExcludeTransitiveNativeContentFromPack" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <Content Update="@(Content)" Pack="false" Condition="'%(Content.DefiningProjectName)' == 'BasisUniversal.Native'" />
+    </ItemGroup>
+  </Target>
 
 </Project>
