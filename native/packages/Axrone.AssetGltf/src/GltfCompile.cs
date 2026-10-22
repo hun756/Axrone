@@ -474,6 +474,8 @@ public static class GltfCompileExtensions
 
                 int vertexCount = -1;
                 var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
+                var attributeNames = new List<string>(prim.Attributes.Count);
+                var isCustomAttribute = new List<bool>(prim.Attributes.Count);
                 int totalInterleavedStride = 0;
 
                 foreach (KeyValuePair<string, int> kv in prim.Attributes)
@@ -485,11 +487,10 @@ public static class GltfCompileExtensions
                     }
 
                     GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
-
-                    if (!TryParseSemantic(kv.Key, out GltfMeshSemantic semantic))
+                    bool isCustom = !TryParseSemantic(kv.Key, out GltfMeshSemantic semantic);
+                    if (isCustom)
                     {
-                        diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.mesh.attribute.unsupported", $"Attribute '{kv.Key}' bypassed."));
-                        continue;
+                        semantic = GltfMeshSemantic.Custom;
                     }
 
                     if (vertexCount < 0)
@@ -516,6 +517,8 @@ public static class GltfCompileExtensions
                         acc.Normalized,
                         acc.ComponentType != 5126));
 
+                    attributeNames.Add(kv.Key);
+                    isCustomAttribute.Add(isCustom);
                     totalInterleavedStride += attrSize;
                 }
 
@@ -567,7 +570,7 @@ public static class GltfCompileExtensions
                 for (int a = 0; a < attrLayouts.Count; a++)
                 {
                     GltfVertexAttribute layout = attrLayouts[a];
-                    string semStr = GetSemanticString(layout.Semantic);
+                    string semStr = attributeNames[a];
                     int accessorIndex = prim.Attributes[semStr];
                     GltfRawModel.Accessor acc = rawModel.Accessors[accessorIndex];
 
@@ -838,22 +841,39 @@ public static class GltfCompileExtensions
                 (ReadOnlyMemory<byte> downcastedBytes, bool is16Bit) = GltfMeshPipeline.DowncastIndices(expandedIndices);
 
                 var finalAttributes = ImmutableArray.CreateBuilder<GltfVertexAttribute>(attrLayouts.Count);
+                var customAttributes = ImmutableArray.CreateBuilder<GltfCustomVertexAttribute>();
                 for (int a = 0; a < attrLayouts.Count; a++)
                 {
                     GltfVertexAttribute la = attrLayouts[a];
+                    if (isCustomAttribute[a])
+                    {
+                        customAttributes.Add(new GltfCustomVertexAttribute(
+                            attributeNames[a],
+                            la.Offset,
+                            totalInterleavedStride,
+                            la.ComponentType,
+                            la.ComponentCount,
+                            la.Normalized,
+                            la.Integer));
+                        continue;
+                    }
+
                     finalAttributes.Add(new GltfVertexAttribute(la.Offset, totalInterleavedStride, la.ComponentType, la.Semantic, la.ComponentCount, la.Normalized, la.Integer));
                 }
 
                 var definition = new GltfMeshDefinition(
                     meshAssetId,
                     interleavedVertices,
-                    finalAttributes.MoveToImmutable(),
+                    finalAttributes.ToImmutable(),
                     morphTargetsBuilder.ToImmutable(),
                     downcastedBytes,
                     vertexCount,
                     expandedIndices.Length,
                     is16Bit,
-                    prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles));
+                    prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles))
+                {
+                    CustomAttributes = customAttributes.ToImmutable(),
+                };
 
                 var variantMappings = ImmutableArray.CreateBuilder<GltfMaterialVariantMapping>(prim.MaterialVariants.Count);
                 for (int v = 0; v < prim.MaterialVariants.Count; v++)
@@ -940,25 +960,6 @@ public static class GltfCompileExtensions
             default: semantic = default; return false;
         }
     }
-
-    private static string GetSemanticString(GltfMeshSemantic semantic) =>
-        semantic switch
-        {
-            GltfMeshSemantic.Position => "POSITION",
-            GltfMeshSemantic.Normal => "NORMAL",
-            GltfMeshSemantic.Uv0 => "TEXCOORD_0",
-            GltfMeshSemantic.Uv1 => "TEXCOORD_1",
-            GltfMeshSemantic.Uv2 => "TEXCOORD_2",
-            GltfMeshSemantic.Uv3 => "TEXCOORD_3",
-            GltfMeshSemantic.Tangent => "TANGENT",
-            GltfMeshSemantic.Color0 => "COLOR_0",
-            GltfMeshSemantic.Color1 => "COLOR_1",
-            GltfMeshSemantic.Joints0 => "JOINTS_0",
-            GltfMeshSemantic.Joints1 => "JOINTS_1",
-            GltfMeshSemantic.Weights0 => "WEIGHTS_0",
-            GltfMeshSemantic.Weights1 => "WEIGHTS_1",
-            _ => string.Empty,
-        };
 
     internal static async ValueTask<(List<GltfSkinAsset> Skins, ImmutableDictionary<int, string> SkinKeyMap)> CompileSkinsAsync<TMeshoptPolicy>(
         GltfRawModel rawModel,

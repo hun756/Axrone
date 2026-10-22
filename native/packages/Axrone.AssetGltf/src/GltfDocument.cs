@@ -168,6 +168,16 @@ public readonly record struct GltfMorphTargetDefinition(
     int Stride,
     int ComponentCount);
 
+/// <summary>Application-specific vertex attribute preserved in the interleaved buffer.</summary>
+public readonly record struct GltfCustomVertexAttribute(
+    string Name,
+    int Offset,
+    int Stride,
+    int ComponentType,
+    byte ComponentCount,
+    bool Normalized,
+    bool Integer);
+
 /// <summary>Interleaved mesh definition.</summary>
 public readonly record struct GltfMeshDefinition(
     string Id,
@@ -178,7 +188,12 @@ public readonly record struct GltfMeshDefinition(
     int VertexCount,
     int IndexCount,
     bool Index16Bit,
-    GltfMeshTopology Topology);
+    GltfMeshTopology Topology)
+{
+    /// <summary>Attributes with application-specific names (<c>_NAME</c>).</summary>
+    public ImmutableArray<GltfCustomVertexAttribute> CustomAttributes { get; init; } =
+        ImmutableArray<GltfCustomVertexAttribute>.Empty;
+}
 
 /// <summary>Canonical skin asset.</summary>
 public sealed class GltfSkinAsset

@@ -41,6 +41,14 @@ public enum GltfMeshSemantic : byte
 
     /// <summary>WEIGHTS_1 attribute.</summary>
     Weights1 = 12,
+
+    /// <summary>
+    /// Application-specific attribute (<c>_NAME</c>). It is preserved in the
+    /// interleaved buffer and described by
+    /// <see cref="GltfMeshDefinition.CustomAttributes"/> instead of the
+    /// standard semantic array.
+    /// </summary>
+    Custom = 255,
 }
 
 /// <summary>Morph target attribute semantic.</summary>
