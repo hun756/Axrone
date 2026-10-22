@@ -53,6 +53,8 @@ public sealed class NativeDracoTests
         mesh.Indices.Should().HaveCount(1152 * 3);
         mesh.Attributes.Should().HaveCount(1);
         mesh.Attributes.Values.Sum(static a => a.Length).Should().Be(625 * 3);
+        mesh.AttributeDataTypes.Should().HaveCount(1);
+        mesh.AttributeDataTypes.Values.Should().NotContain(GltfDracoAttributeDataType.Unknown);
     }
 
     [Fact]
