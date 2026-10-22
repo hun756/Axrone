@@ -65,6 +65,8 @@ policies and rejects required Draco payloads with a coded
 
 ## Licensing
 
+`Axrone.AssetGltf.Codecs` is Apache-2.0 (see `LICENSE`) and redistributes:
+
 - google/draco sources (built from `native/extern/draco-bridge`, never vendored)
   - Apache-2.0, including its Section 3 patent grant.
 - `Alimer.Bindings.MeshOptimizer` — MIT bindings; meshoptimizer is MIT.
