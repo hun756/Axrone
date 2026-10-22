@@ -8,9 +8,13 @@
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>true</InvariantGlobalization>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <!-- CA1849: this console smoke is intentionally synchronous after startup. -->
+    <NoWarn>$(NoWarn);CA1515;CA1849</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Axrone.AssetGltf.Codecs.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\TestData\draco-grid-1k.drc" Link="TestData\draco-grid-1k.drc" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
