@@ -188,6 +188,51 @@ public sealed class CodecTests
         result.Textures[0].Payload.Should().BeOfType<GltfTranscodedTexturePayload>();
     }
 
+    [Fact]
+    public void BasisPolicy_RejectsUnsupportedTarget()
+    {
+        BasisKtx2TranscoderPolicy
+            .CanTranscode([1, 2, 3], GltfTextureFormat.Unknown, GltfTextureFormat.Unknown)
+            .Should().BeFalse();
+
+        bool ok = BasisKtx2TranscoderPolicy.TryTranscode(
+            ReadOnlyMemory<byte>.Empty,
+            GltfTextureFormat.Unknown,
+            GltfTextureFormat.Unknown,
+            out GltfTranscodeOutput? output,
+            out string? failureReason);
+
+        ok.Should().BeFalse();
+        output.Should().BeNull();
+        failureReason.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void BasisPolicy_RejectsInvalidPayload()
+    {
+        bool ok = BasisKtx2TranscoderPolicy.TryTranscode(
+            new byte[] { 1, 2, 3 },
+            GltfTextureFormat.Unknown,
+            GltfTextureFormat.BC7_RGBA,
+            out GltfTranscodeOutput? output,
+            out string? failureReason);
+
+        ok.Should().BeFalse();
+        output.Should().BeNull();
+        failureReason.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void MeshoptPolicy_RejectsInvalidLayouts()
+    {
+        byte[] destination = new byte[16];
+
+        MeshoptCompressionPolicy.TryDecompressBufferView([1, 2, 3], 2, 8, "BOGUS", "NONE", destination).Should().BeFalse();
+        MeshoptCompressionPolicy.TryDecompressBufferView([1, 2, 3], 2, 8, "TRIANGLES", "OCTAHEDRAL", destination).Should().BeFalse();
+        MeshoptCompressionPolicy.TryDecompressBufferView([1, 2, 3], 2, 8, "ATTRIBUTES", "NONE", new byte[4]).Should().BeFalse();
+        MeshoptCompressionPolicy.TryDecompressBufferView([], 1, 4, "ATTRIBUTES", "NONE", destination).Should().BeFalse();
+    }
+
     private static byte[] Glb(string json, byte[] bin)
     {
         byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
