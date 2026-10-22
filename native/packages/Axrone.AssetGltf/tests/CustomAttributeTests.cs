@@ -65,6 +65,46 @@ public sealed class CustomAttributeTests
         result.Diagnostics.Should().NotContain(static d => d.Code == "gltf.mesh.attribute.unsupported");
     }
 
+    [Fact]
+    public async Task Import_EscapedCustomAttributeName_IsUnescaped()
+    {
+        // The JSON property name is "_BATCH\u0049D" (escaped I).
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0, "_BATCH\u0049D": 1},
+                "indices": 2
+              }]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5121, "count": 3, "type": "SCALAR"},
+                {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 6},
+                {"buffer": 0, "byteOffset": 44, "byteLength": 3}
+              ],
+              "buffers": [{"byteLength": 48}]
+            }
+            """;
+
+        byte[] bin = new byte[48];
+        float[] positions = [0, 0, 0, 1, 0, 0, 0, 1, 0];
+        Buffer.BlockCopy(positions, 0, bin, 0, 36);
+        bin[44] = 7;
+
+        var importer = new GltfImporter(new GltfImporterOptions { Id = "custom-escaped.glb" });
+        GltfImportResult result = await importer.ImportAsync(Glb(System.Text.Encoding.UTF8.GetBytes(json), bin));
+
+        result.Meshes[0].Definition.CustomAttributes.Should().ContainSingle()
+            .Which.Name.Should().Be("_BATCHID");
+    }
+
     private static byte[] Glb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;
