@@ -553,7 +553,14 @@ public static class GltfCompileExtensions
                             ThrowHelper.ThrowLimit("MaxDecodedBytes", decodedBytes, limits.MaxDecodedBytes);
                         }
 
-                        ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} Draco payload could not be decoded.");
+                        if (status == GltfDracoDecodeStatus.Unsupported)
+                        {
+                            ThrowHelper.ThrowAccessor(
+                                prim.Attributes.GetValueOrDefault("POSITION", -1),
+                                "uses a Draco attribute layout the decoder cannot represent.");
+                        }
+
+                        ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} Draco payload is not a decodable triangular mesh.");
                     }
 
                     if (dracoMesh.VertexCount != vertexCount)
