@@ -4,7 +4,22 @@ namespace Axrone.AssetGltf;
 internal static class GltfJsonParser
 {
     /// <summary>Parses glTF JSON bytes into a raw model.</summary>
+    /// <exception cref="GltfSchemaError">The JSON is malformed.</exception>
     public static GltfRawModel Parse(ReadOnlySpan<byte> jsonBytes)
+    {
+        try
+        {
+            return ParseCore(jsonBytes);
+        }
+        catch (Exception exception) when (exception is JsonException or FormatException or InvalidOperationException)
+        {
+            // Invalid UTF-8, wrong token kinds, and numeric overflow surface
+            // from Utf8JsonReader as non-JsonException types.
+            throw new GltfSchemaError($"glTF JSON is malformed: {exception.Message}", exception);
+        }
+    }
+
+    private static GltfRawModel ParseCore(ReadOnlySpan<byte> jsonBytes)
     {
         var model = new GltfRawModel();
         var reader = new Utf8JsonReader(jsonBytes, new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip });
@@ -109,7 +124,62 @@ internal static class GltfJsonParser
             ThrowHelper.ThrowSchema("glTF document is missing the required 'asset' object.");
         }
 
+        ValidateNodeReferences(model);
         return model;
+    }
+
+    /// <summary>
+    /// Rejects scene and node indices that point outside their collections.
+    /// JSON property order can put scenes before nodes, so this runs after the
+    /// whole document is read.
+    /// </summary>
+    private static void ValidateNodeReferences(GltfRawModel model)
+    {
+        for (int s = 0; s < model.Scenes.Count; s++)
+        {
+            GltfRawModel.Scene scene = model.Scenes[s];
+            for (int i = 0; i < scene.Nodes.Count; i++)
+            {
+                int nodeIndex = scene.Nodes[i];
+                if ((uint)nodeIndex >= (uint)model.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Scene {s} references a missing node {nodeIndex}.");
+                }
+            }
+        }
+
+        for (int n = 0; n < model.Nodes.Count; n++)
+        {
+            GltfRawModel.Node node = model.Nodes[n];
+            for (int c = 0; c < node.Children.Count; c++)
+            {
+                int childIndex = node.Children[c];
+                if ((uint)childIndex >= (uint)model.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Node {n} references a missing child node {childIndex}.");
+                }
+            }
+
+            if (node.Mesh is int mesh && (uint)mesh >= (uint)model.Meshes.Count)
+            {
+                ThrowHelper.ThrowSchema($"Node {n} references a missing mesh {mesh}.");
+            }
+
+            if (node.Skin is int skin && (uint)skin >= (uint)model.Skins.Count)
+            {
+                ThrowHelper.ThrowSchema($"Node {n} references a missing skin {skin}.");
+            }
+
+            if (node.Camera is int camera && (uint)camera >= (uint)model.Cameras.Count)
+            {
+                ThrowHelper.ThrowSchema($"Node {n} references a missing camera {camera}.");
+            }
+
+            if (node.Light is int light && (uint)light >= (uint)model.Lights.Count)
+            {
+                ThrowHelper.ThrowSchema($"Node {n} references a missing light {light}.");
+            }
+        }
     }
 
     private static void ParseAsset(ref Utf8JsonReader reader, GltfRawModel model)
