@@ -30,7 +30,7 @@ public static class GltfCompileExtensions
         cancellationToken.ThrowIfCancellationRequested();
 
         (List<GltfMeshAsset> meshes, ImmutableArray<ImmutableArray<string>> meshKeysByMesh) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
-            rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
+            rawModel, resourceRuntime, options.Limits, diagnostics, cancellationToken).ConfigureAwait(false);
 
         (List<GltfSkinAsset> skins, ImmutableDictionary<int, string> skinKeyMap) = await CompileSkinsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
@@ -422,6 +422,7 @@ public static class GltfCompileExtensions
     internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableArray<ImmutableArray<string>> MeshKeysByMesh)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
         GltfRawModel rawModel,
         GltfResourceRuntimeCache resourceRuntime,
+        GltfImportLimits limits,
         List<GltfDiagnostic> diagnostics,
         CancellationToken cancellationToken)
         where TDracoPolicy : struct, IDracoMeshPolicy
@@ -526,6 +527,13 @@ public static class GltfCompileExtensions
                 GltfDracoDecodedMesh? dracoMesh = null;
                 if (prim.Draco != null && TDracoPolicy.IsSupported)
                 {
+                    // KHR_draco_mesh_compression only allows triangle primitives.
+                    if (prim.Mode is not (4 or 5))
+                    {
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} uses KHR_draco_mesh_compression with mode {prim.Mode}; only TRIANGLES and TRIANGLE_STRIP are allowed.");
+                    }
+
                     ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -539,6 +547,19 @@ public static class GltfCompileExtensions
                         ThrowHelper.ThrowAccessor(
                             prim.Attributes.GetValueOrDefault("POSITION", -1),
                             $"Draco vertex count {dracoMesh.VertexCount} does not match accessor count {vertexCount}.");
+                    }
+
+                    // Decoded attributes and indices are transient copies on top
+                    // of the interleaved output, so they get their own budget.
+                    long decodedBytes = (long)dracoMesh.Indices.Length * sizeof(uint);
+                    foreach (float[] values in dracoMesh.Attributes.Values)
+                    {
+                        decodedBytes += (long)values.Length * sizeof(float);
+                    }
+
+                    if (decodedBytes > limits.MaxDecodedBytes)
+                    {
+                        ThrowHelper.ThrowLimit("MaxDecodedBytes", decodedBytes, limits.MaxDecodedBytes);
                     }
                 }
 
@@ -731,11 +752,21 @@ public static class GltfCompileExtensions
                 if (dracoMesh != null)
                 {
                     ImmutableArray<uint> dracoIndices = dracoMesh.Indices;
+                    if (prim.Indices is int indexAccessor &&
+                        indexAccessor >= 0 &&
+                        indexAccessor < rawModel.Accessors.Count &&
+                        rawModel.Accessors[indexAccessor].Count != dracoIndices.Length)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            indexAccessor,
+                            $"Draco index count {dracoIndices.Length} does not match accessor count {rawModel.Accessors[indexAccessor].Count}.");
+                    }
+
                     GltfAccessorRuntime.ValidateIndices(
                         dracoIndices.AsSpan(),
                         vertexCount,
                         prim.Indices ?? -1);
-                    expandedIndices = GltfMeshPipeline.ExpandTopology(4, dracoIndices.AsSpan(), vertexCount);
+                    expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, dracoIndices.AsSpan(), vertexCount);
                 }
                 else if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
                 {
