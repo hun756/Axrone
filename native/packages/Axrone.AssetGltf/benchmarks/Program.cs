@@ -1,4 +1,7 @@
 using Axrone.AssetGltf.Benchmarks;
 using BenchmarkDotNet.Running;
 
-BenchmarkRunner.Run<GltfImportBenchmarks>(args: args);
+string[] effectiveArgs = args.Length == 0 ? ["--filter", "*"] : args;
+BenchmarkSwitcher
+    .FromAssembly(typeof(GltfImportBenchmarks).Assembly)
+    .Run(effectiveArgs);
