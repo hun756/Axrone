@@ -97,6 +97,40 @@ internal sealed class SceneBehaviourTable
         return behaviour;
     }
 
+    /// <summary>Creates and attaches a behaviour using its registered factory.</summary>
+    public T Add<T>(SceneActor actor)
+        where T : SceneBehaviour
+    {
+        SceneBehaviourDescriptor descriptor = _registry.GetBehaviourByType(typeof(T));
+        if (descriptor.Create() is not T behaviour)
+        {
+            throw new SceneValidationException(
+                SceneErrorCodes.ValidationInvalid,
+                $"Behaviour factory for '{descriptor.Name}' did not produce {typeof(T).Name}.");
+        }
+
+        AddCore(actor, descriptor, behaviour);
+        return behaviour;
+    }
+
+    /// <summary>Removes every behaviour attached to an actor.</summary>
+    public void RemoveAllOnActor(SceneActor actor)
+    {
+        int actorSlot = _actors.Resolve(actor);
+        int slot = _actors.BehaviourHeadAt(actorSlot);
+        while (slot >= 0)
+        {
+            SceneBehaviour? behaviour = _slots[slot].Behaviour;
+            int next = _slots[slot].Next;
+            if (behaviour is not null)
+            {
+                Remove(behaviour);
+            }
+
+            slot = next;
+        }
+    }
+
     /// <summary>Returns the first behaviour of a type on an actor.</summary>
     public SceneBehaviour? Get(SceneActor actor, SceneBehaviourTypeId typeId)
     {

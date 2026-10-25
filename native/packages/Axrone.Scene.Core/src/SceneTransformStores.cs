@@ -235,6 +235,14 @@ internal sealed class SceneTransform2DStore
         return new Vec2(matrix.M31, matrix.M32);
     }
 
+    /// <summary>Clears every transform and cached matrix.</summary>
+    public void ClearAll()
+    {
+        _column.ClearAll();
+        Array.Clear(_localMatrices);
+        Array.Clear(_worldMatrices);
+    }
+
     /// <summary>Marks a subtree's world matrices stale without touching local data.</summary>
     public void MarkWorldDirtySubtree(int slot)
     {
