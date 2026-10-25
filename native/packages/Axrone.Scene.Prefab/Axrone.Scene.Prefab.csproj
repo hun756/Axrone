@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Scene.Prefab</RootNamespace>
+    <AssemblyName>Axrone.Scene.Prefab</AssemblyName>
+    <Description>Prefab definitions, actor snapshots, component codecs and instantiation for the Axrone scene runtime.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1051: Visible instance fields — snapshot records are wire-shaped data
+         carriers. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1815: Equals on transient structs — snapshot records are compared by
+         reference or consumed positionally. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1032: Standard exception ctors — prefab failures carry stable codes
+         and optional node ids. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1031: Instantiation rollback must catch any failure to destroy
+         partially created actors before rethrowing a coded prefab error. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Scene.Prefab.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Scene.Core/Axrone.Scene.Core.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
