@@ -30,6 +30,9 @@
     <!-- CA1032: Standard exception ctors — scene rendering errors carry stable
          codes and optional payloads. -->
     <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1028: byte-backed enums — component payloads use wire-sized
+         discriminants to keep actor columns compact. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
