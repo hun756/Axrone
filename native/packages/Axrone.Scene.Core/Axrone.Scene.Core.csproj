@@ -44,6 +44,9 @@
     <!-- CA1711: SceneActorFlags is a bitmask; "Flags" is the domain term and
          matches the engine-wide convention for actor state bits. -->
     <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1031: Behaviour attachment and teardown must catch any exception to
+         restore structural invariants; attachment rethrows after rollback. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

@@ -77,6 +77,9 @@ public abstract class SceneBehaviour : ISceneBehaviour
     private bool _enabled = true;
     private int _priority;
 
+    /// <summary>Owning behaviour-table slot; <c>-1</c> while detached.</summary>
+    internal int SlotIndex = -1;
+
     /// <inheritdoc/>
     public SceneActor Actor
     {
@@ -209,6 +212,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     {
         _actor = SceneActor.Null;
         _priority = 0;
+        SlotIndex = -1;
     }
 
     /// <summary>Runs Awake exactly once.</summary>
