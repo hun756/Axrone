@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Particles</RootNamespace>
+    <AssemblyName>Axrone.Particles</AssemblyName>
+    <Description>Module-based particle simulation with struct-of-arrays native storage for the Axrone engine: SIMD-friendly, zero-alloc hot paths and AOT-safe.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1028: byte-backed particle enums — wire-sized discriminants, intentional. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1034: Nested types — duck-typed struct enumerators are an
+         intentional zero-allocation traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1040: Empty marker interfaces drive the typestate builder phases. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1051: Visible instance fields — explicit-layout payloads are
+         intentional wire layouts. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — particle errors carry coded
+         (code, message) payloads instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1815: Equals on stateless structs — policy structs carry
+         no state to compare. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1000: Static members on generic types — policy monomorphization
+         exposes static abstracts on generic structs by design. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1711: *Flags enums end with Flags by domain vocabulary;
+         they are bit sets, not System attributes. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Particles.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
