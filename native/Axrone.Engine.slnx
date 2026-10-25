@@ -8,6 +8,8 @@
     <Project Path="packages/Axrone.Ecs/tests/Axrone.Ecs.Tests.csproj" />
     <Project Path="packages/Axrone.Scene.Core/Axrone.Scene.Core.csproj" />
     <Project Path="packages/Axrone.Scene.Core/tests/Axrone.Scene.Core.Tests.csproj" />
+    <Project Path="packages/Axrone.Scene.Assets/Axrone.Scene.Assets.csproj" />
+    <Project Path="packages/Axrone.Scene.Assets/tests/Axrone.Scene.Assets.Tests.csproj" />
     <Project Path="packages/Axrone.GameLoop/Axrone.GameLoop.csproj" />
     <Project Path="packages/Axrone.GameLoop/tests/Axrone.GameLoop.Tests.csproj" />
     <Project Path="packages/Axrone.Audio.OpenAL/Axrone.Audio.OpenAL.csproj" />
