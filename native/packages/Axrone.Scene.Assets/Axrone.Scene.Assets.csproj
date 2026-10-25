@@ -32,6 +32,12 @@
     <!-- CA1032: Standard exception ctors — asset errors carry stable codes and
          optional typed payloads instead of free-form constructors. -->
     <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1711: SceneVertexAttribute is a vertex descriptor; "Attribute" is the
+         domain term, not a System.Attribute. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1720: UInt16/UInt32/Integer are the wire-format terms for index and
+         component encoding; renaming would obscure the payload contract. -->
+    <NoWarn>$(NoWarn);CA1720</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
