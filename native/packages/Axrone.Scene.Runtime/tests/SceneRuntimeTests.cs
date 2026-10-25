@@ -1,6 +1,7 @@
 namespace Axrone.Scene.Runtime.Tests;
 
 using System.Text.Json;
+using Axrone.GameLoop;
 using Axrone.Geometry;
 using Axrone.Numeric;
 using Axrone.Render.OpenGL.Context;
@@ -156,6 +157,52 @@ public sealed class SceneRuntimeTests
         target.Frame.Passes.Count.Should().Be(1);
         target.Frame.Plan(0).Should().BeTrue();
         target.Frame.CollectItems(SceneRenderPassIds.Main).Should().Be(1);
+    }
+
+    [Fact]
+    public void Loop_TicksRuntimeAndRenders()
+    {
+        var api = new MockGLApi { EnableCallLogging = true };
+        using var context = new GLContext(api);
+        using var runtime = CreateRenderableRuntime(out _, out _);
+        using var renderer = new SceneGlFrameRenderer(context, runtime);
+        renderer.UploadAssets();
+        using var loop = new SceneRuntimeLoop(runtime, renderer);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        FrameExecutionOutcome outcome = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        outcome.Kind.Should().Be(FrameOutcomeKind.Executed);
+        outcome.Frame.Value.Should().Be(1);
+        loop.State.CameraAvailable.Should().BeTrue();
+        loop.State.RenderStats.DrawCalls.Should().Be(1);
+        loop.State.RenderStats.PassCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Loop_PlansHeadlesslyWithoutRenderer()
+    {
+        using var runtime = CreateRenderableRuntime(out _, out _);
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        loop.State.CameraAvailable.Should().BeTrue();
+        loop.State.RenderStats.DrawCalls.Should().Be(0);
+        loop.State.RenderStats.PassCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Loop_HaltsBeforeStart()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        FrameExecutionOutcome outcome = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        outcome.Kind.Should().Be(FrameOutcomeKind.Halted);
+        loop.Status.Should().Be(GameLoopStatus.Idle);
     }
 
     private static SceneProfile CreateProfile() =>
