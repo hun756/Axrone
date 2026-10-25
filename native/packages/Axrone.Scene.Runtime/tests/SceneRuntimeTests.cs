@@ -159,6 +159,24 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_ResolvesFogState()
+    {
+        using var runtime = CreateRenderableRuntime(out _, out _);
+        SceneActor fogActor = runtime.World.CreateActor("Fog");
+        SceneFog fog = SceneFog.Default;
+        fog.Enabled = true;
+        fog.Mode = SceneFogMode.Exponential;
+        fog.Density = 0.5f;
+        runtime.World.AddData(fogActor, fog);
+
+        _ = runtime.Frame.Plan(0);
+
+        runtime.Frame.Fog.Enabled.Should().BeTrue();
+        runtime.Frame.Fog.Mode.Should().Be(SceneFogMode.Exponential);
+        runtime.Frame.Fog.Density.Should().BeApproximately(0.5f, 1e-6f);
+    }
+
+    [Fact]
     public void Pipeline_ReturnsFalseWithoutCamera()
     {
         using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
