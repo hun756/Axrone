@@ -16,7 +16,7 @@ public interface ISceneHierarchyVisitor<TContext>
     /// <param name="depth">Hierarchy depth of the actor.</param>
     /// <param name="context">Traversal state.</param>
     /// <returns><see langword="true"/> to continue; <see langword="false"/> to stop early.</returns>
-    bool Visit(SceneActor actor, int depth, ref TContext context);
+    bool Visit(SceneActor actor, int depth, scoped ref TContext context);
 }
 
 /// <summary>Receives structural hierarchy notifications from <see cref="SceneHierarchy"/>.</summary>
@@ -236,8 +236,8 @@ public sealed class SceneHierarchy
     }
 
     /// <summary>Visits direct children in sibling order.</summary>
-    public bool VisitChildren<TVisitor, TContext>(SceneActor actor, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISceneHierarchyVisitor<TContext>
+    public bool VisitChildren<TVisitor, TContext>(SceneActor actor, scoped ref TVisitor visitor, scoped ref TContext context)
+        where TVisitor : ISceneHierarchyVisitor<TContext>, allows ref struct
         where TContext : allows ref struct
     {
         int slot = _actors.Resolve(actor);
@@ -258,8 +258,8 @@ public sealed class SceneHierarchy
     }
 
     /// <summary>Visits ancestors from nearest parent to root.</summary>
-    public bool VisitAncestors<TVisitor, TContext>(SceneActor actor, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISceneHierarchyVisitor<TContext>
+    public bool VisitAncestors<TVisitor, TContext>(SceneActor actor, scoped ref TVisitor visitor, scoped ref TContext context)
+        where TVisitor : ISceneHierarchyVisitor<TContext>, allows ref struct
         where TContext : allows ref struct
     {
         int current = _actors.RecordAt(_actors.Resolve(actor)).Parent;
@@ -279,8 +279,8 @@ public sealed class SceneHierarchy
     }
 
     /// <summary>Visits descendants in pre-order using parent links only; no stack allocation.</summary>
-    public bool VisitDescendants<TVisitor, TContext>(SceneActor actor, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISceneHierarchyVisitor<TContext>
+    public bool VisitDescendants<TVisitor, TContext>(SceneActor actor, scoped ref TVisitor visitor, scoped ref TContext context)
+        where TVisitor : ISceneHierarchyVisitor<TContext>, allows ref struct
         where TContext : allows ref struct
     {
         int start = _actors.Resolve(actor);
@@ -321,8 +321,8 @@ public sealed class SceneHierarchy
     }
 
     /// <summary>Visits the actor and every descendant in pre-order.</summary>
-    public bool VisitSubtree<TVisitor, TContext>(SceneActor actor, ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISceneHierarchyVisitor<TContext>
+    public bool VisitSubtree<TVisitor, TContext>(SceneActor actor, scoped ref TVisitor visitor, scoped ref TContext context)
+        where TVisitor : ISceneHierarchyVisitor<TContext>, allows ref struct
         where TContext : allows ref struct
     {
         int slot = _actors.Resolve(actor);

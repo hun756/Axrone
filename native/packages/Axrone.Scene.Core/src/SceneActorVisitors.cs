@@ -11,7 +11,7 @@ public interface ISceneActorVisitor<TContext>
 {
     /// <summary>Visits one live actor.</summary>
     /// <returns><see langword="true"/> to continue; <see langword="false"/> to stop early.</returns>
-    bool Visit(SceneActor actor, ref TContext context);
+    bool Visit(SceneActor actor, scoped ref TContext context);
 }
 
 /// <summary>Allocation-free enumerable over live actors in slot order.</summary>

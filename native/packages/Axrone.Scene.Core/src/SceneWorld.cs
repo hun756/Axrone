@@ -630,8 +630,8 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     }
 
     /// <summary>Visits every live actor in slot order.</summary>
-    public bool VisitActors<TVisitor, TContext>(ref TVisitor visitor, ref TContext context)
-        where TVisitor : struct, ISceneActorVisitor<TContext>
+    public bool VisitActors<TVisitor, TContext>(scoped ref TVisitor visitor, scoped ref TContext context)
+        where TVisitor : ISceneActorVisitor<TContext>, allows ref struct
         where TContext : allows ref struct
     {
         ThrowIfDisposed();
