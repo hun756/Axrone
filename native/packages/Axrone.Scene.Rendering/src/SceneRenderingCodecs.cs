@@ -36,6 +36,11 @@ public static class SceneRenderingCodecs
             codecs.Register(new SceneDirectionalLightCodec());
         }
 
+        if (components.TryGetDataByType(typeof(SceneFog), out _))
+        {
+            codecs.Register(new SceneFogCodec());
+        }
+
         if (components.TryGetDataByType(typeof(ScenePointLight), out _))
         {
             codecs.Register(new ScenePointLightCodec());
@@ -242,6 +247,85 @@ public sealed class SceneMeshRendererCodec : SceneDataCodec<SceneMeshRenderer>
         }
 
         return renderer;
+    }
+}
+
+/// <summary>JSON codec for <see cref="SceneFog"/>.</summary>
+public sealed class SceneFogCodec : SceneDataCodec<SceneFog>
+{
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, in SceneFog value)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteBoolean("enabled", value.Enabled);
+        SceneJson.WriteVec3(writer, "color", value.Color);
+        writer.WriteString("mode", WriteMode(value.Mode));
+        writer.WriteNumber("density", value.Density);
+        writer.WriteNumber("rangeStart", value.RangeStart);
+        writer.WriteNumber("rangeEnd", value.RangeEnd);
+    }
+
+    /// <inheritdoc/>
+    public override SceneFog Read(JsonElement data)
+    {
+        SceneFog fog = SceneFog.Default;
+
+        if (data.TryGetProperty("enabled", out JsonElement enabled))
+        {
+            fog.Enabled = enabled.GetBoolean();
+        }
+
+        if (data.TryGetProperty("color", out JsonElement color))
+        {
+            fog.Color = SceneJson.ReadVec3(color, "color");
+        }
+
+        if (data.TryGetProperty("mode", out JsonElement mode))
+        {
+            fog.Mode = ReadMode(mode);
+        }
+
+        if (data.TryGetProperty("density", out JsonElement density))
+        {
+            fog.Density = density.GetSingle();
+        }
+
+        if (data.TryGetProperty("rangeStart", out JsonElement rangeStart))
+        {
+            fog.RangeStart = rangeStart.GetSingle();
+        }
+
+        if (data.TryGetProperty("rangeEnd", out JsonElement rangeEnd))
+        {
+            fog.RangeEnd = rangeEnd.GetSingle();
+        }
+
+        return fog;
+    }
+
+    private static string WriteMode(SceneFogMode mode) => mode switch
+    {
+        SceneFogMode.Linear => "linear",
+        SceneFogMode.ExponentialSquared => "exponential-squared",
+        _ => "exponential"
+    };
+
+    private static SceneFogMode ReadMode(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            throw SceneJson.Invalid("Fog 'mode' must be a string.");
+        }
+
+        return element.GetString() switch
+        {
+            "linear" => SceneFogMode.Linear,
+            "exponential" => SceneFogMode.Exponential,
+            "exponential-squared" => SceneFogMode.ExponentialSquared,
+            _ => throw SceneJson.Invalid(
+                $"Fog 'mode' must be 'linear', 'exponential' or 'exponential-squared'; received '{element.GetString()}'.")
+        };
     }
 }
 

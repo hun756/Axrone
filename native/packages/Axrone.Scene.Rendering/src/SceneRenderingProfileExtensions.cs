@@ -18,6 +18,11 @@ public static class SceneRenderingProfileExtensions
             SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
             priority: 100);
 
+        builder.AddData<SceneFog>(
+            "Fog",
+            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+            priority: 950);
+
         return builder;
     }
 
