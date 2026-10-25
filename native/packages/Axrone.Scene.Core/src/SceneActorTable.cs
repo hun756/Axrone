@@ -250,7 +250,7 @@ internal sealed class SceneActorTable
 
     private void InitializeFreeSlots(int start, int end)
     {
-        for (int slot = start; slot < end; slot++)
+        for (int slot = end - 1; slot >= start; slot--)
         {
             ref SceneActorRecord record = ref _records[slot];
             record.Entity = new Entity(

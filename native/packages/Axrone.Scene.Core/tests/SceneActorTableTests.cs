@@ -27,6 +27,24 @@ public sealed class SceneActorTableTests
     }
 
     [Fact]
+    public void Allocate_UsesAscendingSlots()
+    {
+        var table = new SceneActorTable(4);
+
+        SceneActor first = table.Allocate(SceneStringId.Invalid, SceneStringId.Invalid, 0, true, false, false);
+        SceneActor second = table.Allocate(SceneStringId.Invalid, SceneStringId.Invalid, 0, true, false, false);
+        SceneActor third = table.Allocate(SceneStringId.Invalid, SceneStringId.Invalid, 0, true, false, false);
+
+        first.Slot.Should().Be(0);
+        second.Slot.Should().Be(1);
+        third.Slot.Should().Be(2);
+
+        table.Free(1);
+        SceneActor reused = table.Allocate(SceneStringId.Invalid, SceneStringId.Invalid, 0, true, false, false);
+        reused.Slot.Should().Be(1);
+    }
+
+    [Fact]
     public void Grow_PreservesLiveActors()
     {
         var table = new SceneActorTable(2);
