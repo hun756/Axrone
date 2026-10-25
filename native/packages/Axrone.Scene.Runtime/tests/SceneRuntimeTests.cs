@@ -104,6 +104,28 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_SteadyStatePlanningDoesNotAllocate()
+    {
+        using var runtime = CreateRenderableRuntime(out _, out _);
+
+        for (int i = 0; i < 10; i++)
+        {
+            _ = runtime.Frame.Plan(i);
+            _ = runtime.Frame.CollectItems(SceneRenderPassIds.Main);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            _ = runtime.Frame.Plan(i);
+            _ = runtime.Frame.CollectItems(SceneRenderPassIds.Main);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        (after - before).Should().Be(0);
+    }
+
+    [Fact]
     public void Pipeline_ReturnsFalseWithoutCamera()
     {
         using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
