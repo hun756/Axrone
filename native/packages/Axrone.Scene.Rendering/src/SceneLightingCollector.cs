@@ -250,9 +250,11 @@ public sealed class SceneLightingCollector : IDisposable
         _rig.SetEnvironment(new LightingEnvironment(ambient, sky, ground));
     }
 
+    // LightId zero is the lighting store's empty-slot sentinel, so the packed
+    // slot/kind pair is biased by one to keep slot zero addressable.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static LightId MakeId(int slot, int kind) =>
-        new(((ulong)(uint)slot << 8) | (uint)kind);
+        new((((ulong)(uint)slot << 8) | (uint)kind) + 1UL);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ulong MakeSequence(int slot, int kind) =>
