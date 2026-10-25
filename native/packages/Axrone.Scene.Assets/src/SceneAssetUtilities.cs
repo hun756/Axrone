@@ -87,9 +87,26 @@ public static class SceneMeshBounds
             (minX + maxX) * 0.5f,
             (minY + maxY) * 0.5f,
             (minZ + maxZ) * 0.5f);
-        var corner = new Vec3(maxX, maxY, maxZ);
 
-        bounds = new BoundingSphere3(center, Vec3.Distance(center, corner));
+        // The AABB half-diagonal overestimates round meshes. One more pass
+        // finds the farthest vertex so spheres and cylinders keep tight
+        // culling bounds at authoring cost only.
+        float radiusSquared = 0.0f;
+        for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+        {
+            ReadOnlySpan<byte> positionBytes = vertices.Slice(
+                (vertexIndex * stride) + offset,
+                PositionFloatBytes);
+
+            var vertex = new Vec3(
+                BinaryPrimitives.ReadSingleLittleEndian(positionBytes),
+                BinaryPrimitives.ReadSingleLittleEndian(positionBytes[4..]),
+                BinaryPrimitives.ReadSingleLittleEndian(positionBytes[8..]));
+
+            radiusSquared = MathF.Max(radiusSquared, Vec3.DistanceSquared(center, vertex));
+        }
+
+        bounds = new BoundingSphere3(center, MathF.Sqrt(radiusSquared));
         return true;
     }
 
