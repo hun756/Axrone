@@ -20,6 +20,18 @@ public static class ScenePrefabErrorCodes
     /// <summary>A component snapshot has no registered codec.</summary>
     public const string UnknownComponent = "scene.prefab.unknown-component";
 
+    /// <summary>An override references a node that is not present.</summary>
+    public const string UnknownNode = "scene.prefab.unknown-node";
+
+    /// <summary>An override operation is malformed or not applicable.</summary>
+    public const string InvalidOverride = "scene.prefab.invalid-override";
+
+    /// <summary>A component property path cannot be resolved.</summary>
+    public const string InvalidPath = "scene.prefab.invalid-path";
+
+    /// <summary>An actor already carries the component type or id.</summary>
+    public const string DuplicateComponent = "scene.prefab.duplicate-component";
+
     /// <summary>Instantiation failed and was rolled back.</summary>
     public const string InstantiationFailed = "scene.prefab.instantiation-failed";
 }
@@ -241,17 +253,35 @@ public sealed class ScenePrefabDefinition
 
         foreach (SceneActorSnapshot actor in actors)
         {
+            HashSet<string> componentTypes = new(StringComparer.Ordinal);
+            HashSet<string> componentIds = new(StringComparer.Ordinal);
+
+            for (int i = 0; i < actor.Components.Count; i++)
+            {
+                SceneComponentSnapshot component = actor.Components[i];
+                if (!componentTypes.Add(component.Type))
+                {
+                    throw new ScenePrefabException(
+                        ScenePrefabErrorCodes.DuplicateComponent,
+                        $"Actor '{actor.NodeId}' declares component type '{component.Type}' more than once.",
+                        actor.NodeId);
+                }
+
+                if (component.Id is { } componentId && !componentIds.Add(componentId))
+                {
+                    throw new ScenePrefabException(
+                        ScenePrefabErrorCodes.DuplicateComponent,
+                        $"Actor '{actor.NodeId}' declares component id '{componentId}' more than once.",
+                        actor.NodeId);
+                }
+            }
+        }
+
+        foreach (SceneActorSnapshot actor in actors)
+        {
             if (actor.ParentNodeId is not { } parentId)
             {
                 continue;
-            }
-
-            if (string.Equals(parentId, actor.NodeId, StringComparison.Ordinal))
-            {
-                throw new ScenePrefabException(
-                    ScenePrefabErrorCodes.Cycle,
-                    $"Actor '{actor.NodeId}' cannot parent itself.",
-                    actor.NodeId);
             }
 
             if (!byNode.ContainsKey(parentId))
