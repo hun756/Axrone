@@ -126,6 +126,39 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_SteadyStatePlanningDoesNotAllocateWithManyRenderers()
+    {
+        using var runtime = CreateRenderableRuntime(out _, out SceneActor firstRenderer);
+        SceneWorld world = runtime.World;
+        SceneMeshRenderer template = world.GetData<SceneMeshRenderer>(firstRenderer);
+
+        for (int i = 1; i < 1000; i++)
+        {
+            SceneActor actor = world.CreateActor("Renderer");
+            world.GetTransform3D(actor).SetPosition(new Vec3(i % 32, i / 32, 0.0f));
+            world.AddData(actor, template);
+        }
+
+        world.UpdateTransforms();
+
+        for (int i = 0; i < 10; i++)
+        {
+            _ = runtime.Frame.Plan(i);
+            _ = runtime.Frame.CollectItems(SceneRenderPassIds.Main);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100; i++)
+        {
+            _ = runtime.Frame.Plan(i);
+            _ = runtime.Frame.CollectItems(SceneRenderPassIds.Main);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        (after - before).Should().Be(0);
+    }
+
+    [Fact]
     public void Pipeline_ReturnsFalseWithoutCamera()
     {
         using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
