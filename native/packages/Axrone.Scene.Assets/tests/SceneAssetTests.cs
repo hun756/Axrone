@@ -1,5 +1,6 @@
 namespace Axrone.Scene.Assets.Tests;
 
+using Axrone.Numeric;
 using Axrone.Scene;
 using Axrone.Scene.Assets;
 using FluentAssertions;
@@ -166,6 +167,99 @@ public sealed class SceneAssetTests
         registry.ResolveName(id).Should().Be("mesh/quad");
         registry.Names.TryGetId("mesh/quad", out SceneStringId symbol).Should().BeTrue();
         symbol.Should().Be(id.Value);
+    }
+
+    [Fact]
+    public void SamplerDefinition_ValidatesAnisotropy()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<SamplerAssetTag> id = registry.CreateId<SamplerAssetTag>("sampler/linear");
+        var sampler = new SceneSamplerDefinition(id, maxAnisotropy: 8);
+
+        sampler.MaxAnisotropy.Should().Be(8);
+        sampler.MinFilter.Should().Be(SceneFilterMode.Linear);
+        sampler.WrapS.Should().Be(SceneWrapMode.Repeat);
+
+        Action invalid = () => { _ = new SceneSamplerDefinition(id, maxAnisotropy: 0); };
+        invalid.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
+    public void TextureDefinition_SupportsDataUrlAndColorSources()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<TextureAssetTag> dataId = registry.CreateId<TextureAssetTag>("texture/data");
+        SceneAssetId<SamplerAssetTag> samplerId = registry.CreateId<SamplerAssetTag>("sampler/default");
+
+        var dataTexture = new SceneTextureDefinition(
+            dataId,
+            new SceneTextureData(new byte[16]),
+            format: SceneTextureFormat.Srgba8,
+            width: 2,
+            height: 2,
+            samplerId: samplerId);
+        var urlTexture = new SceneTextureDefinition(
+            registry.CreateId<TextureAssetTag>("texture/url"),
+            new SceneTextureUrl("../textures/albedo.png"));
+        var colorTexture = new SceneTextureDefinition(
+            registry.CreateId<TextureAssetTag>("texture/color"),
+            new SceneTextureColor(new Vec4(1.0f, 0.5f, 0.25f, 1.0f), 4, 4));
+
+        dataTexture.Width.Should().Be(2);
+        dataTexture.Height.Should().Be(2);
+        dataTexture.Format.Should().Be(SceneTextureFormat.Srgba8);
+        dataTexture.SamplerId.Should().Be(samplerId);
+        urlTexture.Source.Should().BeOfType<SceneTextureUrl>();
+        ((SceneTextureUrl)urlTexture.Source).Url.OriginalString.Should().Be("../textures/albedo.png");
+        colorTexture.Source.Should().BeOfType<SceneTextureColor>();
+
+        Action emptyData = () => { _ = new SceneTextureData(ReadOnlyMemory<byte>.Empty); };
+        emptyData.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
+    public void RenderPassDefinition_StoresClearState()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<RenderPassAssetTag> id = registry.CreateId<RenderPassAssetTag>("pass/main");
+        var pass = new SceneRenderPassDefinition(
+            id,
+            order: 2,
+            clearMask: SceneClearMask.Color | SceneClearMask.Depth,
+            clearColor: new Vec4(0.1f, 0.2f, 0.3f, 1.0f),
+            clearDepth: 1.0f,
+            depthTest: true,
+            cull: true,
+            blend: false);
+
+        pass.Order.Should().Be(2);
+        pass.Enabled.Should().BeTrue();
+        pass.ClearMask.Should().HaveFlag(SceneClearMask.Color);
+        pass.ClearMask.Should().HaveFlag(SceneClearMask.Depth);
+        pass.ClearColor.Should().Be(new Vec4(0.1f, 0.2f, 0.3f, 1.0f));
+        pass.ClearDepth.Should().Be(1.0f);
+        pass.DepthTest.Should().BeTrue();
+        pass.Cull.Should().BeTrue();
+        pass.Blend.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AssetRegistry_CountsEveryKind()
+    {
+        var registry = new SceneAssetRegistry();
+        registry.Shaders.Register(CreateShader(registry, "count/shader"));
+        registry.Meshes.Register(CreateMesh(registry, "count/mesh"));
+        registry.Samplers.Register(new SceneSamplerDefinition(
+            registry.CreateId<SamplerAssetTag>("count/sampler")));
+        registry.Textures.Register(new SceneTextureDefinition(
+            registry.CreateId<TextureAssetTag>("count/texture"),
+            new SceneTextureColor(new Vec4(1.0f))));
+        registry.RenderPasses.Register(new SceneRenderPassDefinition(
+            registry.CreateId<RenderPassAssetTag>("count/pass")));
+
+        registry.Count.Should().Be(5);
+        registry.Clear();
+        registry.Count.Should().Be(0);
     }
 
     private static SceneShaderDefinition CreateShader(SceneAssetRegistry registry, string name)
