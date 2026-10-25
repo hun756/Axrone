@@ -244,11 +244,106 @@ public sealed class SceneAssetTests
     }
 
     [Fact]
+    public void MaterialDefinition_CopiesPassesAndUniforms()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<ShaderAssetTag> shaderId = registry.CreateId<ShaderAssetTag>("material/shader");
+        SceneAssetId<TextureAssetTag> textureId = registry.CreateId<TextureAssetTag>("material/albedo");
+        SceneAssetId<SamplerAssetTag> samplerId = registry.CreateId<SamplerAssetTag>("material/sampler");
+        var surface = new SceneMaterialSurface
+        {
+            ShadingModel = SceneMaterialShadingModel.Pbr,
+            AlphaMode = SceneMaterialAlphaMode.Mask,
+            AlphaCutoff = 0.4f,
+            Metallic = 0.5f,
+            Roughness = 0.3f,
+            Features = SceneMaterialFeatures.AlbedoMap | SceneMaterialFeatures.NormalMap,
+            AlbedoMap = new SceneMaterialTextureBinding(textureId, samplerId, unit: 0)
+        };
+        var passes = new List<SceneMaterialPass>
+        {
+            new("main", depthWrite: true),
+            new("outline", priority: -1, cull: true)
+        };
+        var uniforms = new Dictionary<string, SceneUniformValue>
+        {
+            ["u_Custom"] = SceneUniformValue.FromFloat(0.75f)
+        };
+
+        var material = new SceneMaterialDefinition(
+            registry.CreateId<MaterialAssetTag>("material/test"),
+            shaderId,
+            surface,
+            passes,
+            uniforms);
+
+        passes.Clear();
+        uniforms["u_Custom"] = SceneUniformValue.FromFloat(0.0f);
+        uniforms["u_Added"] = SceneUniformValue.FromFloat(1.0f);
+
+        material.ShaderId.Should().Be(shaderId);
+        material.Passes.Should().HaveCount(2);
+        material.Passes[0].Id.Should().Be("main");
+        material.Passes[1].Id.Should().Be("outline");
+        material.Surface.AlphaCutoff.Should().Be(0.4f);
+        material.Surface.AlbedoMap!.Value.Unit.Should().Be(0);
+        material.Uniforms.ContainsKey("u_Added").Should().BeFalse();
+        material.Uniforms["u_Custom"].X.Should().Be(0.75f);
+    }
+
+    [Fact]
+    public void MaterialSurface_ValidatesRanges()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<MaterialAssetTag> id = registry.CreateId<MaterialAssetTag>("material/invalid");
+        SceneAssetId<ShaderAssetTag> shaderId = registry.CreateId<ShaderAssetTag>("material/shader");
+
+        Action invalidMetallic = () => { _ = new SceneMaterialDefinition(id, shaderId, new SceneMaterialSurface { Metallic = 2.0f }); };
+        Action invalidCutoff = () => { _ = new SceneMaterialDefinition(id, shaderId, new SceneMaterialSurface { AlphaCutoff = -0.1f }); };
+
+        invalidMetallic.Should().Throw<SceneAssetException>();
+        invalidCutoff.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
+    public void MaterialPass_RequiresId()
+    {
+        Action create = () => { _ = new SceneMaterialPass(""); };
+
+        create.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
+    public void UniformValue_ValidatesFinitePayloads()
+    {
+        SceneUniformValue value = SceneUniformValue.FromVec3(new Vec3(1.0f, 2.0f, 3.0f));
+
+        value.Kind.Should().Be(SceneUniformKind.Vec3);
+        value.X.Should().Be(1.0f);
+        value.Z.Should().Be(3.0f);
+
+        Action invalid = () => SceneUniformValue.FromFloat(float.NaN);
+        invalid.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
+    public void TextureBinding_RejectsNegativeUnit()
+    {
+        var registry = new SceneAssetRegistry();
+        SceneAssetId<TextureAssetTag> textureId = registry.CreateId<TextureAssetTag>("binding/texture");
+
+        Action create = () => { _ = new SceneMaterialTextureBinding(textureId, unit: -1); };
+
+        create.Should().Throw<SceneAssetException>();
+    }
+
+    [Fact]
     public void AssetRegistry_CountsEveryKind()
     {
         var registry = new SceneAssetRegistry();
         registry.Shaders.Register(CreateShader(registry, "count/shader"));
         registry.Meshes.Register(CreateMesh(registry, "count/mesh"));
+        registry.Materials.Register(CreateMaterial(registry, "count/material"));
         registry.Samplers.Register(new SceneSamplerDefinition(
             registry.CreateId<SamplerAssetTag>("count/sampler")));
         registry.Textures.Register(new SceneTextureDefinition(
@@ -257,9 +352,18 @@ public sealed class SceneAssetTests
         registry.RenderPasses.Register(new SceneRenderPassDefinition(
             registry.CreateId<RenderPassAssetTag>("count/pass")));
 
-        registry.Count.Should().Be(5);
+        registry.Count.Should().Be(6);
         registry.Clear();
         registry.Count.Should().Be(0);
+    }
+
+    private static SceneMaterialDefinition CreateMaterial(SceneAssetRegistry registry, string name)
+    {
+        SceneAssetId<ShaderAssetTag> shaderId = registry.CreateId<ShaderAssetTag>($"{name}/shader");
+        return new SceneMaterialDefinition(
+            registry.CreateId<MaterialAssetTag>(name),
+            shaderId,
+            new SceneMaterialSurface());
     }
 
     private static SceneShaderDefinition CreateShader(SceneAssetRegistry registry, string name)
