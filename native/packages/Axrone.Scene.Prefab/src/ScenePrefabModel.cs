@@ -32,6 +32,9 @@ public static class ScenePrefabErrorCodes
     /// <summary>An actor already carries the component type or id.</summary>
     public const string DuplicateComponent = "scene.prefab.duplicate-component";
 
+    /// <summary>A registry reference cannot be resolved, is stale or cycles.</summary>
+    public const string ResolutionFailed = "scene.prefab.resolution-failed";
+
     /// <summary>Instantiation failed and was rolled back.</summary>
     public const string InstantiationFailed = "scene.prefab.instantiation-failed";
 }
@@ -200,12 +203,16 @@ public sealed class SceneActorSnapshot
 /// <summary>Immutable prefab definition.</summary>
 public sealed class ScenePrefabDefinition
 {
-    /// <summary>Creates a prefab definition and validates its hierarchy.</summary>
+    /// <summary>Creates a prefab definition and validates its composition layers.</summary>
     public ScenePrefabDefinition(
         string id,
         IReadOnlyList<SceneActorSnapshot> actors,
         ScenePrefabKind kind = ScenePrefabKind.Prefab,
-        ScenePrefabMetadata? metadata = null)
+        ScenePrefabMetadata? metadata = null,
+        ScenePrefabReference? basePrefab = null,
+        IReadOnlyList<ScenePrefabNestedInstance>? nested = null,
+        IReadOnlyList<ScenePrefabOverrideOperation>? overrides = null,
+        IReadOnlyList<string>? lineage = null)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -215,13 +222,42 @@ public sealed class ScenePrefabDefinition
         }
 
         ArgumentNullException.ThrowIfNull(actors);
+
+        ScenePrefabNestedInstance[] nestedArray = nested is null ? [] : [.. nested];
+        ScenePrefabOverrideOperation[] overrideArray = overrides is null ? [] : [.. overrides];
+
+        if (kind == ScenePrefabKind.Variant && basePrefab is null)
+        {
+            throw new ScenePrefabException(
+                ScenePrefabErrorCodes.Invalid,
+                $"Variant prefab '{id}' requires a base reference.");
+        }
+
+        if (kind == ScenePrefabKind.Resolved &&
+            (basePrefab is not null || nestedArray.Length > 0 || overrideArray.Length > 0))
+        {
+            throw new ScenePrefabException(
+                ScenePrefabErrorCodes.Invalid,
+                $"Resolved prefab '{id}' cannot declare base, nested or override layers.");
+        }
+
+        ValidateNestedInstances(id, nestedArray);
+
         SceneActorSnapshot[] actorArray = [.. actors];
-        ValidateHierarchy(id, actorArray);
+        // Layered definitions may reference actors inherited from a base or a
+        // nested instance, so links are only validated once resolution flattens
+        // them into a standalone definition.
+        bool selfContained = basePrefab is null && nestedArray.Length == 0;
+        ValidateHierarchy(id, actorArray, validateLinks: selfContained);
 
         Id = id;
         Kind = kind;
         Actors = actorArray;
         Metadata = metadata;
+        Base = basePrefab;
+        Nested = nestedArray;
+        Overrides = overrideArray;
+        Lineage = lineage is null ? [] : [.. lineage];
     }
 
     /// <summary>Prefab id.</summary>
@@ -236,7 +272,45 @@ public sealed class ScenePrefabDefinition
     /// <summary>Optional metadata.</summary>
     public ScenePrefabMetadata? Metadata { get; }
 
-    private static void ValidateHierarchy(string prefabId, SceneActorSnapshot[] actors)
+    /// <summary>Optional base prefab this definition derives from.</summary>
+    public ScenePrefabReference? Base { get; }
+
+    /// <summary>Nested prefab instances merged into this definition.</summary>
+    public IReadOnlyList<ScenePrefabNestedInstance> Nested { get; }
+
+    /// <summary>Override operations applied after base, nested and own actors.</summary>
+    public IReadOnlyList<ScenePrefabOverrideOperation> Overrides { get; }
+
+    /// <summary>Resolution lineage from the root prefab to this definition.</summary>
+    public IReadOnlyList<string> Lineage { get; }
+
+    private static void ValidateNestedInstances(
+        string prefabId,
+        ScenePrefabNestedInstance[] nested)
+    {
+        if (nested.Length == 0)
+        {
+            return;
+        }
+
+        HashSet<string> instanceIds = new(StringComparer.Ordinal);
+        for (int i = 0; i < nested.Length; i++)
+        {
+            ScenePrefabNestedInstance instance = nested[i];
+            if (!instanceIds.Add(instance.InstanceId))
+            {
+                throw new ScenePrefabException(
+                    ScenePrefabErrorCodes.DuplicateNode,
+                    $"Prefab '{prefabId}' declares nested instance id '{instance.InstanceId}' more than once.",
+                    instance.InstanceId);
+            }
+        }
+    }
+
+    private static void ValidateHierarchy(
+        string prefabId,
+        SceneActorSnapshot[] actors,
+        bool validateLinks)
     {
         Dictionary<string, SceneActorSnapshot> byNode = new(StringComparer.Ordinal);
         for (int i = 0; i < actors.Length; i++)
@@ -275,6 +349,11 @@ public sealed class ScenePrefabDefinition
                         actor.NodeId);
                 }
             }
+        }
+
+        if (!validateLinks)
+        {
+            return;
         }
 
         foreach (SceneActorSnapshot actor in actors)
