@@ -14,7 +14,7 @@ namespace Axrone.Scene;
 public sealed class SceneComponentRegistry
 {
     /// <summary>Maximum number of data component types per registry.</summary>
-    public const int MaxComponentTypes = 256;
+    public const int MaxComponentTypes = SceneComponentMask.Capacity;
 
     private readonly Lock _gate = new();
     private readonly SceneDataComponentDescriptor?[] _dataById = new SceneDataComponentDescriptor?[MaxComponentTypes];
