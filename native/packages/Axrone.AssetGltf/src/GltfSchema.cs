@@ -1,8 +1,225 @@
 namespace Axrone.AssetGltf;
 
 /// <summary>Raw glTF schema model (parsed JSON, unresolved).</summary>
-internal sealed class GltfRawModel
+/// <remarks>
+/// High-volume geometry entities (nodes, meshes, primitives, accessors) live in
+/// pooled value-type slabs owned by <see cref="GltfParseArena"/>. Low-volume or
+/// deeply nested blocks (materials, textures, animations) remain reference types.
+/// The document must be disposed after the compile stage consumes it; no span or
+/// slice may escape that scope.
+/// </remarks>
+internal sealed class GltfRawModel : IDisposable
 {
+    private readonly GltfParseArena _arena;
+
+    /// <summary>Creates an empty model with the given parse limits.</summary>
+    public GltfRawModel(GltfImportLimits? limits = null, CancellationToken cancellationToken = default)
+    {
+        _arena = new GltfParseArena(limits ?? GltfImportLimits.Default, cancellationToken);
+    }
+
+    /// <summary>Transient parse storage used by the parser.</summary>
+    public GltfParseArena Arena => _arena;
+
+    /// <summary>Whether the pooled storage has been returned.</summary>
+    public bool IsDisposed => _arena.IsDisposed;
+
+    /// <summary>Node count.</summary>
+    public int NodeCount => _arena.NodeCount;
+
+    /// <summary>Mesh count.</summary>
+    public int MeshCount => _arena.MeshCount;
+
+    /// <summary>Primitive count.</summary>
+    public int PrimitiveCount => _arena.PrimitiveCount;
+
+    /// <summary>Accessor count.</summary>
+    public int AccessorCount => _arena.AccessorCount;
+
+    /// <summary>Nodes.</summary>
+    public GltfSpan<Node> Nodes => _arena.Nodes;
+
+    /// <summary>Meshes.</summary>
+    public GltfSpan<Mesh> Meshes => _arena.Meshes;
+
+    /// <summary>Accessors.</summary>
+    public GltfSpan<Accessor> Accessors => _arena.Accessors;
+
+    /// <summary>BufferViews (reference type: nested meshopt payload).</summary>
+    public List<BufferView> BufferViews { get; } = new();
+
+    /// <summary>Buffers.</summary>
+    public List<Buffer> Buffers { get; } = new();
+
+    /// <summary>Materials.</summary>
+    public List<Material> Materials { get; } = new();
+
+    /// <summary>Textures.</summary>
+    public List<Texture> Textures { get; } = new();
+
+    /// <summary>Images.</summary>
+    public List<Image> Images { get; } = new();
+
+    /// <summary>Samplers.</summary>
+    public List<Sampler> Samplers { get; } = new();
+
+    /// <summary>Skins.</summary>
+    public List<Skin> Skins { get; } = new();
+
+    /// <summary>Animations.</summary>
+    public List<Animation> Animations { get; } = new();
+
+    /// <summary>Lights.</summary>
+    public List<Light> Lights { get; } = new();
+
+    /// <summary>Material variants.</summary>
+    public List<MaterialVariant> Variants { get; } = new();
+
+    /// <summary>Cameras.</summary>
+    public List<Camera> Cameras { get; } = new();
+
+    /// <summary>Scenes.</summary>
+    public List<Scene> Scenes { get; } = new();
+
+    /// <summary>Asset version string.</summary>
+    public GltfStringRef Version { get; set; }
+
+    /// <summary>Generator string.</summary>
+    public GltfStringRef Generator { get; set; }
+
+    /// <summary>Copyright string.</summary>
+    public GltfStringRef Copyright { get; set; }
+
+    /// <summary>Default scene index (-1 when unset).</summary>
+    public int DefaultScene { get; set; } = -1;
+
+    /// <summary>Used extensions.</summary>
+    public HashSet<string> ExtensionsUsed { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Required extensions.</summary>
+    public HashSet<string> ExtensionsRequired { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Returns one node by index.</summary>
+    public Node GetNode(int index) => _arena.GetNode(index);
+
+    /// <summary>Returns one mesh by index.</summary>
+    public Mesh GetMesh(int index) => _arena.GetMesh(index);
+
+    /// <summary>Returns one accessor by index.</summary>
+    public Accessor GetAccessor(int index) => _arena.GetAccessor(index);
+
+    /// <summary>Resolves a mesh's primitive slice.</summary>
+    public GltfSpan<Primitive> GetPrimitives(in Mesh mesh) => _arena.GetPrimitives(mesh.Primitives);
+
+    /// <summary>Returns one primitive of a mesh.</summary>
+    public Primitive GetPrimitive(in Mesh mesh, int index) =>
+        _arena.GetPrimitive(mesh.Primitives.Offset + index);
+
+    /// <summary>Resolves a primitive attribute map.</summary>
+    public GltfAttributeMap GetAttributes(in Primitive primitive) =>
+        _arena.GetAttributes(primitive.Attributes);
+
+    /// <summary>Resolves a Draco attribute map.</summary>
+    public GltfAttributeMap GetDracoAttributes(in Primitive primitive) =>
+        _arena.GetAttributes(primitive.Draco.Attributes);
+
+    /// <summary>Resolves a morph target attribute map.</summary>
+    public GltfAttributeMap GetAttributes(in MorphTarget target) =>
+        _arena.GetAttributes(target.Attributes);
+
+    /// <summary>Morph target count for a primitive.</summary>
+    public static int GetMorphTargetCount(in Primitive primitive) => primitive.Targets.Length;
+
+    /// <summary>Returns one morph target.</summary>
+    public MorphTarget GetMorphTarget(in Primitive primitive, int index) =>
+        _arena.GetMorphTarget(primitive.Targets.Offset + index);
+
+    /// <summary>Material-variant mapping count for a primitive.</summary>
+    public static int GetMaterialVariantCount(in Primitive primitive) => primitive.MaterialVariants.Length;
+
+    /// <summary>Returns one material-variant mapping.</summary>
+    public PrimitiveMaterialVariant GetMaterialVariant(in Primitive primitive, int index) =>
+        _arena.GetMaterialVariant(primitive.MaterialVariants.Offset + index);
+
+    /// <summary>Resolves a mapping's variant-index slice.</summary>
+    public GltfSpan<int> GetVariants(in PrimitiveMaterialVariant mapping) => _arena.GetInts(mapping.Variants);
+
+    /// <summary>Child count for a node.</summary>
+    public static int GetChildCount(in Node node) => node.Children.Length;
+
+    /// <summary>Returns one child node index.</summary>
+    public int GetChild(in Node node, int index) => _arena.GetInt(node.Children.Offset + index);
+
+    /// <summary>Morph weight count for a node.</summary>
+    public static int GetWeightCount(in Node node) => node.Weights.Length;
+
+    /// <summary>Returns one morph weight.</summary>
+    public float GetWeight(in Node node, int index) => _arena.GetFloat(node.Weights.Offset + index);
+
+    /// <summary>Returns an accessor min/max component.</summary>
+    public GltfSpan<float> GetMin(in Accessor accessor) => _arena.GetFloats(accessor.Min);
+
+    /// <summary>Returns an accessor max component.</summary>
+    public GltfSpan<float> GetMax(in Accessor accessor) => _arena.GetFloats(accessor.Max);
+
+    /// <summary>Materializes one arena string.</summary>
+    public string GetString(GltfStringRef value) => _arena.GetString(value);
+
+    /// <summary>Returns raw UTF-8 bytes for one arena string.</summary>
+    public ReadOnlySpan<byte> GetStringBytes(GltfStringRef value) => _arena.GetStringBytes(value);
+
+    /// <summary>Looks up a standard semantic in an attribute map.</summary>
+    public bool TryGetAttribute(
+        GltfSlice<Attribute> attributes,
+        GltfMeshSemantic semantic,
+        out int accessor)
+    {
+        ReadOnlySpan<Attribute> span = _arena.GetAttributes(attributes).AsSpan();
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i].Semantic == semantic)
+            {
+                accessor = span[i].Accessor;
+                return true;
+            }
+        }
+
+        accessor = -1;
+        return false;
+    }
+
+    /// <summary>Looks up a custom attribute by UTF-8 name.</summary>
+    public bool TryGetAttribute(
+        GltfSlice<Attribute> attributes,
+        GltfStringRef name,
+        out int accessor)
+    {
+        ReadOnlySpan<Attribute> span = _arena.GetAttributes(attributes).AsSpan();
+        ReadOnlySpan<byte> target = GetStringBytes(name);
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i].Semantic == GltfMeshSemantic.Custom &&
+                GetStringBytes(span[i].Name).SequenceEqual(target))
+            {
+                accessor = span[i].Accessor;
+                return true;
+            }
+        }
+
+        accessor = -1;
+        return false;
+    }
+
+    /// <summary>Looks up a standard semantic or returns a fallback.</summary>
+    public int GetAttributeOrDefault(
+        GltfSlice<Attribute> attributes,
+        GltfMeshSemantic semantic,
+        int fallback) =>
+        TryGetAttribute(attributes, semantic, out int accessor) ? accessor : fallback;
+
+    /// <summary>Releases all pooled parse storage.</summary>
+    public void Dispose() => _arena.Dispose();
+
     /// <summary>Raw buffer descriptor.</summary>
     public sealed class Buffer
     {
@@ -61,138 +278,167 @@ internal sealed class GltfRawModel
     }
 
     /// <summary>Sparse accessor indices.</summary>
-    public sealed class SparseIndices
+    public readonly struct SparseIndices
     {
         /// <summary>BufferView index.</summary>
-        public int BufferView { get; set; }
+        public required int BufferView { get; init; }
 
         /// <summary>Byte offset.</summary>
-        public int ByteOffset { get; set; }
+        public int ByteOffset { get; init; }
 
         /// <summary>Component type.</summary>
-        public int ComponentType { get; set; }
+        public int ComponentType { get; init; }
     }
 
     /// <summary>Sparse accessor values.</summary>
-    public sealed class SparseValues
+    public readonly struct SparseValues
     {
         /// <summary>BufferView index.</summary>
-        public int BufferView { get; set; }
+        public required int BufferView { get; init; }
 
         /// <summary>Byte offset.</summary>
-        public int ByteOffset { get; set; }
+        public int ByteOffset { get; init; }
     }
 
     /// <summary>Sparse accessor patch.</summary>
-    public sealed class AccessorSparse
+    public readonly struct AccessorSparse
     {
+        /// <summary>Whether a sparse patch is present.</summary>
+        public bool HasSparse { get; init; }
+
         /// <summary>Patched element count.</summary>
-        public int Count { get; set; }
+        public int Count { get; init; }
 
         /// <summary>Index stream.</summary>
-        public SparseIndices Indices { get; set; } = new();
+        public SparseIndices Indices { get; init; }
 
         /// <summary>Value stream.</summary>
-        public SparseValues Values { get; set; } = new();
+        public SparseValues Values { get; init; }
+    }
+
+    /// <summary>Vertex attribute entry.</summary>
+    public readonly struct Attribute
+    {
+        /// <summary>Standard semantic, or <see cref="GltfMeshSemantic.Custom"/>.</summary>
+        public required GltfMeshSemantic Semantic { get; init; }
+
+        /// <summary>Accessor index.</summary>
+        public required int Accessor { get; init; }
+
+        /// <summary>Application-specific UTF-8 name for custom semantics.</summary>
+        public GltfStringRef Name { get; init; }
     }
 
     /// <summary>Raw accessor descriptor.</summary>
-    public sealed class Accessor
+    public readonly struct Accessor
     {
-        /// <summary>BufferView index (-1 when empty).</summary>
-        public int BufferView { get; set; } = -1;
+        /// <summary>BufferView index (-1 when absent).</summary>
+        public int BufferView { get; init; }
 
         /// <summary>Byte offset into the bufferView.</summary>
-        public int ByteOffset { get; set; }
+        public int ByteOffset { get; init; }
 
         /// <summary>Component type.</summary>
-        public int ComponentType { get; set; }
+        public int ComponentType { get; init; }
 
         /// <summary>Whether integer data is normalized.</summary>
-        public bool Normalized { get; set; }
+        public bool Normalized { get; init; }
 
         /// <summary>Element count.</summary>
-        public int Count { get; set; }
+        public int Count { get; init; }
 
-        /// <summary>Accessor type string.</summary>
-        public string Type { get; set; } = "SCALAR";
+        /// <summary>Element type.</summary>
+        public GltfAccessorType Type { get; init; }
 
         /// <summary>Declared minimums.</summary>
-        public float[]? Min { get; set; }
+        public GltfSlice<float> Min { get; init; }
+
+        /// <summary>Whether minimums were declared.</summary>
+        public bool HasMin { get; init; }
 
         /// <summary>Declared maximums.</summary>
-        public float[]? Max { get; set; }
+        public GltfSlice<float> Max { get; init; }
+
+        /// <summary>Whether maximums were declared.</summary>
+        public bool HasMax { get; init; }
 
         /// <summary>Sparse patch.</summary>
-        public AccessorSparse? Sparse { get; set; }
+        public AccessorSparse Sparse { get; init; }
     }
 
-    /// <summary>Accessors.</summary>
-    public List<Accessor> Accessors { get; } = new();
-
-    /// <summary>BufferViews.</summary>
-    public List<BufferView> BufferViews { get; } = new();
-
-    /// <summary>Buffers.</summary>
-    public List<Buffer> Buffers { get; } = new();
-
     /// <summary>KHR_draco_mesh_compression primitive extension.</summary>
-    public sealed class DracoPrimitiveExtension
+    public readonly struct DracoPrimitiveExtension
     {
-        /// <summary>BufferView index.</summary>
-        public int BufferView { get; set; }
+        /// <summary>Whether the extension is present.</summary>
+        public bool Present { get; init; }
 
-        /// <summary>Semantic to attribute-index mapping.</summary>
-        public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
+        /// <summary>BufferView index.</summary>
+        public int BufferView { get; init; }
+
+        /// <summary>Semantic to Draco unique-id mapping.</summary>
+        public GltfSlice<Attribute> Attributes { get; init; }
     }
 
     /// <summary>Material variant mapping for one primitive.</summary>
-    public sealed class PrimitiveMaterialVariant
+    public readonly struct PrimitiveMaterialVariant
     {
         /// <summary>Variant indices.</summary>
-        public List<int> Variants { get; } = new();
+        public GltfSlice<int> Variants { get; init; }
 
-        /// <summary>Material index.</summary>
-        public int? Material { get; set; }
+        /// <summary>Material index, or -1.</summary>
+        public int Material { get; init; }
+
+        /// <summary>Whether a material was declared.</summary>
+        public bool HasMaterial => Material >= 0;
+    }
+
+    /// <summary>Morph target attribute map.</summary>
+    public readonly struct MorphTarget
+    {
+        /// <summary>Attribute map.</summary>
+        public GltfSlice<Attribute> Attributes { get; init; }
     }
 
     /// <summary>Raw mesh primitive.</summary>
-    public sealed class Primitive
+    public readonly struct Primitive
     {
-        /// <summary>Semantic to accessor-index mapping.</summary>
-        public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
+        /// <summary>Indices accessor index, or -1.</summary>
+        public int Indices { get; init; }
 
-        /// <summary>Indices accessor index.</summary>
-        public int? Indices { get; set; }
+        /// <summary>Whether indices were declared.</summary>
+        public bool HasIndices => Indices >= 0;
 
-        /// <summary>Material index.</summary>
-        public int? Material { get; set; }
+        /// <summary>Material index, or -1.</summary>
+        public int Material { get; init; }
+
+        /// <summary>Whether a material was declared.</summary>
+        public bool HasMaterial => Material >= 0;
 
         /// <summary>Topology mode (default triangles).</summary>
-        public int Mode { get; set; } = 4;
+        public int Mode { get; init; }
 
-        /// <summary>Morph target attribute maps.</summary>
-        public List<Dictionary<string, int>> Targets { get; } = new();
+        /// <summary>Semantic to accessor-index mapping.</summary>
+        public GltfSlice<Attribute> Attributes { get; init; }
+
+        /// <summary>Morph target maps.</summary>
+        public GltfSlice<MorphTarget> Targets { get; init; }
 
         /// <summary>KHR_materials_variants mappings.</summary>
-        public List<PrimitiveMaterialVariant> MaterialVariants { get; } = new();
+        public GltfSlice<PrimitiveMaterialVariant> MaterialVariants { get; init; }
 
         /// <summary>Draco extension payload.</summary>
-        public DracoPrimitiveExtension? Draco { get; set; }
+        public DracoPrimitiveExtension Draco { get; init; }
     }
 
     /// <summary>Raw mesh.</summary>
-    public sealed class Mesh
+    public readonly struct Mesh
     {
         /// <summary>Mesh name.</summary>
-        public string? Name { get; set; }
+        public GltfStringRef Name { get; init; }
 
-        /// <summary>Primitives.</summary>
-        public List<Primitive> Primitives { get; } = new();
+        /// <summary>Primitive slice.</summary>
+        public GltfSlice<Primitive> Primitives { get; init; }
     }
-
-    /// <summary>Meshes.</summary>
-    public List<Mesh> Meshes { get; } = new();
 
     /// <summary>Texture sampler binding with KHR_texture_transform.</summary>
     public sealed class TextureInfo
@@ -398,18 +644,6 @@ internal sealed class GltfRawModel
         public int WrapT { get; set; } = 10497;
     }
 
-    /// <summary>Materials.</summary>
-    public List<Material> Materials { get; } = new();
-
-    /// <summary>Textures.</summary>
-    public List<Texture> Textures { get; } = new();
-
-    /// <summary>Images.</summary>
-    public List<Image> Images { get; } = new();
-
-    /// <summary>Samplers.</summary>
-    public List<Sampler> Samplers { get; } = new();
-
     /// <summary>Raw skin.</summary>
     public sealed class Skin
     {
@@ -519,40 +753,58 @@ internal sealed class GltfRawModel
     }
 
     /// <summary>Raw node.</summary>
-    public sealed class Node
+    public readonly struct Node
     {
         /// <summary>Node name.</summary>
-        public string? Name { get; set; }
+        public GltfStringRef Name { get; init; }
 
-        /// <summary>Camera index.</summary>
-        public int? Camera { get; set; }
+        /// <summary>Mesh index, or -1.</summary>
+        public int Mesh { get; init; }
+
+        /// <summary>Whether a mesh is attached.</summary>
+        public bool HasMesh => Mesh >= 0;
+
+        /// <summary>Skin index, or -1.</summary>
+        public int Skin { get; init; }
+
+        /// <summary>Whether a skin is attached.</summary>
+        public bool HasSkin => Skin >= 0;
+
+        /// <summary>Camera index, or -1.</summary>
+        public int Camera { get; init; }
+
+        /// <summary>Whether a camera is attached.</summary>
+        public bool HasCamera => Camera >= 0;
+
+        /// <summary>Light index, or -1.</summary>
+        public int Light { get; init; }
+
+        /// <summary>Whether a light is attached.</summary>
+        public bool HasLight => Light >= 0;
 
         /// <summary>Child node indices.</summary>
-        public List<int> Children { get; } = new();
+        public GltfSlice<int> Children { get; init; }
 
-        /// <summary>Skin index.</summary>
-        public int? Skin { get; set; }
+        /// <summary>Whether an explicit matrix is present.</summary>
+        public bool HasMatrix { get; init; }
 
         /// <summary>Column-major transform matrix.</summary>
-        public float[]? Matrix { get; set; }
+        public Mat4 Matrix { get; init; }
 
-        /// <summary>Mesh index.</summary>
-        public int? Mesh { get; set; }
+        /// <summary>Translation, when explicitly present.</summary>
+        public Vec3? Translation { get; init; }
 
-        /// <summary>Rotation quaternion.</summary>
-        public float[]? Rotation { get; set; }
+        /// <summary>Rotation, when explicitly present.</summary>
+        public Quat? Rotation { get; init; }
 
-        /// <summary>Scale vector.</summary>
-        public float[]? Scale { get; set; }
-
-        /// <summary>Translation vector.</summary>
-        public float[]? Translation { get; set; }
+        /// <summary>Scale, when explicitly present.</summary>
+        public Vec3? Scale { get; init; }
 
         /// <summary>Morph weights.</summary>
-        public float[]? Weights { get; set; }
+        public GltfSlice<float> Weights { get; init; }
 
-        /// <summary>Attached light index.</summary>
-        public int? Light { get; set; }
+        /// <summary>Whether morph weights are present.</summary>
+        public bool HasWeights => Weights.Length > 0;
     }
 
     /// <summary>Raw scene.</summary>
@@ -565,49 +817,101 @@ internal sealed class GltfRawModel
         public List<int> Nodes { get; } = new();
     }
 
-    /// <summary>Asset version string.</summary>
-    public string Version { get; set; } = "2.0";
-
-    /// <summary>Generator string.</summary>
-    public string? Generator { get; set; }
-
-    /// <summary>Copyright string.</summary>
-    public string? Copyright { get; set; }
-
-    /// <summary>Default scene index.</summary>
-    public int DefaultScene { get; set; } = -1;
-
-    /// <summary>Scenes.</summary>
-    public List<Scene> Scenes { get; } = new();
-
-    /// <summary>Nodes.</summary>
-    public List<Node> Nodes { get; } = new();
-
-    /// <summary>Skins.</summary>
-    public List<Skin> Skins { get; } = new();
-
-    /// <summary>Animations.</summary>
-    public List<Animation> Animations { get; } = new();
-
-    /// <summary>Lights.</summary>
-    public List<Light> Lights { get; } = new();
-
-    /// <summary>Named material variants.</summary>
+    /// <summary>Named material variant.</summary>
     public sealed class MaterialVariant
     {
         /// <summary>Variant name.</summary>
         public string? Name { get; set; }
     }
+}
 
-    /// <summary>Material variants.</summary>
-    public List<MaterialVariant> Variants { get; } = new();
+/// <summary>Allocation-free lookup over one primitive's attribute slice.</summary>
+internal readonly ref struct GltfAttributeMap
+{
+    private readonly ReadOnlySpan<GltfRawModel.Attribute> _attributes;
+    private readonly ReadOnlySpan<byte> _strings;
 
-    /// <summary>Cameras.</summary>
-    public List<Camera> Cameras { get; } = new();
+    public GltfAttributeMap(
+        ReadOnlySpan<GltfRawModel.Attribute> attributes,
+        ReadOnlySpan<byte> strings)
+    {
+        _attributes = attributes;
+        _strings = strings;
+    }
 
-    /// <summary>Used extensions.</summary>
-    public HashSet<string> ExtensionsUsed { get; } = new(StringComparer.Ordinal);
+    public int Count => _attributes.Length;
 
-    /// <summary>Required extensions.</summary>
-    public HashSet<string> ExtensionsRequired { get; } = new(StringComparer.Ordinal);
+    public ref readonly GltfRawModel.Attribute this[int index] => ref _attributes[index];
+
+    public ReadOnlySpan<GltfRawModel.Attribute> AsSpan() => _attributes;
+
+    public bool TryGet(GltfMeshSemantic semantic, out int accessor)
+    {
+        for (int i = 0; i < _attributes.Length; i++)
+        {
+            if (_attributes[i].Semantic == semantic)
+            {
+                accessor = _attributes[i].Accessor;
+                return true;
+            }
+        }
+
+        accessor = -1;
+        return false;
+    }
+
+    public bool TryGet(GltfStringRef name, out int accessor)
+    {
+        ReadOnlySpan<byte> target = Resolve(name);
+        for (int i = 0; i < _attributes.Length; i++)
+        {
+            GltfRawModel.Attribute attribute = _attributes[i];
+            if (attribute.Semantic == GltfMeshSemantic.Custom &&
+                Resolve(attribute.Name).SequenceEqual(target))
+            {
+                accessor = attribute.Accessor;
+                return true;
+            }
+        }
+
+        accessor = -1;
+        return false;
+    }
+
+    public int GetOrDefault(GltfMeshSemantic semantic, int fallback) =>
+        TryGet(semantic, out int accessor) ? accessor : fallback;
+
+    public string GetName(in GltfRawModel.Attribute attribute) =>
+        attribute.Name.IsEmpty ? string.Empty : Encoding.UTF8.GetString(Resolve(attribute.Name));
+
+    public Enumerator GetEnumerator() => new(_attributes);
+
+    private ReadOnlySpan<byte> Resolve(GltfStringRef value) =>
+        value.IsEmpty ? [] : _strings.Slice(value.Offset, value.Length);
+
+    public ref struct Enumerator
+    {
+        private readonly ReadOnlySpan<GltfRawModel.Attribute> _attributes;
+        private int _index;
+
+        public Enumerator(ReadOnlySpan<GltfRawModel.Attribute> attributes)
+        {
+            _attributes = attributes;
+            _index = -1;
+        }
+
+        public bool MoveNext()
+        {
+            int next = _index + 1;
+            if ((uint)next >= (uint)_attributes.Length)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public ref readonly GltfRawModel.Attribute Current => ref _attributes[_index];
+    }
 }

@@ -88,7 +88,7 @@ public sealed class GltfResourcesTests
     public async Task ResolveBufferView_OutOfRange_ThrowsSchemaError()
     {
         var cache = new GltfResourceRuntimeCache(glbBinaryChunk: null, resolver: null);
-        var model = new GltfRawModel();
+        using var model = new GltfRawModel();
 
         Func<Task> act = () => cache
             .ResolveBufferViewAsync<NoMeshoptCompressionPolicy>(0, model, CancellationToken.None)
@@ -101,7 +101,7 @@ public sealed class GltfResourcesTests
     public async Task ResolveBufferView_RangeExceedsBuffer_ThrowsSchemaError()
     {
         var cache = new GltfResourceRuntimeCache(new byte[] { 1, 2, 3, 4 }, resolver: null);
-        var model = new GltfRawModel();
+        using var model = new GltfRawModel();
         model.Buffers.Add(new GltfRawModel.Buffer { ByteLength = 4 });
         model.BufferViews.Add(new GltfRawModel.BufferView
         {

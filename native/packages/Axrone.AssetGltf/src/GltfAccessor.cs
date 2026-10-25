@@ -29,6 +29,21 @@ internal static class GltfAccessorRuntime
             _ => 1,
         };
 
+    /// <summary>Element count of a glTF accessor type.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetTypeElementCount(GltfAccessorType type) =>
+        type switch
+        {
+            GltfAccessorType.Scalar => 1,
+            GltfAccessorType.Vec2 => 2,
+            GltfAccessorType.Vec3 => 3,
+            GltfAccessorType.Vec4 => 4,
+            GltfAccessorType.Mat2 => 4,
+            GltfAccessorType.Mat3 => 9,
+            GltfAccessorType.Mat4 => 16,
+            _ => 1,
+        };
+
     /// <summary>Validates that an accessor fits inside its bufferView.</summary>
     public static void ValidateAccessorRange(
         GltfRawModel model,

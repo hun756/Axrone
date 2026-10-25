@@ -21,6 +21,21 @@ public sealed class GltfImportLimits
     /// <summary>Maximum number of meshes.</summary>
     public int MaxMeshCount { get; init; } = 1_000_000;
 
+    /// <summary>Maximum number of primitives across all meshes.</summary>
+    public int MaxPrimitiveCount { get; init; } = 16_777_216;
+
+    /// <summary>Maximum number of vertex attribute entries across all maps.</summary>
+    public int MaxAttributeCount { get; init; } = 16_777_216;
+
+    /// <summary>Maximum number of morph target entries.</summary>
+    public int MaxMorphTargetCount { get; init; } = 16_777_216;
+
+    /// <summary>Maximum number of primitive material-variant mappings.</summary>
+    public int MaxMaterialVariantCount { get; init; } = 1_000_000;
+
+    /// <summary>Maximum transient parse storage (slabs, pools, and the string arena).</summary>
+    public long MaxParseBytes { get; init; } = 256L * 1024 * 1024;
+
     /// <summary>Maximum number of textures.</summary>
     public int MaxTextureCount { get; init; } = 65_536;
 
@@ -39,19 +54,19 @@ internal static class GltfLimitsValidator
             ThrowHelper.ThrowLimit("MaxSourceBytes", sourceLength, limits.MaxSourceBytes);
         }
 
-        if (model.Accessors.Count > limits.MaxAccessorCount)
+        if (model.AccessorCount > limits.MaxAccessorCount)
         {
-            ThrowHelper.ThrowLimit("MaxAccessorCount", model.Accessors.Count, limits.MaxAccessorCount);
+            ThrowHelper.ThrowLimit("MaxAccessorCount", model.AccessorCount, limits.MaxAccessorCount);
         }
 
-        if (model.Nodes.Count > limits.MaxNodeCount)
+        if (model.NodeCount > limits.MaxNodeCount)
         {
-            ThrowHelper.ThrowLimit("MaxNodeCount", model.Nodes.Count, limits.MaxNodeCount);
+            ThrowHelper.ThrowLimit("MaxNodeCount", model.NodeCount, limits.MaxNodeCount);
         }
 
-        if (model.Meshes.Count > limits.MaxMeshCount)
+        if (model.MeshCount > limits.MaxMeshCount)
         {
-            ThrowHelper.ThrowLimit("MaxMeshCount", model.Meshes.Count, limits.MaxMeshCount);
+            ThrowHelper.ThrowLimit("MaxMeshCount", model.MeshCount, limits.MaxMeshCount);
         }
 
         if (model.Textures.Count > limits.MaxTextureCount)
@@ -70,11 +85,11 @@ internal static class GltfLimitsValidator
         }
 
         long decodedBytes = 0;
-        for (int i = 0; i < model.Accessors.Count; i++)
+        for (int i = 0; i < model.AccessorCount; i++)
         {
             GltfRawModel.Accessor accessor = model.Accessors[i];
             long bytes = (long)accessor.Count * GltfAccessorRuntime.GetTypeElementCount(accessor.Type) * 4;
-            if (accessor.Sparse != null)
+            if (accessor.Sparse.HasSparse)
             {
                 bytes += (long)accessor.Sparse.Count * GltfAccessorRuntime.GetTypeElementCount(accessor.Type) * 4;
             }
@@ -82,22 +97,24 @@ internal static class GltfLimitsValidator
             decodedBytes = AddChecked("MaxDecodedBytes", decodedBytes, bytes, limits.MaxDecodedBytes);
         }
 
-        for (int i = 0; i < model.Meshes.Count; i++)
+        for (int i = 0; i < model.MeshCount; i++)
         {
             GltfRawModel.Mesh mesh = model.Meshes[i];
-            for (int p = 0; p < mesh.Primitives.Count; p++)
+            for (int p = 0; p < mesh.Primitives.Length; p++)
             {
-                GltfRawModel.Primitive primitive = mesh.Primitives[p];
+                GltfRawModel.Primitive primitive = model.GetPrimitive(mesh, p);
                 int vertexCount = 0;
                 long stride = 0;
-                foreach (KeyValuePair<string, int> attribute in primitive.Attributes)
+                GltfAttributeMap attributeMap = model.GetAttributes(primitive);
+                for (int a = 0; a < attributeMap.Count; a++)
                 {
-                    if (attribute.Value < 0 || attribute.Value >= model.Accessors.Count)
+                    int attributeAccessor = attributeMap[a].Accessor;
+                    if ((uint)attributeAccessor >= (uint)model.AccessorCount)
                     {
                         continue;
                     }
 
-                    GltfRawModel.Accessor accessor = model.Accessors[attribute.Value];
+                    GltfRawModel.Accessor accessor = model.GetAccessor(attributeAccessor);
                     vertexCount = Math.Max(vertexCount, accessor.Count);
                     stride += GltfAccessorRuntime.GetTypeElementCount(accessor.Type) * 4;
                 }
@@ -108,27 +125,29 @@ internal static class GltfLimitsValidator
                     (long)vertexCount * stride,
                     limits.MaxDecodedBytes);
 
-                if (primitive.Indices.HasValue &&
-                    primitive.Indices.Value >= 0 &&
-                    primitive.Indices.Value < model.Accessors.Count)
+                if (primitive.HasIndices &&
+                    (uint)primitive.Indices < (uint)model.AccessorCount)
                 {
                     decodedBytes = AddChecked(
                         "MaxDecodedBytes",
                         decodedBytes,
-                        (long)model.Accessors[primitive.Indices.Value].Count * 4,
+                        (long)model.GetAccessor(primitive.Indices).Count * 4,
                         limits.MaxDecodedBytes);
                 }
 
-                for (int t = 0; t < primitive.Targets.Count; t++)
+                int targetCount = GltfRawModel.GetMorphTargetCount(primitive);
+                for (int t = 0; t < targetCount; t++)
                 {
-                    foreach (KeyValuePair<string, int> target in primitive.Targets[t])
+                    GltfAttributeMap targetMap = model.GetAttributes(model.GetMorphTarget(primitive, t));
+                    for (int a = 0; a < targetMap.Count; a++)
                     {
-                        if (target.Value < 0 || target.Value >= model.Accessors.Count)
+                        int targetAccessor = targetMap[a].Accessor;
+                        if ((uint)targetAccessor >= (uint)model.AccessorCount)
                         {
                             continue;
                         }
 
-                        GltfRawModel.Accessor accessor = model.Accessors[target.Value];
+                        GltfRawModel.Accessor accessor = model.GetAccessor(targetAccessor);
                         decodedBytes = AddChecked(
                             "MaxDecodedBytes",
                             decodedBytes,

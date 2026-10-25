@@ -28,19 +28,19 @@ public sealed class GltfParserTests
             }
             """;
 
-        var model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
+        using GltfRawModel model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
 
-        model.Version.Should().Be("2.0");
+        model.GetString(model.Version).Should().Be("2.0");
         model.DefaultScene.Should().Be(0);
         model.Scenes.Should().HaveCount(1);
         model.Scenes[0].Nodes.Should().Equal(0);
-        model.Nodes.Should().HaveCount(1);
-        model.Nodes[0].Translation.Should().Equal(1f, 2f, 3f);
-        model.Meshes.Should().HaveCount(1);
-        model.Meshes[0].Primitives.Should().HaveCount(1);
-        model.Meshes[0].Primitives[0].Attributes["POSITION"].Should().Be(0);
-        model.Accessors.Should().HaveCount(2);
-        model.Accessors[0].Type.Should().Be("VEC3");
+        model.NodeCount.Should().Be(1);
+        model.GetNode(0).Translation!.Value.Should().Be(new Vec3(1f, 2f, 3f));
+        model.MeshCount.Should().Be(1);
+        model.GetMesh(0).Primitives.Length.Should().Be(1);
+        model.GetAttributes(model.GetPrimitive(model.GetMesh(0), 0)).GetOrDefault(GltfMeshSemantic.Position, -1).Should().Be(0);
+        model.AccessorCount.Should().Be(2);
+        model.GetAccessor(0).Type.Should().Be(GltfAccessorType.Vec3);
         model.BufferViews.Should().HaveCount(2);
         model.Buffers.Should().HaveCount(1);
         model.Materials.Should().HaveCount(1);
@@ -77,12 +77,36 @@ public sealed class GltfParserTests
             }
             """;
 
-        var model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
+        using GltfRawModel model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
 
         model.Lights.Should().HaveCount(3);
-        model.Nodes.Should().HaveCount(3);
+        model.NodeCount.Should().Be(3);
         model.Scenes[0].Nodes.Should().Equal(0, 1, 2);
-        model.Nodes.Select(static node => node.Light).Should().Equal(0, 1, 2);
+        var lightIndices = new int[model.NodeCount];
+        for (int i = 0; i < lightIndices.Length; i++)
+        {
+            lightIndices[i] = model.GetNode(i).Light;
+        }
+
+        lightIndices.Should().Equal(0, 1, 2);
+    }
+
+    [Fact]
+    public void Parse_EscapedStandardSemantic_MapsToKnownSemantic()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "meshes": [{"primitives": [{"attributes": {"\u0050OSITION": 0}}]}],
+              "accessors": [{"componentType": 5126, "count": 3, "type": "VEC3"}]
+            }
+            """;
+
+        using GltfRawModel model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
+        GltfRawModel.Primitive primitive = model.GetPrimitive(model.GetMesh(0), 0);
+
+        model.GetAttributes(primitive).TryGet(GltfMeshSemantic.Position, out int accessor).Should().BeTrue();
+        accessor.Should().Be(0);
     }
 
     [Fact]

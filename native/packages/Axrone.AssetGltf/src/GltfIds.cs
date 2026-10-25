@@ -51,6 +51,31 @@ public enum GltfMeshSemantic : byte
     Custom = 255,
 }
 
+/// <summary>Accessor element type.</summary>
+public enum GltfAccessorType : byte
+{
+    /// <summary>SCALAR.</summary>
+    Scalar = 0,
+
+    /// <summary>VEC2.</summary>
+    Vec2 = 1,
+
+    /// <summary>VEC3.</summary>
+    Vec3 = 2,
+
+    /// <summary>VEC4.</summary>
+    Vec4 = 3,
+
+    /// <summary>MAT2.</summary>
+    Mat2 = 4,
+
+    /// <summary>MAT3.</summary>
+    Mat3 = 5,
+
+    /// <summary>MAT4.</summary>
+    Mat4 = 6,
+}
+
 /// <summary>Morph target attribute semantic.</summary>
 public enum GltfMorphTargetSemantic : byte
 {

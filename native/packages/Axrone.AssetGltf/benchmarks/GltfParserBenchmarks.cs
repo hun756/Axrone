@@ -31,8 +31,8 @@ public class GltfParserBenchmarks
     [Benchmark]
     public int Parse()
     {
-        GltfRawModel model = GltfJsonParser.Parse(_json);
-        return model.Nodes.Count + model.Meshes.Count + model.Accessors.Count;
+        using GltfRawModel model = GltfJsonParser.Parse(_json);
+        return model.NodeCount + model.MeshCount + model.AccessorCount;
     }
 
     private static byte[] BuildJson(bool includeNames)
