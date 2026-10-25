@@ -10,6 +10,7 @@ internal sealed class SceneTransform3DStore
     private readonly SceneComponentColumn<SceneTransform3D> _column;
     private Mat4[] _localMatrices;
     private Mat4[] _worldMatrices;
+    private Quat[] _worldRotations;
 
     public SceneTransform3DStore(
         SceneActorTable actors,
@@ -22,6 +23,7 @@ internal sealed class SceneTransform3DStore
         _column = column;
         _localMatrices = new Mat4[column.Capacity];
         _worldMatrices = new Mat4[column.Capacity];
+        _worldRotations = new Quat[column.Capacity];
     }
 
     /// <summary>Component type id backing this store.</summary>
@@ -33,6 +35,7 @@ internal sealed class SceneTransform3DStore
         _column.EnsureCapacity(required);
         EnsureArrayCapacity(ref _localMatrices, required);
         EnsureArrayCapacity(ref _worldMatrices, required);
+        EnsureArrayCapacity(ref _worldRotations, required);
     }
 
     /// <summary>Initializes a slot to identity with clean matrices.</summary>
@@ -44,6 +47,7 @@ internal sealed class SceneTransform3DStore
         _column.Set(slot, in transform);
         _localMatrices[slot] = Mat4.Identity;
         _worldMatrices[slot] = Mat4.Identity;
+        _worldRotations[slot] = Quat.Identity;
     }
 
     /// <summary>Clears one slot.</summary>
@@ -52,6 +56,7 @@ internal sealed class SceneTransform3DStore
         _column.ClearSlot(slot);
         _localMatrices[slot] = default;
         _worldMatrices[slot] = default;
+        _worldRotations[slot] = Quat.Identity;
     }
 
     /// <summary>References the local transform payload.</summary>
@@ -61,6 +66,10 @@ internal sealed class SceneTransform3DStore
     /// <summary>References the cached world matrix.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref readonly Mat4 GetWorldMatrix(int slot) => ref _worldMatrices[slot];
+
+    /// <summary>References the cached world rotation.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref readonly Quat GetWorldRotation(int slot) => ref _worldRotations[slot];
 
     /// <summary>Reads the cached world position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -76,6 +85,7 @@ internal sealed class SceneTransform3DStore
         _column.ClearAll();
         Array.Clear(_localMatrices);
         Array.Clear(_worldMatrices);
+        Array.Clear(_worldRotations);
     }
 
     /// <summary>Marks a subtree's world matrices stale without touching local data.</summary>
@@ -97,6 +107,7 @@ internal sealed class SceneTransform3DStore
     {
         int capacity = _actors.Capacity;
         Mat4 identity = Mat4.Identity;
+        Quat identityRotation = Quat.Identity;
 
         for (int slot = 0; slot < capacity; slot++)
         {
@@ -106,11 +117,15 @@ internal sealed class SceneTransform3DStore
                 continue;
             }
 
-            UpdateRecursive(slot, in identity, parentChanged: false);
+            UpdateRecursive(slot, in identity, in identityRotation, parentChanged: false);
         }
     }
 
-    private void UpdateRecursive(int slot, in Mat4 parentWorld, bool parentChanged)
+    private void UpdateRecursive(
+        int slot,
+        in Mat4 parentWorld,
+        in Quat parentRotation,
+        bool parentChanged)
     {
         ref SceneTransform3D transform = ref _column.Get(slot);
         bool localChanged = transform.IsLocalDirty;
@@ -137,6 +152,14 @@ internal sealed class SceneTransform3DStore
             worldChanged = true;
         }
 
+        bool rotationChanged = worldChanged;
+        Quat worldRotation = _worldRotations[slot];
+        if (rotationChanged)
+        {
+            worldRotation = Quat.Multiply(transform.Rotation, parentRotation);
+            _worldRotations[slot] = worldRotation;
+        }
+
         bool childParentChanged = parentChanged || worldChanged;
         int child = _actors.RecordAt(slot).FirstChild;
         while (child >= 0)
@@ -145,7 +168,11 @@ internal sealed class SceneTransform3DStore
             int next = childRecord.NextSibling;
             if ((childRecord.Meta.Flags & SceneActorFlags.IsFree) == 0)
             {
-                UpdateRecursive(child, in _worldMatrices[slot], childParentChanged);
+                UpdateRecursive(
+                    child,
+                    in _worldMatrices[slot],
+                    in worldRotation,
+                    childParentChanged);
             }
 
             child = next;

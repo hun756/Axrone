@@ -53,6 +53,23 @@ public sealed class SceneWorldTests
     }
 
     [Fact]
+    public void WorldRotation_PropagatesToChildren()
+    {
+        using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);
+        SceneActor parent = world.CreateActor("Parent");
+        SceneActor child = world.CreateActor("Child");
+        Quat parentRotation = Quat.CreateFromYawPitchRoll(MathF.PI / 2.0f, 0.0f, 0.0f);
+
+        world.GetTransform3D(parent).SetRotation(parentRotation);
+        world.GetTransform3D(child).SetRotation(Quat.Identity);
+        world.Hierarchy.SetParent(child, parent);
+        world.UpdateTransforms();
+
+        Quat childWorldRotation = world.GetWorldRotation3D(child);
+        childWorldRotation.Should().Be(parentRotation);
+    }
+
+    [Fact]
     public void ActiveInHierarchy_PropagatesThroughHierarchy()
     {
         using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);

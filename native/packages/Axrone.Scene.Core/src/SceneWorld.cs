@@ -581,6 +581,18 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         return ref _transform3D.GetWorldMatrix(_actors.Resolve(actor));
     }
 
+    /// <summary>References an actor's cached 3D world rotation.</summary>
+    public ref readonly Quat GetWorldRotation3D(SceneActor actor)
+    {
+        ThrowIfDisposed();
+        if (_transform3D is null)
+        {
+            throw new SceneCapabilityException(nameof(SceneTransform3D), "the active profile has no 3D transform.");
+        }
+
+        return ref _transform3D.GetWorldRotation(_actors.Resolve(actor));
+    }
+
     /// <summary>Reads an actor's cached 3D world position.</summary>
     public Vec3 GetWorldPosition3D(SceneActor actor)
     {
