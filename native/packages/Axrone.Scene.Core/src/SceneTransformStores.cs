@@ -76,7 +76,7 @@ internal sealed class SceneTransform3DStore
     public Vec3 GetWorldPosition(int slot)
     {
         ref readonly Mat4 matrix = ref _worldMatrices[slot];
-        return new Vec3(matrix.M14, matrix.M24, matrix.M34);
+        return new Vec3(matrix.M41, matrix.M42, matrix.M43);
     }
 
     /// <summary>Clears every transform and cached matrix.</summary>

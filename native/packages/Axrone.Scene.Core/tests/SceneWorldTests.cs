@@ -53,6 +53,44 @@ public sealed class SceneWorldTests
     }
 
     [Fact]
+    public void WorldMatrix_UsesRowVectorTranslation()
+    {
+        using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);
+        SceneActor actor = world.CreateActor();
+        world.GetTransform3D(actor).SetPosition(new Vec3(1.0f, 2.0f, 3.0f));
+        world.UpdateTransforms();
+
+        Mat4 matrix = world.GetWorldMatrix3D(actor);
+
+        matrix.M41.Should().Be(1.0f);
+        matrix.M42.Should().Be(2.0f);
+        matrix.M43.Should().Be(3.0f);
+        matrix.M14.Should().Be(0.0f);
+        matrix.M24.Should().Be(0.0f);
+        matrix.M34.Should().Be(0.0f);
+
+        Vec4 transformed = matrix * new Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        transformed.Should().Be(new Vec4(1.0f, 2.0f, 3.0f, 1.0f));
+    }
+
+    [Fact]
+    public void WorldMatrix_RotationMatchesQuaternionRotation()
+    {
+        using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);
+        SceneActor parent = world.CreateActor("Parent");
+        SceneActor child = world.CreateActor("Child");
+        Quat parentRotation = Quat.CreateFromYawPitchRoll(MathF.PI / 2.0f, 0.0f, 0.0f);
+
+        world.GetTransform3D(parent).SetRotation(parentRotation);
+        world.GetTransform3D(child).SetPosition(new Vec3(0.0f, 0.0f, -1.0f));
+        world.Hierarchy.SetParent(child, parent);
+        world.UpdateTransforms();
+
+        Vec3 expected = parentRotation * new Vec3(0.0f, 0.0f, -1.0f);
+        world.GetWorldPosition3D(child).Should().Be(expected);
+    }
+
+    [Fact]
     public void WorldRotation_PropagatesToChildren()
     {
         using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);

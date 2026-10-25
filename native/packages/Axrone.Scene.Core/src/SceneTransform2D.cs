@@ -146,16 +146,15 @@ public struct SceneTransform2D : ISceneDataComponent
         return matrix;
     }
 
-    /// <summary>Composes the local matrix in row-vector convention.</summary>
+    /// <summary>Composes the local matrix in the numeric row-vector convention.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void ComposeLocalMatrix(out Mat3 matrix)
     {
-        float cos = MathF.Cos(RotationRadians);
-        float sin = MathF.Sin(RotationRadians);
+        Mat3 scale = Mat3.CreateScale(new Vec3(Scale.X, Scale.Y, 1.0f));
+        Mat3 rotation = Mat3.CreateRotationZ(RotationRadians);
+        Mat3 translation = Mat3.CreateTranslation(Position);
 
-        matrix = new Mat3(
-            Scale.X * cos, Scale.X * sin, 0.0f,
-            -Scale.Y * sin, Scale.Y * cos, 0.0f,
-            Position.X, Position.Y, 1.0f);
+        Mat3.Multiply(in scale, in rotation, out Mat3 scaledRotation);
+        Mat3.Multiply(in scaledRotation, in translation, out matrix);
     }
 }

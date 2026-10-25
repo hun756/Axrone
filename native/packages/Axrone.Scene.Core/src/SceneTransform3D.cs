@@ -154,24 +154,15 @@ public struct SceneTransform3D : ISceneDataComponent
         return matrix;
     }
 
-    /// <summary>Composes the local matrix in row-vector convention.</summary>
+    /// <summary>Composes the local matrix in the numeric row-vector convention.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void ComposeLocalMatrix(out Mat4 matrix)
     {
-        float xx = Rotation.X * Rotation.X;
-        float yy = Rotation.Y * Rotation.Y;
-        float zz = Rotation.Z * Rotation.Z;
-        float xy = Rotation.X * Rotation.Y;
-        float xz = Rotation.X * Rotation.Z;
-        float yz = Rotation.Y * Rotation.Z;
-        float wx = Rotation.W * Rotation.X;
-        float wy = Rotation.W * Rotation.Y;
-        float wz = Rotation.W * Rotation.Z;
+        Mat4 scale = Mat4.CreateScale(Scale);
+        Mat4 rotation = Mat4.CreateFromQuaternion(Rotation);
+        Mat4 translation = Mat4.CreateTranslation(Position);
 
-        matrix = new Mat4(
-            (1.0f - (2.0f * (yy + zz))) * Scale.X, (2.0f * (xy - wz)) * Scale.Y, (2.0f * (xz + wy)) * Scale.Z, Position.X,
-            (2.0f * (xy + wz)) * Scale.X, (1.0f - (2.0f * (xx + zz))) * Scale.Y, (2.0f * (yz - wx)) * Scale.Z, Position.Y,
-            (2.0f * (xz - wy)) * Scale.X, (2.0f * (yz + wx)) * Scale.Y, (1.0f - (2.0f * (xx + yy))) * Scale.Z, Position.Z,
-            0.0f, 0.0f, 0.0f, 1.0f);
+        Mat4.Multiply(in scale, in rotation, out Mat4 scaledRotation);
+        Mat4.Multiply(in scaledRotation, in translation, out matrix);
     }
 }
