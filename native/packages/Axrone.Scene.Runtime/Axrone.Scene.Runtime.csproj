@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Scene.Runtime</RootNamespace>
+    <AssemblyName>Axrone.Scene.Runtime</AssemblyName>
+    <Description>Composition root for the Axrone scene runtime: world, assets, prefab and snapshot services, frame planning and optional OpenGL execution.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1815: Equals on transient structs — frame records are consumed
+         positionally. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Scene.Runtime.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Scene.Core/Axrone.Scene.Core.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Assets/Axrone.Scene.Assets.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Rendering/Axrone.Scene.Rendering.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Rendering.OpenGL/Axrone.Scene.Rendering.OpenGL.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Prefab/Axrone.Scene.Prefab.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Snapshot/Axrone.Scene.Snapshot.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+    <ProjectReference Include="../Axrone.Lighting/Axrone.Lighting.csproj" />
+    <ProjectReference Include="../Axrone.Render.Core/Axrone.Render.Core.csproj" />
+    <ProjectReference Include="../Axrone.Render.OpenGL/Axrone.Render.OpenGL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

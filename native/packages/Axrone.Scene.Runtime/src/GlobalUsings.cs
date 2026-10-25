@@ -1,0 +1,17 @@
+global using System;
+global using System.Collections.Generic;
+global using System.Diagnostics.CodeAnalysis;
+global using System.Globalization;
+global using System.Numerics;
+global using System.Runtime.CompilerServices;
+global using System.Runtime.InteropServices;
+global using Axrone.Geometry;
+global using Axrone.Lighting;
+global using Axrone.Numeric;
+global using Axrone.Render.OpenGL.Context;
+global using Axrone.Scene;
+global using Axrone.Scene.Assets;
+global using Axrone.Scene.Prefab;
+global using Axrone.Scene.Rendering;
+global using Axrone.Scene.Rendering.OpenGL;
+global using Axrone.Scene.Snapshot;
