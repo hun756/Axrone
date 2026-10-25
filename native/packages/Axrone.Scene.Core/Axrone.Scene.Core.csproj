@@ -41,6 +41,9 @@
     <!-- CA1819: Properties returning arrays — serialization and diagnostics
          expose defensive snapshots, never hot-path buffers. -->
     <NoWarn>$(NoWarn);CA1819</NoWarn>
+    <!-- CA1711: SceneActorFlags is a bitmask; "Flags" is the domain term and
+         matches the engine-wide convention for actor state bits. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
