@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Scene.Rendering.OpenGL</RootNamespace>
+    <AssemblyName>Axrone.Scene.Rendering.OpenGL</AssemblyName>
+    <Description>OpenGL execution layer for Axrone scene rendering: GPU asset caches, uniform binding and draw submission.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1051: Visible instance fields — GPU planning payloads are explicit
+         cache-friendly layouts. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1815: Equals on transient structs — descriptor records are consumed
+         positionally by the upload and draw paths. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1032: Standard exception ctors — asset failures carry stable codes
+         and optional typed payloads. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Scene.Rendering.OpenGL.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Scene.Core/Axrone.Scene.Core.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Assets/Axrone.Scene.Assets.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Rendering/Axrone.Scene.Rendering.csproj" />
+    <ProjectReference Include="../Axrone.Render.Core/Axrone.Render.Core.csproj" />
+    <ProjectReference Include="../Axrone.Render.OpenGL/Axrone.Render.OpenGL.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+    <ProjectReference Include="../Axrone.Lighting/Axrone.Lighting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
