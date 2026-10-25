@@ -61,6 +61,9 @@ public interface ISceneDiagnosticsSink
 /// <summary>Discards every diagnostic; eliminated by dead-code removal.</summary>
 public readonly struct NullSceneDiagnosticsSink : ISceneDiagnosticsSink
 {
+    /// <summary>Shared instance; safe because the sink is stateless.</summary>
+    public static NullSceneDiagnosticsSink Instance => default;
+
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Report(in SceneDiagnostic diagnostic)

@@ -22,6 +22,8 @@ public interface ISceneHierarchyVisitor<TContext>
 /// <summary>Receives structural hierarchy notifications from <see cref="SceneHierarchy"/>.</summary>
 internal interface ISceneHierarchyObserver
 {
+    void BeforeStructuralChange(string operation);
+
     void OnParentChanged(in SceneActor child, in SceneActor oldParent, in SceneActor newParent);
 
     void OnActiveInHierarchyChanged(in SceneActor actor, bool active);
@@ -119,6 +121,8 @@ public sealed class SceneHierarchy
     /// <exception cref="SceneValidationException">The operation would create a cycle or exceed the depth budget.</exception>
     public void SetParent(SceneActor child, SceneActor parent)
     {
+        _observer?.BeforeStructuralChange(nameof(SetParent));
+
         int childSlot = _actors.Resolve(child);
         int parentSlot = parent.IsValid ? _actors.Resolve(parent) : -1;
 
@@ -189,6 +193,8 @@ public sealed class SceneHierarchy
     /// <summary>Sets the local active flag and propagates active-in-hierarchy to descendants.</summary>
     public void SetActiveSelf(SceneActor actor, bool active)
     {
+        _observer?.BeforeStructuralChange(nameof(SetActiveSelf));
+
         int slot = _actors.Resolve(actor);
         ref SceneActorRecord record = ref _actors.RecordAt(slot);
         bool wasActive = (record.Meta.Flags & SceneActorFlags.ActiveSelf) != 0;
