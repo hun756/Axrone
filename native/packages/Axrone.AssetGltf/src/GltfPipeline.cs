@@ -9,9 +9,6 @@ public readonly struct StateSchemaParsed;
 /// <summary>Resource-resolved pipeline state.</summary>
 public readonly struct StateResolved;
 
-/// <summary>Compiled pipeline state (reserved).</summary>
-public readonly struct StateCompiled;
-
 /// <summary>Importer options.</summary>
 public sealed class GltfImporterOptions
 {
@@ -21,6 +18,9 @@ public sealed class GltfImporterOptions
         get => field;
         init => field = string.IsNullOrWhiteSpace(value) ? "asset.gltf" : value;
     } = "asset.gltf";
+
+    /// <summary>Source document URI, when known.</summary>
+    public string? SourceUri { get; init; }
 
     /// <summary>External resource resolver.</summary>
     public GltfResourceResolver? ResourceResolver { get; init; }
@@ -52,6 +52,9 @@ public sealed class GltfImporterOptions
         get => field;
         init => field = value;
     } = GltfTextureFormat.BC7_RGBA;
+
+    /// <summary>Resource limits for untrusted input.</summary>
+    public GltfImportLimits Limits { get; init; } = GltfImportLimits.Default;
 }
 
 /// <summary>Typestate import pipeline container (transitions are extensions).</summary>
@@ -104,11 +107,23 @@ public static class GltfPipelineExtensions
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.Ordinal)
     {
         "EXT_meshopt_compression",
+        "EXT_texture_avif",
+        "EXT_texture_webp",
         "KHR_draco_mesh_compression",
         "KHR_lights_punctual",
+        "KHR_materials_anisotropy",
         "KHR_materials_clearcoat",
+        "KHR_materials_dispersion",
         "KHR_materials_emissive_strength",
+        "KHR_materials_ior",
+        "KHR_materials_iridescence",
+        "KHR_materials_sheen",
+        "KHR_materials_specular",
+        "KHR_materials_transmission",
         "KHR_materials_unlit",
+        "KHR_animation_pointer",
+        "KHR_materials_variants",
+        "KHR_materials_volume",
         "KHR_mesh_quantization",
         "KHR_texture_basisu",
         "KHR_texture_transform",
@@ -121,6 +136,12 @@ public static class GltfPipelineExtensions
 
         GltfContainerData container = GltfContainer.Parse(pipeline.SourceBytes);
         GltfRawModel rawModel = GltfJsonParser.Parse(container.JsonBytes.Span);
+
+        ReadOnlySpan<char> version = rawModel.Version.AsSpan();
+        if (version.Length < 3 || version[0] != '2' || version[1] != '.')
+        {
+            ThrowHelper.ThrowSchema($"Unsupported glTF version '{rawModel.Version}'. Only glTF 2.x is supported.");
+        }
 
         return new GltfPipeline<StateSchemaParsed>(
             pipeline.SourceBytes,

@@ -1,0 +1,197 @@
+name: Native Asset Pipeline
+
+# TEMP-DISABLED (2026-10-22): remote CI load'unu kesmek icin push/PR tetikleri
+# kapatildi. En son duzeltmede asagidaki blok geri alinacak. Manuel kosum icin
+# Actions > Native Asset Pipeline > Run workflow kullanilabilir.
+on:
+  workflow_dispatch:
+#   pull_request:
+#     paths:
+#       - 'native/packages/Axrone.AssetGltf/**'
+#       - 'native/packages/Axrone.AssetGltf.Codecs/**'
+#       - 'native/extern/draco-bridge/**'
+#       - 'native/Directory.Build.props'
+#       - 'native/Directory.Packages.props'
+#       - 'native/Axrone.Engine.slnx'
+#       - '.github/workflows/native-assets.yml'
+#   push:
+#     branches:
+#       - main
+#       - native
+#       - fix/assetgltf-hardening
+#     paths:
+#       - 'native/packages/Axrone.AssetGltf/**'
+#       - 'native/packages/Axrone.AssetGltf.Codecs/**'
+#       - 'native/extern/draco-bridge/**'
+#       - 'native/Directory.Build.props'
+#       - 'native/Directory.Packages.props'
+#       - 'native/Axrone.Engine.slnx'
+#       - '.github/workflows/native-assets.yml'
+
+jobs:
+  draco-native:
+    name: draco-native (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            lib: axrone_draco.dll
+            cmake_extra: '-A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
+            ndk: false
+            apt: ''
+          - os: windows-latest
+            rid: win-arm64
+            lib: axrone_draco.dll
+            cmake_extra: '-A ARM64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
+            ndk: false
+            apt: ''
+          - os: ubuntu-latest
+            rid: linux-x64
+            lib: libaxrone_draco.so
+            cmake_extra: ''
+            ndk: false
+            apt: ''
+          - os: ubuntu-latest
+            rid: linux-arm64
+            lib: libaxrone_draco.so
+            cmake_extra: '-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++'
+            ndk: false
+            apt: g++-aarch64-linux-gnu
+          - os: macos-14
+            rid: osx-x64
+            lib: libaxrone_draco.dylib
+            cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0'
+            ndk: false
+            apt: ''
+          - os: macos-14
+            rid: osx-arm64
+            lib: libaxrone_draco.dylib
+            cmake_extra: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0'
+            ndk: false
+            apt: ''
+          - os: ubuntu-latest
+            rid: android-arm64
+            lib: libaxrone_draco.so
+            cmake_extra: '-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24'
+            ndk: true
+            apt: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Android NDK
+        if: matrix.ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27
+      - name: Install cross compiler
+        if: matrix.apt != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt }}
+      - name: Configure draco bridge
+        run: cmake -S extern/draco-bridge -B ../build/draco-${{ matrix.rid }} -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_extra }}
+      - name: Build draco bridge
+        run: cmake --build ../build/draco-${{ matrix.rid }} --config Release --target axrone_draco
+      - name: Stage runtime asset
+        run: |
+          mkdir -p packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native
+          cp ../build/draco-${{ matrix.rid }}/${{ matrix.lib }} packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/ 2>/dev/null \
+          || cp ../build/draco-${{ matrix.rid }}/Release/${{ matrix.lib }} packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/
+          ls packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native/
+      - name: Verify bridge exports
+        run: |
+          lib=$(find packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}/native -type f | head -n 1)
+          test -n "$lib"
+          for symbol in axr_draco_decode axr_draco_free axr_draco_point_count axr_draco_face_count \
+                        axr_draco_attribute_count axr_draco_attribute_info axr_draco_attribute_floats axr_draco_face_indices; do
+            grep -aq "$symbol" "$lib" || { echo "missing export: $symbol"; exit 1; }
+          done
+          echo "exports ok: $lib"
+      - name: Upload runtime asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: draco-runtimes-${{ matrix.rid }}
+          path: packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}
+          if-no-files-found: error
+
+  build-test:
+    name: build-test (${{ matrix.os }})
+    needs: draco-native
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download Draco natives
+        uses: actions/download-artifact@v4
+        with:
+          name: draco-runtimes-${{ matrix.rid }}
+          path: packages/Axrone.AssetGltf.Codecs/runtimes/${{ matrix.rid }}
+      - name: Restore
+        run: dotnet restore Axrone.Engine.slnx
+      - name: Build core and codecs
+        run: |
+          dotnet build packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj -c Release --no-restore
+          dotnet build packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj -c Release --no-restore
+      - name: Test core and codecs
+        env:
+          AXRONE_REQUIRE_NATIVE_DRACO: '1'
+        run: |
+          dotnet test packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj -c Release --no-restore \
+            --collect:"XPlat Code Coverage" --results-directory TestResults/${{ matrix.rid }}/core
+          dotnet test packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj -c Release --no-restore \
+            --collect:"XPlat Code Coverage" --results-directory TestResults/${{ matrix.rid }}/codecs
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.rid }}
+          path: native/TestResults/${{ matrix.rid }}
+          if-no-files-found: warn
+      - name: Verify formatting
+        run: |
+          dotnet format packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj --verify-no-changes --no-restore
+          dotnet format packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj --verify-no-changes --no-restore
+          dotnet format packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj --verify-no-changes --no-restore
+          dotnet format packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj --verify-no-changes --no-restore
+
+  aot-smoke:
+    name: native-aot-smoke (win-x64)
+    runs-on: windows-latest
+    needs: [build-test, draco-native]
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download Draco natives
+        uses: actions/download-artifact@v4
+        with:
+          name: draco-runtimes-win-x64
+          path: packages/Axrone.AssetGltf.Codecs/runtimes/win-x64
+      - name: Publish Native AOT smoke
+        run: dotnet publish packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.AotSmoke/Axrone.AssetGltf.AotSmoke.csproj -c Release -r win-x64 -p:PublishAot=true
+      - name: Run Native AOT smoke
+        env:
+          AXRONE_REQUIRE_NATIVE_DRACO: '1'
+        run: ./packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.AotSmoke/bin/Release/net10.0/win-x64/publish/Axrone.AssetGltf.AotSmoke.exe

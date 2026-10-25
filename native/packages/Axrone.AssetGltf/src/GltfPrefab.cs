@@ -3,9 +3,6 @@ namespace Axrone.AssetGltf;
 /// <summary>Scene graph synthesizer: prefabs from raw nodes.</summary>
 internal static class GltfPrefabEngine
 {
-    /// <summary>Local light budget per scene.</summary>
-    public const int MaxSceneLocalLights = 4;
-
     /// <summary>Decomposes a node matrix or TRS into translation/rotation/scale.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static void DecomposeTransform(
@@ -48,9 +45,10 @@ internal static class GltfPrefabEngine
         GltfRawModel model,
         bool isDefaultScene,
         List<GltfDiagnostic> diagnostics,
-        ImmutableDictionary<int, string> meshKeyMap,
+        ImmutableArray<ImmutableArray<string>> meshKeysByMesh,
         ImmutableDictionary<int, string> skinKeyMap,
-        ImmutableArray<string> animationClipIds)
+        ImmutableArray<string> animationClipIds,
+        int maxLocalLights)
     {
         string prefabId = $"gltf/scene/{sceneIndex}";
         GltfRawModel.Scene scene = model.Scenes[sceneIndex];
@@ -58,7 +56,9 @@ internal static class GltfPrefabEngine
         var actorList = new List<GltfActorSnapshot>();
         var rootNodeIds = new List<string>();
         var allNodeIds = new HashSet<string>(StringComparer.Ordinal);
+        var materialKeys = new SortedSet<string>(StringComparer.Ordinal);
 
+        bool primaryCameraAssigned = false;
         bool primaryDirectionalAllocated = false;
         int localLightCount = 0;
 
@@ -100,7 +100,7 @@ internal static class GltfPrefabEngine
             if (node.Camera.HasValue && node.Camera.Value >= 0 && node.Camera.Value < model.Cameras.Count)
             {
                 GltfRawModel.Camera cam = model.Cameras[node.Camera.Value];
-                bool isPrimaryCam = isDefaultScene && parentId == null;
+                bool isPrimaryCam = isDefaultScene && parentId == null && !primaryCameraAssigned;
                 bool isOrtho = string.Equals(cam.Type, "orthographic", StringComparison.OrdinalIgnoreCase);
 
                 compBuilder.Add(new GltfCameraComponent(
@@ -110,6 +110,8 @@ internal static class GltfPrefabEngine
                     cam.Yfov,
                     isOrtho,
                     cam.Ymag));
+
+                primaryCameraAssigned |= isPrimaryCam;
             }
 
             if (node.Light.HasValue && node.Light.Value >= 0 && node.Light.Value < model.Lights.Count)
@@ -126,12 +128,12 @@ internal static class GltfPrefabEngine
                 else if (string.Equals(light.Type, "point", StringComparison.OrdinalIgnoreCase))
                 {
                     localLightCount++;
-                    if (localLightCount > MaxSceneLocalLights)
+                    if (localLightCount > maxLocalLights)
                     {
                         diagnostics.Add(new GltfDiagnostic(
                             GltfDiagnosticLevel.Warning,
                             "gltf.light.local.runtime-limit",
-                            $"Local lights exceed engine budget limit of {MaxSceneLocalLights}."));
+                            $"Local lights exceed engine budget limit of {maxLocalLights}."));
                     }
 
                     compBuilder.Add(new GltfPointLightComponent(color, light.Intensity, light.Range ?? 0.0f));
@@ -139,12 +141,12 @@ internal static class GltfPrefabEngine
                 else if (string.Equals(light.Type, "spot", StringComparison.OrdinalIgnoreCase))
                 {
                     localLightCount++;
-                    if (localLightCount > MaxSceneLocalLights)
+                    if (localLightCount > maxLocalLights)
                     {
                         diagnostics.Add(new GltfDiagnostic(
                             GltfDiagnosticLevel.Warning,
                             "gltf.light.local.runtime-limit",
-                            $"Local lights exceed engine budget limit of {MaxSceneLocalLights}."));
+                            $"Local lights exceed engine budget limit of {maxLocalLights}."));
                     }
 
                     compBuilder.Add(new GltfSpotLightComponent(
@@ -171,12 +173,19 @@ internal static class GltfPrefabEngine
             {
                 GltfRawModel.Mesh mesh = model.Meshes[node.Mesh.Value];
                 string? skinId = (node.Skin.HasValue && skinKeyMap.TryGetValue(node.Skin.Value, out string? sKey)) ? sKey : null;
+                ImmutableArray<string> primitiveKeys = meshKeysByMesh[node.Mesh.Value];
 
                 if (mesh.Primitives.Count == 1)
                 {
-                    string meshKey = meshKeyMap.TryGetValue(node.Mesh.Value, out string? k) ? k : $"{node.Mesh.Value}:0";
+                    string meshKey = primitiveKeys.Length > 0
+                        ? primitiveKeys[0]
+                        : GltfKeys.Mesh(node.Mesh.Value, 0);
                     int? material = mesh.Primitives[0].Material;
                     string? matKey = material.HasValue ? $"gltf/material/{material.Value}" : null;
+                    if (matKey != null)
+                    {
+                        materialKeys.Add(matKey);
+                    }
 
                     compBuilder.Add(new GltfMeshRendererComponent(
                         meshKey,
@@ -193,9 +202,15 @@ internal static class GltfPrefabEngine
                     for (int p = 0; p < mesh.Primitives.Count; p++)
                     {
                         string childActorId = $"{nodeId}/primitive/{p}";
-                        string meshKey = $"{node.Mesh.Value}:{p}";
+                        string meshKey = p < primitiveKeys.Length
+                            ? primitiveKeys[p]
+                            : GltfKeys.Mesh(node.Mesh.Value, p);
                         int? primMaterial = mesh.Primitives[p].Material;
                         string? matKey = primMaterial.HasValue ? $"gltf/material/{primMaterial.Value}" : null;
+                        if (matKey != null)
+                        {
+                            materialKeys.Add(matKey);
+                        }
 
                         var childComps = ImmutableArray.Create<GltfComponentSnapshot>(
                             new GltfTransformComponent(Vec3.Zero, Quat.Identity, Vec3.One),
@@ -235,6 +250,22 @@ internal static class GltfPrefabEngine
             }
         }
 
+        int meshKeyCount = 0;
+        for (int i = 0; i < meshKeysByMesh.Length; i++)
+        {
+            meshKeyCount += meshKeysByMesh[i].Length;
+        }
+
+        var prefabMeshKeys = ImmutableArray.CreateBuilder<string>(meshKeyCount);
+        for (int i = 0; i < meshKeysByMesh.Length; i++)
+        {
+            ImmutableArray<string> keys = meshKeysByMesh[i];
+            for (int k = 0; k < keys.Length; k++)
+            {
+                prefabMeshKeys.Add(keys[k]);
+            }
+        }
+
         return new GltfPrefabAsset
         {
             Id = prefabId,
@@ -242,10 +273,10 @@ internal static class GltfPrefabEngine
             Definition = new GltfPrefabDefinition { Actors = actorList.ToImmutableArray() },
             RootNodeIds = rootNodeIds.ToImmutableArray(),
             NodeIds = allNodeIds.ToImmutableArray(),
-            MeshKeys = meshKeyMap.Values.ToImmutableArray(),
+            MeshKeys = prefabMeshKeys.MoveToImmutable(),
             SkinKeys = skinKeyMap.Values.ToImmutableArray(),
             AnimationKeys = animationClipIds,
-            MaterialKeys = ImmutableArray<string>.Empty,
+            MaterialKeys = materialKeys.ToImmutableArray(),
             AnimationController = animationClipIds.Length > 0 ? new GltfAnimationControllerMetadata { Clips = animationClipIds } : null,
         };
     }

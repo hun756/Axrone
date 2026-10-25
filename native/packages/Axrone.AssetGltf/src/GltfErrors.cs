@@ -49,6 +49,28 @@ public sealed class GltfTopologyError(int mode, string message)
     public int Mode { get; } = mode;
 }
 
+/// <summary>Required glTF extension has no linked runtime implementation.</summary>
+public sealed class GltfUnsupportedExtensionError(string extensionName, string message)
+    : GltfException("gltf.extension.unsupported", $"Extension '{extensionName}' is unsupported: {message}")
+{
+    /// <summary>Extension name.</summary>
+    public string ExtensionName { get; } = extensionName;
+}
+
+/// <summary>Configured import limit was exceeded.</summary>
+public sealed class GltfLimitExceededError(string limit, long requested, long maximum)
+    : GltfException("gltf.limit.exceeded", $"Limit '{limit}' exceeded: {requested} > {maximum}.")
+{
+    /// <summary>Limit name.</summary>
+    public string Limit { get; } = limit;
+
+    /// <summary>Requested value.</summary>
+    public long Requested { get; } = requested;
+
+    /// <summary>Configured maximum.</summary>
+    public long Maximum { get; } = maximum;
+}
+
 /// <summary>Centralized throw paths (keeps hot paths inline).</summary>
 internal static class ThrowHelper
 {
@@ -77,4 +99,16 @@ internal static class ThrowHelper
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowTopology(int mode, string message) => throw new GltfTopologyError(mode, message);
+
+    /// <summary>Throws an unsupported-extension error.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowUnsupportedExtension(string extensionName, string message) =>
+        throw new GltfUnsupportedExtensionError(extensionName, message);
+
+    /// <summary>Throws a limit-exceeded error.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowLimit(string limit, long requested, long maximum) =>
+        throw new GltfLimitExceededError(limit, requested, maximum);
 }

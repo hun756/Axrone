@@ -1,17 +1,20 @@
 name: Engine Hardening
 
+# TEMP-DISABLED (2026-10-22): remote CI load'unu kesmek icin push/PR tetikleri
+# kapatildi. En son duzeltmede asagidaki blok geri alinacak.
 on:
-  pull_request:
-    paths:
-      - 'web/**'
-      - '.github/workflows/engine-hardening.yml'
-  push:
-    branches:
-      - main
-      - module-refactor
-    paths:
-      - 'web/**'
-      - '.github/workflows/engine-hardening.yml'
+  workflow_dispatch:
+#   pull_request:
+#     paths:
+#       - 'web/**'
+#       - '.github/workflows/engine-hardening.yml'
+#   push:
+#     branches:
+#       - main
+#       - module-refactor
+#     paths:
+#       - 'web/**'
+#       - '.github/workflows/engine-hardening.yml'
 
 jobs:
   engine-hardening:

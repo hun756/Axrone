@@ -52,6 +52,47 @@ public sealed class GltfParserTests
     }
 
     [Fact]
+    public void Parse_NodeLightExtensions_PreservesSiblingNodes()
+    {
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "extensionsUsed": ["KHR_lights_punctual"],
+              "extensions": {
+                "KHR_lights_punctual": {
+                  "lights": [
+                    {"type": "point", "intensity": 1, "range": 5},
+                    {"type": "point", "intensity": 1, "range": 5},
+                    {"type": "point", "intensity": 1, "range": 5}
+                  ]
+                }
+              },
+              "scene": 0,
+              "scenes": [{"nodes": [0, 1, 2]}],
+              "nodes": [
+                {"name": "L0", "extensions": {"KHR_lights_punctual": {"light": 0}}},
+                {"name": "L1", "extensions": {"KHR_lights_punctual": {"light": 1}}},
+                {"name": "L2", "extensions": {"KHR_lights_punctual": {"light": 2}}}
+              ]
+            }
+            """;
+
+        var model = GltfJsonParser.Parse(System.Text.Encoding.UTF8.GetBytes(json));
+
+        model.Lights.Should().HaveCount(3);
+        model.Nodes.Should().HaveCount(3);
+        model.Scenes[0].Nodes.Should().Equal(0, 1, 2);
+        model.Nodes.Select(static node => node.Light).Should().Equal(0, 1, 2);
+    }
+
+    [Fact]
+    public void Parse_MissingAsset_Throws()
+    {
+        Action act = () => GltfJsonParser.Parse("{}"u8.ToArray());
+        act.Should().Throw<GltfSchemaError>();
+    }
+
+    [Fact]
     public void Parse_InvalidRoot_Throws()
     {
         Action act = () => GltfJsonParser.Parse("[]"u8.ToArray());

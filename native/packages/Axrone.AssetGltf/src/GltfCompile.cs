@@ -14,32 +14,48 @@ public static class GltfCompileExtensions
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         GltfRawModel rawModel = pipeline.RawModel!;
         GltfResourceRuntimeCache resourceRuntime = pipeline.ResourceRuntime!;
         List<GltfDiagnostic> diagnostics = pipeline.Diagnostics;
 
+        GltfLimitsValidator.Validate(pipeline.SourceBytes.Length, rawModel, options.Limits);
+
         List<GltfTextureAsset> textures = await CompileTexturesAsync<TMeshoptPolicy, TTranscoderPolicy>(
             rawModel, resourceRuntime, options, diagnostics, cancellationToken).ConfigureAwait(false);
 
+        cancellationToken.ThrowIfCancellationRequested();
         List<GltfMaterialAsset> materials = CompileMaterials(rawModel, options);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        (List<GltfMeshAsset> meshes, ImmutableDictionary<int, string> meshKeyMap) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
-            rawModel, resourceRuntime, diagnostics, cancellationToken).ConfigureAwait(false);
+        (List<GltfMeshAsset> meshes, ImmutableArray<ImmutableArray<string>> meshKeysByMesh) = await CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+            rawModel, resourceRuntime, options.Limits, diagnostics, cancellationToken).ConfigureAwait(false);
 
         (List<GltfSkinAsset> skins, ImmutableDictionary<int, string> skinKeyMap) = await CompileSkinsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
 
         List<GltfAnimationClipAsset> animations = await CompileAnimationsAsync<TMeshoptPolicy>(
             rawModel, resourceRuntime, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
         ImmutableArray<string> animIds = animations.ConvertAll(static a => a.Id).ToImmutableArray();
 
-        var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(Math.Max(1, rawModel.Scenes.Count));
+        var materialVariants = ImmutableArray.CreateBuilder<GltfMaterialVariant>(rawModel.Variants.Count);
+        for (int i = 0; i < rawModel.Variants.Count; i++)
+        {
+            materialVariants.Add(new GltfMaterialVariant(
+                i,
+                rawModel.Variants[i].Name ?? $"Variant_{i}"));
+        }
+
+        var prefabs = ImmutableArray.CreateBuilder<GltfPrefabAsset>(rawModel.Scenes.Count);
         var sceneAssets = ImmutableArray.CreateBuilder<GltfDocumentSceneAsset>(rawModel.Scenes.Count);
         int defaultSceneIdx = rawModel.DefaultScene >= 0 && rawModel.DefaultScene < rawModel.Scenes.Count
             ? rawModel.DefaultScene
-            : 0;
+            : rawModel.Scenes.Count > 0
+                ? 0
+                : -1;
 
         for (int s = 0; s < rawModel.Scenes.Count; s++)
         {
@@ -48,9 +64,10 @@ public static class GltfCompileExtensions
                 rawModel,
                 s == defaultSceneIdx,
                 diagnostics,
-                meshKeyMap,
+                meshKeysByMesh,
                 skinKeyMap,
-                animIds);
+                animIds,
+                options.MaxLocalLightsBudget);
 
             prefabs.Add(prefab);
 
@@ -81,6 +98,7 @@ public static class GltfCompileExtensions
             Document = new GltfDocumentAsset
             {
                 Id = options.Id,
+                Uri = options.SourceUri,
                 Name = Path.GetFileNameWithoutExtension(options.Id),
                 Format = pipeline.ContainerFormat,
                 Version = rawModel.Version,
@@ -95,6 +113,7 @@ public static class GltfCompileExtensions
                 TextureKeys = textures.ConvertAll(static t => t.Id).ToImmutableArray(),
                 ExtensionsUsed = rawModel.ExtensionsUsed.ToImmutableArray(),
                 ExtensionsRequired = rawModel.ExtensionsRequired.ToImmutableArray(),
+                MaterialVariants = materialVariants.MoveToImmutable(),
                 Stats = stats,
             },
             Prefabs = prefabs.MoveToImmutable(),
@@ -119,6 +138,7 @@ public static class GltfCompileExtensions
         var textures = new List<GltfTextureAsset>(rawModel.Textures.Count);
         for (int i = 0; i < rawModel.Textures.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Texture texDef = rawModel.Textures[i];
             GltfRawModel.Sampler sampDef = (texDef.Sampler.HasValue && texDef.Sampler.Value < rawModel.Samplers.Count)
                 ? rawModel.Samplers[texDef.Sampler.Value]
@@ -145,18 +165,30 @@ public static class GltfCompileExtensions
                             runtimeFormat = Ktx2Decoder.MapVkFormat(compressed.VkFormat);
 
                             if (options.TranscodeTargetFormat != GltfTextureFormat.Unknown
-                                && TTranscoderPolicy.CanTranscode(runtimeFormat, options.TranscodeTargetFormat))
+                                && TTranscoderPolicy.CanTranscode(
+                                    imgBytes.Span,
+                                    runtimeFormat,
+                                    options.TranscodeTargetFormat))
                             {
-                                if (TTranscoderPolicy.TryTranscode(imgBytes, runtimeFormat, options.TranscodeTargetFormat, out ReadOnlyMemory<byte> transcoded, out string? failureReason))
+                                if (TTranscoderPolicy.TryTranscode(
+                                        imgBytes,
+                                        runtimeFormat,
+                                        options.TranscodeTargetFormat,
+                                        out GltfTranscodeOutput? transcodeOutput,
+                                        out string? failureReason) &&
+                                    transcodeOutput.HasValue)
                                 {
                                     transcodeState = new GltfTextureTranscodeState(true, TTranscoderPolicy.PolicyId, null, options.TranscodeTargetFormat);
-                                    runtimeFormat = options.TranscodeTargetFormat;
-                                    payload = new GltfRawTexturePayload(transcoded, "application/octet-stream");
+                                    runtimeFormat = transcodeOutput.Value.Format;
+                                    payload = transcodeOutput.Value.Payload;
                                 }
                                 else
                                 {
                                     transcodeState = new GltfTextureTranscodeState(false, null, failureReason, options.TranscodeTargetFormat);
-                                    diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.texture.transcode.failed", failureReason!));
+                                    diagnostics.Add(new GltfDiagnostic(
+                                        GltfDiagnosticLevel.Warning,
+                                        "gltf.texture.transcode.failed",
+                                        failureReason ?? "Texture transcode failed."));
                                 }
                             }
                         }
@@ -169,12 +201,35 @@ public static class GltfCompileExtensions
                     else
                     {
                         payload = new GltfRawTexturePayload(imgBytes, img.MimeType ?? "image/png");
-                        runtimeFormat = GltfTextureFormat.R8G8B8A8_UNorm;
+                        runtimeFormat = GltfTextureFormat.Unknown;
                     }
                 }
                 else if (!string.IsNullOrEmpty(img.Uri))
                 {
-                    payload = new GltfExternalTexturePayload(img.Uri);
+                    if (img.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        payload = new GltfRawTexturePayload(
+                            GltfResourceRuntimeCache.DecodeDataUri(img.Uri),
+                            img.MimeType ?? GltfResourceRuntimeCache.GetDataUriMimeType(img.Uri) ?? "application/octet-stream");
+                        runtimeFormat = GltfTextureFormat.Unknown;
+                    }
+                    else
+                    {
+                        ReadOnlyMemory<byte>? resolvedImage = await resourceRuntime.TryResolveImageAsync(
+                            img.Uri, img.MimeType, cancellationToken).ConfigureAwait(false);
+
+                        if (resolvedImage.HasValue)
+                        {
+                            payload = new GltfRawTexturePayload(
+                                resolvedImage.Value,
+                                img.MimeType ?? "application/octet-stream");
+                            runtimeFormat = GltfTextureFormat.Unknown;
+                        }
+                        else
+                        {
+                            payload = new GltfExternalTexturePayload(img.Uri);
+                        }
+                    }
                 }
                 else
                 {
@@ -208,17 +263,52 @@ public static class GltfCompileExtensions
         for (int i = 0; i < rawModel.Materials.Count; i++)
         {
             GltfRawModel.Material mDef = rawModel.Materials[i];
+            ValidateTextureBinding(mDef.Pbr.BaseColorTexture, i, rawModel.Textures.Count, "baseColorTexture");
+            ValidateTextureBinding(mDef.Pbr.MetallicRoughnessTexture, i, rawModel.Textures.Count, "metallicRoughnessTexture");
+            ValidateTextureBinding(mDef.NormalTexture, i, rawModel.Textures.Count, "normalTexture");
+            ValidateTextureBinding(mDef.OcclusionTexture, i, rawModel.Textures.Count, "occlusionTexture");
+            ValidateTextureBinding(mDef.EmissiveTexture, i, rawModel.Textures.Count, "emissiveTexture");
+            ValidateTextureBinding(mDef.ClearcoatTexture, i, rawModel.Textures.Count, "clearcoatTexture");
+            ValidateTextureBinding(mDef.ClearcoatRoughnessTexture, i, rawModel.Textures.Count, "clearcoatRoughnessTexture");
+            ValidateTextureBinding(mDef.ClearcoatNormalTexture, i, rawModel.Textures.Count, "clearcoatNormalTexture");
+            ValidateTextureBinding(mDef.SpecularTexture, i, rawModel.Textures.Count, "specularTexture");
+            ValidateTextureBinding(mDef.SpecularColorTexture, i, rawModel.Textures.Count, "specularColorTexture");
+            ValidateTextureBinding(mDef.SheenColorTexture, i, rawModel.Textures.Count, "sheenColorTexture");
+            ValidateTextureBinding(mDef.SheenRoughnessTexture, i, rawModel.Textures.Count, "sheenRoughnessTexture");
+            ValidateTextureBinding(mDef.TransmissionTexture, i, rawModel.Textures.Count, "transmissionTexture");
+            ValidateTextureBinding(mDef.ThicknessTexture, i, rawModel.Textures.Count, "thicknessTexture");
+            ValidateTextureBinding(mDef.IridescenceTexture, i, rawModel.Textures.Count, "iridescenceTexture");
+            ValidateTextureBinding(mDef.IridescenceThicknessTexture, i, rawModel.Textures.Count, "iridescenceThicknessTexture");
+            ValidateTextureBinding(mDef.AnisotropyTexture, i, rawModel.Textures.Count, "anisotropyTexture");
+
             var floatUniforms = ImmutableDictionary.CreateBuilder<string, float[]>(StringComparer.Ordinal);
             var scalarUniforms = ImmutableDictionary.CreateBuilder<string, float>(StringComparer.Ordinal);
             var intUniforms = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
             var texBindings = ImmutableDictionary.CreateBuilder<GltfTextureUsage, GltfMaterialTextureBinding>();
 
-            float[] baseColor = mDef.Pbr.BaseColorFactor ?? [0.84f, 0.84f, 0.86f, 1.0f];
+            float[] baseColor = mDef.Pbr.BaseColorFactor ?? [1.0f, 1.0f, 1.0f, 1.0f];
             floatUniforms.Add("_BaseColorFactor", baseColor);
             scalarUniforms.Add("_MetallicFactor", mDef.Pbr.MetallicFactor);
             scalarUniforms.Add("_RoughnessFactor", mDef.Pbr.RoughnessFactor);
             scalarUniforms.Add("_ClearcoatFactor", mDef.ClearcoatFactor);
             scalarUniforms.Add("_ClearcoatRoughnessFactor", mDef.ClearcoatRoughnessFactor);
+
+            floatUniforms.Add("_SpecularColorFactor", mDef.SpecularColorFactor ?? [1.0f, 1.0f, 1.0f]);
+            scalarUniforms.Add("_SpecularFactor", mDef.SpecularFactor);
+            floatUniforms.Add("_SheenColorFactor", mDef.SheenColorFactor ?? [0.0f, 0.0f, 0.0f]);
+            scalarUniforms.Add("_SheenRoughnessFactor", mDef.SheenRoughnessFactor);
+            scalarUniforms.Add("_TransmissionFactor", mDef.TransmissionFactor);
+            scalarUniforms.Add("_ThicknessFactor", mDef.ThicknessFactor);
+            scalarUniforms.Add("_AttenuationDistance", mDef.AttenuationDistance);
+            floatUniforms.Add("_AttenuationColor", mDef.AttenuationColor ?? [1.0f, 1.0f, 1.0f]);
+            scalarUniforms.Add("_IorFactor", mDef.Ior);
+            scalarUniforms.Add("_IridescenceFactor", mDef.IridescenceFactor);
+            scalarUniforms.Add("_IridescenceIor", mDef.IridescenceIor);
+            scalarUniforms.Add("_IridescenceThicknessMinimum", mDef.IridescenceThicknessMinimum);
+            scalarUniforms.Add("_IridescenceThicknessMaximum", mDef.IridescenceThicknessMaximum);
+            scalarUniforms.Add("_AnisotropyStrength", mDef.AnisotropyStrength);
+            scalarUniforms.Add("_AnisotropyRotation", mDef.AnisotropyRotation);
+            scalarUniforms.Add("_Dispersion", mDef.Dispersion);
 
             float[] emissive = mDef.EmissiveFactor ?? [0.0f, 0.0f, 0.0f];
             if (mDef.EmissiveStrength != 1.0f)
@@ -239,8 +329,9 @@ public static class GltfCompileExtensions
                 "BLEND" => GltfAlphaMode.Blend,
                 _ => GltfAlphaMode.Opaque,
             };
+            float alphaCutoff = mDef.AlphaCutoff ?? options.AlphaCutoffThreshold;
             intUniforms.Add("_AlphaMode", (int)alphaMode);
-            scalarUniforms.Add("_AlphaCutoff", mDef.AlphaCutoff);
+            scalarUniforms.Add("_AlphaCutoff", alphaCutoff);
             intUniforms.Add("_DoubleSided", mDef.DoubleSided ? 1 : 0);
 
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.BaseColor, mDef.Pbr.BaseColorTexture, "_BaseColorTexture");
@@ -251,6 +342,15 @@ public static class GltfCompileExtensions
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Clearcoat, mDef.ClearcoatTexture, "_ClearcoatTexture");
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.ClearcoatRoughness, mDef.ClearcoatRoughnessTexture, "_ClearcoatRoughnessTexture");
             BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.ClearcoatNormal, mDef.ClearcoatNormalTexture, "_ClearcoatNormalTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Specular, mDef.SpecularTexture, "_SpecularTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SpecularColor, mDef.SpecularColorTexture, "_SpecularColorTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SheenColor, mDef.SheenColorTexture, "_SheenColorTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.SheenRoughness, mDef.SheenRoughnessTexture, "_SheenRoughnessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Transmission, mDef.TransmissionTexture, "_TransmissionTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Thickness, mDef.ThicknessTexture, "_ThicknessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Iridescence, mDef.IridescenceTexture, "_IridescenceTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.IridescenceThickness, mDef.IridescenceThicknessTexture, "_IridescenceThicknessTexture");
+            BindTexture(texBindings, floatUniforms, scalarUniforms, intUniforms, GltfTextureUsage.Anisotropy, mDef.AnisotropyTexture, "_AnisotropyTexture");
 
             var definition = new GltfMaterialDefinition
             {
@@ -266,7 +366,7 @@ public static class GltfCompileExtensions
                 MaterialIndex = i,
                 Definition = definition,
                 AlphaMode = alphaMode,
-                AlphaCutoff = mDef.AlphaCutoff,
+                AlphaCutoff = alphaCutoff,
                 DoubleSided = mDef.DoubleSided,
                 Unlit = mDef.Unlit,
                 Textures = texBindings.ToImmutable(),
@@ -274,6 +374,19 @@ public static class GltfCompileExtensions
         }
 
         return materials;
+    }
+
+    private static void ValidateTextureBinding(
+        GltfRawModel.TextureInfo? info,
+        int materialIndex,
+        int textureCount,
+        string slot)
+    {
+        if (info != null && info.Index >= 0 && info.Index >= textureCount)
+        {
+            ThrowHelper.ThrowSchema(
+                $"Material {materialIndex} references missing texture {info.Index} in '{slot}'.");
+        }
     }
 
     private static void BindTexture(
@@ -306,47 +419,89 @@ public static class GltfCompileExtensions
         scalarUniforms.Add($"{uniformPrefix}_Strength", info.Strength);
     }
 
-    internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableDictionary<int, string> MeshKeyMap)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
+    internal static async ValueTask<(List<GltfMeshAsset> Meshes, ImmutableArray<ImmutableArray<string>> MeshKeysByMesh)> CompileMeshesAsync<TDracoPolicy, TMeshoptPolicy>(
         GltfRawModel rawModel,
         GltfResourceRuntimeCache resourceRuntime,
+        GltfImportLimits limits,
         List<GltfDiagnostic> diagnostics,
         CancellationToken cancellationToken)
         where TDracoPolicy : struct, IDracoMeshPolicy
         where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
     {
         var meshes = new List<GltfMeshAsset>();
-        var meshKeyMap = ImmutableDictionary.CreateBuilder<int, string>();
+        var meshKeysByMesh = ImmutableArray.CreateBuilder<ImmutableArray<string>>(rawModel.Meshes.Count);
 
         for (int m = 0; m < rawModel.Meshes.Count; m++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Mesh meshDef = rawModel.Meshes[m];
+            var primitiveKeys = ImmutableArray.CreateBuilder<string>(meshDef.Primitives.Count);
+
             for (int p = 0; p < meshDef.Primitives.Count; p++)
             {
                 GltfRawModel.Primitive prim = meshDef.Primitives[p];
-                string meshAssetId = $"gltf/mesh/{m}:{p}";
-                if (p == 0)
+                string meshAssetId = GltfKeys.Mesh(m, p);
+                primitiveKeys.Add(meshAssetId);
+
+                if (prim.Material.HasValue &&
+                    (prim.Material.Value < 0 || prim.Material.Value >= rawModel.Materials.Count))
                 {
-                    meshKeyMap[m] = meshAssetId;
+                    ThrowHelper.ThrowSchema(
+                        $"Mesh {m} primitive {p} references a missing material {prim.Material.Value}.");
                 }
 
-                int vertexCount = 0;
+                if (prim.Indices.HasValue &&
+                    (prim.Indices.Value < 0 || prim.Indices.Value >= rawModel.Accessors.Count))
+                {
+                    ThrowHelper.ThrowSchema(
+                        $"Mesh {m} primitive {p} references a missing index accessor {prim.Indices.Value}.");
+                }
+
+                if (prim.Draco != null && !TDracoPolicy.IsSupported)
+                {
+                    if (rawModel.ExtensionsRequired.Contains("KHR_draco_mesh_compression"))
+                    {
+                        ThrowHelper.ThrowUnsupportedExtension(
+                            "KHR_draco_mesh_compression",
+                            "no Draco decoder is linked for this import.");
+                    }
+
+                    diagnostics.Add(new GltfDiagnostic(
+                        GltfDiagnosticLevel.Warning,
+                        "gltf.extension.unsupported",
+                        "KHR_draco_mesh_compression was ignored because no Draco decoder is linked."));
+                }
+
+                int vertexCount = -1;
                 var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
+                var attributeNames = new List<string>(prim.Attributes.Count);
+                var isCustomAttribute = new List<bool>(prim.Attributes.Count);
                 int totalInterleavedStride = 0;
 
                 foreach (KeyValuePair<string, int> kv in prim.Attributes)
                 {
                     if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
                     {
-                        continue;
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
                     }
 
                     GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
-                    vertexCount = acc.Count;
-
-                    if (!TryParseSemantic(kv.Key, out GltfMeshSemantic semantic))
+                    bool isCustom = !TryParseSemantic(kv.Key, out GltfMeshSemantic semantic);
+                    if (isCustom)
                     {
-                        diagnostics.Add(new GltfDiagnostic(GltfDiagnosticLevel.Warning, "gltf.mesh.attribute.unsupported", $"Attribute '{kv.Key}' bypassed."));
-                        continue;
+                        semantic = GltfMeshSemantic.Custom;
+                    }
+
+                    if (vertexCount < 0)
+                    {
+                        vertexCount = acc.Count;
+                    }
+                    else if (acc.Count != vertexCount)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            kv.Value,
+                            $"attribute vertex count {acc.Count} does not match the primitive vertex count {vertexCount}.");
                     }
 
                     int compCount = GltfAccessorRuntime.GetTypeElementCount(acc.Type);
@@ -362,7 +517,58 @@ public static class GltfCompileExtensions
                         acc.Normalized,
                         acc.ComponentType != 5126));
 
+                    attributeNames.Add(kv.Key);
+                    isCustomAttribute.Add(isCustom);
                     totalInterleavedStride += attrSize;
+                }
+
+                if (vertexCount < 0)
+                {
+                    ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} has no supported vertex attributes.");
+                }
+
+                GltfDracoDecodedMesh? dracoMesh = null;
+                if (prim.Draco != null && TDracoPolicy.IsSupported)
+                {
+                    // KHR_draco_mesh_compression only allows triangle primitives.
+                    if (prim.Mode is not (4 or 5))
+                    {
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} uses KHR_draco_mesh_compression with mode {prim.Mode}; only TRIANGLES and TRIANGLE_STRIP are allowed.");
+                    }
+
+                    ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                        prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                    GltfDracoDecodeStatus status = TDracoPolicy.TryDecodeMesh(
+                        dracoBytes.Span,
+                        new GltfDracoDecodeLimits(limits.MaxDecodedBytes),
+                        out dracoMesh,
+                        out long decodedBytes);
+
+                    if (status != GltfDracoDecodeStatus.Success || dracoMesh == null)
+                    {
+                        if (status == GltfDracoDecodeStatus.LimitExceeded)
+                        {
+                            ThrowHelper.ThrowLimit("MaxDecodedBytes", decodedBytes, limits.MaxDecodedBytes);
+                        }
+
+                        if (status == GltfDracoDecodeStatus.Unsupported)
+                        {
+                            ThrowHelper.ThrowAccessor(
+                                prim.Attributes.GetValueOrDefault("POSITION", -1),
+                                "uses a Draco attribute layout the decoder cannot represent.");
+                        }
+
+                        ThrowHelper.ThrowSchema($"Mesh {m} primitive {p} Draco payload is not a decodable triangular mesh.");
+                    }
+
+                    if (dracoMesh.VertexCount != vertexCount)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            prim.Attributes.GetValueOrDefault("POSITION", -1),
+                            $"Draco vertex count {dracoMesh.VertexCount} does not match accessor count {vertexCount}.");
+                    }
                 }
 
                 byte[] interleavedVertices = GC.AllocateUninitializedArray<byte>(vertexCount * totalInterleavedStride, pinned: true);
@@ -371,62 +577,109 @@ public static class GltfCompileExtensions
                 for (int a = 0; a < attrLayouts.Count; a++)
                 {
                     GltfVertexAttribute layout = attrLayouts[a];
-                    string semStr = GetSemanticString(layout.Semantic);
-                    GltfRawModel.Accessor acc = rawModel.Accessors[prim.Attributes[semStr]];
+                    string semStr = attributeNames[a];
+                    int accessorIndex = prim.Attributes[semStr];
+                    GltfRawModel.Accessor acc = rawModel.Accessors[accessorIndex];
 
                     int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
-                    int elemSize = layout.ComponentCount * compSize;
+                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, accessorIndex, layout.ComponentCount);
                     var decodedFloats = new float[vertexCount * layout.ComponentCount];
 
-                    if (prim.Draco != null && TDracoPolicy.IsSupported)
+                    if (dracoMesh != null)
                     {
-                        ReadOnlyMemory<byte> dracoBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
-                            prim.Draco.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-
-                        byte[] tempAttr = GC.AllocateUninitializedArray<byte>(vertexCount * elemSize, pinned: true);
-                        bool decoded;
-                        int dracoVertexCount;
+                        int dracoAttributeId = 0;
+                        bool hasDracoAttribute = prim.Draco != null &&
+                            prim.Draco.Attributes.TryGetValue(semStr, out dracoAttributeId);
+                        if (!hasDracoAttribute)
                         {
-                            ReadOnlySpan<byte> dracoSpan = dracoBytes.Span;
-                            decoded = TDracoPolicy.TryDecodePrimitive(dracoSpan, layout.Semantic, acc.ComponentType, tempAttr, out dracoVertexCount);
+                            ThrowHelper.ThrowAccessor(accessorIndex, "is missing from the decoded Draco primitive.");
                         }
 
-                        if (decoded)
+                        float[]? dracoValues = null;
+                        bool hasDracoValues = dracoMesh.Attributes.TryGetValue(dracoAttributeId, out dracoValues);
+                        if (!hasDracoValues || dracoValues == null)
                         {
-                            GltfAccessorRuntime.DecodeFloats(tempAttr, dracoVertexCount, acc.ComponentType, layout.ComponentCount, elemSize, acc.Normalized, decodedFloats);
+                            ThrowHelper.ThrowAccessor(accessorIndex, "is missing from the decoded Draco primitive.");
+                        }
+
+                        if (dracoValues.Length != vertexCount * layout.ComponentCount)
+                        {
+                            ThrowHelper.ThrowAccessor(accessorIndex, "Draco attribute component count does not match its accessor.");
+                        }
+
+                        // Draco stores normalized integer accessors as raw
+                        // integers; float-backed attributes are already in
+                        // accessor units.
+                        double inverseMax = 1d;
+                        if (acc.Normalized)
+                        {
+                            if (!dracoMesh.AttributeDataTypes.TryGetValue(dracoAttributeId, out GltfDracoAttributeDataType dataType) ||
+                                dataType is GltfDracoAttributeDataType.Unknown or GltfDracoAttributeDataType.Other)
+                            {
+                                ThrowHelper.ThrowAccessor(
+                                    accessorIndex,
+                                    "has a normalized Draco attribute with an unknown storage type.");
+                            }
+
+                            if (dataType != GltfDracoAttributeDataType.Float32)
+                            {
+                                inverseMax = 1d / GetIntegerDataTypeMax(dataType);
+                            }
+                        }
+
+                        if (inverseMax == 1d)
+                        {
+                            dracoValues.AsSpan().CopyTo(decodedFloats);
+                        }
+                        else
+                        {
+                            for (int i = 0; i < dracoValues.Length; i++)
+                            {
+                                decodedFloats[i] = (float)(dracoValues[i] * inverseMax);
+                            }
                         }
                     }
                     else
                     {
-                        ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
-                            acc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-
+                        if (acc.BufferView >= 0)
                         {
+                            ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                                acc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
                             ReadOnlySpan<byte> srcSpan = viewBytes.Span.Slice(acc.ByteOffset);
                             int srcStride = rawModel.BufferViews[acc.BufferView].ByteStride;
                             GltfAccessorRuntime.DecodeFloats(srcSpan, vertexCount, acc.ComponentType, layout.ComponentCount, srcStride, acc.Normalized, decodedFloats);
                         }
+                        else if (acc.Sparse == null)
+                        {
+                            ThrowHelper.ThrowAccessor(accessorIndex, "has neither a base bufferView nor sparse data.");
+                        }
 
                         if (acc.Sparse != null)
                         {
+                            if (acc.Sparse.Indices.BufferView < 0 || acc.Sparse.Values.BufferView < 0)
+                            {
+                                ThrowHelper.ThrowAccessor(accessorIndex, "has an invalid sparse bufferView reference.");
+                            }
+
                             ReadOnlyMemory<byte> sparseIndexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                                 acc.Sparse.Indices.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
                             ReadOnlyMemory<byte> sparseValueBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                                 acc.Sparse.Values.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
-                            {
-                                ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
-                                ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
-                                GltfAccessorRuntime.MergeSparseFloats(
-                                    idxSpan,
-                                    acc.Sparse.Indices.ComponentType,
-                                    valSpan,
-                                    acc.Sparse.Count,
-                                    acc.ComponentType,
-                                    layout.ComponentCount,
-                                    acc.Normalized,
-                                    decodedFloats);
-                            }
+                            ReadOnlySpan<byte> idxSpan = sparseIndexBytes.Span.Slice(acc.Sparse.Indices.ByteOffset);
+                            ReadOnlySpan<byte> valSpan = sparseValueBytes.Span.Slice(acc.Sparse.Values.ByteOffset);
+                            GltfAccessorRuntime.MergeSparseFloats(
+                                accessorIndex,
+                                idxSpan,
+                                acc.Sparse.Indices.ComponentType,
+                                valSpan,
+                                acc.Sparse.Count,
+                                vertexCount,
+                                acc.ComponentType,
+                                layout.ComponentCount,
+                                acc.Normalized,
+                                decodedFloats);
                         }
                     }
 
@@ -444,19 +697,29 @@ public static class GltfCompileExtensions
                                     BinaryPrimitives.WriteSingleLittleEndian(interleavedVertices.AsSpan(compDst, 4), val);
                                     break;
                                 case 5120:
-                                    interleavedVertices[compDst] = (byte)(sbyte)(layout.Normalized ? val * 127.0f : val);
+                                    interleavedVertices[compDst] = layout.Normalized
+                                        ? (byte)QuantizeSignedNormalized(val, 127f)
+                                        : (byte)(sbyte)val;
                                     break;
                                 case 5121:
-                                    interleavedVertices[compDst] = (byte)(layout.Normalized ? val * 255.0f : val);
+                                    interleavedVertices[compDst] = layout.Normalized
+                                        ? (byte)QuantizeUnsignedNormalized(val, 255f)
+                                        : (byte)val;
                                     break;
                                 case 5122:
-                                    BinaryPrimitives.WriteInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (short)(layout.Normalized ? val * 32767.0f : val));
+                                    BinaryPrimitives.WriteInt16LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 2),
+                                        layout.Normalized ? (short)QuantizeSignedNormalized(val, 32767f) : (short)val);
                                     break;
                                 case 5123:
-                                    BinaryPrimitives.WriteUInt16LittleEndian(interleavedVertices.AsSpan(compDst, 2), (ushort)(layout.Normalized ? val * 65535.0f : val));
+                                    BinaryPrimitives.WriteUInt16LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 2),
+                                        layout.Normalized ? (ushort)QuantizeUnsignedNormalized(val, 65535f) : (ushort)val);
                                     break;
                                 case 5125:
-                                    BinaryPrimitives.WriteUInt32LittleEndian(interleavedVertices.AsSpan(compDst, 4), (uint)(layout.Normalized ? val * 4294967295.0f : val));
+                                    BinaryPrimitives.WriteUInt32LittleEndian(
+                                        interleavedVertices.AsSpan(compDst, 4),
+                                        layout.Normalized ? QuantizeUnsignedNormalized32(val) : (uint)val);
                                     break;
                                 default:
                                     break;
@@ -478,20 +741,43 @@ public static class GltfCompileExtensions
                     {
                         if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
                         {
-                            continue;
+                            ThrowHelper.ThrowSchema(
+                                $"Mesh {m} primitive {p} morph target {t} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
                         }
 
                         GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
-                        GltfMorphTargetSemantic morphSemantic = kv.Key switch
+                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
+                        if (tAcc.Count != vertexCount)
                         {
-                            "NORMAL" => GltfMorphTargetSemantic.Normal,
-                            "TANGENT" => GltfMorphTargetSemantic.Tangent,
-                            _ => GltfMorphTargetSemantic.Position,
-                        };
+                            ThrowHelper.ThrowAccessor(
+                                kv.Value,
+                                $"morph target vertex count {tAcc.Count} does not match the primitive vertex count {vertexCount}.");
+                        }
+
+                        GltfMorphTargetSemantic morphSemantic;
+                        switch (kv.Key)
+                        {
+                            case "POSITION":
+                                morphSemantic = GltfMorphTargetSemantic.Position;
+                                break;
+                            case "NORMAL":
+                                morphSemantic = GltfMorphTargetSemantic.Normal;
+                                break;
+                            case "TANGENT":
+                                morphSemantic = GltfMorphTargetSemantic.Tangent;
+                                break;
+                            default:
+                                diagnostics.Add(new GltfDiagnostic(
+                                    GltfDiagnosticLevel.Warning,
+                                    "gltf.mesh.target.attribute.unsupported",
+                                    $"Morph target attribute '{kv.Key}' bypassed."));
+                                continue;
+                        }
+
+                        GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
 
                         ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                             tAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
 
                         var deltaFloats = new float[tAcc.Count * targetCompCount];
                         {
@@ -511,9 +797,37 @@ public static class GltfCompileExtensions
                 }
 
                 uint[] expandedIndices;
-                if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
+                if (dracoMesh != null)
+                {
+                    ImmutableArray<uint> dracoIndices = dracoMesh.Indices;
+                    if (prim.Indices is int indexAccessor &&
+                        indexAccessor >= 0 &&
+                        indexAccessor < rawModel.Accessors.Count &&
+                        rawModel.Accessors[indexAccessor].Count != dracoIndices.Length)
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            indexAccessor,
+                            $"Draco index count {dracoIndices.Length} does not match accessor count {rawModel.Accessors[indexAccessor].Count}.");
+                    }
+
+                    GltfAccessorRuntime.ValidateIndices(
+                        dracoIndices.AsSpan(),
+                        vertexCount,
+                        prim.Indices ?? -1);
+                    expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, dracoIndices.AsSpan(), vertexCount);
+                }
+                else if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
                 {
                     GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
+                    if (!string.Equals(indexAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                        indexAcc.ComponentType is not (5121 or 5123 or 5125))
+                    {
+                        ThrowHelper.ThrowAccessor(
+                            prim.Indices.Value,
+                            "index accessors must use an unsigned SCALAR component type.");
+                    }
+
+                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, prim.Indices.Value, 1);
                     ReadOnlyMemory<byte> indexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         indexAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -523,6 +837,7 @@ public static class GltfCompileExtensions
                         GltfAccessorRuntime.DecodeIndices(indexSpan, indexAcc.Count, indexAcc.ComponentType, rawModel.BufferViews[indexAcc.BufferView].ByteStride, decodedRawIndices);
                     }
 
+                    GltfAccessorRuntime.ValidateIndices(decodedRawIndices, vertexCount, prim.Indices.Value);
                     expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, decodedRawIndices, vertexCount);
                 }
                 else
@@ -533,22 +848,65 @@ public static class GltfCompileExtensions
                 (ReadOnlyMemory<byte> downcastedBytes, bool is16Bit) = GltfMeshPipeline.DowncastIndices(expandedIndices);
 
                 var finalAttributes = ImmutableArray.CreateBuilder<GltfVertexAttribute>(attrLayouts.Count);
+                var customAttributes = ImmutableArray.CreateBuilder<GltfCustomVertexAttribute>();
                 for (int a = 0; a < attrLayouts.Count; a++)
                 {
                     GltfVertexAttribute la = attrLayouts[a];
+                    if (isCustomAttribute[a])
+                    {
+                        customAttributes.Add(new GltfCustomVertexAttribute(
+                            attributeNames[a],
+                            la.Offset,
+                            totalInterleavedStride,
+                            la.ComponentType,
+                            la.ComponentCount,
+                            la.Normalized,
+                            la.Integer));
+                        continue;
+                    }
+
                     finalAttributes.Add(new GltfVertexAttribute(la.Offset, totalInterleavedStride, la.ComponentType, la.Semantic, la.ComponentCount, la.Normalized, la.Integer));
                 }
 
                 var definition = new GltfMeshDefinition(
                     meshAssetId,
                     interleavedVertices,
-                    finalAttributes.MoveToImmutable(),
+                    finalAttributes.ToImmutable(),
                     morphTargetsBuilder.ToImmutable(),
                     downcastedBytes,
                     vertexCount,
                     expandedIndices.Length,
                     is16Bit,
-                    prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles));
+                    prim.Mode == 0 ? GltfMeshTopology.Points : (prim.Mode is 1 or 2 or 3 ? GltfMeshTopology.Lines : GltfMeshTopology.Triangles))
+                {
+                    CustomAttributes = customAttributes.ToImmutable(),
+                };
+
+                var variantMappings = ImmutableArray.CreateBuilder<GltfMaterialVariantMapping>(prim.MaterialVariants.Count);
+                for (int v = 0; v < prim.MaterialVariants.Count; v++)
+                {
+                    GltfRawModel.PrimitiveMaterialVariant mapping = prim.MaterialVariants[v];
+                    for (int variantIndex = 0; variantIndex < mapping.Variants.Count; variantIndex++)
+                    {
+                        int index = mapping.Variants[variantIndex];
+                        if (index < 0 || index >= rawModel.Variants.Count)
+                        {
+                            ThrowHelper.ThrowSchema(
+                                $"Mesh {m} primitive {p} maps an unknown material variant {index}.");
+                        }
+                    }
+
+                    if (mapping.Material.HasValue &&
+                        (mapping.Material.Value < 0 || mapping.Material.Value >= rawModel.Materials.Count))
+                    {
+                        ThrowHelper.ThrowSchema(
+                            $"Mesh {m} primitive {p} maps variant material {mapping.Material.Value} which does not exist.");
+                    }
+
+                    variantMappings.Add(new GltfMaterialVariantMapping(
+                        mapping.Variants.ToImmutableArray(),
+                        mapping.Material));
+                }
 
                 meshes.Add(new GltfMeshAsset
                 {
@@ -558,12 +916,36 @@ public static class GltfCompileExtensions
                     Definition = definition,
                     Bounds = bounds,
                     MaterialKey = prim.Material.HasValue ? $"gltf/material/{prim.Material.Value}" : null,
+                    MaterialVariants = variantMappings.MoveToImmutable(),
                 });
             }
+
+            meshKeysByMesh.Add(primitiveKeys.MoveToImmutable());
         }
 
-        return (meshes, meshKeyMap.ToImmutable());
+        return (meshes, meshKeysByMesh.MoveToImmutable());
     }
+
+    private static double GetIntegerDataTypeMax(GltfDracoAttributeDataType dataType) =>
+        dataType switch
+        {
+            GltfDracoAttributeDataType.Int8 => sbyte.MaxValue,
+            GltfDracoAttributeDataType.UInt8 => byte.MaxValue,
+            GltfDracoAttributeDataType.Int16 => short.MaxValue,
+            GltfDracoAttributeDataType.UInt16 => ushort.MaxValue,
+            GltfDracoAttributeDataType.Int32 => int.MaxValue,
+            GltfDracoAttributeDataType.UInt32 => uint.MaxValue,
+            _ => 1d,
+        };
+
+    private static sbyte QuantizeSignedNormalized(float value, float max) =>
+        (sbyte)MathF.Round(Math.Clamp(value, -1f, 1f) * max);
+
+    private static byte QuantizeUnsignedNormalized(float value, float max) =>
+        (byte)MathF.Round(Math.Clamp(value, 0f, 1f) * max);
+
+    private static uint QuantizeUnsignedNormalized32(float value) =>
+        (uint)Math.Round(Math.Clamp((double)value, 0d, 1d) * uint.MaxValue);
 
     private static bool TryParseSemantic(string name, out GltfMeshSemantic semantic)
     {
@@ -573,27 +955,18 @@ public static class GltfCompileExtensions
             case "NORMAL": semantic = GltfMeshSemantic.Normal; return true;
             case "TEXCOORD_0": semantic = GltfMeshSemantic.Uv0; return true;
             case "TEXCOORD_1": semantic = GltfMeshSemantic.Uv1; return true;
+            case "TEXCOORD_2": semantic = GltfMeshSemantic.Uv2; return true;
+            case "TEXCOORD_3": semantic = GltfMeshSemantic.Uv3; return true;
             case "TANGENT": semantic = GltfMeshSemantic.Tangent; return true;
             case "COLOR_0": semantic = GltfMeshSemantic.Color0; return true;
+            case "COLOR_1": semantic = GltfMeshSemantic.Color1; return true;
             case "JOINTS_0": semantic = GltfMeshSemantic.Joints0; return true;
+            case "JOINTS_1": semantic = GltfMeshSemantic.Joints1; return true;
             case "WEIGHTS_0": semantic = GltfMeshSemantic.Weights0; return true;
+            case "WEIGHTS_1": semantic = GltfMeshSemantic.Weights1; return true;
             default: semantic = default; return false;
         }
     }
-
-    private static string GetSemanticString(GltfMeshSemantic semantic) =>
-        semantic switch
-        {
-            GltfMeshSemantic.Position => "POSITION",
-            GltfMeshSemantic.Normal => "NORMAL",
-            GltfMeshSemantic.Uv0 => "TEXCOORD_0",
-            GltfMeshSemantic.Uv1 => "TEXCOORD_1",
-            GltfMeshSemantic.Tangent => "TANGENT",
-            GltfMeshSemantic.Color0 => "COLOR_0",
-            GltfMeshSemantic.Joints0 => "JOINTS_0",
-            GltfMeshSemantic.Weights0 => "WEIGHTS_0",
-            _ => string.Empty,
-        };
 
     internal static async ValueTask<(List<GltfSkinAsset> Skins, ImmutableDictionary<int, string> SkinKeyMap)> CompileSkinsAsync<TMeshoptPolicy>(
         GltfRawModel rawModel,
@@ -606,6 +979,7 @@ public static class GltfCompileExtensions
 
         for (int s = 0; s < rawModel.Skins.Count; s++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Skin skinDef = rawModel.Skins[s];
             string skinId = $"gltf/skin/{s}";
             skinKeyMap[s] = skinId;
@@ -613,13 +987,47 @@ public static class GltfCompileExtensions
             var jointIds = ImmutableArray.CreateBuilder<string>(skinDef.Joints.Count);
             for (int j = 0; j < skinDef.Joints.Count; j++)
             {
-                jointIds.Add($"node_{skinDef.Joints[j]}_{rawModel.Nodes[skinDef.Joints[j]].Name ?? "unnamed"}");
+                int jointIndex = skinDef.Joints[j];
+                if (jointIndex < 0 || jointIndex >= rawModel.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Skin {s} references a missing joint node {jointIndex}.");
+                }
+
+                jointIds.Add($"node_{jointIndex}_{rawModel.Nodes[jointIndex].Name ?? "unnamed"}");
+            }
+
+            if (skinDef.Skeleton.HasValue &&
+                (skinDef.Skeleton.Value < 0 || skinDef.Skeleton.Value >= rawModel.Nodes.Count))
+            {
+                ThrowHelper.ThrowSchema($"Skin {s} references a missing skeleton node {skinDef.Skeleton.Value}.");
             }
 
             ReadOnlyMemory<float> rowMajorIbm = ReadOnlyMemory<float>.Empty;
-            if (skinDef.InverseBindMatrices.HasValue && skinDef.InverseBindMatrices.Value < rawModel.Accessors.Count)
+            if (skinDef.InverseBindMatrices.HasValue)
             {
-                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[skinDef.InverseBindMatrices.Value];
+                int inverseBindAccessorIndex = skinDef.InverseBindMatrices.Value;
+                if (inverseBindAccessorIndex < 0 || inverseBindAccessorIndex >= rawModel.Accessors.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Skin {s} references a missing inverse-bind accessor {inverseBindAccessorIndex}.");
+                }
+
+                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[inverseBindAccessorIndex];
+                if (!string.Equals(ibmAcc.Type, "MAT4", StringComparison.Ordinal) ||
+                    ibmAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inverseBindAccessorIndex,
+                        "inverse bind matrices must use FLOAT MAT4 accessors.");
+                }
+
+                if (ibmAcc.Count != skinDef.Joints.Count)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inverseBindAccessorIndex,
+                        "inverse bind matrix count does not match the skin joint count.");
+                }
+
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, inverseBindAccessorIndex, 16);
                 ReadOnlyMemory<byte> viewBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                     ibmAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -670,6 +1078,7 @@ public static class GltfCompileExtensions
 
         for (int a = 0; a < rawModel.Animations.Count; a++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             GltfRawModel.Animation animDef = rawModel.Animations[a];
             string animId = $"gltf/animation/{a}";
 
@@ -679,10 +1088,52 @@ public static class GltfCompileExtensions
             for (int c = 0; c < animDef.Channels.Count; c++)
             {
                 GltfRawModel.AnimationChannel chan = animDef.Channels[c];
+                if (chan.Sampler < 0 || chan.Sampler >= animDef.Samplers.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing sampler {chan.Sampler}.");
+                }
+
                 GltfRawModel.AnimationSampler samp = animDef.Samplers[chan.Sampler];
+                if (samp.Input < 0 || samp.Input >= rawModel.Accessors.Count ||
+                    samp.Output < 0 || samp.Output >= rawModel.Accessors.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} references a missing accessor.");
+                }
+
+                bool isPointer = !string.IsNullOrEmpty(chan.Pointer);
+                if (isPointer)
+                {
+                    if (chan.TargetNode >= rawModel.Nodes.Count)
+                    {
+                        ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
+                    }
+                }
+                else if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.Nodes.Count)
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
+                }
 
                 GltfRawModel.Accessor inAcc = rawModel.Accessors[samp.Input];
                 GltfRawModel.Accessor outAcc = rawModel.Accessors[samp.Output];
+                if (!string.Equals(inAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                    inAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(samp.Input, "animation input must use FLOAT SCALAR accessors.");
+                }
+
+                if (outAcc.ComponentType != 5126)
+                {
+                    ThrowHelper.ThrowAccessor(samp.Output, "animation output must use FLOAT components.");
+                }
+
+                if (inAcc.BufferView < 0 || outAcc.BufferView < 0)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        inAcc.BufferView < 0 ? samp.Input : samp.Output,
+                        "animation accessors must be backed by a bufferView.");
+                }
+
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, samp.Input, 1);
 
                 ReadOnlyMemory<byte> inBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                     inAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
@@ -695,40 +1146,97 @@ public static class GltfCompileExtensions
                     GltfAccessorRuntime.DecodeFloats(inSpan, inAcc.Count, inAcc.ComponentType, 1, rawModel.BufferViews[inAcc.BufferView].ByteStride, false, times);
                 }
 
+                for (int t = 1; t < times.Length; t++)
+                {
+                    if (times[t] < 0.0f || times[t] < times[t - 1])
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Input, "animation input times must be non-negative and sorted.");
+                    }
+                }
+
                 if (times.Length > 0 && times[^1] > maxDuration)
                 {
                     maxDuration = times[^1];
                 }
 
-                GltfAnimationPath path = chan.TargetPath.ToLowerInvariant() switch
+                GltfAnimationPath path;
+                if (isPointer)
                 {
-                    "rotation" => GltfAnimationPath.Rotation,
-                    "scale" => GltfAnimationPath.Scale,
-                    "weights" => GltfAnimationPath.Weights,
-                    _ => GltfAnimationPath.Translation,
-                };
+                    path = GltfAnimationPath.Pointer;
+                }
+                else
+                {
+                    string pathText = chan.TargetPath.ToLowerInvariant();
+                    if (pathText is not ("translation" or "rotation" or "scale" or "weights"))
+                    {
+                        ThrowHelper.ThrowSchema($"Animation {a} channel {c} has unsupported target path '{chan.TargetPath}'.");
+                    }
 
-                GltfInterpolation interp = samp.Interpolation.ToUpperInvariant() switch
+                    path = pathText switch
+                    {
+                        "rotation" => GltfAnimationPath.Rotation,
+                        "scale" => GltfAnimationPath.Scale,
+                        "weights" => GltfAnimationPath.Weights,
+                        _ => GltfAnimationPath.Translation,
+                    };
+                }
+
+                string interpolationText = samp.Interpolation.ToUpperInvariant();
+                if (interpolationText is not ("LINEAR" or "STEP" or "CUBICSPLINE"))
+                {
+                    ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} has unsupported interpolation '{samp.Interpolation}'.");
+                }
+
+                GltfInterpolation interp = interpolationText switch
                 {
                     "STEP" => GltfInterpolation.Step,
                     "CUBICSPLINE" => GltfInterpolation.CubicSpline,
                     _ => GltfInterpolation.Linear,
                 };
 
-                int valCompCount = path switch
-                {
-                    GltfAnimationPath.Rotation => 4,
-                    GltfAnimationPath.Weights => GltfAccessorRuntime.GetTypeElementCount(outAcc.Type),
-                    _ => 3,
-                };
+                int keyframeCount = inAcc.Count;
+                int sampleMultiplier = interp == GltfInterpolation.CubicSpline ? 3 : 1;
+                int expectedOutputElements = keyframeCount * sampleMultiplier;
+                int valCompCount;
 
-                int sampleStride = interp == GltfInterpolation.CubicSpline ? 3 * valCompCount : valCompCount;
-                var values = new float[inAcc.Count * sampleStride];
+                if (path == GltfAnimationPath.Weights)
+                {
+                    if (expectedOutputElements <= 0 || outAcc.Count % expectedOutputElements != 0)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "morph weight output count does not align with its keyframes.");
+                    }
+
+                    valCompCount = outAcc.Count / expectedOutputElements;
+                }
+                else if (path == GltfAnimationPath.Pointer)
+                {
+                    valCompCount = GltfAccessorRuntime.GetTypeElementCount(outAcc.Type);
+                    if (valCompCount <= 0 || outAcc.Count != expectedOutputElements)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "animation pointer output count does not match its keyframes and component type.");
+                    }
+                }
+                else
+                {
+                    valCompCount = GltfAccessorRuntime.GetTypeElementCount(outAcc.Type);
+                    int expectedComponentCount = path == GltfAnimationPath.Rotation ? 4 : 3;
+                    if (valCompCount != expectedComponentCount || outAcc.Count != expectedOutputElements)
+                    {
+                        ThrowHelper.ThrowAccessor(samp.Output, "animation output count does not match its keyframes and component type.");
+                    }
+                }
+
+                int sampleStride = sampleMultiplier * valCompCount;
+                GltfAccessorRuntime.ValidateAccessorRange(
+                    rawModel,
+                    samp.Output,
+                    GltfAccessorRuntime.GetTypeElementCount(outAcc.Type));
+                var values = new float[keyframeCount * sampleStride];
                 {
                     ReadOnlySpan<byte> outSpan = outBytes.Span.Slice(outAcc.ByteOffset);
                     GltfAccessorRuntime.DecodeFloats(
                         outSpan,
-                        inAcc.Count * (interp == GltfInterpolation.CubicSpline ? 3 : 1),
+                        expectedOutputElements,
                         outAcc.ComponentType,
                         valCompCount,
                         rawModel.BufferViews[outAcc.BufferView].ByteStride,
@@ -745,8 +1253,9 @@ public static class GltfCompileExtensions
                     TargetNodeIndex = chan.TargetNode,
                     TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{rawModel.Nodes[chan.TargetNode].Name ?? "unnamed"}" : string.Empty,
                     Path = path,
+                    Pointer = chan.Pointer,
                     Interpolation = interp,
-                    KeyframeCount = inAcc.Count,
+                    KeyframeCount = keyframeCount,
                     ValueComponentCount = valCompCount,
                     SampleStride = sampleStride,
                     Times = times,
@@ -778,16 +1287,33 @@ public sealed class GltfImporter
         _options = options ?? new GltfImporterOptions();
     }
 
-    /// <summary>Imports glTF or GLB bytes.</summary>
-    public async ValueTask<GltfImportResult> ImportAsync(
+    /// <summary>Imports glTF or GLB bytes with the default null codecs.</summary>
+    public ValueTask<GltfImportResult> ImportAsync(
+        ReadOnlyMemory<byte> sourceBytes,
+        CancellationToken cancellationToken = default) =>
+        ImportAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+            sourceBytes,
+            cancellationToken);
+
+    /// <summary>Imports glTF or GLB bytes with explicit compression policies.</summary>
+    public async ValueTask<GltfImportResult> ImportAsync<TDracoPolicy, TMeshoptPolicy, TTranscoderPolicy>(
         ReadOnlyMemory<byte> sourceBytes,
         CancellationToken cancellationToken = default)
+        where TDracoPolicy : struct, IDracoMeshPolicy
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+        where TTranscoderPolicy : struct, ITextureTranscoderPolicy
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (sourceBytes.Length > _options.Limits.MaxSourceBytes)
+        {
+            ThrowHelper.ThrowLimit("MaxSourceBytes", sourceBytes.Length, _options.Limits.MaxSourceBytes);
+        }
+
         GltfPipeline<StateUnparsed> pipeline = GltfPipeline<StateUnparsed>.Create(sourceBytes);
         GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
         GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
 
-        return await resolved.CompileAsync<NoDracoCompressionPolicy, NoMeshoptCompressionPolicy, PassthroughTranscoderPolicy>(
+        return await resolved.CompileAsync<TDracoPolicy, TMeshoptPolicy, TTranscoderPolicy>(
             _options,
             cancellationToken).ConfigureAwait(false);
     }

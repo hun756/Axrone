@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.AssetGltf.Codecs</RootNamespace>
+    <AssemblyName>Axrone.AssetGltf.Codecs</AssemblyName>
+    <Description>Optional native decoder policies (Draco, meshopt, Basis/KTX2) for the Axrone glTF import pipeline.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>gltf;draco;meshopt;basisu;ktx2;codecs;3d</PackageTags>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <!-- CA1815: stateless policy structs have no values to compare. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
+    <PackageReference Include="Alimer.Bindings.MeshOptimizer" />
+    <PackageReference Include="BasisUniversal.NET" />
+    <PackageReference Include="BasisUniversal.Native" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Built by CI from native/extern/draco-bridge; absent on machines without a C++ toolchain. -->
+    <Content Include="runtimes\**\native\*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup Label="Packaging">
+    <None Update="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- BasisUniversal.Native injects its runtimes as Content via buildTransitive.
+       Consumers receive them through the package dependency; packing them again
+       collides with the dependency's content folder (NU5118/NU5100). -->
+  <Target Name="ExcludeTransitiveNativeContentFromPack" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <Content Update="@(Content)" Pack="false" Condition="'%(Content.DefiningProjectName)' == 'BasisUniversal.Native'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

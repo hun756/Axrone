@@ -1,12 +1,89 @@
 namespace Axrone.AssetGltf;
 
-/// <summary>Zero-copy span visitor contract.</summary>
-/// <typeparam name="T">Element type.</typeparam>
-public interface ISpanVisitor<T>
+/// <summary>Storage type of one decoded Draco attribute.</summary>
+public enum GltfDracoAttributeDataType : byte
 {
-    /// <summary>Visits a span.</summary>
-    /// <param name="span">Span to visit.</param>
-    void Visit(scoped ReadOnlySpan<T> span);
+    /// <summary>Storage type was not reported.</summary>
+    Unknown = 0,
+
+    /// <summary>Signed 8-bit integer.</summary>
+    Int8 = 1,
+
+    /// <summary>Unsigned 8-bit integer.</summary>
+    UInt8 = 2,
+
+    /// <summary>Signed 16-bit integer.</summary>
+    Int16 = 3,
+
+    /// <summary>Unsigned 16-bit integer.</summary>
+    UInt16 = 4,
+
+    /// <summary>Signed 32-bit integer.</summary>
+    Int32 = 5,
+
+    /// <summary>Unsigned 32-bit integer.</summary>
+    UInt32 = 6,
+
+    /// <summary>32-bit float, already in accessor units.</summary>
+    Float32 = 7,
+
+    /// <summary>Any other storage type.</summary>
+    Other = 8,
+}
+
+/// <summary>Decoded Draco primitive: attributes keyed by Draco unique id.</summary>
+public sealed class GltfDracoDecodedMesh
+{
+    /// <summary>Decoded vertex count.</summary>
+    public required int VertexCount { get; init; }
+
+    /// <summary>Attribute values keyed by Draco unique id, packed as floats.</summary>
+    public required ImmutableDictionary<int, float[]> Attributes { get; init; }
+
+    /// <summary>
+    /// Storage type per attribute, keyed by Draco unique id. Normalized glTF
+    /// accessors backed by integer storage hold raw integers, not [0, 1] values.
+    /// </summary>
+    public ImmutableDictionary<int, GltfDracoAttributeDataType> AttributeDataTypes { get; init; } =
+        ImmutableDictionary<int, GltfDracoAttributeDataType>.Empty;
+
+    /// <summary>Decoded triangle indices.</summary>
+    public required ImmutableArray<uint> Indices { get; init; }
+}
+
+/// <summary>Outcome of one Draco mesh decode attempt.</summary>
+public enum GltfDracoDecodeStatus : byte
+{
+    /// <summary>Mesh decoded and output populated.</summary>
+    Success = 0,
+
+    /// <summary>Bitstream is malformed or not a triangular mesh.</summary>
+    InvalidData = 1,
+
+    /// <summary>Attribute layout or conversion is unsupported.</summary>
+    Unsupported = 2,
+
+    /// <summary>Decoded buffers would exceed <see cref="GltfDracoDecodeLimits.MaxDecodedBytes"/>.</summary>
+    LimitExceeded = 3,
+}
+
+/// <summary>Pre-allocation budget for one Draco decode.</summary>
+public readonly struct GltfDracoDecodeLimits
+{
+    /// <summary>Creates a budget.</summary>
+    /// <param name="maxDecodedBytes">Maximum bytes for decoded attributes and indices.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The budget is negative.</exception>
+    public GltfDracoDecodeLimits(long maxDecodedBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxDecodedBytes);
+        MaxDecodedBytes = maxDecodedBytes;
+    }
+
+    /// <summary>Maximum bytes for decoded attributes and indices.</summary>
+    public long MaxDecodedBytes { get; }
+
+    /// <summary>Budget that never rejects a payload.</summary>
+    public static GltfDracoDecodeLimits Unlimited { get; } = new(long.MaxValue);
 }
 
 /// <summary>Draco mesh decompression policy (monomorphized per importer).</summary>
@@ -15,13 +92,19 @@ public interface IDracoMeshPolicy
     /// <summary>Whether a decoder is linked.</summary>
     static abstract bool IsSupported { get; }
 
-    /// <summary>Tries to decode one primitive attribute.</summary>
-    static abstract bool TryDecodePrimitive(
+    /// <summary>
+    /// Decodes one Draco mesh into attributes and indices. Implementations
+    /// must check <paramref name="limits"/> before allocating decoded buffers.
+    /// </summary>
+    /// <param name="dracoBytes">Draco bitstream.</param>
+    /// <param name="limits">Decode budget.</param>
+    /// <param name="mesh">Decoded mesh on success.</param>
+    /// <param name="decodedBytes">Bytes required for the decoded buffers.</param>
+    static abstract GltfDracoDecodeStatus TryDecodeMesh(
         ReadOnlySpan<byte> dracoBytes,
-        GltfMeshSemantic semantic,
-        int componentType,
-        Span<byte> destination,
-        out int decodedVertexCount);
+        GltfDracoDecodeLimits limits,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+        out long decodedBytes);
 }
 
 /// <summary>Null Draco policy: clean rejection when no decoder is linked.</summary>
@@ -32,15 +115,15 @@ public readonly struct NoDracoCompressionPolicy : IDracoMeshPolicy
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryDecodePrimitive(
+    public static GltfDracoDecodeStatus TryDecodeMesh(
         ReadOnlySpan<byte> dracoBytes,
-        GltfMeshSemantic semantic,
-        int componentType,
-        Span<byte> destination,
-        out int decodedVertexCount)
+        GltfDracoDecodeLimits limits,
+        [NotNullWhen(true)] out GltfDracoDecodedMesh? mesh,
+        out long decodedBytes)
     {
-        decodedVertexCount = 0;
-        return false;
+        mesh = null;
+        decodedBytes = 0;
+        return GltfDracoDecodeStatus.InvalidData;
     }
 }
 
@@ -56,6 +139,7 @@ public interface IMeshoptCompressionPolicy
         int count,
         int byteStride,
         ReadOnlySpan<char> mode,
+        ReadOnlySpan<char> filter,
         Span<byte> destination);
 }
 
@@ -72,6 +156,7 @@ public readonly struct NoMeshoptCompressionPolicy : IMeshoptCompressionPolicy
         int count,
         int byteStride,
         ReadOnlySpan<char> mode,
+        ReadOnlySpan<char> filter,
         Span<byte> destination) => false;
 }
 
@@ -82,16 +167,24 @@ public interface ITextureTranscoderPolicy
     static abstract string PolicyId { get; }
 
     /// <summary>Whether a source-to-target transcode is supported.</summary>
-    static abstract bool CanTranscode(GltfTextureFormat source, GltfTextureFormat target);
+    static abstract bool CanTranscode(
+        ReadOnlySpan<byte> sourceBytes,
+        GltfTextureFormat source,
+        GltfTextureFormat target);
 
     /// <summary>Tries to transcode texture bytes.</summary>
     static abstract bool TryTranscode(
         ReadOnlyMemory<byte> sourceBytes,
         GltfTextureFormat source,
         GltfTextureFormat target,
-        out ReadOnlyMemory<byte> transcodedBytes,
+        [NotNullWhen(true)] out GltfTranscodeOutput? output,
         out string? failureReason);
 }
+
+/// <summary>Successful texture transcode output.</summary>
+public readonly record struct GltfTranscodeOutput(
+    GltfTexturePayload Payload,
+    GltfTextureFormat Format);
 
 /// <summary>Passthrough policy: only identity transcodes, zero work.</summary>
 public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
@@ -101,7 +194,10 @@ public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool CanTranscode(GltfTextureFormat source, GltfTextureFormat target) => source == target;
+    public static bool CanTranscode(
+        ReadOnlySpan<byte> sourceBytes,
+        GltfTextureFormat source,
+        GltfTextureFormat target) => source == target;
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -109,10 +205,12 @@ public readonly struct PassthroughTranscoderPolicy : ITextureTranscoderPolicy
         ReadOnlyMemory<byte> sourceBytes,
         GltfTextureFormat source,
         GltfTextureFormat target,
-        out ReadOnlyMemory<byte> transcodedBytes,
+        [NotNullWhen(true)] out GltfTranscodeOutput? output,
         out string? failureReason)
     {
-        transcodedBytes = sourceBytes;
+        output = new GltfTranscodeOutput(
+            new GltfRawTexturePayload(sourceBytes, "application/octet-stream"),
+            source);
         failureReason = null;
         return true;
     }

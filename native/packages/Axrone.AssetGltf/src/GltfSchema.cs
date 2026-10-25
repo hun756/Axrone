@@ -1,7 +1,7 @@
 namespace Axrone.AssetGltf;
 
 /// <summary>Raw glTF schema model (parsed JSON, unresolved).</summary>
-public sealed class GltfRawModel
+internal sealed class GltfRawModel
 {
     /// <summary>Raw buffer descriptor.</summary>
     public sealed class Buffer
@@ -33,6 +33,9 @@ public sealed class GltfRawModel
 
         /// <summary>Compression mode.</summary>
         public string Mode { get; set; } = "ATTRIBUTES";
+
+        /// <summary>Optional attribute filter.</summary>
+        public string Filter { get; set; } = "NONE";
     }
 
     /// <summary>Raw bufferView descriptor.</summary>
@@ -143,6 +146,16 @@ public sealed class GltfRawModel
         public Dictionary<string, int> Attributes { get; } = new(StringComparer.Ordinal);
     }
 
+    /// <summary>Material variant mapping for one primitive.</summary>
+    public sealed class PrimitiveMaterialVariant
+    {
+        /// <summary>Variant indices.</summary>
+        public List<int> Variants { get; } = new();
+
+        /// <summary>Material index.</summary>
+        public int? Material { get; set; }
+    }
+
     /// <summary>Raw mesh primitive.</summary>
     public sealed class Primitive
     {
@@ -160,6 +173,9 @@ public sealed class GltfRawModel
 
         /// <summary>Morph target attribute maps.</summary>
         public List<Dictionary<string, int>> Targets { get; } = new();
+
+        /// <summary>KHR_materials_variants mappings.</summary>
+        public List<PrimitiveMaterialVariant> MaterialVariants { get; } = new();
 
         /// <summary>Draco extension payload.</summary>
         public DracoPrimitiveExtension? Draco { get; set; }
@@ -240,8 +256,8 @@ public sealed class GltfRawModel
         /// <summary>Alpha mode string.</summary>
         public string AlphaMode { get; set; } = "OPAQUE";
 
-        /// <summary>Alpha cutoff.</summary>
-        public float AlphaCutoff { get; set; } = 0.5f;
+        /// <summary>Alpha cutoff, or null when the document omits it.</summary>
+        public float? AlphaCutoff { get; set; }
 
         /// <summary>Double-sided flag.</summary>
         public bool DoubleSided { get; set; }
@@ -266,6 +282,81 @@ public sealed class GltfRawModel
 
         /// <summary>KHR_materials_emissive_strength value.</summary>
         public float EmissiveStrength { get; set; } = 1.0f;
+
+        /// <summary>KHR_materials_specular factor.</summary>
+        public float SpecularFactor { get; set; } = 1.0f;
+
+        /// <summary>KHR_materials_specular color factor.</summary>
+        public float[]? SpecularColorFactor { get; set; }
+
+        /// <summary>KHR_materials_specular specular texture (alpha channel).</summary>
+        public TextureInfo? SpecularTexture { get; set; }
+
+        /// <summary>KHR_materials_specular color texture (RGB channels).</summary>
+        public TextureInfo? SpecularColorTexture { get; set; }
+
+        /// <summary>KHR_materials_sheen color factor.</summary>
+        public float[]? SheenColorFactor { get; set; }
+
+        /// <summary>KHR_materials_sheen color texture.</summary>
+        public TextureInfo? SheenColorTexture { get; set; }
+
+        /// <summary>KHR_materials_sheen roughness factor.</summary>
+        public float SheenRoughnessFactor { get; set; }
+
+        /// <summary>KHR_materials_sheen roughness texture (alpha channel).</summary>
+        public TextureInfo? SheenRoughnessTexture { get; set; }
+
+        /// <summary>KHR_materials_transmission factor.</summary>
+        public float TransmissionFactor { get; set; }
+
+        /// <summary>KHR_materials_transmission texture (red channel).</summary>
+        public TextureInfo? TransmissionTexture { get; set; }
+
+        /// <summary>KHR_materials_volume thickness factor.</summary>
+        public float ThicknessFactor { get; set; }
+
+        /// <summary>KHR_materials_volume thickness texture (green channel).</summary>
+        public TextureInfo? ThicknessTexture { get; set; }
+
+        /// <summary>KHR_materials_volume attenuation distance.</summary>
+        public float AttenuationDistance { get; set; } = float.PositiveInfinity;
+
+        /// <summary>KHR_materials_volume attenuation color.</summary>
+        public float[]? AttenuationColor { get; set; }
+
+        /// <summary>KHR_materials_ior index of refraction.</summary>
+        public float Ior { get; set; } = 1.5f;
+
+        /// <summary>KHR_materials_iridescence factor.</summary>
+        public float IridescenceFactor { get; set; }
+
+        /// <summary>KHR_materials_iridescence texture.</summary>
+        public TextureInfo? IridescenceTexture { get; set; }
+
+        /// <summary>KHR_materials_iridescence index of refraction.</summary>
+        public float IridescenceIor { get; set; } = 1.3f;
+
+        /// <summary>KHR_materials_iridescence minimum thickness in nanometers.</summary>
+        public float IridescenceThicknessMinimum { get; set; } = 100.0f;
+
+        /// <summary>KHR_materials_iridescence maximum thickness in nanometers.</summary>
+        public float IridescenceThicknessMaximum { get; set; } = 400.0f;
+
+        /// <summary>KHR_materials_iridescence thickness texture (green channel).</summary>
+        public TextureInfo? IridescenceThicknessTexture { get; set; }
+
+        /// <summary>KHR_materials_anisotropy strength.</summary>
+        public float AnisotropyStrength { get; set; }
+
+        /// <summary>KHR_materials_anisotropy rotation in radians.</summary>
+        public float AnisotropyRotation { get; set; }
+
+        /// <summary>KHR_materials_anisotropy texture.</summary>
+        public TextureInfo? AnisotropyTexture { get; set; }
+
+        /// <summary>KHR_materials_dispersion strength.</summary>
+        public float Dispersion { get; set; }
     }
 
     /// <summary>Raw texture.</summary>
@@ -359,6 +450,9 @@ public sealed class GltfRawModel
 
         /// <summary>Target path string.</summary>
         public string TargetPath { get; set; } = "translation";
+
+        /// <summary>KHR_animation_pointer JSON pointer, when present.</summary>
+        public string? Pointer { get; set; }
     }
 
     /// <summary>Raw animation.</summary>
@@ -497,6 +591,16 @@ public sealed class GltfRawModel
 
     /// <summary>Lights.</summary>
     public List<Light> Lights { get; } = new();
+
+    /// <summary>Named material variants.</summary>
+    public sealed class MaterialVariant
+    {
+        /// <summary>Variant name.</summary>
+        public string? Name { get; set; }
+    }
+
+    /// <summary>Material variants.</summary>
+    public List<MaterialVariant> Variants { get; } = new();
 
     /// <summary>Cameras.</summary>
     public List<Camera> Cameras { get; } = new();

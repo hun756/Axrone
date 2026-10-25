@@ -50,6 +50,9 @@
     <Project Path="packages/Axrone.AssetShader/tests/Axrone.AssetShader.Tests.csproj" />
     <Project Path="packages/Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
     <Project Path="packages/Axrone.AssetGltf/tests/Axrone.AssetGltf.Tests.csproj" />
+    <Project Path="packages/Axrone.AssetGltf.Codecs/Axrone.AssetGltf.Codecs.csproj" />
+    <Project Path="packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.Codecs.Tests.csproj" />
+    <Project Path="packages/Axrone.AssetGltf.Codecs/tests/Axrone.AssetGltf.AotSmoke/Axrone.AssetGltf.AotSmoke.csproj" />
     <Project Path="packages/Axrone.Lighting/Axrone.Lighting.csproj" />
     <Project Path="packages/Axrone.Lighting/tests/Axrone.Lighting.Tests.csproj" />
     <Project Path="packages/Axrone.Particles/Axrone.Particles.csproj" />
@@ -69,6 +72,7 @@
     <Project Path="packages/Axrone.Render.OpenGL.Mock/Axrone.Render.OpenGL.Mock.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
+    <Project Path="packages/Axrone.AssetGltf/benchmarks/Axrone.AssetGltf.Benchmarks.csproj" />
     <Project Path="packages/Axrone.Batching/benchmarks/Axrone.Batching.Benchmarks.csproj" />
   </Folder>
 </Solution>

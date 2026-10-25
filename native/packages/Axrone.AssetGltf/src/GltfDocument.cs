@@ -51,9 +51,20 @@ public sealed class GltfDocumentAsset
     /// <summary>Required extensions.</summary>
     public required ImmutableArray<string> ExtensionsRequired { get; init; }
 
+    /// <summary>Named material variants.</summary>
+    public ImmutableArray<GltfMaterialVariant> MaterialVariants { get; init; } = ImmutableArray<GltfMaterialVariant>.Empty;
+
     /// <summary>Import statistics.</summary>
     public required GltfDocumentStats Stats { get; init; }
 }
+
+/// <summary>Named material variant.</summary>
+public sealed record GltfMaterialVariant(int Index, string Name);
+
+/// <summary>Primitive material selection for one or more variants.</summary>
+public readonly record struct GltfMaterialVariantMapping(
+    ImmutableArray<int> Variants,
+    int? MaterialIndex);
 
 /// <summary>Import statistics.</summary>
 public readonly record struct GltfDocumentStats(
@@ -144,6 +155,10 @@ public sealed class GltfMeshAsset
 
     /// <summary>Extras payload.</summary>
     public ImmutableDictionary<string, object>? Extras { get; init; }
+
+    /// <summary>KHR_materials_variants mappings.</summary>
+    public ImmutableArray<GltfMaterialVariantMapping> MaterialVariants { get; init; } =
+        ImmutableArray<GltfMaterialVariantMapping>.Empty;
 }
 
 /// <summary>Morph target delta buffer.</summary>
@@ -152,6 +167,16 @@ public readonly record struct GltfMorphTargetDefinition(
     ReadOnlyMemory<byte> DeltaBuffer,
     int Stride,
     int ComponentCount);
+
+/// <summary>Application-specific vertex attribute preserved in the interleaved buffer.</summary>
+public readonly record struct GltfCustomVertexAttribute(
+    string Name,
+    int Offset,
+    int Stride,
+    int ComponentType,
+    byte ComponentCount,
+    bool Normalized,
+    bool Integer);
 
 /// <summary>Interleaved mesh definition.</summary>
 public readonly record struct GltfMeshDefinition(
@@ -163,7 +188,12 @@ public readonly record struct GltfMeshDefinition(
     int VertexCount,
     int IndexCount,
     bool Index16Bit,
-    GltfMeshTopology Topology);
+    GltfMeshTopology Topology)
+{
+    /// <summary>Attributes with application-specific names (<c>_NAME</c>).</summary>
+    public ImmutableArray<GltfCustomVertexAttribute> CustomAttributes { get; init; } =
+        ImmutableArray<GltfCustomVertexAttribute>.Empty;
+}
 
 /// <summary>Canonical skin asset.</summary>
 public sealed class GltfSkinAsset
@@ -232,6 +262,9 @@ public sealed class GltfAnimationTrackAsset
 
     /// <summary>Target path.</summary>
     public required GltfAnimationPath Path { get; init; }
+
+    /// <summary>KHR_animation_pointer JSON pointer, when present.</summary>
+    public string? Pointer { get; init; }
 
     /// <summary>Interpolation.</summary>
     public required GltfInterpolation Interpolation { get; init; }

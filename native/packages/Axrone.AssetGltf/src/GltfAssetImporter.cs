@@ -3,6 +3,14 @@ namespace Axrone.AssetGltf;
 /// <summary>glTF asset importer bridge (bytes/text to canonical writes).</summary>
 public sealed class GltfAssetImporter : IAssetImporter
 {
+    private readonly GltfResourceResolver? _resourceResolver;
+
+    /// <summary>Creates an importer with an optional external resource resolver.</summary>
+    public GltfAssetImporter(GltfResourceResolver? resourceResolver = null)
+    {
+        _resourceResolver = resourceResolver;
+    }
+
     /// <inheritdoc/>
     public AssetImporterId Id => new("axrone.importer.gltf");
 
@@ -40,7 +48,12 @@ public sealed class GltfAssetImporter : IAssetImporter
         }
 
         string id = context.SourceUri?.Value ?? context.BaseKey.Value ?? "asset.gltf";
-        var importer = new GltfImporter(new GltfImporterOptions { Id = id });
+        var importer = new GltfImporter(new GltfImporterOptions
+        {
+            Id = id,
+            SourceUri = context.SourceUri?.Value,
+            ResourceResolver = _resourceResolver,
+        });
         GltfImportResult result = await importer.ImportAsync(bytes, cancellationToken).ConfigureAwait(false);
 
         return MapResult(context, result);
@@ -151,7 +164,8 @@ public sealed class GltfAssetImporter : IAssetImporter
         {
             AssetKey key = SubKey($"scene/{prefab.SceneIndex}/prefab");
 
-            var deps = new List<AssetDependencyInput>(prefab.MeshKeys.Length + prefab.SkinKeys.Length + prefab.AnimationKeys.Length);
+            var deps = new List<AssetDependencyInput>(
+                prefab.MeshKeys.Length + prefab.SkinKeys.Length + prefab.AnimationKeys.Length + prefab.MaterialKeys.Length);
             foreach (string meshId in prefab.MeshKeys)
             {
                 if (meshKeys.TryGetValue(meshId, out AssetKey meshKey))
@@ -173,6 +187,14 @@ public sealed class GltfAssetImporter : IAssetImporter
                 if (animationKeys.TryGetValue(animationId, out AssetKey animationKey))
                 {
                     deps.Add(animationKey);
+                }
+            }
+
+            foreach (string materialId in prefab.MaterialKeys)
+            {
+                if (materialKeys.TryGetValue(materialId, out AssetKey materialKey))
+                {
+                    deps.Add(materialKey);
                 }
             }
 

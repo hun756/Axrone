@@ -6,6 +6,12 @@
     <Description>glTF 2.0 static import pipeline (schema, GLB container, accessors, meshes) for the Axrone engine: native value-type idioms, zero-copy reads and AOT-safe parsing.</Description>
   </PropertyGroup>
 
+  <PropertyGroup Label="Package">
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>gltf;glb;3d;assets;game-engine;aot</PackageTags>
+  </PropertyGroup>
+
   <PropertyGroup Label="AotCompatibility">
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
@@ -61,6 +67,7 @@
 
   <ItemGroup Label="PublicApi">
     <InternalsVisibleTo Include="Axrone.AssetGltf.Tests" />
+    <InternalsVisibleTo Include="Axrone.AssetGltf.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>
@@ -71,6 +78,10 @@
   <ItemGroup>
     <Compile Remove="tests/**" />
     <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+  <ItemGroup Label="Packaging">
+    <None Update="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
