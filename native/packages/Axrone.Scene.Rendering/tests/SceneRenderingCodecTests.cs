@@ -174,6 +174,32 @@ public sealed class SceneRenderingCodecTests
     }
 
     [Fact]
+    public void FogCodec_RoundTrips()
+    {
+        var fog = new SceneFog
+        {
+            Enabled = true,
+            Color = new Vec3(0.25f, 0.5f, 0.75f),
+            Mode = SceneFogMode.ExponentialSquared,
+            Density = 0.125f,
+            RangeStart = 5.0f,
+            RangeEnd = 120.0f
+        };
+        var codec = new SceneFogCodec();
+
+        JsonElement payload = Capture(writer => codec.Write(writer, fog));
+        SceneFog restored = codec.Read(payload);
+
+        payload.GetProperty("mode").GetString().Should().Be("exponential-squared");
+        restored.Enabled.Should().BeTrue();
+        restored.Color.Should().Be(fog.Color);
+        restored.Mode.Should().Be(SceneFogMode.ExponentialSquared);
+        restored.Density.Should().BeApproximately(0.125f, 1e-6f);
+        restored.RangeStart.Should().BeApproximately(5.0f, 1e-6f);
+        restored.RangeEnd.Should().BeApproximately(120.0f, 1e-6f);
+    }
+
+    [Fact]
     public void Register_RegistersComponentsPresentInTheRegistry()
     {
         using SceneWorld world = RenderingFixture.CreateProfile().CreateWorld();
@@ -182,9 +208,10 @@ public sealed class SceneRenderingCodecTests
 
         SceneRenderingCodecs.Register(codecs, world.Registry, assets);
 
-        codecs.Count.Should().Be(5);
+        codecs.Count.Should().Be(6);
         codecs.TryGet("Camera", out _).Should().BeTrue();
         codecs.TryGet("MeshRenderer", out _).Should().BeTrue();
+        codecs.TryGet("Fog", out _).Should().BeTrue();
         codecs.TryGet("DirectionalLight", out _).Should().BeTrue();
         codecs.TryGet("PointLight", out _).Should().BeTrue();
         codecs.TryGet("SpotLight", out _).Should().BeTrue();
@@ -204,9 +231,10 @@ public sealed class SceneRenderingCodecTests
 
         SceneRenderingCodecs.Register(codecs, world.Registry, assets);
 
-        codecs.Count.Should().Be(2);
+        codecs.Count.Should().Be(3);
         codecs.TryGet("Camera", out _).Should().BeTrue();
         codecs.TryGet("MeshRenderer", out _).Should().BeTrue();
+        codecs.TryGet("Fog", out _).Should().BeTrue();
     }
 
     private static JsonElement Capture(Action<Utf8JsonWriter> write)

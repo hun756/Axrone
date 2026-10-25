@@ -343,6 +343,49 @@ public sealed class SceneRenderingTests
         }
     }
 
+    [Fact]
+    public void FogState_FromComponentSanitizes()
+    {
+        var fog = new SceneFog
+        {
+            Enabled = true,
+            Color = Vec3.One,
+            Mode = SceneFogMode.Linear,
+            Density = 2.0f,
+            RangeStart = 100.0f,
+            RangeEnd = 10.0f
+        };
+
+        SceneFogState state = SceneFogState.FromComponent(fog);
+
+        state.Enabled.Should().BeTrue();
+        state.Density.Should().Be(1.0f);
+        state.RangeStart.Should().Be(10.0f);
+        state.RangeEnd.Should().Be(100.0f);
+    }
+
+    [Fact]
+    public void FogSelector_SelectsActiveComponent()
+    {
+        using SceneWorld world = RenderingFixture.CreateProfile().CreateWorld();
+        SceneActor actor = world.CreateActor("Fog");
+        SceneFog fog = SceneFog.Default;
+        fog.Enabled = true;
+        fog.Mode = SceneFogMode.Linear;
+        fog.RangeStart = 1.0f;
+        fog.RangeEnd = 50.0f;
+        world.AddData(actor, fog);
+
+        SceneFogSelector.TrySelect(world, out SceneFogState state).Should().BeTrue();
+        state.Enabled.Should().BeTrue();
+        state.Mode.Should().Be(SceneFogMode.Linear);
+
+        world.SetActive(actor, false);
+
+        SceneFogSelector.TrySelect(world, out state).Should().BeFalse();
+        state.Enabled.Should().BeFalse();
+    }
+
     private static SceneActor CreateRenderer(
         SceneWorld world,
         SceneAssetId<MeshAssetTag> meshId,
