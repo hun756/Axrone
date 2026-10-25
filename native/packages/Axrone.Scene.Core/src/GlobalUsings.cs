@@ -6,6 +6,7 @@ global using System.Globalization;
 global using System.Numerics;
 global using System.Runtime.CompilerServices;
 global using System.Runtime.InteropServices;
+global using System.Text.Json;
 global using System.Threading;
 global using System.Threading.Tasks;
 global using Axrone.Numeric;

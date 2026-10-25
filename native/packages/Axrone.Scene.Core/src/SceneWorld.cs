@@ -343,6 +343,14 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     public ushort LayerOf(SceneActor actor) =>
         _actors.RecordAt(_actors.Resolve(actor)).Meta.Layer;
 
+    /// <summary>Whether the actor is marked persistent.</summary>
+    public bool IsPersistent(SceneActor actor) =>
+        (_actors.RecordAt(_actors.Resolve(actor)).Meta.Flags & SceneActorFlags.Persistent) != 0;
+
+    /// <summary>Whether the actor participates in pooling.</summary>
+    public bool IsPooled(SceneActor actor) =>
+        (_actors.RecordAt(_actors.Resolve(actor)).Meta.Flags & SceneActorFlags.Pooled) != 0;
+
     /// <summary>Resolves the actor name to its original string.</summary>
     public string GetName(SceneActor actor) => _names.Resolve(NameOf(actor));
 
