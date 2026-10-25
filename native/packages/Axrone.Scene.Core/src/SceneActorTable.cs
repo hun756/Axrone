@@ -22,7 +22,7 @@ internal struct SceneActorMeta
 {
     public ushort Layer;
     public SceneActorFlags Flags;
-    public byte Reserved;
+    public byte Depth;
 }
 
 /// <summary>
@@ -125,6 +125,7 @@ internal sealed class SceneActorTable
         record.Mask = SceneComponentMask.Empty;
         record.HierarchyVersion = 1;
         record.Meta.Layer = layer;
+        record.Meta.Depth = 0;
         record.Meta.Flags =
             SceneActorFlags.Initialized |
             (active ? SceneActorFlags.ActiveSelf | SceneActorFlags.ActiveInHierarchy : SceneActorFlags.None) |
@@ -198,6 +199,7 @@ internal sealed class SceneActorTable
         record.PrevSibling = -1;
         record.HierarchyVersion++;
         record.Meta.Layer = 0;
+        record.Meta.Depth = 0;
         record.Meta.Flags = SceneActorFlags.IsFree;
         record.Parent = _freeHead;
         _behaviourHeads[slot] = -1;
@@ -223,6 +225,7 @@ internal sealed class SceneActorTable
             record.PrevSibling = -1;
             record.HierarchyVersion++;
             record.Meta.Layer = 0;
+            record.Meta.Depth = 0;
             record.Meta.Flags = SceneActorFlags.IsFree;
             _behaviourHeads[slot] = -1;
             _freeHead = slot;
@@ -262,6 +265,7 @@ internal sealed class SceneActorTable
             record.PrevSibling = -1;
             record.HierarchyVersion = 1;
             record.Meta.Layer = 0;
+            record.Meta.Depth = 0;
             record.Meta.Flags = SceneActorFlags.IsFree;
             _behaviourHeads[slot] = -1;
             _freeHead = slot;
