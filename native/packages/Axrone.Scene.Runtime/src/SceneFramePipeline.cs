@@ -62,6 +62,9 @@ public sealed class SceneFramePipeline : IDisposable
     /// <summary>Resolved lighting for the current frame, or null when no camera exists.</summary>
     public LightingSelectionState? Lighting { get; private set; }
 
+    /// <summary>Resolved fog settings for the current frame.</summary>
+    public SceneFogState Fog { get; private set; } = SceneFogState.Default;
+
     /// <summary>Enabled render passes in execution order.</summary>
     public SceneRenderPassPlan Passes => _passes;
 
@@ -115,6 +118,9 @@ public sealed class SceneFramePipeline : IDisposable
         }
 
         _frameState.Begin(frameIndex);
+        _ = SceneFogSelector.TrySelect(_world, out SceneFogState fog);
+        Fog = fog;
+
         Camera = _cameraCollector.Collect(_world, _viewportWidth, _viewportHeight);
 
         if (Camera is null)
