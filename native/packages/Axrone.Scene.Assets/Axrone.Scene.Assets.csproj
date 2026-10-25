@@ -29,6 +29,9 @@
     <!-- CA1000: Static members on generic types — asset id factories belong to
          the closed generic that owns the tag. -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1032: Standard exception ctors — asset errors carry stable codes and
+         optional typed payloads instead of free-form constructors. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
