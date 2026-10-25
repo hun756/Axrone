@@ -22,48 +22,112 @@ public static class ScenePrefabOverrides
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(operations);
 
-        var state = new PrefabState(definition);
-
-        for (int i = 0; i < operations.Count; i++)
-        {
-            ApplyOperation(state, operations[i]);
-        }
-
+        var state = new ScenePrefabOverrideState(definition);
+        state.ApplyRange(operations);
         return state.ToDefinition();
     }
+}
 
-    private static void ApplyOperation(PrefabState state, ScenePrefabOverrideOperation operation)
+/// <summary>
+/// Mutable composition state shared by override application and prefab
+/// resolution. Mutation stays internal; consumers only observe materialized,
+/// validated definitions.
+/// </summary>
+internal sealed class ScenePrefabOverrideState
+{
+    private readonly List<ActorState> _actors;
+    private readonly Dictionary<string, ActorState> _byNode;
+
+    public ScenePrefabOverrideState(
+        string id,
+        ScenePrefabKind kind,
+        ScenePrefabMetadata? metadata,
+        IReadOnlyList<string> lineage)
+    {
+        Id = id;
+        Kind = kind;
+        Metadata = metadata;
+        Lineage = [.. lineage];
+        _actors = [];
+        _byNode = new Dictionary<string, ActorState>(StringComparer.Ordinal);
+    }
+
+    public ScenePrefabOverrideState(ScenePrefabDefinition definition)
+        : this(definition.Id, definition.Kind, definition.Metadata, definition.Lineage)
+    {
+        AddActors(definition.Actors);
+    }
+
+    public string Id { get; }
+
+    public ScenePrefabKind Kind { get; }
+
+    public ScenePrefabMetadata? Metadata { get; }
+
+    public IReadOnlyList<string> Lineage { get; }
+
+    /// <summary>
+    /// Merges actors by node id: existing entries are replaced in place and new
+    /// entries append, matching the authoring merge order.
+    /// </summary>
+    public void AddActors(IReadOnlyList<SceneActorSnapshot> actors)
+    {
+        for (int i = 0; i < actors.Count; i++)
+        {
+            var actor = new ActorState(actors[i]);
+            if (_byNode.TryGetValue(actor.NodeId, out ActorState? existing))
+            {
+                int index = _actors.IndexOf(existing);
+                _actors[index] = actor;
+                _byNode[actor.NodeId] = actor;
+                continue;
+            }
+
+            _actors.Add(actor);
+            _byNode.Add(actor.NodeId, actor);
+        }
+    }
+
+    public void ApplyRange(IReadOnlyList<ScenePrefabOverrideOperation> operations)
+    {
+        for (int i = 0; i < operations.Count; i++)
+        {
+            Apply(operations[i]);
+        }
+    }
+
+    public void Apply(ScenePrefabOverrideOperation operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
         switch (operation)
         {
             case ScenePrefabAddActorOperation add:
-                AddActor(state, add);
+                AddActor(add);
                 break;
             case ScenePrefabRemoveActorOperation remove:
-                RemoveActor(state, remove);
+                RemoveActor(remove);
                 break;
             case ScenePrefabReparentActorOperation reparent:
-                ReparentActor(state, reparent);
+                ReparentActor(reparent);
                 break;
             case ScenePrefabSetActorFieldOperation setField:
-                SetActorField(state, setField);
+                SetActorField(setField);
                 break;
             case ScenePrefabAddComponentOperation addComponent:
-                AddComponent(state, addComponent);
+                AddComponent(addComponent);
                 break;
             case ScenePrefabRemoveComponentOperation removeComponent:
-                RemoveComponent(state, removeComponent);
+                RemoveComponent(removeComponent);
                 break;
             case ScenePrefabReplaceComponentOperation replaceComponent:
-                ReplaceComponent(state, replaceComponent);
+                ReplaceComponent(replaceComponent);
                 break;
             case ScenePrefabSetComponentPropertyOperation setProperty:
-                SetComponentProperty(state, setProperty);
+                SetComponentProperty(setProperty);
                 break;
             case ScenePrefabUnsetComponentPropertyOperation unsetProperty:
-                UnsetComponentProperty(state, unsetProperty);
+                UnsetComponentProperty(unsetProperty);
                 break;
             default:
                 throw new ScenePrefabException(
@@ -72,10 +136,21 @@ public static class ScenePrefabOverrides
         }
     }
 
-    private static void AddActor(PrefabState state, ScenePrefabAddActorOperation operation)
+    public ScenePrefabDefinition ToDefinition()
     {
-        ActorState actor = new(operation.Actor);
-        if (!state.TryAdd(actor))
+        var snapshots = new SceneActorSnapshot[_actors.Count];
+        for (int i = 0; i < _actors.Count; i++)
+        {
+            snapshots[i] = _actors[i].ToSnapshot();
+        }
+
+        return new ScenePrefabDefinition(Id, snapshots, Kind, Metadata, lineage: Lineage);
+    }
+
+    private void AddActor(ScenePrefabAddActorOperation operation)
+    {
+        var actor = new ActorState(operation.Actor);
+        if (_byNode.ContainsKey(actor.NodeId))
         {
             throw new ScenePrefabException(
                 ScenePrefabErrorCodes.DuplicateNode,
@@ -85,25 +160,19 @@ public static class ScenePrefabOverrides
 
         if (operation.AfterNodeId is not { } afterNodeId)
         {
-            state.Actors.Add(actor);
+            _actors.Add(actor);
+            _byNode.Add(actor.NodeId, actor);
             return;
         }
 
-        int anchor = state.IndexOf(afterNodeId);
-        if (anchor < 0)
-        {
-            throw new ScenePrefabException(
-                ScenePrefabErrorCodes.UnknownNode,
-                $"Anchor node '{afterNodeId}' does not exist.",
-                afterNodeId);
-        }
-
-        state.Actors.Insert(anchor + 1, actor);
+        ActorState anchor = EnsureActor(afterNodeId);
+        _actors.Insert(_actors.IndexOf(anchor) + 1, actor);
+        _byNode.Add(actor.NodeId, actor);
     }
 
-    private static void RemoveActor(PrefabState state, ScenePrefabRemoveActorOperation operation)
+    private void RemoveActor(ScenePrefabRemoveActorOperation operation)
     {
-        EnsureActor(state, operation.NodeId);
+        EnsureActor(operation.NodeId);
 
         var removed = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Stack<string>();
@@ -117,33 +186,36 @@ public static class ScenePrefabOverrides
                 continue;
             }
 
-            foreach (ActorState actor in state.Actors)
+            for (int i = 0; i < _actors.Count; i++)
             {
-                if (string.Equals(actor.ParentNodeId, nodeId, StringComparison.Ordinal))
+                if (string.Equals(_actors[i].ParentNodeId, nodeId, StringComparison.Ordinal))
                 {
-                    pending.Push(actor.NodeId);
+                    pending.Push(_actors[i].NodeId);
                 }
             }
         }
 
-        state.Actors.RemoveAll(actor => removed.Contains(actor.NodeId));
-        state.RemoveNodes(removed);
+        _actors.RemoveAll(actor => removed.Contains(actor.NodeId));
+        foreach (string nodeId in removed)
+        {
+            _byNode.Remove(nodeId);
+        }
     }
 
-    private static void ReparentActor(PrefabState state, ScenePrefabReparentActorOperation operation)
+    private void ReparentActor(ScenePrefabReparentActorOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         if (operation.ParentNodeId is { } parentNodeId)
         {
-            EnsureActor(state, parentNodeId);
+            EnsureActor(parentNodeId);
         }
 
         actor.ParentNodeId = operation.ParentNodeId;
     }
 
-    private static void SetActorField(PrefabState state, ScenePrefabSetActorFieldOperation operation)
+    private void SetActorField(ScenePrefabSetActorFieldOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
 
         switch (operation.Field)
         {
@@ -173,9 +245,9 @@ public static class ScenePrefabOverrides
         }
     }
 
-    private static void AddComponent(PrefabState state, ScenePrefabAddComponentOperation operation)
+    private void AddComponent(ScenePrefabAddComponentOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         SceneComponentSnapshot component = operation.Component;
 
         if (component.Id is { } componentId &&
@@ -204,15 +276,15 @@ public static class ScenePrefabOverrides
         actor.Components.Insert(index, component);
     }
 
-    private static void RemoveComponent(PrefabState state, ScenePrefabRemoveComponentOperation operation)
+    private void RemoveComponent(ScenePrefabRemoveComponentOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         actor.Components.RemoveAt(EnsureComponentIndex(actor, operation.Selector));
     }
 
-    private static void ReplaceComponent(PrefabState state, ScenePrefabReplaceComponentOperation operation)
+    private void ReplaceComponent(ScenePrefabReplaceComponentOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         int index = EnsureComponentIndex(actor, operation.Selector);
 
         SceneComponentSnapshot replacement = operation.Component;
@@ -230,11 +302,9 @@ public static class ScenePrefabOverrides
         actor.Components[index] = replacement;
     }
 
-    private static void SetComponentProperty(
-        PrefabState state,
-        ScenePrefabSetComponentPropertyOperation operation)
+    private void SetComponentProperty(ScenePrefabSetComponentPropertyOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         int index = EnsureComponentIndex(actor, operation.Selector);
         SceneComponentSnapshot component = actor.Components[index];
 
@@ -242,11 +312,9 @@ public static class ScenePrefabOverrides
         actor.Components[index] = new SceneComponentSnapshot(component.Type, data, component.Id);
     }
 
-    private static void UnsetComponentProperty(
-        PrefabState state,
-        ScenePrefabUnsetComponentPropertyOperation operation)
+    private void UnsetComponentProperty(ScenePrefabUnsetComponentPropertyOperation operation)
     {
-        ActorState actor = EnsureActor(state, operation.NodeId);
+        ActorState actor = EnsureActor(operation.NodeId);
         int index = EnsureComponentIndex(actor, operation.Selector);
         SceneComponentSnapshot component = actor.Components[index];
 
@@ -270,15 +338,17 @@ public static class ScenePrefabOverrides
         actor.Components[index] = new SceneComponentSnapshot(component.Type, data, component.Id);
     }
 
-    private static ActorState EnsureActor(PrefabState state, string nodeId) =>
-        state.TryGet(nodeId, out ActorState? actor)
+    private ActorState EnsureActor(string nodeId) =>
+        _byNode.TryGetValue(nodeId, out ActorState? actor)
             ? actor
             : throw new ScenePrefabException(
                 ScenePrefabErrorCodes.UnknownNode,
                 $"Node '{nodeId}' does not exist.",
                 nodeId);
 
-    private static int EnsureComponentIndex(ActorState actor, in ScenePrefabComponentSelector selector)
+    private static int EnsureComponentIndex(
+        ActorState actor,
+        in ScenePrefabComponentSelector selector)
     {
         int index = FindComponentIndex(actor.Components, selector);
         if (index >= 0)
@@ -444,9 +514,7 @@ public static class ScenePrefabOverrides
 
         JsonObject obj = current as JsonObject ?? new JsonObject();
         string name = segment.Name;
-        JsonNode? child = obj.TryGetPropertyValue(name, out JsonNode? existingNode)
-            ? Detach(obj, name)
-            : null;
+        JsonNode? child = obj.TryGetPropertyValue(name, out _) ? Detach(obj, name) : null;
         JsonNode? nested = SetNode(child, path, index + 1, value);
         obj[name] = nested;
         return obj;
@@ -592,71 +660,5 @@ public static class ScenePrefabOverrides
             Pooled,
             Components,
             ParentNodeId);
-    }
-
-    private sealed class PrefabState
-    {
-        private readonly Dictionary<string, ActorState> _byNode = new(StringComparer.Ordinal);
-
-        public PrefabState(ScenePrefabDefinition definition)
-        {
-            Id = definition.Id;
-            Kind = definition.Kind;
-            Metadata = definition.Metadata;
-            Actors = new List<ActorState>(definition.Actors.Count);
-
-            for (int i = 0; i < definition.Actors.Count; i++)
-            {
-                SceneActorSnapshot snapshot = definition.Actors[i];
-                var actor = new ActorState(snapshot);
-                Actors.Add(actor);
-                _byNode.Add(actor.NodeId, actor);
-            }
-        }
-
-        public string Id { get; }
-
-        public ScenePrefabKind Kind { get; }
-
-        public ScenePrefabMetadata? Metadata { get; }
-
-        public List<ActorState> Actors { get; }
-
-        public bool TryAdd(ActorState actor) => _byNode.TryAdd(actor.NodeId, actor);
-
-        public bool TryGet(string nodeId, [NotNullWhen(true)] out ActorState? actor) =>
-            _byNode.TryGetValue(nodeId, out actor);
-
-        public int IndexOf(string nodeId)
-        {
-            for (int i = 0; i < Actors.Count; i++)
-            {
-                if (string.Equals(Actors[i].NodeId, nodeId, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        public void RemoveNodes(HashSet<string> nodeIds)
-        {
-            foreach (string nodeId in nodeIds)
-            {
-                _byNode.Remove(nodeId);
-            }
-        }
-
-        public ScenePrefabDefinition ToDefinition()
-        {
-            var snapshots = new SceneActorSnapshot[Actors.Count];
-            for (int i = 0; i < Actors.Count; i++)
-            {
-                snapshots[i] = Actors[i].ToSnapshot();
-            }
-
-            return new ScenePrefabDefinition(Id, snapshots, Kind, Metadata);
-        }
     }
 }
