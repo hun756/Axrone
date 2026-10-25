@@ -349,6 +349,58 @@ public sealed class SceneComponentRegistry
         }
     }
 
+    /// <summary>Resolves a data component descriptor by CLR type.</summary>
+    public bool TryGetDataByType(
+        Type componentType,
+        [NotNullWhen(true)] out SceneDataComponentDescriptor? descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        lock (_gate)
+        {
+            return _dataByType.TryGetValue(componentType, out descriptor);
+        }
+    }
+
+    /// <summary>Resolves a data component descriptor by CLR type, throwing when unregistered.</summary>
+    public SceneDataComponentDescriptor GetDataByType(Type componentType)
+    {
+        if (TryGetDataByType(componentType, out SceneDataComponentDescriptor? descriptor))
+        {
+            return descriptor;
+        }
+
+        throw new SceneValidationException(
+            SceneErrorCodes.ComponentUnregistered,
+            $"Data component type {componentType.Name} has no registration.");
+    }
+
+    /// <summary>Resolves a behaviour descriptor by CLR type.</summary>
+    public bool TryGetBehaviourByType(
+        Type componentType,
+        [NotNullWhen(true)] out SceneBehaviourDescriptor? descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        lock (_gate)
+        {
+            return _behaviourByType.TryGetValue(componentType, out descriptor);
+        }
+    }
+
+    /// <summary>Resolves a behaviour descriptor by CLR type, throwing when unregistered.</summary>
+    public SceneBehaviourDescriptor GetBehaviourByType(Type componentType)
+    {
+        if (TryGetBehaviourByType(componentType, out SceneBehaviourDescriptor? descriptor))
+        {
+            return descriptor;
+        }
+
+        throw new SceneValidationException(
+            SceneErrorCodes.ComponentUnregistered,
+            $"Behaviour type {componentType.Name} has no registration.");
+    }
+
     /// <summary>Resolves an interned descriptor name back to its original string.</summary>
     public bool TryResolveName(SceneStringId name, [NotNullWhen(true)] out string? resolved) =>
         Names.TryResolve(name, out resolved);
