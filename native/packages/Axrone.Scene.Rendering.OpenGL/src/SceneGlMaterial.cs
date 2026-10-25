@@ -7,6 +7,9 @@ public readonly record struct SceneGlTextureSlot(
     GLTexture Texture,
     GLSampler Sampler);
 
+/// <summary>Flattened custom uniform entry used by the allocation-free draw loop.</summary>
+public readonly record struct SceneGlUniformEntry(string Name, SceneUniformValue Value);
+
 /// <summary>
 /// GPU-ready material: compiled shader, resolved texture slots and the canonical
 /// definition used for uniform and state binding.
@@ -27,6 +30,7 @@ public sealed class SceneGlMaterial
         Shader = shader;
         TextureSlots = textureSlots;
         PrimaryPass = ResolvePrimaryPass(definition.Passes);
+        UniformEntries = FlattenUniforms(definition.Uniforms);
     }
 
     /// <summary>Canonical material definition.</summary>
@@ -36,7 +40,10 @@ public sealed class SceneGlMaterial
     public SceneGlShader Shader { get; }
 
     /// <summary>Resolved texture slots.</summary>
-    public IReadOnlyList<SceneGlTextureSlot> TextureSlots { get; }
+    public ReadOnlyMemory<SceneGlTextureSlot> TextureSlots { get; }
+
+    /// <summary>Flattened custom uniforms in declaration order.</summary>
+    public ReadOnlyMemory<SceneGlUniformEntry> UniformEntries { get; }
 
     /// <summary>Pass used for state overrides, if any.</summary>
     public SceneMaterialPass? PrimaryPass { get; }
@@ -63,5 +70,23 @@ public sealed class SceneGlMaterial
         }
 
         return passes[0];
+    }
+
+    private static SceneGlUniformEntry[] FlattenUniforms(
+        IReadOnlyDictionary<string, SceneUniformValue> uniforms)
+    {
+        if (uniforms.Count == 0)
+        {
+            return [];
+        }
+
+        var entries = new SceneGlUniformEntry[uniforms.Count];
+        int index = 0;
+        foreach (KeyValuePair<string, SceneUniformValue> pair in uniforms)
+        {
+            entries[index++] = new SceneGlUniformEntry(pair.Key, pair.Value);
+        }
+
+        return entries;
     }
 }
