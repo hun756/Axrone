@@ -16,6 +16,8 @@
     <Project Path="packages/Axrone.Scene.Rendering.OpenGL/tests/Axrone.Scene.Rendering.OpenGL.Tests.csproj" />
     <Project Path="packages/Axrone.Scene.Prefab/Axrone.Scene.Prefab.csproj" />
     <Project Path="packages/Axrone.Scene.Prefab/tests/Axrone.Scene.Prefab.Tests.csproj" />
+    <Project Path="packages/Axrone.Scene.Snapshot/Axrone.Scene.Snapshot.csproj" />
+    <Project Path="packages/Axrone.Scene.Snapshot/tests/Axrone.Scene.Snapshot.Tests.csproj" />
     <Project Path="packages/Axrone.GameLoop/Axrone.GameLoop.csproj" />
     <Project Path="packages/Axrone.GameLoop/tests/Axrone.GameLoop.Tests.csproj" />
     <Project Path="packages/Axrone.Audio.OpenAL/Axrone.Audio.OpenAL.csproj" />
