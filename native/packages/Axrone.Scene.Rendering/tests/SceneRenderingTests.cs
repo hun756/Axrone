@@ -308,6 +308,41 @@ public sealed class SceneRenderingTests
         profile.Registry.TryGetDataByType(typeof(SceneSpotLight), out _).Should().BeTrue();
     }
 
+    [Fact]
+    public void RenderItemCollector_SortsLargeTransparentQueueByDistance()
+    {
+        SceneProfile profile = RenderingFixture.CreateProfile();
+        using SceneWorld world = profile.CreateWorld();
+        var assets = new SceneAssetRegistry();
+        SceneMeshDefinition mesh = RenderingFixture.CreateMesh(assets, "mesh/large", radius: 0.25f);
+        assets.Meshes.Register(mesh);
+        SceneAssetId<MaterialAssetTag> materialId = assets.CreateId<MaterialAssetTag>("material/large");
+        SceneActor cameraActor = RenderingFixture.CreateCamera(world, new Vec3(0.0f, 0.0f, 10.0f), primary: true);
+        SceneCameraFrame frame = new SceneCameraFrameCollector().Collect(world, cameraActor, 1280, 720)!;
+
+        const int rendererCount = 64;
+        for (int i = 0; i < rendererCount; i++)
+        {
+            CreateRenderer(
+                world,
+                mesh.Id,
+                materialId,
+                new Vec3(0.0f, 0.0f, -i * 0.25f),
+                transparent: true);
+        }
+
+        world.UpdateTransforms();
+        var collector = new SceneRenderItemCollector(16);
+        int planned = collector.Collect(world, frame, SceneRenderPassIds.Main, assets);
+
+        planned.Should().Be(rendererCount);
+        for (int i = 1; i < collector.Count; i++)
+        {
+            collector.Items[i - 1].DistanceSquared
+                .Should().BeGreaterThanOrEqualTo(collector.Items[i].DistanceSquared);
+        }
+    }
+
     private static SceneActor CreateRenderer(
         SceneWorld world,
         SceneAssetId<MeshAssetTag> meshId,
