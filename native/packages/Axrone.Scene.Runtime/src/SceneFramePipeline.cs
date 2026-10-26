@@ -184,6 +184,7 @@ public sealed class SceneFramePipeline : IDisposable, ISceneFrameItemSource
         }
 
         _frameState.RecordQueues(count - transparent, transparent);
+        _frameState.RecordCulled(_items.CulledCount);
         return count;
     }
 
@@ -201,6 +202,7 @@ public sealed class SceneFramePipeline : IDisposable, ISceneFrameItemSource
 
         int count = _spriteItems.Collect(_world, Camera, passId);
         _frameState.RecordSprites(count);
+        _frameState.RecordCulled(_spriteItems.CulledCount);
         return count;
     }
 
