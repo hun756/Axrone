@@ -7,14 +7,12 @@ namespace Axrone.Scene.Runtime;
 /// </summary>
 public sealed class SceneRuntime : IDisposable
 {
-    private readonly SceneProfile _profile;
     private bool _disposed;
 
     /// <summary>Creates a runtime with an optional shared asset catalog.</summary>
     public SceneRuntime(SceneRuntimeOptions options, SceneAssetRegistry? assets = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.Profile);
 
         if (options.ViewportWidth <= 0 || options.ViewportHeight <= 0)
         {
@@ -28,11 +26,12 @@ public sealed class SceneRuntime : IDisposable
                 $"Local-light capacity must not be negative; received {options.MaxLocalLights}.");
         }
 
-        _profile = options.Profile;
+        RuntimeProfile = SceneRuntimeProfiles.Resolve(options.RuntimeProfile, options.Profile);
+        SceneProfile profile = RuntimeProfile.Profile;
         Assets = assets ?? new SceneAssetRegistry();
         World = options.WorldOptions is { } worldOptions
-            ? _profile.CreateWorld(worldOptions)
-            : _profile.CreateWorld();
+            ? profile.CreateWorld(worldOptions)
+            : profile.CreateWorld();
 
         Codecs = new SceneCodecRegistry(World.Registry);
         ScenePrefabCodecs.RegisterCore(Codecs, World.Registry);
@@ -54,8 +53,14 @@ public sealed class SceneRuntime : IDisposable
             options.MaxLocalLights);
     }
 
-    /// <summary>Active scene profile.</summary>
-    public SceneProfile Profile => _profile;
+    /// <summary>Resolved runtime profile (built-in or custom).</summary>
+    public SceneRuntimeProfile RuntimeProfile { get; }
+
+    /// <summary>Active scene composition.</summary>
+    public SceneProfile Profile => RuntimeProfile.Profile;
+
+    /// <summary>Physics bridges this runtime's profile participates in.</summary>
+    public ScenePhysicsBridgeSelection PhysicsBridges => RuntimeProfile.PhysicsBridges;
 
     /// <summary>Scene world that owns actors, components and behaviours.</summary>
     public SceneWorld World { get; }
