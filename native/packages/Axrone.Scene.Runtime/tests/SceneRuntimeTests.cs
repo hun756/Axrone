@@ -239,6 +239,32 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_RecordsCulledSprites()
+    {
+        using var runtime = Create2DRuntime(out SceneAssetRegistry assets);
+        SceneAssetId<TextureAssetTag> textureId = assets.CreateId<TextureAssetTag>("texture/sprite");
+        SceneWorld world = runtime.World;
+
+        SceneActor visible = world.CreateActor("Visible");
+        world.GetTransform2D(visible).SetPosition(Vec2.Zero);
+        SceneSpriteRenderer visibleSprite = SceneSpriteRenderer.Default;
+        visibleSprite.TextureId = textureId;
+        world.AddData(visible, visibleSprite);
+
+        SceneActor culled = world.CreateActor("Culled");
+        world.GetTransform2D(culled).SetPosition(new Vec2(100.0f, 0.0f));
+        SceneSpriteRenderer culledSprite = SceneSpriteRenderer.Default;
+        culledSprite.TextureId = textureId;
+        world.AddData(culled, culledSprite);
+
+        world.UpdateTransforms();
+
+        runtime.Frame.Plan(0).Should().BeTrue();
+        runtime.Frame.CollectSprites(SceneRenderPassIds.Main).Should().Be(1);
+        runtime.Frame.Complete(1).CulledCount.Should().Be(1);
+    }
+
+    [Fact]
     public void Pipeline_ResolvesFogState()
     {
         using var runtime = CreateRenderableRuntime(out _, out _);
