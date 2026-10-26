@@ -26,6 +26,16 @@ public static class SceneRenderingCodecs
             codecs.Register(new SceneCameraCodec());
         }
 
+        if (components.TryGetDataByType(typeof(SceneCamera2D), out _))
+        {
+            codecs.Register(new SceneCamera2DCodec());
+        }
+
+        if (components.TryGetDataByType(typeof(SceneSpriteRenderer), out _))
+        {
+            codecs.Register(new SceneSpriteRendererCodec(names));
+        }
+
         if (components.TryGetDataByType(typeof(SceneMeshRenderer), out _))
         {
             codecs.Register(new SceneMeshRendererCodec(names));
@@ -247,6 +257,147 @@ public sealed class SceneMeshRendererCodec : SceneDataCodec<SceneMeshRenderer>
         }
 
         return renderer;
+    }
+}
+
+/// <summary>JSON codec for <see cref="SceneCamera2D"/>.</summary>
+public sealed class SceneCamera2DCodec : SceneDataCodec<SceneCamera2D>
+{
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, in SceneCamera2D value)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.WriteNumber("depth", value.Depth);
+    }
+
+    /// <inheritdoc/>
+    public override SceneCamera2D Read(JsonElement data)
+    {
+        SceneCamera2D camera = SceneCamera2D.Default;
+        if (data.TryGetProperty("depth", out JsonElement depth))
+        {
+            camera.Depth = depth.GetSingle();
+        }
+
+        return camera;
+    }
+}
+
+/// <summary>JSON codec for <see cref="SceneSpriteRenderer"/>.</summary>
+public sealed class SceneSpriteRendererCodec : SceneDataCodec<SceneSpriteRenderer>
+{
+    private readonly SceneNameTable _names;
+
+    /// <summary>Creates a codec that resolves asset symbols through a name table.</summary>
+    public SceneSpriteRendererCodec(SceneNameTable names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        _names = names;
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, in SceneSpriteRenderer value)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        SceneJson.WriteAssetId(writer, "texture", value.TextureId, _names);
+        SceneJson.WriteAssetId(writer, "material", value.MaterialId, _names);
+        SceneJson.WriteAssetId(writer, "pass", value.PassId, _names);
+        writer.WriteBoolean("enabled", value.Enabled);
+        writer.WriteBoolean("visible", value.Visible);
+        writer.WriteBoolean("flipX", value.FlipX);
+        writer.WriteBoolean("flipY", value.FlipY);
+        writer.WriteNumber("sortingLayer", value.SortingLayer);
+        writer.WriteNumber("renderOrder", value.RenderOrder);
+        writer.WriteNumber("depth", value.Depth);
+        SceneJson.WriteVec2(writer, "size", value.Size);
+        SceneJson.WriteVec2(writer, "sourceSize", value.SourceSize);
+        SceneJson.WriteVec2(writer, "anchor", value.Anchor);
+        SceneJson.WriteVec4(writer, "color", value.Color);
+        SceneJson.WriteVec4(writer, "uvRect", value.UvRect);
+    }
+
+    /// <inheritdoc/>
+    public override SceneSpriteRenderer Read(JsonElement data)
+    {
+        SceneSpriteRenderer sprite = SceneSpriteRenderer.Default;
+
+        if (SceneJson.TryReadAssetId(data, "texture", _names, out SceneAssetId<TextureAssetTag> texture))
+        {
+            sprite.TextureId = texture;
+        }
+
+        if (SceneJson.TryReadAssetId(data, "material", _names, out SceneAssetId<MaterialAssetTag> material))
+        {
+            sprite.MaterialId = material;
+        }
+
+        if (SceneJson.TryReadAssetId(data, "pass", _names, out SceneAssetId<RenderPassAssetTag> pass))
+        {
+            sprite.PassId = pass;
+        }
+
+        if (data.TryGetProperty("enabled", out JsonElement enabled))
+        {
+            sprite.Enabled = enabled.GetBoolean();
+        }
+
+        if (data.TryGetProperty("visible", out JsonElement visible))
+        {
+            sprite.Visible = visible.GetBoolean();
+        }
+
+        if (data.TryGetProperty("flipX", out JsonElement flipX))
+        {
+            sprite.FlipX = flipX.GetBoolean();
+        }
+
+        if (data.TryGetProperty("flipY", out JsonElement flipY))
+        {
+            sprite.FlipY = flipY.GetBoolean();
+        }
+
+        if (data.TryGetProperty("sortingLayer", out JsonElement sortingLayer))
+        {
+            sprite.SortingLayer = sortingLayer.GetInt32();
+        }
+
+        if (data.TryGetProperty("renderOrder", out JsonElement renderOrder))
+        {
+            sprite.RenderOrder = renderOrder.GetInt32();
+        }
+
+        if (data.TryGetProperty("depth", out JsonElement depth))
+        {
+            sprite.Depth = depth.GetSingle();
+        }
+
+        if (data.TryGetProperty("size", out JsonElement size))
+        {
+            sprite.Size = SceneJson.ReadVec2(size, "size");
+        }
+
+        if (data.TryGetProperty("sourceSize", out JsonElement sourceSize))
+        {
+            sprite.SourceSize = SceneJson.ReadVec2(sourceSize, "sourceSize");
+        }
+
+        if (data.TryGetProperty("anchor", out JsonElement anchor))
+        {
+            sprite.Anchor = SceneJson.ReadVec2(anchor, "anchor");
+        }
+
+        if (data.TryGetProperty("color", out JsonElement color))
+        {
+            sprite.Color = SceneJson.ReadVec4(color, "color");
+        }
+
+        if (data.TryGetProperty("uvRect", out JsonElement uvRect))
+        {
+            sprite.UvRect = SceneJson.ReadVec4(uvRect, "uvRect");
+        }
+
+        return sprite;
     }
 }
 
@@ -538,6 +689,14 @@ internal static class SceneJson
         return true;
     }
 
+    public static void WriteVec2(Utf8JsonWriter writer, string name, in Vec2 value)
+    {
+        writer.WriteStartArray(name);
+        writer.WriteNumberValue(value.X);
+        writer.WriteNumberValue(value.Y);
+        writer.WriteEndArray();
+    }
+
     public static void WriteVec3(Utf8JsonWriter writer, string name, in Vec3 value)
     {
         writer.WriteStartArray(name);
@@ -555,6 +714,18 @@ internal static class SceneJson
         writer.WriteNumberValue(value.Z);
         writer.WriteNumberValue(value.W);
         writer.WriteEndArray();
+    }
+
+    public static Vec2 ReadVec2(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() < 2)
+        {
+            throw Invalid($"'{name}' must be a two-component array.");
+        }
+
+        return new Vec2(
+            element[0].GetSingle(),
+            element[1].GetSingle());
     }
 
     public static Vec3 ReadVec3(JsonElement element, string name)
