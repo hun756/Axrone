@@ -10,9 +10,7 @@ public sealed class SceneGlFrameRenderer : IDisposable
     private readonly GLContext _context;
     private readonly SceneRuntime _runtime;
     private readonly SceneGlAssetCache _assets;
-    private readonly SceneGlDrawExecutor _executor;
-    private readonly SceneGlSpriteBatchRenderer _spriteRenderer;
-    private readonly bool _hasSprites;
+    private readonly SceneGlRenderOrchestrator _orchestrator;
     private bool _disposed;
 
     /// <summary>Creates a GL frame renderer for a runtime and context.</summary>
@@ -24,9 +22,7 @@ public sealed class SceneGlFrameRenderer : IDisposable
         _context = context;
         _runtime = runtime;
         _assets = new SceneGlAssetCache(context, runtime.Assets);
-        _executor = new SceneGlDrawExecutor(context, _assets);
-        _spriteRenderer = new SceneGlSpriteBatchRenderer(context, _assets);
-        _hasSprites = runtime.World.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
+        _orchestrator = new SceneGlRenderOrchestrator(context, _assets, runtime.World);
     }
 
     /// <summary>GPU-side asset cache.</summary>
@@ -52,40 +48,13 @@ public sealed class SceneGlFrameRenderer : IDisposable
         }
 
         SceneCameraFrame camera = frame.Camera!;
-        ReadOnlySpan<SceneRenderPassDefinition> passes = frame.Passes.Passes;
-        int passCount = 0;
-
-        for (int i = 0; i < passes.Length; i++)
-        {
-            SceneRenderPassDefinition pass = passes[i];
-            _ = frame.CollectItems(pass.Id);
-            _executor.Render(
-                _runtime.World,
-                camera,
-                frame.Items,
-                frame.Lighting,
-                pass,
-                frame.FrameState,
-                elapsedSeconds);
-
-            if (_hasSprites)
-            {
-                int spriteCount = frame.CollectSprites(pass.Id);
-                if (spriteCount > 0)
-                {
-                    _ = _spriteRenderer.Render(
-                        _runtime.World,
-                        camera,
-                        frame.SpriteItems,
-                        pass,
-                        frame.FrameState);
-                }
-            }
-
-            passCount++;
-        }
-
-        return frame.Complete(passCount);
+        return _orchestrator.RenderFrame(
+            _runtime.World,
+            camera,
+            frame,
+            frame.Passes.Passes,
+            frame.FrameState,
+            elapsedSeconds);
     }
 
     /// <inheritdoc/>
@@ -96,7 +65,7 @@ public sealed class SceneGlFrameRenderer : IDisposable
             return;
         }
 
-        _spriteRenderer.Dispose();
+        _orchestrator.Dispose();
         _assets.Dispose();
         _disposed = true;
     }
