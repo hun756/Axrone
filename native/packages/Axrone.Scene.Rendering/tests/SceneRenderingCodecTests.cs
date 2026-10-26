@@ -200,6 +200,64 @@ public sealed class SceneRenderingCodecTests
     }
 
     [Fact]
+    public void Camera2DCodec_RoundTrips()
+    {
+        var codec = new SceneCamera2DCodec();
+        var camera = new SceneCamera2D { Depth = 12.5f };
+
+        SceneCamera2D restored = codec.Read(Capture(writer => codec.Write(writer, camera)));
+
+        restored.Depth.Should().BeApproximately(12.5f, 1e-6f);
+    }
+
+    [Fact]
+    public void SpriteCodec_RoundTrips()
+    {
+        var assets = new SceneAssetRegistry();
+        SceneAssetId<TextureAssetTag> texture = assets.CreateId<TextureAssetTag>("texture/sprite");
+        SceneAssetId<MaterialAssetTag> material = assets.CreateId<MaterialAssetTag>("material/sprite");
+        SceneAssetId<RenderPassAssetTag> pass = assets.CreateId<RenderPassAssetTag>("pass/ui");
+        var codec = new SceneSpriteRendererCodec(assets.Names);
+
+        var sprite = new SceneSpriteRenderer
+        {
+            TextureId = texture,
+            MaterialId = material,
+            PassId = pass,
+            Enabled = false,
+            Visible = true,
+            FlipX = true,
+            FlipY = false,
+            SortingLayer = 3,
+            RenderOrder = 7,
+            Depth = 0.25f,
+            Size = new Vec2(2.0f, 4.0f),
+            SourceSize = new Vec2(64.0f, 128.0f),
+            Anchor = new Vec2(0.25f, 0.75f),
+            Color = new Vec4(1.0f, 0.5f, 0.25f, 0.75f),
+            UvRect = new Vec4(0.125f, 0.25f, 0.5f, 0.5f)
+        };
+
+        JsonElement payload = Capture(writer => codec.Write(writer, sprite));
+        SceneSpriteRenderer restored = codec.Read(payload);
+
+        payload.GetProperty("texture").GetString().Should().Be("texture/sprite");
+        restored.TextureId.Should().Be(texture);
+        restored.MaterialId.Should().Be(material);
+        restored.PassId.Should().Be(pass);
+        restored.Enabled.Should().BeFalse();
+        restored.FlipX.Should().BeTrue();
+        restored.SortingLayer.Should().Be(3);
+        restored.RenderOrder.Should().Be(7);
+        restored.Depth.Should().BeApproximately(0.25f, 1e-6f);
+        restored.Size.Should().Be(new Vec2(2.0f, 4.0f));
+        restored.SourceSize.Should().Be(new Vec2(64.0f, 128.0f));
+        restored.Anchor.Should().Be(new Vec2(0.25f, 0.75f));
+        restored.Color.Should().Be(new Vec4(1.0f, 0.5f, 0.25f, 0.75f));
+        restored.UvRect.Should().Be(new Vec4(0.125f, 0.25f, 0.5f, 0.5f));
+    }
+
+    [Fact]
     public void Register_RegistersComponentsPresentInTheRegistry()
     {
         using SceneWorld world = RenderingFixture.CreateProfile().CreateWorld();
