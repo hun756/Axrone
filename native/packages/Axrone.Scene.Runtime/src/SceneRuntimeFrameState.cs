@@ -6,7 +6,8 @@ using Axrone.GameLoop;
 public readonly record struct SceneRuntimeFrameState(
     FrameIndex Frame,
     SceneRenderStats RenderStats,
-    bool CameraAvailable);
+    bool CameraAvailable,
+    SceneRenderMode Mode);
 
 /// <summary>Loop timing settings for <see cref="SceneRuntimeLoop"/>.</summary>
 public sealed record SceneRuntimeLoopOptions

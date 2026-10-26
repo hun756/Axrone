@@ -39,7 +39,11 @@ public sealed class SceneRuntimeLoop : IDisposable
             options.InitialCapacity);
 
         _kernel.Registry.Register(new SceneRuntimeSystem(runtime, renderer));
-        _state = new SceneRuntimeFrameState(default, default, CameraAvailable: false);
+        _state = new SceneRuntimeFrameState(
+            default,
+            default,
+            CameraAvailable: false,
+            SceneRenderMode.None);
     }
 
     /// <summary>Underlying game-loop kernel.</summary>
