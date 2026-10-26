@@ -389,6 +389,68 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Instantiate_ResolvesRegisteredVariant()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        ScenePrefabDefinition basePrefab = CreatePrefab("prefab/base");
+        runtime.RegisterPrefab(basePrefab);
+
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant(
+            "prefab/base",
+            "prefab/variant",
+            [
+                new ScenePrefabSetActorFieldOperation(
+                    "root",
+                    ScenePrefabActorField.Name,
+                    ScenePrefabActorFieldValue.FromString("VariantRoot"))
+            ]);
+        runtime.RegisterPrefab(variant);
+
+        ScenePrefabInstantiationResult result = runtime.Instantiate(variant);
+
+        result.Actors.Should().HaveCount(2);
+        runtime.World.GetName(result.NodeMap["root"]).Should().Be("VariantRoot");
+    }
+
+    [Fact]
+    public void LoadSnapshot_AppliesLiveOverrides()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        SceneSnapshot snapshot = CreateSnapshot(out _);
+
+        ScenePrefabInstantiationResult result = runtime.LoadSnapshot(
+            snapshot,
+            new SceneSnapshotLoadOptions
+            {
+                LiveOverrides =
+                [
+                    new ScenePrefabSetActorFieldOperation(
+                        "root",
+                        ScenePrefabActorField.Tag,
+                        ScenePrefabActorFieldValue.FromString("Live"))
+                ]
+            });
+
+        result.Actors.Should().HaveCount(2);
+        runtime.World.GetTag(result.NodeMap["root"]).Should().Be("Live");
+    }
+
+    [Fact]
+    public void LoadSnapshot_ResolvesRegisteredVariantPrefab()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        ScenePrefabDefinition basePrefab = CreatePrefab("prefab/base");
+        runtime.RegisterPrefab(basePrefab);
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant("prefab/base", "prefab/variant");
+        runtime.RegisterPrefab(variant);
+
+        var snapshot = new SceneSnapshot(variant, [], [], [], [], [], []);
+        ScenePrefabInstantiationResult result = runtime.LoadSnapshot(snapshot);
+
+        result.Actors.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void CaptureSnapshot_RoundTripsIntoAnotherRuntime()
     {
         using var source = CreateRenderableRuntime(out _, out _);
