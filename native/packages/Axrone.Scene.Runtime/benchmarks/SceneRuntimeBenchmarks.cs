@@ -22,16 +22,9 @@ public class SceneFramePlanningBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        SceneProfile profile = new SceneProfileBuilder(
-                new SceneProfileId(SceneStringId.FromName("bench/frame")))
-            .AddTransform3D()
-            .AddRendering3D()
-            .AddLighting3D()
-            .Build();
-
         _runtime = new SceneRuntime(new SceneRuntimeOptions
         {
-            Profile = profile,
+            RuntimeProfile = SceneRuntimeProfiles.ThreeD,
             ViewportWidth = 1280,
             ViewportHeight = 720
         });
