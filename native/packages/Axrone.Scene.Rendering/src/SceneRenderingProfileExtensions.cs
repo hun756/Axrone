@@ -27,14 +27,24 @@ public static class SceneRenderingProfileExtensions
     }
 
     /// <summary>Registers the 2D camera and sprite renderer components.</summary>
-    public static SceneProfileBuilder AddRendering2D(this SceneProfileBuilder builder)
+    /// <param name="builder">Profile builder.</param>
+    /// <param name="includeCamera">
+    /// Whether to register the shared camera component. Pass false when the
+    /// profile already registers it through the 3D extension.
+    /// </param>
+    public static SceneProfileBuilder AddRendering2D(
+        this SceneProfileBuilder builder,
+        bool includeCamera = true)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.AddData<SceneCamera>(
-            "Camera",
-            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
-            priority: 900);
+        if (includeCamera)
+        {
+            builder.AddData<SceneCamera>(
+                "Camera",
+                SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+                priority: 900);
+        }
 
         builder.AddData<SceneCamera2D>(
             "Camera2D",
