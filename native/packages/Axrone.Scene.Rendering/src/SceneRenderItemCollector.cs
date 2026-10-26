@@ -89,23 +89,7 @@ public sealed class SceneRenderItemCollector
             if (hasLocalBounds)
             {
                 Mat4 worldMatrix = world.GetWorldMatrix3D(actor);
-                Vec4 center = worldMatrix * new Vec4(localBounds.Center, 1.0f);
-                float scaleX = MathF.Sqrt(
-                    (worldMatrix.M11 * worldMatrix.M11) +
-                    (worldMatrix.M12 * worldMatrix.M12) +
-                    (worldMatrix.M13 * worldMatrix.M13));
-                float scaleY = MathF.Sqrt(
-                    (worldMatrix.M21 * worldMatrix.M21) +
-                    (worldMatrix.M22 * worldMatrix.M22) +
-                    (worldMatrix.M23 * worldMatrix.M23));
-                float scaleZ = MathF.Sqrt(
-                    (worldMatrix.M31 * worldMatrix.M31) +
-                    (worldMatrix.M32 * worldMatrix.M32) +
-                    (worldMatrix.M33 * worldMatrix.M33));
-                float maxScale = MathF.Max(scaleX, MathF.Max(scaleY, scaleZ));
-                worldBounds = new BoundingSphere3(
-                    new Vec3(center.X, center.Y, center.Z),
-                    localBounds.Radius * maxScale);
+                worldBounds = SceneBounds.TransformSphere(in worldMatrix, in localBounds);
                 hasWorldBounds = true;
             }
 
@@ -180,161 +164,14 @@ public sealed class SceneRenderItemCollector
 
         Array.Resize(ref _items, capacity);
     }
-
     /// <summary>
-    /// Allocation-free introsort over the planned queue. The BCL's span sort
-    /// boxes the struct comparer (88 bytes per call at this writing), which
-    /// would break the zero-allocation frame contract.
+    /// Allocation-free introsort over the planned queue. The BCL span sort
+    /// boxes struct comparers, which would break the zero-allocation contract.
     /// </summary>
-    private void SortPlannedItems()
-    {
-        int count = _count;
-        if (count < 2)
-        {
-            return;
-        }
-
-        IntrospectiveSort(_items.AsSpan(0, count), 2 * BitOperations.Log2((uint)count));
-    }
-
-    private void IntrospectiveSort(Span<SceneRenderItem> span, int depthLimit)
-    {
-        while (span.Length > 16)
-        {
-            if (depthLimit == 0)
-            {
-                HeapSort(span);
-                return;
-            }
-
-            depthLimit--;
-
-            int pivot = Partition(span);
-            Span<SceneRenderItem> right = span[(pivot + 1)..];
-            Span<SceneRenderItem> left = span[..pivot];
-
-            // Recurse into the smaller half; loop over the larger one.
-            if (left.Length < right.Length)
-            {
-                IntrospectiveSort(left, depthLimit);
-                span = right;
-            }
-            else
-            {
-                IntrospectiveSort(right, depthLimit);
-                span = left;
-            }
-        }
-
-        InsertionSort(span);
-    }
-
-    private int Partition(Span<SceneRenderItem> span)
-    {
-        int last = span.Length - 1;
-        int mid = last >> 1;
-
-        // Order first/middle/last, then park the median at the tail.
-        if (Less(span[last], span[0]))
-        {
-            Swap(span, 0, last);
-        }
-
-        if (Less(span[mid], span[0]))
-        {
-            Swap(span, 0, mid);
-        }
-
-        if (Less(span[last], span[mid]))
-        {
-            Swap(span, mid, last);
-        }
-
-        SceneRenderItem pivot = span[mid];
-        Swap(span, mid, last);
-
-        int store = 0;
-        for (int i = 0; i < last; i++)
-        {
-            if (Less(span[i], pivot))
-            {
-                Swap(span, i, store);
-                store++;
-            }
-        }
-
-        Swap(span, store, last);
-        return store;
-    }
-
-    private void InsertionSort(Span<SceneRenderItem> span)
-    {
-        for (int i = 1; i < span.Length; i++)
-        {
-            SceneRenderItem item = span[i];
-            int j = i - 1;
-
-            while (j >= 0 && Less(item, span[j]))
-            {
-                span[j + 1] = span[j];
-                j--;
-            }
-
-            span[j + 1] = item;
-        }
-    }
-
-    private void HeapSort(Span<SceneRenderItem> span)
-    {
-        int count = span.Length;
-
-        for (int root = (count >> 1) - 1; root >= 0; root--)
-        {
-            SiftDown(span, root, count);
-        }
-
-        for (int end = count - 1; end > 0; end--)
-        {
-            Swap(span, 0, end);
-            SiftDown(span, 0, end);
-        }
-    }
-
-    private void SiftDown(Span<SceneRenderItem> span, int root, int count)
-    {
-        while (true)
-        {
-            int child = (root << 1) + 1;
-            if (child >= count)
-            {
-                return;
-            }
-
-            if (child + 1 < count && Less(span[child], span[child + 1]))
-            {
-                child++;
-            }
-
-            if (!Less(span[root], span[child]))
-            {
-                return;
-            }
-
-            Swap(span, root, child);
-            root = child;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool Less(in SceneRenderItem left, in SceneRenderItem right) =>
-        _comparer.Compare(left, right) < 0;
-
-    private static void Swap(Span<SceneRenderItem> span, int left, int right)
-    {
-        SceneRenderItem temp = span[left];
-        span[left] = span[right];
-        span[right] = temp;
-    }
+    private void SortPlannedItems() =>
+        SceneIntroSort<SceneRenderItem, RenderItemComparer>.Sort(
+            _items.AsSpan(0, _count),
+            _comparer);
 
     private readonly struct RenderItemComparer : IComparer<SceneRenderItem>
     {

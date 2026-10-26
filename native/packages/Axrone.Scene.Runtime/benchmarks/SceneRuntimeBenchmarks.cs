@@ -101,6 +101,46 @@ public class SceneFramePlanningBenchmarks
     }
 }
 
+/// <summary>Measures profiler recording overhead on a steady-state frame.</summary>
+[MemoryDiagnoser]
+[ShortRunJob]
+public class SceneProfilerBenchmarks
+{
+    private SceneRuntimeProfiler _profiler = null!;
+    private SceneRenderStats _renderStats;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _profiler = new SceneRuntimeProfiler(new SceneRuntimeProfilerOptions
+        {
+            Enabled = true,
+            Capacity = 300,
+            MemorySampleIntervalMs = 1e9
+        });
+
+        _renderStats = new SceneRenderStats(0, 12, 4800, 1, 100, 4, 2, 0);
+    }
+
+    [GlobalCleanup]
+    public void Cleanup() => _profiler.Dispose();
+
+    /// <summary>Records one complete frame with phase timing.</summary>
+    [Benchmark]
+    public void RecordFrame()
+    {
+        _profiler.BeginFrame(0, 0.0, 16.0);
+
+        using (_profiler.MeasurePhase(SceneRuntimePhase.Update))
+        {
+        }
+
+        _profiler.AccumulatePhase(SceneRuntimePhase.Render, 1.0f);
+        _profiler.AttachRenderStats(in _renderStats);
+        _profiler.EndFrame(16.0, 1);
+    }
+}
+
 /// <summary>Measures procedural mesh authoring cost.</summary>
 [MemoryDiagnoser]
 [ShortRunJob]

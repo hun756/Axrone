@@ -14,8 +14,10 @@ public static class SceneCameraSelector
         SceneActor fallback = SceneActor.Null;
         foreach (SceneActor actor in world.Actors)
         {
+            // Actors carrying the 2D marker are owned by the 2D selector.
             if (!world.IsActiveInHierarchy(actor) ||
-                !world.HasData<SceneCamera>(actor))
+                !world.HasData<SceneCamera>(actor) ||
+                world.HasData<SceneCamera2D>(actor))
             {
                 continue;
             }

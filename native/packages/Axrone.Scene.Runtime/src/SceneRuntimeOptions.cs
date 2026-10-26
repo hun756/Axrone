@@ -26,4 +26,7 @@ public sealed record SceneRuntimeOptions
 
     /// <summary>Maximum point and spot lights forwarded to the lighting rig.</summary>
     public int MaxLocalLights { get; init; } = 4;
+
+    /// <summary>Optional frame profiler settings; recording is disabled by default.</summary>
+    public SceneRuntimeProfilerOptions? Profiler { get; init; }
 }

@@ -41,6 +41,7 @@ public sealed class SceneRuntime : IDisposable
         Prefabs = new ScenePrefabRegistry();
         PrefabResolver = new ScenePrefabResolver(Prefabs);
         Snapshots = new SceneSnapshotLoader(World, Assets, Codecs);
+        Profiler = new SceneRuntimeProfiler(options.Profiler);
 
         Frame = new SceneFramePipeline(
             World,
@@ -76,6 +77,9 @@ public sealed class SceneRuntime : IDisposable
 
     /// <summary>Backend-agnostic frame planner.</summary>
     public SceneFramePipeline Frame { get; }
+
+    /// <summary>Frame profiler; recording is opt-in through the runtime options.</summary>
+    public SceneRuntimeProfiler Profiler { get; }
 
     /// <summary>Viewport width forwarded to the frame planner.</summary>
     public int ViewportWidth
@@ -145,6 +149,7 @@ public sealed class SceneRuntime : IDisposable
         }
 
         Frame.Dispose();
+        Profiler.Dispose();
         World.Dispose();
         _disposed = true;
     }
