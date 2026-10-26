@@ -27,6 +27,9 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         _hasSpriteComponent = world.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
     }
 
+    /// <summary>Mesh executor used by the orchestrator (diagnostics/tests).</summary>
+    internal SceneGlDrawExecutor MeshExecutor => _meshExecutor;
+
     /// <summary>
     /// Renders every enabled pass and returns the accumulated frame counters.
     /// </summary>
@@ -58,7 +61,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                 items.Lighting,
                 pass,
                 frameState,
-                elapsedSeconds);
+                elapsedSeconds,
+                items.Fog);
 
             if (_hasSpriteComponent)
             {

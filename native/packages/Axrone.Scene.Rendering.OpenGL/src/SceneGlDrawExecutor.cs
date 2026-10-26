@@ -38,6 +38,11 @@ public sealed class SceneGlDrawExecutor
     private const string SpotLightRangeUniform = "u_SpotLightRange";
     private const string SpotLightInnerCosUniform = "u_SpotLightInnerCos";
     private const string SpotLightOuterCosUniform = "u_SpotLightOuterCos";
+    private const string FogEnabledUniform = "u_FogEnabled";
+    private const string FogColorUniform = "u_FogColor";
+    private const string FogModeUniform = "u_FogMode";
+    private const string FogDensityUniform = "u_FogDensity";
+    private const string FogRangeUniform = "u_FogStartEnd";
 
     private readonly GLContext _context;
     private readonly SceneGlAssetCache _assets;
@@ -52,6 +57,9 @@ public sealed class SceneGlDrawExecutor
         _assets = assets;
     }
 
+    /// <summary>Fog state bound by the last render call (diagnostics/tests).</summary>
+    internal SceneFogState LastFog { get; private set; }
+
     /// <summary>Renders one pass and returns the submitted draw count.</summary>
     public int Render(
         SceneWorld world,
@@ -60,7 +68,8 @@ public sealed class SceneGlDrawExecutor
         LightingSelectionState? lighting,
         SceneRenderPassDefinition pass,
         SceneRenderFrameState frameState,
-        float elapsedSeconds = 0.0f)
+        float elapsedSeconds = 0.0f,
+        in SceneFogState fog = default)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(camera);
@@ -69,6 +78,7 @@ public sealed class SceneGlDrawExecutor
 
         _context.AssertRenderThread();
         _context.State.SetViewport(0, 0, camera.ViewportWidth, camera.ViewportHeight);
+        LastFog = fog;
 
         BeginPass(camera, pass);
         ExtractLighting(lighting, out LightingValues lights);
@@ -103,6 +113,7 @@ public sealed class SceneGlDrawExecutor
 
             ApplySurface(shader, material.Surface);
             ApplyLighting(shader, in lights);
+            ApplyFog(shader, in fog);
             ApplyCustomUniforms(shader, material.UniformEntries.Span);
             BindTextures(shader, material.TextureSlots.Span);
             ApplyState(item, material, pass);
@@ -138,6 +149,24 @@ public sealed class SceneGlDrawExecutor
             _context.State.SetClearDepth(depth);
             _context.GL.Clear(GLConst.DepthBufferBit);
         }
+    }
+
+    internal static void ApplyFog(SceneGlShader shader, in SceneFogState fog)
+    {
+        shader.SetInt(FogEnabledUniform, fog.Enabled ? 1 : 0);
+
+        if (!fog.Enabled)
+        {
+            return;
+        }
+
+        Vec3 color = fog.Color;
+        shader.SetVec3(FogColorUniform, in color);
+        shader.SetInt(FogModeUniform, (int)fog.Mode);
+        shader.SetFloat(FogDensityUniform, fog.Density);
+
+        var range = new Vec2(fog.RangeStart, fog.RangeEnd);
+        shader.SetVec2(FogRangeUniform, in range);
     }
 
     private static void ApplySurface(SceneGlShader shader, SceneMaterialSurface surface)
