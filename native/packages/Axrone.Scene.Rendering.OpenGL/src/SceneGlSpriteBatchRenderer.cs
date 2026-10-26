@@ -85,7 +85,6 @@ public sealed class SceneGlSpriteBatchRenderer : IDisposable
         int indexCapacity = InitialSpriteCapacity * IndicesPerSprite;
         _vertices = new SpriteVertex[vertexCapacity];
         _indices = new uint[indexCapacity];
-        FillIndices(0, InitialSpriteCapacity);
 
         _vertexBuffer = new GLBuffer(
             context,
@@ -99,7 +98,6 @@ public sealed class SceneGlSpriteBatchRenderer : IDisposable
             GLConst.DynamicDraw,
             indexCapacity * sizeof(uint),
             "scene-sprite-indices");
-        _indexBuffer.Update(MemoryMarshal.AsBytes(_indices.AsSpan()));
 
         _vao = new GLVertexArray(context, "scene-sprite-batch");
         _vao.ConfigureLayout(
@@ -227,7 +225,8 @@ public sealed class SceneGlSpriteBatchRenderer : IDisposable
 
     private void AppendSprite(SceneWorld world, ref readonly SceneSpriteRenderItem item)
     {
-        if (_vertexCount + VerticesPerSprite > _vertices.Length)
+        if (_vertexCount + VerticesPerSprite > _vertices.Length ||
+            _indexCount + IndicesPerSprite > _indices.Length)
         {
             Grow();
         }
@@ -267,6 +266,17 @@ public sealed class SceneGlSpriteBatchRenderer : IDisposable
         vertices[2] = new SpriteVertex(new Vec3(tr.X, tr.Y, tr.Z), new Vec2(u1, v1), item.Color);
         vertices[3] = new SpriteVertex(new Vec3(tl.X, tl.Y, tl.Z), new Vec2(u0, v1), item.Color);
 
+        // Batches restart their vertex base at zero, so indices must be written
+        // relative to this batch rather than the global sprite slot.
+        uint baseIndex = (uint)_vertexCount;
+        int indexOffset = _indexCount;
+        _indices[indexOffset] = baseIndex;
+        _indices[indexOffset + 1] = baseIndex + 1;
+        _indices[indexOffset + 2] = baseIndex + 2;
+        _indices[indexOffset + 3] = baseIndex;
+        _indices[indexOffset + 4] = baseIndex + 2;
+        _indices[indexOffset + 5] = baseIndex + 3;
+
         _vertexCount += VerticesPerSprite;
         _indexCount += IndicesPerSprite;
     }
@@ -294,28 +304,9 @@ public sealed class SceneGlSpriteBatchRenderer : IDisposable
 
         Array.Resize(ref _vertices, newSpriteCapacity * VerticesPerSprite);
         Array.Resize(ref _indices, newSpriteCapacity * IndicesPerSprite);
-        FillIndices(spriteCapacity, newSpriteCapacity - spriteCapacity);
 
         _vertexBuffer.Resize(_vertices.Length * VertexStride);
         _indexBuffer.Resize(_indices.Length * sizeof(uint));
-        _indexBuffer.Update(MemoryMarshal.AsBytes(_indices.AsSpan()));
-    }
-
-    private void FillIndices(int startSprite, int spriteCount)
-    {
-        for (int i = 0; i < spriteCount; i++)
-        {
-            int sprite = startSprite + i;
-            uint baseIndex = (uint)(sprite * VerticesPerSprite);
-            int index = sprite * IndicesPerSprite;
-
-            _indices[index] = baseIndex;
-            _indices[index + 1] = baseIndex + 1;
-            _indices[index + 2] = baseIndex + 2;
-            _indices[index + 3] = baseIndex;
-            _indices[index + 4] = baseIndex + 2;
-            _indices[index + 5] = baseIndex + 3;
-        }
     }
 
     private void ThrowIfDisposed()
