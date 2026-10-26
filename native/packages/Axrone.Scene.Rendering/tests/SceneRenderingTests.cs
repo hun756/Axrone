@@ -135,6 +135,7 @@ public sealed class SceneRenderingTests
         }
 
         count.Should().Be(3);
+        collector.CulledCount.Should().Be(1);
         collector.Items[0].Actor.Should().Be(opaque);
         collector.Items[0].Transparent.Should().BeFalse();
         collector.Items[1].Actor.Should().Be(transparentFar);

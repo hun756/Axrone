@@ -86,7 +86,9 @@ public sealed class SceneRendering2DTests
             new BoundingSphere3(new Vec3(100.0f, 0.0f, 0.0f), 0.7071f))
             .Should().BeFalse();
         collector.Collect(world, frame, SceneRenderPassIds.Main).Should().Be(0);
+        collector.CulledCount.Should().Be(1);
         collector.Collect(world, frame, SceneRenderPassIds.Main, cull: false).Should().Be(1);
+        collector.CulledCount.Should().Be(0);
     }
 
     [Fact]
