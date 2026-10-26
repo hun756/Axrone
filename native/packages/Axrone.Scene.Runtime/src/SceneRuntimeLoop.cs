@@ -9,6 +9,7 @@ using Axrone.GameLoop;
 /// </summary>
 public sealed class SceneRuntimeLoop : IDisposable
 {
+    private readonly SceneRuntime _runtime;
     private readonly GameLoopKernel<
         SceneRuntimeFrameState,
         HighResolutionStopwatchClock,
@@ -27,6 +28,7 @@ public sealed class SceneRuntimeLoop : IDisposable
         ArgumentNullException.ThrowIfNull(runtime);
         options ??= new SceneRuntimeLoopOptions();
 
+        _runtime = runtime;
         _kernel = new GameLoopKernel<
             SceneRuntimeFrameState,
             HighResolutionStopwatchClock,
@@ -62,11 +64,28 @@ public sealed class SceneRuntimeLoop : IDisposable
     /// <summary>Frames advanced so far.</summary>
     public FrameIndex Frame => _kernel.Frame;
 
-    /// <summary>Starts the loop.</summary>
+    /// <summary>Starts the loop and the scene world lifecycle.</summary>
     public void Start(GameTime? timestamp = null)
     {
         ThrowIfDisposed();
+
+        if (Status == GameLoopStatus.Running)
+        {
+            _runtime.World.Start();
+            return;
+        }
+
         _kernel.TransitionToRunning(timestamp);
+
+        try
+        {
+            _runtime.World.Start();
+        }
+        catch
+        {
+            _kernel.TransitionToStopped();
+            throw;
+        }
     }
 
     /// <summary>Pauses the loop.</summary>
@@ -76,10 +95,11 @@ public sealed class SceneRuntimeLoop : IDisposable
         _kernel.TransitionToPaused();
     }
 
-    /// <summary>Stops the loop.</summary>
+    /// <summary>Stops the loop and the scene world lifecycle.</summary>
     public void Stop()
     {
         ThrowIfDisposed();
+        _runtime.World.Stop();
         _kernel.TransitionToStopped();
     }
 
