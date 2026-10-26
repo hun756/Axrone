@@ -159,6 +159,51 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_Plans2DScene()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/runtime-2d")))
+            .AddTransform2D()
+            .AddRendering2D()
+            .Build();
+
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = profile,
+            ViewportWidth = 320,
+            ViewportHeight = 180
+        });
+
+        SceneAssetId<TextureAssetTag> textureId = runtime.Assets.CreateId<TextureAssetTag>("texture/sprite");
+        SceneWorld world = runtime.World;
+
+        SceneActor cameraActor = world.CreateActor("Camera2D");
+        world.GetTransform2D(cameraActor).SetPosition(new Vec2(0.0f, 0.0f));
+        SceneCamera camera = SceneCamera.Default;
+        camera.Primary = true;
+        camera.OrthographicSize = 5.0f;
+        world.AddData(cameraActor, camera);
+        world.AddData(cameraActor, SceneCamera2D.Default);
+
+        for (int i = 0; i < 3; i++)
+        {
+            SceneActor spriteActor = world.CreateActor("Sprite");
+            world.GetTransform2D(spriteActor).SetPosition(new Vec2(i - 1.0f, 0.0f));
+            SceneSpriteRenderer sprite = SceneSpriteRenderer.Default;
+            sprite.TextureId = textureId;
+            sprite.SortingLayer = i;
+            world.AddData(spriteActor, sprite);
+        }
+
+        world.UpdateTransforms();
+
+        runtime.Frame.Plan(0).Should().BeTrue();
+        runtime.Frame.Camera!.Position.Should().Be(new Vec3(0.0f, 0.0f, -10.0f));
+        runtime.Frame.CollectSprites(SceneRenderPassIds.Main).Should().Be(3);
+        runtime.Frame.Complete(1).SpriteCount.Should().Be(3);
+    }
+
+    [Fact]
     public void Pipeline_ResolvesFogState()
     {
         using var runtime = CreateRenderableRuntime(out _, out _);
