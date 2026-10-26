@@ -5,6 +5,8 @@ internal interface ISceneBehaviourHost
 {
     bool IsStarted { get; }
 
+    bool IsActiveInHierarchy(SceneActor actor);
+
     void ReportBehaviourFault(SceneBehaviour behaviour, Exception exception);
 }
 
@@ -235,6 +237,33 @@ internal sealed class SceneBehaviourTable
         }
     }
 
+    /// <summary>Applies hierarchy activation to every behaviour on an actor.</summary>
+    public void SetActiveInHierarchy(in SceneActor actor, bool active)
+    {
+        int actorSlot = _actors.Resolve(actor);
+        int slot = _actors.BehaviourHeadAt(actorSlot);
+
+        while (slot >= 0)
+        {
+            SceneBehaviourSlot entry = _slots[slot];
+            int next = entry.Next;
+
+            if (entry.Behaviour is { } behaviour)
+            {
+                try
+                {
+                    behaviour.SetActiveInHierarchyInternal(active);
+                }
+                catch (Exception exception)
+                {
+                    _host.ReportBehaviourFault(behaviour, exception);
+                }
+            }
+
+            slot = next;
+        }
+    }
+
     /// <summary>Dispatches one fixed update in priority order.</summary>
     public void FixedUpdateAll(float deltaSeconds)
     {
@@ -390,6 +419,9 @@ internal sealed class SceneBehaviourTable
 
         try
         {
+            // Hierarchy state is known before Start so attaching to an inactive
+            // actor never fires a spurious OnEnable.
+            behaviour.SetActiveInHierarchyInternal(_host.IsActiveInHierarchy(actor));
             behaviour.AwakeInternal();
             if (_host.IsStarted)
             {
