@@ -26,6 +26,29 @@ public static class SceneRenderingProfileExtensions
         return builder;
     }
 
+    /// <summary>Registers the 2D camera and sprite renderer components.</summary>
+    public static SceneProfileBuilder AddRendering2D(this SceneProfileBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.AddData<SceneCamera>(
+            "Camera",
+            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+            priority: 900);
+
+        builder.AddData<SceneCamera2D>(
+            "Camera2D",
+            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+            priority: 900);
+
+        builder.AddData<SceneSpriteRenderer>(
+            "SpriteRenderer",
+            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+            priority: 100);
+
+        return builder;
+    }
+
     /// <summary>Registers the 3D light components.</summary>
     public static SceneProfileBuilder AddLighting3D(this SceneProfileBuilder builder)
     {
