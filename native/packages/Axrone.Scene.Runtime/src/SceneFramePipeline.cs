@@ -5,7 +5,7 @@ namespace Axrone.Scene.Runtime;
 /// selection, lighting synchronization, pass iteration and render-item queues
 /// all write into preallocated state, so a warmed frame allocates nothing.
 /// </summary>
-public sealed class SceneFramePipeline : IDisposable
+public sealed class SceneFramePipeline : IDisposable, ISceneFrameItemSource
 {
     private readonly SceneWorld _world;
     private readonly SceneAssetRegistry _assets;
@@ -20,6 +20,7 @@ public sealed class SceneFramePipeline : IDisposable
     private readonly Vec3 _ambient;
     private readonly Vec3 _sky;
     private readonly Vec3 _ground;
+    private readonly bool _hasSpriteComponent;
 
     private int _viewportWidth;
     private int _viewportHeight;
@@ -57,7 +58,11 @@ public sealed class SceneFramePipeline : IDisposable
         _items = new SceneRenderItemCollector();
         _spriteItems = new SceneSpriteItemCollector();
         _passes = new SceneRenderPassPlan(assets);
+        _hasSpriteComponent = world.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
     }
+
+    /// <summary>Render paths active for the last planned frame.</summary>
+    public SceneRenderMode Mode { get; private set; }
 
     /// <summary>Selected camera frame for the current frame, or null before planning.</summary>
     public SceneCameraFrame? Camera { get; private set; }
@@ -134,8 +139,13 @@ public sealed class SceneFramePipeline : IDisposable
         if (Camera is null)
         {
             Lighting = null;
+            Mode = SceneRenderMode.None;
             return false;
         }
+
+        Mode = hasLighting
+            ? (_hasSpriteComponent ? SceneRenderMode.Mixed : SceneRenderMode.ThreeD)
+            : SceneRenderMode.TwoD;
 
         // 2D frames do not participate in the 3D lighting rig.
         Lighting = hasLighting
@@ -192,6 +202,20 @@ public sealed class SceneFramePipeline : IDisposable
         int count = _spriteItems.Collect(_world, Camera, passId);
         _frameState.RecordSprites(count);
         return count;
+    }
+
+    ReadOnlySpan<SceneRenderItem> ISceneFrameItemSource.CollectMeshes(
+        SceneAssetId<RenderPassAssetTag> passId)
+    {
+        _ = CollectItems(passId);
+        return Items;
+    }
+
+    ReadOnlySpan<SceneSpriteRenderItem> ISceneFrameItemSource.CollectSprites(
+        SceneAssetId<RenderPassAssetTag> passId)
+    {
+        _ = CollectSprites(passId);
+        return SpriteItems;
     }
 
     /// <summary>Takes the immutable counter snapshot for the finished frame.</summary>
