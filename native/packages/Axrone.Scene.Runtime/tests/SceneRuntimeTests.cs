@@ -337,6 +337,58 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Loop_StartsAndStopsWorldLifecycle()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        runtime.World.IsStarted.Should().BeFalse();
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        runtime.World.IsStarted.Should().BeTrue();
+
+        loop.Stop();
+        runtime.World.IsStarted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Loop_DispatchesBehavioursAfterStart()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/loop-behaviour")))
+            .AddTransform3D()
+            .AddBehaviour<CountingBehaviour>("Counting")
+            .Build();
+
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        SceneActor actor = runtime.World.CreateActor("Actor");
+        CountingBehaviour behaviour = runtime.World.AddBehaviour<CountingBehaviour>(actor);
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+        behaviour.UpdateCount.Should().Be(0);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        behaviour.UpdateCount.Should().Be(1);
+        behaviour.FixedUpdateCount.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public void Loop_StartIsIdempotent()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        loop.Start(GameTime.FromMilliseconds(1.0));
+
+        loop.Status.Should().Be(GameLoopStatus.Running);
+        runtime.World.IsStarted.Should().BeTrue();
+    }
+
+    [Fact]
     public void CaptureSnapshot_RoundTripsIntoAnotherRuntime()
     {
         using var source = CreateRenderableRuntime(out _, out _);
@@ -398,6 +450,17 @@ public sealed class SceneRuntimeTests
 
         outcome.Kind.Should().Be(FrameOutcomeKind.Halted);
         loop.Status.Should().Be(GameLoopStatus.Idle);
+    }
+
+    private sealed class CountingBehaviour : SceneBehaviour
+    {
+        public int UpdateCount { get; private set; }
+
+        public int FixedUpdateCount { get; private set; }
+
+        public override void Update(float deltaSeconds) => UpdateCount++;
+
+        public override void FixedUpdate(float deltaSeconds) => FixedUpdateCount++;
     }
 
     private static SceneRuntime Create2DRuntime(out SceneAssetRegistry assets)
