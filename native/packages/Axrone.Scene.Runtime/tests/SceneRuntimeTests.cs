@@ -161,29 +161,9 @@ public sealed class SceneRuntimeTests
     [Fact]
     public void Pipeline_Plans2DScene()
     {
-        SceneProfile profile = new SceneProfileBuilder(
-                new SceneProfileId(SceneStringId.FromName("test/runtime-2d")))
-            .AddTransform2D()
-            .AddRendering2D()
-            .Build();
-
-        using var runtime = new SceneRuntime(new SceneRuntimeOptions
-        {
-            Profile = profile,
-            ViewportWidth = 320,
-            ViewportHeight = 180
-        });
-
-        SceneAssetId<TextureAssetTag> textureId = runtime.Assets.CreateId<TextureAssetTag>("texture/sprite");
+        using var runtime = Create2DRuntime(out SceneAssetRegistry assets);
+        SceneAssetId<TextureAssetTag> textureId = assets.CreateId<TextureAssetTag>("texture/sprite");
         SceneWorld world = runtime.World;
-
-        SceneActor cameraActor = world.CreateActor("Camera2D");
-        world.GetTransform2D(cameraActor).SetPosition(new Vec2(0.0f, 0.0f));
-        SceneCamera camera = SceneCamera.Default;
-        camera.Primary = true;
-        camera.OrthographicSize = 5.0f;
-        world.AddData(cameraActor, camera);
-        world.AddData(cameraActor, SceneCamera2D.Default);
 
         for (int i = 0; i < 3; i++)
         {
@@ -201,6 +181,61 @@ public sealed class SceneRuntimeTests
         runtime.Frame.Camera!.Position.Should().Be(new Vec3(0.0f, 0.0f, -10.0f));
         runtime.Frame.CollectSprites(SceneRenderPassIds.Main).Should().Be(3);
         runtime.Frame.Complete(1).SpriteCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void Pipeline_ReportsRenderModes()
+    {
+        using (var runtime = CreateRenderableRuntime(out _, out _))
+        {
+            runtime.Frame.Plan(0).Should().BeTrue();
+            runtime.Frame.Mode.Should().Be(SceneRenderMode.ThreeD);
+        }
+
+        using (var runtime2D = Create2DRuntime(out _))
+        {
+            runtime2D.Frame.Plan(0).Should().BeTrue();
+            runtime2D.Frame.Mode.Should().Be(SceneRenderMode.TwoD);
+        }
+
+        using (var mixed = CreateMixedRuntime())
+        {
+            mixed.Frame.Plan(0).Should().BeTrue();
+            mixed.Frame.Mode.Should().Be(SceneRenderMode.Mixed);
+        }
+
+        using (var empty = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() }))
+        {
+            empty.Frame.Plan(0).Should().BeFalse();
+            empty.Frame.Mode.Should().Be(SceneRenderMode.None);
+        }
+    }
+
+    [Fact]
+    public void Loop_RecordsProfilerFrames()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = CreateProfile(),
+            Profiler = new SceneRuntimeProfilerOptions
+            {
+                Enabled = true,
+                Capacity = 8,
+                MemorySampleIntervalMs = 1e9
+            }
+        });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        runtime.Profiler.Count.Should().Be(1);
+        SceneRuntimeFrameRecord record = runtime.Profiler.LastRecord!.Value;
+        record.Frame.Should().Be(1);
+        record.FixedSteps.Should().Be(1);
+        record.HasRenderStats.Should().BeTrue();
+        record.RenderStats.PassCount.Should().Be(0);
+        loop.State.Mode.Should().Be(SceneRenderMode.None);
     }
 
     [Fact]
@@ -256,6 +291,48 @@ public sealed class SceneRuntimeTests
         stats.DrawCalls.Should().Be(1);
         stats.OpaqueCount.Should().Be(1);
         stats.PassCount.Should().Be(1);
+        api.CallLog.Should().Contain(call => call.StartsWith("DrawElements", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GlRenderer_Renders2DSprites()
+    {
+        var api = new MockGLApi { EnableCallLogging = true };
+        using var context = new GLContext(api);
+        using var runtime = Create2DRuntime(out SceneAssetRegistry assets);
+
+        SceneAssetId<RenderPassAssetTag> passId = assets.CreateId<RenderPassAssetTag>("main");
+        assets.RenderPasses.Register(new SceneRenderPassDefinition(
+            passId,
+            clearMask: SceneClearMask.Color | SceneClearMask.Depth,
+            clearColor: new Vec4(0.05f, 0.06f, 0.08f, 1.0f),
+            depthTest: false,
+            blend: true));
+        runtime.Frame.RebuildPasses();
+
+        SceneAssetId<TextureAssetTag> textureId = assets.CreateId<TextureAssetTag>("texture/sprite");
+        assets.Textures.Register(new SceneTextureDefinition(
+            textureId,
+            new SceneTextureColor(Vec4.One, 4, 4)));
+
+        for (int i = 0; i < 2; i++)
+        {
+            SceneActor spriteActor = runtime.World.CreateActor("Sprite");
+            runtime.World.GetTransform2D(spriteActor).SetPosition(new Vec2(i - 0.5f, 0.0f));
+            SceneSpriteRenderer sprite = SceneSpriteRenderer.Default;
+            sprite.TextureId = textureId;
+            runtime.World.AddData(spriteActor, sprite);
+        }
+
+        runtime.World.UpdateTransforms();
+
+        using var renderer = new SceneGlFrameRenderer(context, runtime);
+        renderer.UploadAssets();
+        SceneRenderStats stats = renderer.Render(0);
+
+        stats.SpriteCount.Should().Be(2);
+        stats.DrawCalls.Should().Be(1);
+        stats.TrianglesSubmitted.Should().Be(4);
         api.CallLog.Should().Contain(call => call.StartsWith("DrawElements", StringComparison.Ordinal));
     }
 
@@ -321,6 +398,62 @@ public sealed class SceneRuntimeTests
 
         outcome.Kind.Should().Be(FrameOutcomeKind.Halted);
         loop.Status.Should().Be(GameLoopStatus.Idle);
+    }
+
+    private static SceneRuntime Create2DRuntime(out SceneAssetRegistry assets)
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/runtime-2d")))
+            .AddTransform2D()
+            .AddRendering2D()
+            .Build();
+
+        var runtime = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = profile,
+            ViewportWidth = 320,
+            ViewportHeight = 180
+        });
+        assets = runtime.Assets;
+
+        SceneWorld world = runtime.World;
+        SceneActor cameraActor = world.CreateActor("Camera2D");
+        world.GetTransform2D(cameraActor).SetPosition(Vec2.Zero);
+        SceneCamera camera = SceneCamera.Default;
+        camera.Primary = true;
+        camera.OrthographicSize = 5.0f;
+        world.AddData(cameraActor, camera);
+        world.AddData(cameraActor, SceneCamera2D.Default);
+        world.UpdateTransforms();
+        return runtime;
+    }
+
+    private static SceneRuntime CreateMixedRuntime()
+    {
+        var builder = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/runtime-mixed")))
+            .AddTransform3D()
+            .AddRendering3D();
+
+        builder.AddData<SceneSpriteRenderer>(
+            "SpriteRenderer",
+            SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
+            priority: 100);
+
+        var runtime = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = builder.Build(),
+            ViewportWidth = 320,
+            ViewportHeight = 180
+        });
+
+        SceneActor cameraActor = runtime.World.CreateActor("Camera3D");
+        runtime.World.GetTransform3D(cameraActor).SetPosition(new Vec3(0.0f, 0.0f, 10.0f));
+        SceneCamera camera = SceneCamera.Default;
+        camera.Primary = true;
+        runtime.World.AddData(cameraActor, camera);
+        runtime.World.UpdateTransforms();
+        return runtime;
     }
 
     private static SceneProfile CreateProfile() =>
