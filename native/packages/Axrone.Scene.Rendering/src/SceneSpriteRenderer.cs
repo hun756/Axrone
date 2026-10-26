@@ -149,6 +149,9 @@ public sealed class SceneSpriteItemCollector
     private int _count;
     private readonly SpriteItemComparer _comparer;
 
+    /// <summary>Sprites rejected by frustum culling during the last collect.</summary>
+    public int CulledCount { get; private set; }
+
     /// <summary>Creates a collector with an initial item capacity.</summary>
     public SceneSpriteItemCollector(int initialCapacity = 256)
     {
@@ -188,6 +191,7 @@ public sealed class SceneSpriteItemCollector
         ArgumentNullException.ThrowIfNull(cameraFrame);
 
         _count = 0;
+        CulledCount = 0;
         EnsureCapacity(Math.Max(world.ActorCount, 16));
 
         CameraFrustum frustum = cameraFrame.Frustum;
@@ -214,6 +218,7 @@ public sealed class SceneSpriteItemCollector
                 BoundingSphere3 worldBounds = SceneBounds.TransformSphere(in worldMatrix, in localBounds);
                 if (!frustum.IntersectsSphere(in worldBounds))
                 {
+                    CulledCount++;
                     continue;
                 }
             }
@@ -248,7 +253,11 @@ public sealed class SceneSpriteItemCollector
 
     /// <summary>Drops the current plan without releasing the buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Clear() => _count = 0;
+    public void Clear()
+    {
+        _count = 0;
+        CulledCount = 0;
+    }
 
     private void EnsureCapacity(int required)
     {
