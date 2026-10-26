@@ -5,11 +5,14 @@ internal static class GltfJsonParser
 {
     /// <summary>Parses glTF JSON bytes into a raw model.</summary>
     /// <exception cref="GltfSchemaError">The JSON is malformed.</exception>
-    public static GltfRawModel Parse(ReadOnlySpan<byte> jsonBytes)
+    public static GltfRawModel Parse(
+        ReadOnlySpan<byte> jsonBytes,
+        GltfImportLimits? limits = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            return ParseCore(jsonBytes);
+            return ParseCore(jsonBytes, limits ?? GltfImportLimits.Default, cancellationToken);
         }
         catch (Exception exception) when (exception is JsonException or FormatException or InvalidOperationException)
         {
@@ -19,113 +22,125 @@ internal static class GltfJsonParser
         }
     }
 
-    private static GltfRawModel ParseCore(ReadOnlySpan<byte> jsonBytes)
+    private static GltfRawModel ParseCore(
+        ReadOnlySpan<byte> jsonBytes,
+        GltfImportLimits limits,
+        CancellationToken cancellationToken)
     {
-        var model = new GltfRawModel();
-        var reader = new Utf8JsonReader(jsonBytes, new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip });
-
-        if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+        var model = new GltfRawModel(limits, cancellationToken);
+        try
         {
-            ThrowHelper.ThrowContainer("Root glTF JSON payload must be an object.");
-        }
+            var reader = new Utf8JsonReader(jsonBytes, new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip });
 
-        bool hasAsset = false;
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            {
+                ThrowHelper.ThrowContainer("Root glTF JSON payload must be an object.");
+            }
+
+            bool hasAsset = false;
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                reader.Read();
+
+                if (prop.SequenceEqual("asset"u8))
+                {
+                    hasAsset = true;
+                    ParseAsset(ref reader, model);
+                }
+                else if (prop.SequenceEqual("scene"u8))
+                {
+                    model.DefaultScene = reader.GetInt32();
+                }
+                else if (prop.SequenceEqual("scenes"u8))
+                {
+                    ParseScenes(ref reader, model);
+                }
+                else if (prop.SequenceEqual("cameras"u8))
+                {
+                    ParseCameras(ref reader, model);
+                }
+                else if (prop.SequenceEqual("nodes"u8))
+                {
+                    ParseNodes(ref reader, model);
+                }
+                else if (prop.SequenceEqual("meshes"u8))
+                {
+                    ParseMeshes(ref reader, model);
+                }
+                else if (prop.SequenceEqual("accessors"u8))
+                {
+                    ParseAccessors(ref reader, model);
+                }
+                else if (prop.SequenceEqual("bufferViews"u8))
+                {
+                    ParseBufferViews(ref reader, model);
+                }
+                else if (prop.SequenceEqual("buffers"u8))
+                {
+                    ParseBuffers(ref reader, model);
+                }
+                else if (prop.SequenceEqual("materials"u8))
+                {
+                    ParseMaterials(ref reader, model);
+                }
+                else if (prop.SequenceEqual("textures"u8))
+                {
+                    ParseTextures(ref reader, model);
+                }
+                else if (prop.SequenceEqual("images"u8))
+                {
+                    ParseImages(ref reader, model);
+                }
+                else if (prop.SequenceEqual("samplers"u8))
+                {
+                    ParseSamplers(ref reader, model);
+                }
+                else if (prop.SequenceEqual("skins"u8))
+                {
+                    ParseSkins(ref reader, model);
+                }
+                else if (prop.SequenceEqual("animations"u8))
+                {
+                    ParseAnimations(ref reader, model);
+                }
+                else if (prop.SequenceEqual("extensionsUsed"u8))
+                {
+                    ParseStringArray(ref reader, model.ExtensionsUsed);
+                }
+                else if (prop.SequenceEqual("extensionsRequired"u8))
+                {
+                    ParseStringArray(ref reader, model.ExtensionsRequired);
+                }
+                else if (prop.SequenceEqual("extensions"u8))
+                {
+                    ParseRootExtensions(ref reader, model);
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            if (!hasAsset)
+            {
+                ThrowHelper.ThrowSchema("glTF document is missing the required 'asset' object.");
+            }
+
+            ValidateNodeReferences(model);
+            return model;
+        }
+        catch
         {
-            if (reader.TokenType != JsonTokenType.PropertyName)
-            {
-                continue;
-            }
-
-            ReadOnlySpan<byte> prop = reader.ValueSpan;
-            reader.Read();
-
-            if (prop.SequenceEqual("asset"u8))
-            {
-                hasAsset = true;
-                ParseAsset(ref reader, model);
-            }
-            else if (prop.SequenceEqual("scene"u8))
-            {
-                model.DefaultScene = reader.GetInt32();
-            }
-            else if (prop.SequenceEqual("scenes"u8))
-            {
-                ParseScenes(ref reader, model);
-            }
-            else if (prop.SequenceEqual("cameras"u8))
-            {
-                ParseCameras(ref reader, model);
-            }
-            else if (prop.SequenceEqual("nodes"u8))
-            {
-                ParseNodes(ref reader, model);
-            }
-            else if (prop.SequenceEqual("meshes"u8))
-            {
-                ParseMeshes(ref reader, model);
-            }
-            else if (prop.SequenceEqual("accessors"u8))
-            {
-                ParseAccessors(ref reader, model);
-            }
-            else if (prop.SequenceEqual("bufferViews"u8))
-            {
-                ParseBufferViews(ref reader, model);
-            }
-            else if (prop.SequenceEqual("buffers"u8))
-            {
-                ParseBuffers(ref reader, model);
-            }
-            else if (prop.SequenceEqual("materials"u8))
-            {
-                ParseMaterials(ref reader, model);
-            }
-            else if (prop.SequenceEqual("textures"u8))
-            {
-                ParseTextures(ref reader, model);
-            }
-            else if (prop.SequenceEqual("images"u8))
-            {
-                ParseImages(ref reader, model);
-            }
-            else if (prop.SequenceEqual("samplers"u8))
-            {
-                ParseSamplers(ref reader, model);
-            }
-            else if (prop.SequenceEqual("skins"u8))
-            {
-                ParseSkins(ref reader, model);
-            }
-            else if (prop.SequenceEqual("animations"u8))
-            {
-                ParseAnimations(ref reader, model);
-            }
-            else if (prop.SequenceEqual("extensionsUsed"u8))
-            {
-                ParseStringArray(ref reader, model.ExtensionsUsed);
-            }
-            else if (prop.SequenceEqual("extensionsRequired"u8))
-            {
-                ParseStringArray(ref reader, model.ExtensionsRequired);
-            }
-            else if (prop.SequenceEqual("extensions"u8))
-            {
-                ParseRootExtensions(ref reader, model);
-            }
-            else
-            {
-                reader.Skip();
-            }
+            model.Dispose();
+            throw;
         }
-
-        if (!hasAsset)
-        {
-            ThrowHelper.ThrowSchema("glTF document is missing the required 'asset' object.");
-        }
-
-        ValidateNodeReferences(model);
-        return model;
     }
 
     /// <summary>
@@ -135,56 +150,58 @@ internal static class GltfJsonParser
     /// </summary>
     private static void ValidateNodeReferences(GltfRawModel model)
     {
+        int nodeCount = model.NodeCount;
         for (int s = 0; s < model.Scenes.Count; s++)
         {
             GltfRawModel.Scene scene = model.Scenes[s];
             for (int i = 0; i < scene.Nodes.Count; i++)
             {
                 int nodeIndex = scene.Nodes[i];
-                if ((uint)nodeIndex >= (uint)model.Nodes.Count)
+                if ((uint)nodeIndex >= (uint)nodeCount)
                 {
                     ThrowHelper.ThrowSchema($"Scene {s} references a missing node {nodeIndex}.");
                 }
             }
         }
 
-        for (int n = 0; n < model.Nodes.Count; n++)
+        for (int n = 0; n < nodeCount; n++)
         {
-            GltfRawModel.Node node = model.Nodes[n];
-            for (int c = 0; c < node.Children.Count; c++)
+            GltfRawModel.Node node = model.GetNode(n);
+            int childCount = GltfRawModel.GetChildCount(node);
+            for (int c = 0; c < childCount; c++)
             {
-                int childIndex = node.Children[c];
-                if ((uint)childIndex >= (uint)model.Nodes.Count)
+                int childIndex = model.GetChild(node, c);
+                if ((uint)childIndex >= (uint)nodeCount)
                 {
                     ThrowHelper.ThrowSchema($"Node {n} references a missing child node {childIndex}.");
                 }
             }
 
-            if (node.Mesh is int mesh && (uint)mesh >= (uint)model.Meshes.Count)
+            if (node.HasMesh && (uint)node.Mesh >= (uint)model.MeshCount)
             {
-                ThrowHelper.ThrowSchema($"Node {n} references a missing mesh {mesh}.");
+                ThrowHelper.ThrowSchema($"Node {n} references a missing mesh {node.Mesh}.");
             }
 
-            if (node.Skin is int skin && (uint)skin >= (uint)model.Skins.Count)
+            if (node.HasSkin && (uint)node.Skin >= (uint)model.Skins.Count)
             {
-                ThrowHelper.ThrowSchema($"Node {n} references a missing skin {skin}.");
+                ThrowHelper.ThrowSchema($"Node {n} references a missing skin {node.Skin}.");
             }
 
-            if (node.Camera is int camera && (uint)camera >= (uint)model.Cameras.Count)
+            if (node.HasCamera && (uint)node.Camera >= (uint)model.Cameras.Count)
             {
-                ThrowHelper.ThrowSchema($"Node {n} references a missing camera {camera}.");
+                ThrowHelper.ThrowSchema($"Node {n} references a missing camera {node.Camera}.");
             }
 
-            if (node.Light is int light && (uint)light >= (uint)model.Lights.Count)
+            if (node.HasLight && (uint)node.Light >= (uint)model.Lights.Count)
             {
-                ThrowHelper.ThrowSchema($"Node {n} references a missing light {light}.");
+                ThrowHelper.ThrowSchema($"Node {n} references a missing light {node.Light}.");
             }
         }
     }
 
     private static void ParseAsset(ref Utf8JsonReader reader, GltfRawModel model)
     {
-        model.Version = string.Empty;
+        model.Version = GltfStringRef.Empty;
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             reader.Skip();
@@ -202,15 +219,15 @@ internal static class GltfJsonParser
             reader.Read();
             if (prop.SequenceEqual("version"u8))
             {
-                model.Version = reader.GetString() ?? string.Empty;
+                model.Version = model.Arena.AppendString(ref reader);
             }
             else if (prop.SequenceEqual("generator"u8))
             {
-                model.Generator = reader.GetString();
+                model.Generator = model.Arena.AppendString(ref reader);
             }
             else if (prop.SequenceEqual("copyright"u8))
             {
-                model.Copyright = reader.GetString();
+                model.Copyright = model.Arena.AppendString(ref reader);
             }
             else
             {
@@ -389,7 +406,21 @@ internal static class GltfJsonParser
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            var node = new GltfRawModel.Node();
+            model.Arena.ThrowIfCancellationRequested();
+
+            GltfStringRef name = GltfStringRef.Empty;
+            int mesh = -1;
+            int skin = -1;
+            int camera = -1;
+            int light = -1;
+            GltfSlice<int> children = GltfSlice<int>.Empty;
+            bool hasMatrix = false;
+            Mat4 matrix = Mat4.Identity;
+            Vec3? translation = null;
+            Quat? rotation = null;
+            Vec3? scale = null;
+            GltfSlice<float> weights = GltfSlice<float>.Empty;
+
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -401,47 +432,48 @@ internal static class GltfJsonParser
                 reader.Read();
                 if (prop.SequenceEqual("name"u8))
                 {
-                    node.Name = reader.GetString();
+                    name = model.Arena.AppendString(ref reader);
                 }
                 else if (prop.SequenceEqual("mesh"u8))
                 {
-                    node.Mesh = reader.GetInt32();
+                    mesh = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("skin"u8))
                 {
-                    node.Skin = reader.GetInt32();
+                    skin = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("camera"u8))
                 {
-                    node.Camera = reader.GetInt32();
+                    camera = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("children"u8))
                 {
-                    ParseIntArray(ref reader, node.Children);
+                    children = ParseIntSlice(ref reader, model.Arena);
                 }
                 else if (prop.SequenceEqual("matrix"u8))
                 {
-                    node.Matrix = ReadFloatArray(ref reader);
+                    matrix = ReadMatrix(ref reader);
+                    hasMatrix = true;
                 }
                 else if (prop.SequenceEqual("translation"u8))
                 {
-                    node.Translation = ReadFloatArray(ref reader);
+                    translation = ReadVec3(ref reader);
                 }
                 else if (prop.SequenceEqual("rotation"u8))
                 {
-                    node.Rotation = ReadFloatArray(ref reader);
+                    rotation = ReadQuat(ref reader);
                 }
                 else if (prop.SequenceEqual("scale"u8))
                 {
-                    node.Scale = ReadFloatArray(ref reader);
+                    scale = ReadVec3(ref reader);
                 }
                 else if (prop.SequenceEqual("weights"u8))
                 {
-                    node.Weights = ReadFloatArray(ref reader);
+                    weights = ParseFloatSlice(ref reader, model.Arena);
                 }
                 else if (prop.SequenceEqual("extensions"u8))
                 {
-                    ParseNodeExtensions(ref reader, node);
+                    light = ParseNodeExtensions(ref reader);
                 }
                 else
                 {
@@ -449,16 +481,31 @@ internal static class GltfJsonParser
                 }
             }
 
-            model.Nodes.Add(node);
+            model.Arena.AddNode(new GltfRawModel.Node
+            {
+                Name = name,
+                Mesh = mesh,
+                Skin = skin,
+                Camera = camera,
+                Light = light,
+                Children = children,
+                HasMatrix = hasMatrix,
+                Matrix = matrix,
+                Translation = translation,
+                Rotation = rotation,
+                Scale = scale,
+                Weights = weights,
+            });
         }
     }
 
-    private static void ParseNodeExtensions(ref Utf8JsonReader reader, GltfRawModel.Node node)
+    private static int ParseNodeExtensions(ref Utf8JsonReader reader)
     {
+        int light = -1;
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             reader.Skip();
-            return;
+            return light;
         }
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -489,7 +536,7 @@ internal static class GltfJsonParser
                     reader.Read();
                     if (prop.SequenceEqual("light"u8))
                     {
-                        node.Light = reader.GetInt32();
+                        light = reader.GetInt32();
                     }
                     else
                     {
@@ -502,6 +549,8 @@ internal static class GltfJsonParser
                 reader.Skip();
             }
         }
+
+        return light;
     }
 
     private static void ParseRootExtensions(ref Utf8JsonReader reader, GltfRawModel model)
@@ -682,7 +731,11 @@ internal static class GltfJsonParser
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            var mesh = new GltfRawModel.Mesh();
+            model.Arena.ThrowIfCancellationRequested();
+
+            GltfStringRef name = GltfStringRef.Empty;
+            GltfSlice<GltfRawModel.Primitive> primitives = GltfSlice<GltfRawModel.Primitive>.Empty;
+
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -694,11 +747,11 @@ internal static class GltfJsonParser
                 reader.Read();
                 if (prop.SequenceEqual("name"u8))
                 {
-                    mesh.Name = reader.GetString();
+                    name = model.Arena.AppendString(ref reader);
                 }
                 else if (prop.SequenceEqual("primitives"u8))
                 {
-                    ParsePrimitives(ref reader, mesh);
+                    primitives = ParsePrimitives(ref reader, model.Arena);
                 }
                 else
                 {
@@ -706,15 +759,38 @@ internal static class GltfJsonParser
                 }
             }
 
-            model.Meshes.Add(mesh);
+            model.Arena.AddMesh(new GltfRawModel.Mesh
+            {
+                Name = name,
+                Primitives = primitives,
+            });
         }
     }
 
-    private static void ParsePrimitives(ref Utf8JsonReader reader, GltfRawModel.Mesh mesh)
+    private static GltfSlice<GltfRawModel.Primitive> ParsePrimitives(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
     {
+        int start = arena.PrimitiveCount;
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return GltfSlice<GltfRawModel.Primitive>.Empty;
+        }
+
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            var prim = new GltfRawModel.Primitive();
+            arena.ThrowIfCancellationRequested();
+
+            int indices = -1;
+            int material = -1;
+            int mode = 4;
+            GltfSlice<GltfRawModel.Attribute> attributes = GltfSlice<GltfRawModel.Attribute>.Empty;
+            GltfSlice<GltfRawModel.MorphTarget> targets = GltfSlice<GltfRawModel.MorphTarget>.Empty;
+            GltfSlice<GltfRawModel.PrimitiveMaterialVariant> materialVariants =
+                GltfSlice<GltfRawModel.PrimitiveMaterialVariant>.Empty;
+            GltfRawModel.DracoPrimitiveExtension draco = default;
+
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -726,32 +802,27 @@ internal static class GltfJsonParser
                 reader.Read();
                 if (prop.SequenceEqual("indices"u8))
                 {
-                    prim.Indices = reader.GetInt32();
+                    indices = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("material"u8))
                 {
-                    prim.Material = reader.GetInt32();
+                    material = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("mode"u8))
                 {
-                    prim.Mode = reader.GetInt32();
+                    mode = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("attributes"u8))
                 {
-                    ParseAttributeMap(ref reader, prim.Attributes);
+                    attributes = ParseAttributeMap(ref reader, arena);
                 }
                 else if (prop.SequenceEqual("targets"u8))
                 {
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                    {
-                        var dict = new Dictionary<string, int>(StringComparer.Ordinal);
-                        ParseAttributeMap(ref reader, dict);
-                        prim.Targets.Add(dict);
-                    }
+                    targets = ParseMorphTargets(ref reader, arena);
                 }
                 else if (prop.SequenceEqual("extensions"u8))
                 {
-                    ParsePrimitiveExtensions(ref reader, prim);
+                    (draco, materialVariants) = ParsePrimitiveExtensions(ref reader, arena);
                 }
                 else
                 {
@@ -759,100 +830,189 @@ internal static class GltfJsonParser
                 }
             }
 
-            mesh.Primitives.Add(prim);
+            arena.AddPrimitive(new GltfRawModel.Primitive
+            {
+                Indices = indices,
+                Material = material,
+                Mode = mode,
+                Attributes = attributes,
+                Targets = targets,
+                MaterialVariants = materialVariants,
+                Draco = draco,
+            });
         }
+
+        return new GltfSlice<GltfRawModel.Primitive>(start, arena.PrimitiveCount - start);
     }
 
-    private static void ParseAttributeMap(ref Utf8JsonReader reader, Dictionary<string, int> map)
+    private static GltfSlice<GltfRawModel.MorphTarget> ParseMorphTargets(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
     {
+        int start = arena.MorphTargetCount;
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return GltfSlice<GltfRawModel.MorphTarget>.Empty;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            GltfSlice<GltfRawModel.Attribute> attributes = ParseAttributeMap(ref reader, arena);
+            arena.AddMorphTarget(new GltfRawModel.MorphTarget { Attributes = attributes });
+        }
+
+        return arena.CaptureMorphTargets(start);
+    }
+
+    private static GltfSlice<GltfRawModel.Attribute> ParseAttributeMap(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
+    {
+        int start = arena.AttributeCount;
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return GltfSlice<GltfRawModel.Attribute>.Empty;
+        }
+
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            if (reader.TokenType == JsonTokenType.PropertyName)
+            if (reader.TokenType != JsonTokenType.PropertyName)
             {
-                string key = ReadSemanticName(ref reader);
-                reader.Read();
-                map[key] = reader.GetInt32();
+                continue;
             }
+
+            GltfMeshSemantic semantic = ParseSemantic(ref reader, arena, out GltfStringRef customName);
+            reader.Read();
+            int accessor = reader.GetInt32();
+            arena.AddAttribute(new GltfRawModel.Attribute
+            {
+                Semantic = semantic,
+                Accessor = accessor,
+                Name = customName,
+            });
         }
+
+        return arena.CaptureAttributes(start);
     }
 
-    /// <summary>
-    /// Returns the compiler-interned literal for standard semantics and only
-    /// allocates for application-specific names. Escaped strings fall back to
-    /// <see cref="Utf8JsonReader.GetString"/> so unescaping stays correct.
-    /// </summary>
-    private static string ReadSemanticName(ref Utf8JsonReader reader)
+    private static GltfMeshSemantic ParseSemantic(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena,
+        out GltfStringRef customName)
     {
-        if (!reader.ValueIsEscaped)
+        customName = GltfStringRef.Empty;
+        if (reader.ValueIsEscaped)
+        {
+            string escapedName = reader.GetString() ?? string.Empty;
+            if (TryParseSemanticName(escapedName, out GltfMeshSemantic knownSemantic))
+            {
+                return knownSemantic;
+            }
+
+            customName = arena.AppendUtf8(Encoding.UTF8.GetBytes(escapedName));
+            return GltfMeshSemantic.Custom;
+        }
+
         {
             ReadOnlySpan<byte> value = reader.ValueSpan;
-            if (value.SequenceEqual("POSITION"u8)) return "POSITION";
-            if (value.SequenceEqual("NORMAL"u8)) return "NORMAL";
-            if (value.SequenceEqual("TANGENT"u8)) return "TANGENT";
-            if (value.SequenceEqual("TEXCOORD_0"u8)) return "TEXCOORD_0";
-            if (value.SequenceEqual("TEXCOORD_1"u8)) return "TEXCOORD_1";
-            if (value.SequenceEqual("TEXCOORD_2"u8)) return "TEXCOORD_2";
-            if (value.SequenceEqual("TEXCOORD_3"u8)) return "TEXCOORD_3";
-            if (value.SequenceEqual("COLOR_0"u8)) return "COLOR_0";
-            if (value.SequenceEqual("COLOR_1"u8)) return "COLOR_1";
-            if (value.SequenceEqual("JOINTS_0"u8)) return "JOINTS_0";
-            if (value.SequenceEqual("JOINTS_1"u8)) return "JOINTS_1";
-            if (value.SequenceEqual("WEIGHTS_0"u8)) return "WEIGHTS_0";
-            if (value.SequenceEqual("WEIGHTS_1"u8)) return "WEIGHTS_1";
+            if (value.SequenceEqual("POSITION"u8)) return GltfMeshSemantic.Position;
+            if (value.SequenceEqual("NORMAL"u8)) return GltfMeshSemantic.Normal;
+            if (value.SequenceEqual("TANGENT"u8)) return GltfMeshSemantic.Tangent;
+            if (value.SequenceEqual("TEXCOORD_0"u8)) return GltfMeshSemantic.Uv0;
+            if (value.SequenceEqual("TEXCOORD_1"u8)) return GltfMeshSemantic.Uv1;
+            if (value.SequenceEqual("TEXCOORD_2"u8)) return GltfMeshSemantic.Uv2;
+            if (value.SequenceEqual("TEXCOORD_3"u8)) return GltfMeshSemantic.Uv3;
+            if (value.SequenceEqual("COLOR_0"u8)) return GltfMeshSemantic.Color0;
+            if (value.SequenceEqual("COLOR_1"u8)) return GltfMeshSemantic.Color1;
+            if (value.SequenceEqual("JOINTS_0"u8)) return GltfMeshSemantic.Joints0;
+            if (value.SequenceEqual("JOINTS_1"u8)) return GltfMeshSemantic.Joints1;
+            if (value.SequenceEqual("WEIGHTS_0"u8)) return GltfMeshSemantic.Weights0;
+            if (value.SequenceEqual("WEIGHTS_1"u8)) return GltfMeshSemantic.Weights1;
         }
 
-        return reader.GetString() ?? string.Empty;
+        customName = arena.AppendString(ref reader);
+        return GltfMeshSemantic.Custom;
     }
 
-    private static void ParsePrimitiveExtensions(ref Utf8JsonReader reader, GltfRawModel.Primitive prim)
+    private static bool TryParseSemanticName(string name, out GltfMeshSemantic semantic)
     {
+        switch (name)
+        {
+            case "POSITION": semantic = GltfMeshSemantic.Position; return true;
+            case "NORMAL": semantic = GltfMeshSemantic.Normal; return true;
+            case "TANGENT": semantic = GltfMeshSemantic.Tangent; return true;
+            case "TEXCOORD_0": semantic = GltfMeshSemantic.Uv0; return true;
+            case "TEXCOORD_1": semantic = GltfMeshSemantic.Uv1; return true;
+            case "TEXCOORD_2": semantic = GltfMeshSemantic.Uv2; return true;
+            case "TEXCOORD_3": semantic = GltfMeshSemantic.Uv3; return true;
+            case "COLOR_0": semantic = GltfMeshSemantic.Color0; return true;
+            case "COLOR_1": semantic = GltfMeshSemantic.Color1; return true;
+            case "JOINTS_0": semantic = GltfMeshSemantic.Joints0; return true;
+            case "JOINTS_1": semantic = GltfMeshSemantic.Joints1; return true;
+            case "WEIGHTS_0": semantic = GltfMeshSemantic.Weights0; return true;
+            case "WEIGHTS_1": semantic = GltfMeshSemantic.Weights1; return true;
+            default: semantic = default; return false;
+        }
+    }
+
+    private static (GltfRawModel.DracoPrimitiveExtension Draco, GltfSlice<GltfRawModel.PrimitiveMaterialVariant> Variants) ParsePrimitiveExtensions(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
+    {
+        GltfRawModel.DracoPrimitiveExtension draco = default;
+        GltfSlice<GltfRawModel.PrimitiveMaterialVariant> variants =
+            GltfSlice<GltfRawModel.PrimitiveMaterialVariant>.Empty;
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return (draco, variants);
+        }
+
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueSpan.SequenceEqual("KHR_draco_mesh_compression"u8))
+            if (reader.TokenType != JsonTokenType.PropertyName)
             {
-                prim.Draco = new GltfRawModel.DracoPrimitiveExtension();
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                {
-                    if (reader.TokenType != JsonTokenType.PropertyName)
-                    {
-                        continue;
-                    }
-
-                    ReadOnlySpan<byte> prop = reader.ValueSpan;
-                    reader.Read();
-                    if (prop.SequenceEqual("bufferView"u8))
-                    {
-                        prim.Draco.BufferView = reader.GetInt32();
-                    }
-                    else if (prop.SequenceEqual("attributes"u8))
-                    {
-                        ParseAttributeMap(ref reader, prim.Draco.Attributes);
-                    }
-                    else
-                    {
-                        reader.Skip();
-                    }
-                }
+                continue;
             }
-            else if (reader.TokenType == JsonTokenType.PropertyName &&
-                     reader.ValueSpan.SequenceEqual("KHR_materials_variants"u8))
+
+            ReadOnlySpan<byte> extension = reader.ValueSpan;
+            reader.Read();
+            if (extension.SequenceEqual("KHR_draco_mesh_compression"u8))
             {
-                reader.Read();
-                ParsePrimitiveMaterialVariants(ref reader, prim);
+                draco = ParseDraco(ref reader, arena);
+            }
+            else if (extension.SequenceEqual("KHR_materials_variants"u8))
+            {
+                variants = ParsePrimitiveMaterialVariants(ref reader, arena);
             }
             else
             {
                 reader.Skip();
             }
         }
+
+        return (draco, variants);
     }
 
-    private static void ParsePrimitiveMaterialVariants(ref Utf8JsonReader reader, GltfRawModel.Primitive prim)
+    private static GltfRawModel.DracoPrimitiveExtension ParseDraco(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
     {
+        int bufferView = -1;
+        GltfSlice<GltfRawModel.Attribute> attributes = GltfSlice<GltfRawModel.Attribute>.Empty;
+
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             reader.Skip();
-            return;
+            return new GltfRawModel.DracoPrimitiveExtension
+            {
+                Present = true,
+                BufferView = bufferView,
+                Attributes = attributes,
+            };
         }
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
@@ -864,48 +1024,97 @@ internal static class GltfJsonParser
 
             ReadOnlySpan<byte> prop = reader.ValueSpan;
             reader.Read();
-            if (prop.SequenceEqual("mappings"u8))
+            if (prop.SequenceEqual("bufferView"u8))
             {
-                if (reader.TokenType != JsonTokenType.StartArray)
-                {
-                    reader.Skip();
-                    continue;
-                }
-
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                {
-                    var mapping = new GltfRawModel.PrimitiveMaterialVariant();
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                    {
-                        if (reader.TokenType != JsonTokenType.PropertyName)
-                        {
-                            continue;
-                        }
-
-                        ReadOnlySpan<byte> mappingProp = reader.ValueSpan;
-                        reader.Read();
-                        if (mappingProp.SequenceEqual("variants"u8))
-                        {
-                            ParseIntArray(ref reader, mapping.Variants);
-                        }
-                        else if (mappingProp.SequenceEqual("material"u8))
-                        {
-                            mapping.Material = reader.GetInt32();
-                        }
-                        else
-                        {
-                            reader.Skip();
-                        }
-                    }
-
-                    prim.MaterialVariants.Add(mapping);
-                }
+                bufferView = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("attributes"u8))
+            {
+                attributes = ParseAttributeMap(ref reader, arena);
             }
             else
             {
                 reader.Skip();
             }
         }
+
+        return new GltfRawModel.DracoPrimitiveExtension
+        {
+            Present = true,
+            BufferView = bufferView,
+            Attributes = attributes,
+        };
+    }
+
+    private static GltfSlice<GltfRawModel.PrimitiveMaterialVariant> ParsePrimitiveMaterialVariants(
+        ref Utf8JsonReader reader,
+        GltfParseArena arena)
+    {
+        int start = arena.MaterialVariantCount;
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return GltfSlice<GltfRawModel.PrimitiveMaterialVariant>.Empty;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (!prop.SequenceEqual("mappings"u8))
+            {
+                reader.Skip();
+                continue;
+            }
+
+            if (reader.TokenType != JsonTokenType.StartArray)
+            {
+                reader.Skip();
+                continue;
+            }
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                int material = -1;
+                GltfSlice<int> variants = GltfSlice<int>.Empty;
+
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                    {
+                        continue;
+                    }
+
+                    ReadOnlySpan<byte> mappingProp = reader.ValueSpan;
+                    reader.Read();
+                    if (mappingProp.SequenceEqual("variants"u8))
+                    {
+                        variants = ParseIntSlice(ref reader, arena);
+                    }
+                    else if (mappingProp.SequenceEqual("material"u8))
+                    {
+                        material = reader.GetInt32();
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+                }
+
+                arena.AddMaterialVariant(new GltfRawModel.PrimitiveMaterialVariant
+                {
+                    Variants = variants,
+                    Material = material,
+                });
+            }
+        }
+
+        return arena.CaptureMaterialVariants(start);
     }
 
     private static void ParseAccessors(ref Utf8JsonReader reader, GltfRawModel model)
@@ -918,7 +1127,20 @@ internal static class GltfJsonParser
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            var acc = new GltfRawModel.Accessor();
+            model.Arena.ThrowIfCancellationRequested();
+
+            int bufferView = -1;
+            int byteOffset = 0;
+            int componentType = 0;
+            bool normalized = false;
+            int count = 0;
+            GltfAccessorType type = GltfAccessorType.Scalar;
+            GltfSlice<float> min = GltfSlice<float>.Empty;
+            GltfSlice<float> max = GltfSlice<float>.Empty;
+            bool hasMin = false;
+            bool hasMax = false;
+            GltfRawModel.AccessorSparse sparse = default;
+
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -930,39 +1152,41 @@ internal static class GltfJsonParser
                 reader.Read();
                 if (prop.SequenceEqual("bufferView"u8))
                 {
-                    acc.BufferView = reader.GetInt32();
+                    bufferView = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("byteOffset"u8))
                 {
-                    acc.ByteOffset = reader.GetInt32();
+                    byteOffset = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("componentType"u8))
                 {
-                    acc.ComponentType = reader.GetInt32();
+                    componentType = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("normalized"u8))
                 {
-                    acc.Normalized = reader.GetBoolean();
+                    normalized = reader.GetBoolean();
                 }
                 else if (prop.SequenceEqual("count"u8))
                 {
-                    acc.Count = reader.GetInt32();
+                    count = reader.GetInt32();
                 }
                 else if (prop.SequenceEqual("type"u8))
                 {
-                    acc.Type = reader.GetString() ?? "SCALAR";
+                    type = ParseAccessorType(reader.ValueSpan);
                 }
                 else if (prop.SequenceEqual("min"u8))
                 {
-                    acc.Min = ReadFloatArray(ref reader);
+                    min = ParseFloatSlice(ref reader, model.Arena);
+                    hasMin = true;
                 }
                 else if (prop.SequenceEqual("max"u8))
                 {
-                    acc.Max = ReadFloatArray(ref reader);
+                    max = ParseFloatSlice(ref reader, model.Arena);
+                    hasMax = true;
                 }
                 else if (prop.SequenceEqual("sparse"u8))
                 {
-                    acc.Sparse = ParseAccessorSparse(ref reader);
+                    sparse = ParseAccessorSparse(ref reader);
                 }
                 else
                 {
@@ -970,13 +1194,47 @@ internal static class GltfJsonParser
                 }
             }
 
-            model.Accessors.Add(acc);
+            model.Arena.AddAccessor(new GltfRawModel.Accessor
+            {
+                BufferView = bufferView,
+                ByteOffset = byteOffset,
+                ComponentType = componentType,
+                Normalized = normalized,
+                Count = count,
+                Type = type,
+                Min = min,
+                HasMin = hasMin,
+                Max = max,
+                HasMax = hasMax,
+                Sparse = sparse,
+            });
         }
+    }
+
+    private static GltfAccessorType ParseAccessorType(ReadOnlySpan<byte> type)
+    {
+        if (type.SequenceEqual("SCALAR"u8)) return GltfAccessorType.Scalar;
+        if (type.SequenceEqual("VEC2"u8)) return GltfAccessorType.Vec2;
+        if (type.SequenceEqual("VEC3"u8)) return GltfAccessorType.Vec3;
+        if (type.SequenceEqual("VEC4"u8)) return GltfAccessorType.Vec4;
+        if (type.SequenceEqual("MAT2"u8)) return GltfAccessorType.Mat2;
+        if (type.SequenceEqual("MAT3"u8)) return GltfAccessorType.Mat3;
+        if (type.SequenceEqual("MAT4"u8)) return GltfAccessorType.Mat4;
+        return GltfAccessorType.Scalar;
     }
 
     private static GltfRawModel.AccessorSparse ParseAccessorSparse(ref Utf8JsonReader reader)
     {
-        var sparse = new GltfRawModel.AccessorSparse();
+        int count = 0;
+        GltfRawModel.SparseIndices indices = default;
+        GltfRawModel.SparseValues values = default;
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return default;
+        }
+
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             if (reader.TokenType != JsonTokenType.PropertyName)
@@ -988,61 +1246,15 @@ internal static class GltfJsonParser
             reader.Read();
             if (prop.SequenceEqual("count"u8))
             {
-                sparse.Count = reader.GetInt32();
+                count = reader.GetInt32();
             }
             else if (prop.SequenceEqual("indices"u8))
             {
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                {
-                    if (reader.TokenType != JsonTokenType.PropertyName)
-                    {
-                        continue;
-                    }
-
-                    ReadOnlySpan<byte> iprop = reader.ValueSpan;
-                    reader.Read();
-                    if (iprop.SequenceEqual("bufferView"u8))
-                    {
-                        sparse.Indices.BufferView = reader.GetInt32();
-                    }
-                    else if (iprop.SequenceEqual("byteOffset"u8))
-                    {
-                        sparse.Indices.ByteOffset = reader.GetInt32();
-                    }
-                    else if (iprop.SequenceEqual("componentType"u8))
-                    {
-                        sparse.Indices.ComponentType = reader.GetInt32();
-                    }
-                    else
-                    {
-                        reader.Skip();
-                    }
-                }
+                indices = ParseSparseIndices(ref reader);
             }
             else if (prop.SequenceEqual("values"u8))
             {
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                {
-                    if (reader.TokenType != JsonTokenType.PropertyName)
-                    {
-                        continue;
-                    }
-
-                    ReadOnlySpan<byte> vprop = reader.ValueSpan;
-                    reader.Read();
-                    if (vprop.SequenceEqual("bufferView"u8))
-                    {
-                        sparse.Values.BufferView = reader.GetInt32();
-                    }
-                    else if (vprop.SequenceEqual("byteOffset"u8))
-                    {
-                        sparse.Values.ByteOffset = reader.GetInt32();
-                    }
-                    else
-                    {
-                        reader.Skip();
-                    }
-                }
+                values = ParseSparseValues(ref reader);
             }
             else
             {
@@ -1050,7 +1262,123 @@ internal static class GltfJsonParser
             }
         }
 
-        return sparse;
+        return new GltfRawModel.AccessorSparse
+        {
+            HasSparse = true,
+            Count = count,
+            Indices = indices,
+            Values = values,
+        };
+    }
+
+    private static GltfRawModel.SparseIndices ParseSparseIndices(ref Utf8JsonReader reader)
+    {
+        int bufferView = -1;
+        int byteOffset = 0;
+        int componentType = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("bufferView"u8))
+            {
+                bufferView = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("byteOffset"u8))
+            {
+                byteOffset = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("componentType"u8))
+            {
+                componentType = reader.GetInt32();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        return new GltfRawModel.SparseIndices
+        {
+            BufferView = bufferView,
+            ByteOffset = byteOffset,
+            ComponentType = componentType,
+        };
+    }
+
+    private static GltfRawModel.SparseValues ParseSparseValues(ref Utf8JsonReader reader)
+    {
+        int bufferView = -1;
+        int byteOffset = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+            if (prop.SequenceEqual("bufferView"u8))
+            {
+                bufferView = reader.GetInt32();
+            }
+            else if (prop.SequenceEqual("byteOffset"u8))
+            {
+                byteOffset = reader.GetInt32();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        return new GltfRawModel.SparseValues
+        {
+            BufferView = bufferView,
+            ByteOffset = byteOffset,
+        };
+    }
+
+    private static GltfSlice<int> ParseIntSlice(ref Utf8JsonReader reader, GltfParseArena arena)
+    {
+        int start = arena.IntPoolCount;
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return GltfSlice<int>.Empty;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            arena.AddInt(reader.GetInt32());
+        }
+
+        return arena.CaptureInts(start);
+    }
+
+    private static GltfSlice<float> ParseFloatSlice(ref Utf8JsonReader reader, GltfParseArena arena)
+    {
+        int start = arena.FloatPoolCount;
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return GltfSlice<float>.Empty;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            arena.AddFloat(reader.GetSingle());
+        }
+
+        return arena.CaptureFloats(start);
     }
 
     private static void ParseBufferViews(ref Utf8JsonReader reader, GltfRawModel model)
@@ -2185,6 +2513,71 @@ internal static class GltfJsonParser
 
             model.Animations.Add(anim);
         }
+    }
+
+    private static Vec3 ReadVec3(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return Vec3.Zero;
+        }
+
+        reader.Read();
+        float x = reader.GetSingle();
+        reader.Read();
+        float y = reader.GetSingle();
+        reader.Read();
+        float z = reader.GetSingle();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+        }
+
+        return new Vec3(x, y, z);
+    }
+
+    private static Quat ReadQuat(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return Quat.Identity;
+        }
+
+        reader.Read();
+        float x = reader.GetSingle();
+        reader.Read();
+        float y = reader.GetSingle();
+        reader.Read();
+        float z = reader.GetSingle();
+        reader.Read();
+        float w = reader.GetSingle();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+        }
+
+        return new Quat(x, y, z, w);
+    }
+
+    private static Mat4 ReadMatrix(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return Mat4.Identity;
+        }
+
+        Span<float> values = stackalloc float[16];
+        int count = 0;
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (count < 16)
+            {
+                values[count++] = reader.GetSingle();
+            }
+        }
+
+        return count < 16 ? Mat4.Identity : new Mat4(values);
     }
 
     private static void ParseIntArray(ref Utf8JsonReader reader, List<int> list)

@@ -1,0 +1,84 @@
+using Axrone.Numeric;
+using Axrone.Scene;
+using Axrone.Scene.Assets;
+using Axrone.Scene.Rendering;
+using Axrone.Scene.Runtime;
+using Axrone.Scene.Snapshot;
+
+SceneProfile profile = new SceneProfileBuilder(
+        new SceneProfileId(SceneStringId.FromName("smoke/profile")))
+    .AddTransform3D()
+    .AddRendering3D()
+    .AddLighting3D()
+    .Build();
+
+using var runtime = new SceneRuntime(new SceneRuntimeOptions
+{
+    Profile = profile,
+    ViewportWidth = 320,
+    ViewportHeight = 180
+});
+
+SceneAssetId<MeshAssetTag> meshId = runtime.Assets.CreateId<MeshAssetTag>("smoke/mesh");
+runtime.Assets.Meshes.Register(SceneMeshFactory.CreateBox(meshId));
+
+SceneAssetId<ShaderAssetTag> shaderId = runtime.Assets.CreateId<ShaderAssetTag>("smoke/shader");
+runtime.Assets.Shaders.Register(new SceneShaderDefinition(
+    shaderId,
+    "void main(){}",
+    "void main(){}"));
+
+SceneAssetId<MaterialAssetTag> materialId = runtime.Assets.CreateId<MaterialAssetTag>("smoke/material");
+runtime.Assets.Materials.Register(new SceneMaterialDefinition(
+    materialId,
+    shaderId,
+    new SceneMaterialSurface()));
+
+SceneAssetId<RenderPassAssetTag> passId = runtime.Assets.CreateId<RenderPassAssetTag>("main");
+runtime.Assets.RenderPasses.Register(new SceneRenderPassDefinition(
+    passId,
+    clearMask: SceneClearMask.Color | SceneClearMask.Depth,
+    clearColor: new Vec4(0.05f, 0.05f, 0.08f, 1.0f)));
+runtime.Frame.RebuildPasses();
+
+SceneActor cameraActor = runtime.World.CreateActor("SmokeCamera");
+runtime.World.GetTransform3D(cameraActor).SetPosition(new Vec3(0.0f, 0.0f, 10.0f));
+SceneCamera camera = SceneCamera.Default;
+camera.Primary = true;
+runtime.World.AddData(cameraActor, camera);
+
+SceneActor boxActor = runtime.World.CreateActor("SmokeBox");
+SceneMeshRenderer renderer = SceneMeshRenderer.Default;
+renderer.MeshId = meshId;
+renderer.MaterialId = materialId;
+renderer.PassId = passId;
+runtime.World.AddData(boxActor, renderer);
+runtime.World.UpdateTransforms();
+
+if (!runtime.Frame.Plan(0))
+{
+    Console.Error.WriteLine("scene-smoke failed: no camera frame");
+    return 1;
+}
+
+int items = runtime.Frame.CollectItems(passId);
+if (items != 1)
+{
+    Console.Error.WriteLine($"scene-smoke failed: expected one render item, found {items}");
+    return 2;
+}
+
+SceneSnapshot snapshot = runtime.CaptureSnapshot("prefab/smoke");
+byte[] json = SceneSnapshotJson.Serialize(snapshot, runtime.Assets.Names);
+SceneSnapshot restored = SceneSnapshotJson.Deserialize(json);
+
+if (restored.Meshes.Count != 1 ||
+    restored.Prefab.Actors.Count != runtime.World.ActorCount)
+{
+    Console.Error.WriteLine("scene-smoke failed: snapshot round trip mismatch");
+    return 3;
+}
+
+Console.WriteLine(
+    $"scene-smoke ok items={items} actors={runtime.World.ActorCount} bytes={json.Length}");
+return 0;

@@ -17,6 +17,13 @@ public static class GltfCompileExtensions
         cancellationToken.ThrowIfCancellationRequested();
 
         GltfRawModel rawModel = pipeline.RawModel!;
+        if (rawModel.IsDisposed)
+        {
+            throw new InvalidOperationException(
+                "The parsed glTF document has already been consumed; create a new pipeline for another import.");
+        }
+
+        using var rawModelOwner = rawModel;
         GltfResourceRuntimeCache resourceRuntime = pipeline.ResourceRuntime!;
         List<GltfDiagnostic> diagnostics = pipeline.Diagnostics;
 
@@ -83,7 +90,7 @@ public static class GltfCompileExtensions
 
         var stats = new GltfDocumentStats(
             rawModel.Scenes.Count,
-            rawModel.Nodes.Count,
+            rawModel.NodeCount,
             rawModel.Cameras.Count,
             rawModel.Lights.Count,
             rawModel.Meshes.Count,
@@ -101,9 +108,9 @@ public static class GltfCompileExtensions
                 Uri = options.SourceUri,
                 Name = Path.GetFileNameWithoutExtension(options.Id),
                 Format = pipeline.ContainerFormat,
-                Version = rawModel.Version,
-                Generator = rawModel.Generator,
-                Copyright = rawModel.Copyright,
+                Version = rawModel.GetString(rawModel.Version),
+                Generator = rawModel.GetString(rawModel.Generator),
+                Copyright = rawModel.GetString(rawModel.Copyright),
                 DefaultScene = defaultSceneIdx,
                 Scenes = sceneAssets.MoveToImmutable(),
                 MeshKeys = meshes.ConvertAll(static m => m.Id).ToImmutableArray(),
@@ -429,35 +436,33 @@ public static class GltfCompileExtensions
         where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
     {
         var meshes = new List<GltfMeshAsset>();
-        var meshKeysByMesh = ImmutableArray.CreateBuilder<ImmutableArray<string>>(rawModel.Meshes.Count);
+        var meshKeysByMesh = ImmutableArray.CreateBuilder<ImmutableArray<string>>(rawModel.MeshCount);
 
-        for (int m = 0; m < rawModel.Meshes.Count; m++)
+        for (int m = 0; m < rawModel.MeshCount; m++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            GltfRawModel.Mesh meshDef = rawModel.Meshes[m];
-            var primitiveKeys = ImmutableArray.CreateBuilder<string>(meshDef.Primitives.Count);
+            GltfRawModel.Mesh meshDef = rawModel.GetMesh(m);
+            var primitiveKeys = ImmutableArray.CreateBuilder<string>(meshDef.Primitives.Length);
 
-            for (int p = 0; p < meshDef.Primitives.Count; p++)
+            for (int p = 0; p < meshDef.Primitives.Length; p++)
             {
-                GltfRawModel.Primitive prim = meshDef.Primitives[p];
+                GltfRawModel.Primitive prim = rawModel.GetPrimitive(meshDef, p);
                 string meshAssetId = GltfKeys.Mesh(m, p);
                 primitiveKeys.Add(meshAssetId);
 
-                if (prim.Material.HasValue &&
-                    (prim.Material.Value < 0 || prim.Material.Value >= rawModel.Materials.Count))
+                if (prim.HasMaterial && (uint)prim.Material >= (uint)rawModel.Materials.Count)
                 {
                     ThrowHelper.ThrowSchema(
-                        $"Mesh {m} primitive {p} references a missing material {prim.Material.Value}.");
+                        $"Mesh {m} primitive {p} references a missing material {prim.Material}.");
                 }
 
-                if (prim.Indices.HasValue &&
-                    (prim.Indices.Value < 0 || prim.Indices.Value >= rawModel.Accessors.Count))
+                if (prim.HasIndices && (uint)prim.Indices >= (uint)rawModel.AccessorCount)
                 {
                     ThrowHelper.ThrowSchema(
-                        $"Mesh {m} primitive {p} references a missing index accessor {prim.Indices.Value}.");
+                        $"Mesh {m} primitive {p} references a missing index accessor {prim.Indices}.");
                 }
 
-                if (prim.Draco != null && !TDracoPolicy.IsSupported)
+                if (prim.Draco.Present && !TDracoPolicy.IsSupported)
                 {
                     if (rawModel.ExtensionsRequired.Contains("KHR_draco_mesh_compression"))
                     {
@@ -472,55 +477,13 @@ public static class GltfCompileExtensions
                         "KHR_draco_mesh_compression was ignored because no Draco decoder is linked."));
                 }
 
-                int vertexCount = -1;
-                var attrLayouts = ImmutableArray.CreateBuilder<GltfVertexAttribute>(prim.Attributes.Count);
-                var attributeNames = new List<string>(prim.Attributes.Count);
-                var isCustomAttribute = new List<bool>(prim.Attributes.Count);
-                int totalInterleavedStride = 0;
-
-                foreach (KeyValuePair<string, int> kv in prim.Attributes)
-                {
-                    if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
-                    {
-                        ThrowHelper.ThrowSchema(
-                            $"Mesh {m} primitive {p} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
-                    }
-
-                    GltfRawModel.Accessor acc = rawModel.Accessors[kv.Value];
-                    bool isCustom = !TryParseSemantic(kv.Key, out GltfMeshSemantic semantic);
-                    if (isCustom)
-                    {
-                        semantic = GltfMeshSemantic.Custom;
-                    }
-
-                    if (vertexCount < 0)
-                    {
-                        vertexCount = acc.Count;
-                    }
-                    else if (acc.Count != vertexCount)
-                    {
-                        ThrowHelper.ThrowAccessor(
-                            kv.Value,
-                            $"attribute vertex count {acc.Count} does not match the primitive vertex count {vertexCount}.");
-                    }
-
-                    int compCount = GltfAccessorRuntime.GetTypeElementCount(acc.Type);
-                    int compByteSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
-                    int attrSize = compCount * compByteSize;
-
-                    attrLayouts.Add(new GltfVertexAttribute(
-                        totalInterleavedStride,
-                        0,
-                        acc.ComponentType,
-                        semantic,
-                        (byte)compCount,
-                        acc.Normalized,
-                        acc.ComponentType != 5126));
-
-                    attributeNames.Add(kv.Key);
-                    isCustomAttribute.Add(isCustom);
-                    totalInterleavedStride += attrSize;
-                }
+                PrimitiveLayout layoutInfo = BuildPrimitiveLayout(rawModel, prim, m, p);
+                int vertexCount = layoutInfo.VertexCount;
+                var attrLayouts = layoutInfo.Attributes;
+                var attributeNames = layoutInfo.Names;
+                var accessorIndices = layoutInfo.Accessors;
+                var isCustomAttribute = layoutInfo.IsCustom;
+                int totalInterleavedStride = layoutInfo.Stride;
 
                 if (vertexCount < 0)
                 {
@@ -528,7 +491,7 @@ public static class GltfCompileExtensions
                 }
 
                 GltfDracoDecodedMesh? dracoMesh = null;
-                if (prim.Draco != null && TDracoPolicy.IsSupported)
+                if (prim.Draco.Present && TDracoPolicy.IsSupported)
                 {
                     // KHR_draco_mesh_compression only allows triangle primitives.
                     if (prim.Mode is not (4 or 5))
@@ -556,7 +519,7 @@ public static class GltfCompileExtensions
                         if (status == GltfDracoDecodeStatus.Unsupported)
                         {
                             ThrowHelper.ThrowAccessor(
-                                prim.Attributes.GetValueOrDefault("POSITION", -1),
+                                rawModel.GetAttributeOrDefault(prim.Attributes, GltfMeshSemantic.Position, -1),
                                 "uses a Draco attribute layout the decoder cannot represent.");
                         }
 
@@ -566,7 +529,7 @@ public static class GltfCompileExtensions
                     if (dracoMesh.VertexCount != vertexCount)
                     {
                         ThrowHelper.ThrowAccessor(
-                            prim.Attributes.GetValueOrDefault("POSITION", -1),
+                            rawModel.GetAttributeOrDefault(prim.Attributes, GltfMeshSemantic.Position, -1),
                             $"Draco vertex count {dracoMesh.VertexCount} does not match accessor count {vertexCount}.");
                     }
                 }
@@ -578,8 +541,8 @@ public static class GltfCompileExtensions
                 {
                     GltfVertexAttribute layout = attrLayouts[a];
                     string semStr = attributeNames[a];
-                    int accessorIndex = prim.Attributes[semStr];
-                    GltfRawModel.Accessor acc = rawModel.Accessors[accessorIndex];
+                    int accessorIndex = accessorIndices[a];
+                    GltfRawModel.Accessor acc = rawModel.GetAccessor(accessorIndex);
 
                     int compSize = GltfAccessorRuntime.GetComponentByteSize(acc.ComponentType);
                     GltfAccessorRuntime.ValidateAccessorRange(rawModel, accessorIndex, layout.ComponentCount);
@@ -587,9 +550,12 @@ public static class GltfCompileExtensions
 
                     if (dracoMesh != null)
                     {
-                        int dracoAttributeId = 0;
-                        bool hasDracoAttribute = prim.Draco != null &&
-                            prim.Draco.Attributes.TryGetValue(semStr, out dracoAttributeId);
+                        bool hasDracoAttribute = TryGetDracoAttributeId(
+                            rawModel,
+                            prim,
+                            layout.Semantic,
+                            semStr,
+                            out int dracoAttributeId);
                         if (!hasDracoAttribute)
                         {
                             ThrowHelper.ThrowAccessor(accessorIndex, "is missing from the decoded Draco primitive.");
@@ -650,12 +616,12 @@ public static class GltfCompileExtensions
                             int srcStride = rawModel.BufferViews[acc.BufferView].ByteStride;
                             GltfAccessorRuntime.DecodeFloats(srcSpan, vertexCount, acc.ComponentType, layout.ComponentCount, srcStride, acc.Normalized, decodedFloats);
                         }
-                        else if (acc.Sparse == null)
+                        else if (!acc.Sparse.HasSparse)
                         {
                             ThrowHelper.ThrowAccessor(accessorIndex, "has neither a base bufferView nor sparse data.");
                         }
 
-                        if (acc.Sparse != null)
+                        if (acc.Sparse.HasSparse)
                         {
                             if (acc.Sparse.Indices.BufferView < 0 || acc.Sparse.Values.BufferView < 0)
                             {
@@ -733,101 +699,48 @@ public static class GltfCompileExtensions
                     }
                 }
 
-                var morphTargetsBuilder = ImmutableArray.CreateBuilder<GltfMorphTargetDefinition>(prim.Targets.Count);
-                for (int t = 0; t < prim.Targets.Count; t++)
-                {
-                    Dictionary<string, int> targetDict = prim.Targets[t];
-                    foreach (KeyValuePair<string, int> kv in targetDict)
-                    {
-                        if (kv.Value < 0 || kv.Value >= rawModel.Accessors.Count)
-                        {
-                            ThrowHelper.ThrowSchema(
-                                $"Mesh {m} primitive {p} morph target {t} attribute '{kv.Key}' references a missing accessor {kv.Value}.");
-                        }
-
-                        GltfRawModel.Accessor tAcc = rawModel.Accessors[kv.Value];
-                        int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(tAcc.Type);
-                        if (tAcc.Count != vertexCount)
-                        {
-                            ThrowHelper.ThrowAccessor(
-                                kv.Value,
-                                $"morph target vertex count {tAcc.Count} does not match the primitive vertex count {vertexCount}.");
-                        }
-
-                        GltfMorphTargetSemantic morphSemantic;
-                        switch (kv.Key)
-                        {
-                            case "POSITION":
-                                morphSemantic = GltfMorphTargetSemantic.Position;
-                                break;
-                            case "NORMAL":
-                                morphSemantic = GltfMorphTargetSemantic.Normal;
-                                break;
-                            case "TANGENT":
-                                morphSemantic = GltfMorphTargetSemantic.Tangent;
-                                break;
-                            default:
-                                diagnostics.Add(new GltfDiagnostic(
-                                    GltfDiagnosticLevel.Warning,
-                                    "gltf.mesh.target.attribute.unsupported",
-                                    $"Morph target attribute '{kv.Key}' bypassed."));
-                                continue;
-                        }
-
-                        GltfAccessorRuntime.ValidateAccessorRange(rawModel, kv.Value, targetCompCount);
-
-                        ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
-                            tAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
-
-                        var deltaFloats = new float[tAcc.Count * targetCompCount];
-                        {
-                            ReadOnlySpan<byte> targetSpan = targetBytes.Span.Slice(tAcc.ByteOffset);
-                            GltfAccessorRuntime.DecodeFloats(targetSpan, tAcc.Count, tAcc.ComponentType, targetCompCount, rawModel.BufferViews[tAcc.BufferView].ByteStride, false, deltaFloats);
-                        }
-
-                        byte[] deltaBytes = GC.AllocateUninitializedArray<byte>(deltaFloats.Length * 4, pinned: true);
-                        MemoryMarshal.Cast<float, byte>(deltaFloats).CopyTo(deltaBytes);
-
-                        morphTargetsBuilder.Add(new GltfMorphTargetDefinition(
-                            morphSemantic,
-                            deltaBytes,
-                            targetCompCount * 4,
-                            targetCompCount));
-                    }
-                }
+                ImmutableArray<GltfMorphTargetDefinition> morphTargets =
+                    await BuildMorphTargetsAsync<TMeshoptPolicy>(
+                        rawModel,
+                        resourceRuntime,
+                        prim,
+                        m,
+                        p,
+                        vertexCount,
+                        diagnostics,
+                        cancellationToken).ConfigureAwait(false);
 
                 uint[] expandedIndices;
                 if (dracoMesh != null)
                 {
                     ImmutableArray<uint> dracoIndices = dracoMesh.Indices;
-                    if (prim.Indices is int indexAccessor &&
-                        indexAccessor >= 0 &&
-                        indexAccessor < rawModel.Accessors.Count &&
-                        rawModel.Accessors[indexAccessor].Count != dracoIndices.Length)
+                    if (prim.HasIndices &&
+                        (uint)prim.Indices < (uint)rawModel.AccessorCount &&
+                        rawModel.GetAccessor(prim.Indices).Count != dracoIndices.Length)
                     {
                         ThrowHelper.ThrowAccessor(
-                            indexAccessor,
-                            $"Draco index count {dracoIndices.Length} does not match accessor count {rawModel.Accessors[indexAccessor].Count}.");
+                            prim.Indices,
+                            $"Draco index count {dracoIndices.Length} does not match accessor count {rawModel.GetAccessor(prim.Indices).Count}.");
                     }
 
                     GltfAccessorRuntime.ValidateIndices(
                         dracoIndices.AsSpan(),
                         vertexCount,
-                        prim.Indices ?? -1);
+                        prim.Indices);
                     expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, dracoIndices.AsSpan(), vertexCount);
                 }
-                else if (prim.Indices.HasValue && prim.Indices.Value >= 0 && prim.Indices.Value < rawModel.Accessors.Count)
+                else if (prim.HasIndices && (uint)prim.Indices < (uint)rawModel.AccessorCount)
                 {
-                    GltfRawModel.Accessor indexAcc = rawModel.Accessors[prim.Indices.Value];
-                    if (!string.Equals(indexAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                    GltfRawModel.Accessor indexAcc = rawModel.GetAccessor(prim.Indices);
+                    if (indexAcc.Type != GltfAccessorType.Scalar ||
                         indexAcc.ComponentType is not (5121 or 5123 or 5125))
                     {
                         ThrowHelper.ThrowAccessor(
-                            prim.Indices.Value,
+                            prim.Indices,
                             "index accessors must use an unsigned SCALAR component type.");
                     }
 
-                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, prim.Indices.Value, 1);
+                    GltfAccessorRuntime.ValidateAccessorRange(rawModel, prim.Indices, 1);
                     ReadOnlyMemory<byte> indexBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
                         indexAcc.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
 
@@ -837,7 +750,7 @@ public static class GltfCompileExtensions
                         GltfAccessorRuntime.DecodeIndices(indexSpan, indexAcc.Count, indexAcc.ComponentType, rawModel.BufferViews[indexAcc.BufferView].ByteStride, decodedRawIndices);
                     }
 
-                    GltfAccessorRuntime.ValidateIndices(decodedRawIndices, vertexCount, prim.Indices.Value);
+                    GltfAccessorRuntime.ValidateIndices(decodedRawIndices, vertexCount, prim.Indices);
                     expandedIndices = GltfMeshPipeline.ExpandTopology(prim.Mode, decodedRawIndices, vertexCount);
                 }
                 else
@@ -872,7 +785,7 @@ public static class GltfCompileExtensions
                     meshAssetId,
                     interleavedVertices,
                     finalAttributes.ToImmutable(),
-                    morphTargetsBuilder.ToImmutable(),
+                    morphTargets,
                     downcastedBytes,
                     vertexCount,
                     expandedIndices.Length,
@@ -882,30 +795,31 @@ public static class GltfCompileExtensions
                     CustomAttributes = customAttributes.ToImmutable(),
                 };
 
-                var variantMappings = ImmutableArray.CreateBuilder<GltfMaterialVariantMapping>(prim.MaterialVariants.Count);
-                for (int v = 0; v < prim.MaterialVariants.Count; v++)
+                int variantMappingCount = GltfRawModel.GetMaterialVariantCount(prim);
+                var variantMappings = ImmutableArray.CreateBuilder<GltfMaterialVariantMapping>(variantMappingCount);
+                for (int v = 0; v < variantMappingCount; v++)
                 {
-                    GltfRawModel.PrimitiveMaterialVariant mapping = prim.MaterialVariants[v];
-                    for (int variantIndex = 0; variantIndex < mapping.Variants.Count; variantIndex++)
+                    GltfRawModel.PrimitiveMaterialVariant mapping = rawModel.GetMaterialVariant(prim, v);
+                    GltfSpan<int> variants = rawModel.GetVariants(mapping);
+                    for (int variantIndex = 0; variantIndex < variants.Count; variantIndex++)
                     {
-                        int index = mapping.Variants[variantIndex];
-                        if (index < 0 || index >= rawModel.Variants.Count)
+                        int index = variants[variantIndex];
+                        if ((uint)index >= (uint)rawModel.Variants.Count)
                         {
                             ThrowHelper.ThrowSchema(
                                 $"Mesh {m} primitive {p} maps an unknown material variant {index}.");
                         }
                     }
 
-                    if (mapping.Material.HasValue &&
-                        (mapping.Material.Value < 0 || mapping.Material.Value >= rawModel.Materials.Count))
+                    if (mapping.HasMaterial && (uint)mapping.Material >= (uint)rawModel.Materials.Count)
                     {
                         ThrowHelper.ThrowSchema(
-                            $"Mesh {m} primitive {p} maps variant material {mapping.Material.Value} which does not exist.");
+                            $"Mesh {m} primitive {p} maps variant material {mapping.Material} which does not exist.");
                     }
 
                     variantMappings.Add(new GltfMaterialVariantMapping(
-                        mapping.Variants.ToImmutableArray(),
-                        mapping.Material));
+                        variants.AsSpan().ToArray().ToImmutableArray(),
+                        mapping.HasMaterial ? mapping.Material : null));
                 }
 
                 meshes.Add(new GltfMeshAsset
@@ -915,7 +829,7 @@ public static class GltfCompileExtensions
                     PrimitiveIndex = p,
                     Definition = definition,
                     Bounds = bounds,
-                    MaterialKey = prim.Material.HasValue ? $"gltf/material/{prim.Material.Value}" : null,
+                    MaterialKey = prim.HasMaterial ? $"gltf/material/{prim.Material}" : null,
                     MaterialVariants = variantMappings.MoveToImmutable(),
                 });
             }
@@ -946,6 +860,215 @@ public static class GltfCompileExtensions
 
     private static uint QuantizeUnsignedNormalized32(float value) =>
         (uint)Math.Round(Math.Clamp((double)value, 0d, 1d) * uint.MaxValue);
+
+    private sealed class PrimitiveLayout
+    {
+        public int VertexCount = -1;
+        public int Stride;
+        public List<GltfVertexAttribute> Attributes { get; } = new();
+        public List<string> Names { get; } = new();
+        public List<int> Accessors { get; } = new();
+        public List<bool> IsCustom { get; } = new();
+    }
+
+    private static PrimitiveLayout BuildPrimitiveLayout(
+        GltfRawModel rawModel,
+        in GltfRawModel.Primitive prim,
+        int meshIndex,
+        int primitiveIndex)
+    {
+        GltfAttributeMap attributes = rawModel.GetAttributes(prim);
+        var layout = new PrimitiveLayout();
+        for (int a = 0; a < attributes.Count; a++)
+        {
+            GltfRawModel.Attribute attribute = attributes[a];
+            int accessorIndex = attribute.Accessor;
+            bool isCustom = attribute.Semantic == GltfMeshSemantic.Custom;
+            string attributeName = isCustom
+                ? rawModel.GetString(attribute.Name)
+                : GetSemanticName(attribute.Semantic);
+
+            if ((uint)accessorIndex >= (uint)rawModel.AccessorCount)
+            {
+                ThrowHelper.ThrowSchema(
+                    $"Mesh {meshIndex} primitive {primitiveIndex} attribute '{attributeName}' references a missing accessor {accessorIndex}.");
+            }
+
+            GltfRawModel.Accessor accessor = rawModel.GetAccessor(accessorIndex);
+            if (layout.VertexCount < 0)
+            {
+                layout.VertexCount = accessor.Count;
+            }
+            else if (accessor.Count != layout.VertexCount)
+            {
+                ThrowHelper.ThrowAccessor(
+                    accessorIndex,
+                    $"attribute vertex count {accessor.Count} does not match the primitive vertex count {layout.VertexCount}.");
+            }
+
+            int compCount = GltfAccessorRuntime.GetTypeElementCount(accessor.Type);
+            int compByteSize = GltfAccessorRuntime.GetComponentByteSize(accessor.ComponentType);
+            int attrSize = compCount * compByteSize;
+
+            layout.Attributes.Add(new GltfVertexAttribute(
+                layout.Stride,
+                0,
+                accessor.ComponentType,
+                attribute.Semantic,
+                (byte)compCount,
+                accessor.Normalized,
+                accessor.ComponentType != 5126));
+            layout.Names.Add(attributeName);
+            layout.Accessors.Add(accessorIndex);
+            layout.IsCustom.Add(isCustom);
+            layout.Stride += attrSize;
+        }
+
+        return layout;
+    }
+
+    private static async ValueTask<ImmutableArray<GltfMorphTargetDefinition>> BuildMorphTargetsAsync<TMeshoptPolicy>(
+        GltfRawModel rawModel,
+        GltfResourceRuntimeCache resourceRuntime,
+        GltfRawModel.Primitive prim,
+        int meshIndex,
+        int primitiveIndex,
+        int vertexCount,
+        List<GltfDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+        where TMeshoptPolicy : struct, IMeshoptCompressionPolicy
+    {
+        int targetCount = GltfRawModel.GetMorphTargetCount(prim);
+        var builder = ImmutableArray.CreateBuilder<GltfMorphTargetDefinition>(targetCount);
+        for (int t = 0; t < targetCount; t++)
+        {
+            int attributeCount = rawModel.GetAttributes(rawModel.GetMorphTarget(prim, t)).Count;
+            for (int a = 0; a < attributeCount; a++)
+            {
+                GltfRawModel.Attribute attribute = rawModel
+                    .GetAttributes(rawModel.GetMorphTarget(prim, t))[a];
+                int accessorIndex = attribute.Accessor;
+                string attributeName = attribute.Semantic == GltfMeshSemantic.Custom
+                    ? rawModel.GetString(attribute.Name)
+                    : GetSemanticName(attribute.Semantic);
+
+                if ((uint)accessorIndex >= (uint)rawModel.AccessorCount)
+                {
+                    ThrowHelper.ThrowSchema(
+                        $"Mesh {meshIndex} primitive {primitiveIndex} morph target {t} attribute '{attributeName}' references a missing accessor {accessorIndex}.");
+                }
+
+                GltfRawModel.Accessor targetAccessor = rawModel.GetAccessor(accessorIndex);
+                int targetCompCount = GltfAccessorRuntime.GetTypeElementCount(targetAccessor.Type);
+                if (targetAccessor.Count != vertexCount)
+                {
+                    ThrowHelper.ThrowAccessor(
+                        accessorIndex,
+                        $"morph target vertex count {targetAccessor.Count} does not match the primitive vertex count {vertexCount}.");
+                }
+
+                GltfMorphTargetSemantic morphSemantic;
+                switch (attribute.Semantic)
+                {
+                    case GltfMeshSemantic.Position:
+                        morphSemantic = GltfMorphTargetSemantic.Position;
+                        break;
+                    case GltfMeshSemantic.Normal:
+                        morphSemantic = GltfMorphTargetSemantic.Normal;
+                        break;
+                    case GltfMeshSemantic.Tangent:
+                        morphSemantic = GltfMorphTargetSemantic.Tangent;
+                        break;
+                    default:
+                        diagnostics.Add(new GltfDiagnostic(
+                            GltfDiagnosticLevel.Warning,
+                            "gltf.mesh.target.attribute.unsupported",
+                            $"Morph target attribute '{attributeName}' bypassed."));
+                        continue;
+                }
+
+                GltfAccessorRuntime.ValidateAccessorRange(rawModel, accessorIndex, targetCompCount);
+
+                ReadOnlyMemory<byte> targetBytes = await resourceRuntime.ResolveBufferViewAsync<TMeshoptPolicy>(
+                    targetAccessor.BufferView, rawModel, cancellationToken).ConfigureAwait(false);
+
+                var deltaFloats = new float[targetAccessor.Count * targetCompCount];
+                ReadOnlySpan<byte> targetSpan = targetBytes.Span.Slice(targetAccessor.ByteOffset);
+                GltfAccessorRuntime.DecodeFloats(
+                    targetSpan,
+                    targetAccessor.Count,
+                    targetAccessor.ComponentType,
+                    targetCompCount,
+                    rawModel.BufferViews[targetAccessor.BufferView].ByteStride,
+                    false,
+                    deltaFloats);
+
+                byte[] deltaBytes = GC.AllocateUninitializedArray<byte>(deltaFloats.Length * 4, pinned: true);
+                MemoryMarshal.Cast<float, byte>(deltaFloats).CopyTo(deltaBytes);
+
+                builder.Add(new GltfMorphTargetDefinition(
+                    morphSemantic,
+                    deltaBytes,
+                    targetCompCount * 4,
+                    targetCompCount));
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static bool TryGetDracoAttributeId(
+        GltfRawModel rawModel,
+        in GltfRawModel.Primitive prim,
+        GltfMeshSemantic semantic,
+        string attributeName,
+        out int attributeId)
+    {
+        GltfAttributeMap attributes = rawModel.GetDracoAttributes(prim);
+        if (semantic != GltfMeshSemantic.Custom)
+        {
+            return attributes.TryGet(semantic, out attributeId);
+        }
+
+        for (int i = 0; i < attributes.Count; i++)
+        {
+            GltfRawModel.Attribute attribute = attributes[i];
+            if (attribute.Semantic == GltfMeshSemantic.Custom &&
+                string.Equals(rawModel.GetString(attribute.Name), attributeName, StringComparison.Ordinal))
+            {
+                attributeId = attribute.Accessor;
+                return true;
+            }
+        }
+
+        attributeId = -1;
+        return false;
+    }
+
+    private static string GetSemanticName(GltfMeshSemantic semantic) =>
+        semantic switch
+        {
+            GltfMeshSemantic.Position => "POSITION",
+            GltfMeshSemantic.Normal => "NORMAL",
+            GltfMeshSemantic.Tangent => "TANGENT",
+            GltfMeshSemantic.Uv0 => "TEXCOORD_0",
+            GltfMeshSemantic.Uv1 => "TEXCOORD_1",
+            GltfMeshSemantic.Uv2 => "TEXCOORD_2",
+            GltfMeshSemantic.Uv3 => "TEXCOORD_3",
+            GltfMeshSemantic.Color0 => "COLOR_0",
+            GltfMeshSemantic.Color1 => "COLOR_1",
+            GltfMeshSemantic.Joints0 => "JOINTS_0",
+            GltfMeshSemantic.Joints1 => "JOINTS_1",
+            GltfMeshSemantic.Weights0 => "WEIGHTS_0",
+            GltfMeshSemantic.Weights1 => "WEIGHTS_1",
+            _ => "CUSTOM",
+        };
+
+    private static string NodeName(GltfRawModel model, int index)
+    {
+        GltfRawModel.Node node = model.GetNode(index);
+        return node.Name.IsEmpty ? "unnamed" : model.GetString(node.Name);
+    }
 
     private static bool TryParseSemantic(string name, out GltfMeshSemantic semantic)
     {
@@ -988,16 +1111,16 @@ public static class GltfCompileExtensions
             for (int j = 0; j < skinDef.Joints.Count; j++)
             {
                 int jointIndex = skinDef.Joints[j];
-                if (jointIndex < 0 || jointIndex >= rawModel.Nodes.Count)
+                if (jointIndex < 0 || jointIndex >= rawModel.NodeCount)
                 {
                     ThrowHelper.ThrowSchema($"Skin {s} references a missing joint node {jointIndex}.");
                 }
 
-                jointIds.Add($"node_{jointIndex}_{rawModel.Nodes[jointIndex].Name ?? "unnamed"}");
+                jointIds.Add($"node_{jointIndex}_{NodeName(rawModel, jointIndex)}");
             }
 
             if (skinDef.Skeleton.HasValue &&
-                (skinDef.Skeleton.Value < 0 || skinDef.Skeleton.Value >= rawModel.Nodes.Count))
+                (skinDef.Skeleton.Value < 0 || skinDef.Skeleton.Value >= rawModel.NodeCount))
             {
                 ThrowHelper.ThrowSchema($"Skin {s} references a missing skeleton node {skinDef.Skeleton.Value}.");
             }
@@ -1006,13 +1129,13 @@ public static class GltfCompileExtensions
             if (skinDef.InverseBindMatrices.HasValue)
             {
                 int inverseBindAccessorIndex = skinDef.InverseBindMatrices.Value;
-                if (inverseBindAccessorIndex < 0 || inverseBindAccessorIndex >= rawModel.Accessors.Count)
+                if (inverseBindAccessorIndex < 0 || inverseBindAccessorIndex >= rawModel.AccessorCount)
                 {
                     ThrowHelper.ThrowSchema($"Skin {s} references a missing inverse-bind accessor {inverseBindAccessorIndex}.");
                 }
 
-                GltfRawModel.Accessor ibmAcc = rawModel.Accessors[inverseBindAccessorIndex];
-                if (!string.Equals(ibmAcc.Type, "MAT4", StringComparison.Ordinal) ||
+                GltfRawModel.Accessor ibmAcc = rawModel.GetAccessor(inverseBindAccessorIndex);
+                if (ibmAcc.Type != GltfAccessorType.Mat4 ||
                     ibmAcc.ComponentType != 5126)
                 {
                     ThrowHelper.ThrowAccessor(
@@ -1059,7 +1182,7 @@ public static class GltfCompileExtensions
                 SkinIndex = s,
                 JointNodeIds = jointIds.MoveToImmutable(),
                 JointNodeIndices = skinDef.Joints.ToImmutableArray(),
-                SkeletonNodeId = skinDef.Skeleton.HasValue ? $"node_{skinDef.Skeleton.Value}_{rawModel.Nodes[skinDef.Skeleton.Value].Name ?? "unnamed"}" : null,
+                SkeletonNodeId = skinDef.Skeleton.HasValue ? $"node_{skinDef.Skeleton.Value}_{NodeName(rawModel, skinDef.Skeleton.Value)}" : null,
                 SkeletonNodeIndex = skinDef.Skeleton,
                 InverseBindMatrices = rowMajorIbm,
             });
@@ -1094,8 +1217,8 @@ public static class GltfCompileExtensions
                 }
 
                 GltfRawModel.AnimationSampler samp = animDef.Samplers[chan.Sampler];
-                if (samp.Input < 0 || samp.Input >= rawModel.Accessors.Count ||
-                    samp.Output < 0 || samp.Output >= rawModel.Accessors.Count)
+                if (samp.Input < 0 || samp.Input >= rawModel.AccessorCount ||
+                    samp.Output < 0 || samp.Output >= rawModel.AccessorCount)
                 {
                     ThrowHelper.ThrowSchema($"Animation {a} sampler {chan.Sampler} references a missing accessor.");
                 }
@@ -1103,19 +1226,19 @@ public static class GltfCompileExtensions
                 bool isPointer = !string.IsNullOrEmpty(chan.Pointer);
                 if (isPointer)
                 {
-                    if (chan.TargetNode >= rawModel.Nodes.Count)
+                    if (chan.TargetNode >= rawModel.NodeCount)
                     {
                         ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
                     }
                 }
-                else if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.Nodes.Count)
+                else if (chan.TargetNode < 0 || chan.TargetNode >= rawModel.NodeCount)
                 {
                     ThrowHelper.ThrowSchema($"Animation {a} channel {c} references a missing target node {chan.TargetNode}.");
                 }
 
-                GltfRawModel.Accessor inAcc = rawModel.Accessors[samp.Input];
-                GltfRawModel.Accessor outAcc = rawModel.Accessors[samp.Output];
-                if (!string.Equals(inAcc.Type, "SCALAR", StringComparison.Ordinal) ||
+                GltfRawModel.Accessor inAcc = rawModel.GetAccessor(samp.Input);
+                GltfRawModel.Accessor outAcc = rawModel.GetAccessor(samp.Output);
+                if (inAcc.Type != GltfAccessorType.Scalar ||
                     inAcc.ComponentType != 5126)
                 {
                     ThrowHelper.ThrowAccessor(samp.Input, "animation input must use FLOAT SCALAR accessors.");
@@ -1251,7 +1374,7 @@ public static class GltfCompileExtensions
                     InputAccessor = samp.Input,
                     OutputAccessor = samp.Output,
                     TargetNodeIndex = chan.TargetNode,
-                    TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{rawModel.Nodes[chan.TargetNode].Name ?? "unnamed"}" : string.Empty,
+                    TargetNodeId = chan.TargetNode >= 0 ? $"node_{chan.TargetNode}_{NodeName(rawModel, chan.TargetNode)}" : string.Empty,
                     Path = path,
                     Pointer = chan.Pointer,
                     Interpolation = interp,
@@ -1310,7 +1433,7 @@ public sealed class GltfImporter
         }
 
         GltfPipeline<StateUnparsed> pipeline = GltfPipeline<StateUnparsed>.Create(sourceBytes);
-        GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema();
+        GltfPipeline<StateSchemaParsed> parsed = pipeline.ParseSchema(_options.Limits, cancellationToken);
         GltfPipeline<StateResolved> resolved = parsed.ResolveResources(_options.ResourceResolver);
 
         return await resolved.CompileAsync<TDracoPolicy, TMeshoptPolicy, TTranscoderPolicy>(

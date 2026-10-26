@@ -11,32 +11,14 @@ internal static class GltfPrefabEngine
         out Quat rotation,
         out Vec3 scale)
     {
-        if (node.Matrix != null && node.Matrix.Length == 16)
+        if (node.HasMatrix && node.Matrix.Decompose(out scale, out rotation, out translation))
         {
-            ReadOnlySpan<float> m = node.Matrix;
-            var matrix = new Mat4(
-                m[0], m[1], m[2], m[3],
-                m[4], m[5], m[6], m[7],
-                m[8], m[9], m[10], m[11],
-                m[12], m[13], m[14], m[15]);
-
-            if (matrix.Decompose(out scale, out rotation, out translation))
-            {
-                return;
-            }
+            return;
         }
 
-        translation = node.Translation != null && node.Translation.Length >= 3
-            ? new Vec3(node.Translation[0], node.Translation[1], node.Translation[2])
-            : Vec3.Zero;
-
-        rotation = node.Rotation != null && node.Rotation.Length >= 4
-            ? new Quat(node.Rotation[0], node.Rotation[1], node.Rotation[2], node.Rotation[3])
-            : Quat.Identity;
-
-        scale = node.Scale != null && node.Scale.Length >= 3
-            ? new Vec3(node.Scale[0], node.Scale[1], node.Scale[2])
-            : Vec3.One;
+        translation = node.Translation ?? Vec3.Zero;
+        rotation = node.Rotation ?? Quat.Identity;
+        scale = node.Scale ?? Vec3.One;
     }
 
     /// <summary>Builds a prefab asset for one scene.</summary>
@@ -84,8 +66,9 @@ internal static class GltfPrefabEngine
                 continue;
             }
 
-            GltfRawModel.Node node = model.Nodes[nodeIdx];
-            string nodeId = $"node_{nodeIdx}_{node.Name ?? "unnamed"}";
+            GltfRawModel.Node node = model.GetNode(nodeIdx);
+            string nodeName = model.GetString(node.Name);
+            string nodeId = $"node_{nodeIdx}_{(node.Name.IsEmpty ? "unnamed" : nodeName)}";
             allNodeIds.Add(nodeId);
 
             if (parentId == null)
@@ -97,9 +80,9 @@ internal static class GltfPrefabEngine
             var compBuilder = ImmutableArray.CreateBuilder<GltfComponentSnapshot>();
             compBuilder.Add(new GltfTransformComponent(t, r, s));
 
-            if (node.Camera.HasValue && node.Camera.Value >= 0 && node.Camera.Value < model.Cameras.Count)
+            if (node.HasCamera && (uint)node.Camera < (uint)model.Cameras.Count)
             {
-                GltfRawModel.Camera cam = model.Cameras[node.Camera.Value];
+                GltfRawModel.Camera cam = model.Cameras[node.Camera];
                 bool isPrimaryCam = isDefaultScene && parentId == null && !primaryCameraAssigned;
                 bool isOrtho = string.Equals(cam.Type, "orthographic", StringComparison.OrdinalIgnoreCase);
 
@@ -114,9 +97,9 @@ internal static class GltfPrefabEngine
                 primaryCameraAssigned |= isPrimaryCam;
             }
 
-            if (node.Light.HasValue && node.Light.Value >= 0 && node.Light.Value < model.Lights.Count)
+            if (node.HasLight && (uint)node.Light < (uint)model.Lights.Count)
             {
-                GltfRawModel.Light light = model.Lights[node.Light.Value];
+                GltfRawModel.Light light = model.Lights[node.Light];
                 var color = new Vec3(light.Color[0], light.Color[1], light.Color[2]);
 
                 if (string.Equals(light.Type, "directional", StringComparison.OrdinalIgnoreCase))
@@ -169,19 +152,20 @@ internal static class GltfPrefabEngine
                 firstRoot = false;
             }
 
-            if (node.Mesh.HasValue && node.Mesh.Value >= 0 && node.Mesh.Value < model.Meshes.Count)
+            if (node.HasMesh && (uint)node.Mesh < (uint)model.MeshCount)
             {
-                GltfRawModel.Mesh mesh = model.Meshes[node.Mesh.Value];
-                string? skinId = (node.Skin.HasValue && skinKeyMap.TryGetValue(node.Skin.Value, out string? sKey)) ? sKey : null;
-                ImmutableArray<string> primitiveKeys = meshKeysByMesh[node.Mesh.Value];
+                GltfRawModel.Mesh mesh = model.GetMesh(node.Mesh);
+                string? skinId = (node.HasSkin && skinKeyMap.TryGetValue(node.Skin, out string? sKey)) ? sKey : null;
+                ImmutableArray<string> primitiveKeys = meshKeysByMesh[node.Mesh];
+                int primitiveCount = mesh.Primitives.Length;
 
-                if (mesh.Primitives.Count == 1)
+                if (primitiveCount == 1)
                 {
+                    GltfRawModel.Primitive primitive = model.GetPrimitive(mesh, 0);
                     string meshKey = primitiveKeys.Length > 0
                         ? primitiveKeys[0]
-                        : GltfKeys.Mesh(node.Mesh.Value, 0);
-                    int? material = mesh.Primitives[0].Material;
-                    string? matKey = material.HasValue ? $"gltf/material/{material.Value}" : null;
+                        : GltfKeys.Mesh(node.Mesh, 0);
+                    string? matKey = primitive.HasMaterial ? $"gltf/material/{primitive.Material}" : null;
                     if (matKey != null)
                     {
                         materialKeys.Add(matKey);
@@ -195,18 +179,18 @@ internal static class GltfPrefabEngine
                         PassId: "ForwardPBR",
                         ReceiveLighting: true,
                         skinId,
-                        mesh.Primitives[0].Targets.Count));
+                        GltfRawModel.GetMorphTargetCount(primitive)));
                 }
                 else
                 {
-                    for (int p = 0; p < mesh.Primitives.Count; p++)
+                    for (int p = 0; p < primitiveCount; p++)
                     {
+                        GltfRawModel.Primitive primitive = model.GetPrimitive(mesh, p);
                         string childActorId = $"{nodeId}/primitive/{p}";
                         string meshKey = p < primitiveKeys.Length
                             ? primitiveKeys[p]
-                            : GltfKeys.Mesh(node.Mesh.Value, p);
-                        int? primMaterial = mesh.Primitives[p].Material;
-                        string? matKey = primMaterial.HasValue ? $"gltf/material/{primMaterial.Value}" : null;
+                            : GltfKeys.Mesh(node.Mesh, p);
+                        string? matKey = primitive.HasMaterial ? $"gltf/material/{primitive.Material}" : null;
                         if (matKey != null)
                         {
                             materialKeys.Add(matKey);
@@ -222,13 +206,13 @@ internal static class GltfPrefabEngine
                                 PassId: "ForwardPBR",
                                 ReceiveLighting: true,
                                 skinId,
-                                mesh.Primitives[p].Targets.Count));
+                                GltfRawModel.GetMorphTargetCount(primitive)));
 
                         actorList.Add(new GltfActorSnapshot
                         {
                             NodeId = childActorId,
                             ParentNodeId = nodeId,
-                            Name = $"{node.Name ?? "Node"}_Primitive_{p}",
+                            Name = $"{(node.Name.IsEmpty ? "Node" : nodeName)}_Primitive_{p}",
                             Components = childComps,
                         });
                         allNodeIds.Add(childActorId);
@@ -240,13 +224,13 @@ internal static class GltfPrefabEngine
             {
                 NodeId = nodeId,
                 ParentNodeId = parentId,
-                Name = node.Name ?? $"Node_{nodeIdx}",
+                Name = node.Name.IsEmpty ? $"Node_{nodeIdx}" : nodeName,
                 Components = compBuilder.ToImmutable(),
             });
 
-            for (int c = node.Children.Count - 1; c >= 0; c--)
+            for (int c = GltfRawModel.GetChildCount(node) - 1; c >= 0; c--)
             {
-                stack.Push((node.Children[c], nodeId));
+                stack.Push((model.GetChild(node, c), nodeId));
             }
         }
 

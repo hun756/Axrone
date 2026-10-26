@@ -1235,6 +1235,44 @@ public sealed class GltfImportTests
         track.Values.Length.Should().Be(12);
     }
 
+    [Fact]
+    public async Task Import_MorphTargetWithMultipleAttributes_ProducesBothDeltas()
+    {
+        byte[] bin = new byte[108];
+        const string json = """
+            {
+              "asset": {"version": "2.0"},
+              "scene": 0,
+              "scenes": [{"nodes": [0]}],
+              "nodes": [{"name": "N", "mesh": 0}],
+              "meshes": [{"primitives": [{
+                "attributes": {"POSITION": 0},
+                "targets": [{"POSITION": 1, "NORMAL": 2}]
+              }]}],
+              "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC3"}
+              ],
+              "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 72, "byteLength": 36}
+              ],
+              "buffers": [{"byteLength": 108}]
+            }
+            """;
+
+        byte[] glb = BuildGlb(System.Text.Encoding.UTF8.GetBytes(json), bin);
+        GltfImportResult result = await new GltfImporter(new GltfImporterOptions { Id = "morph.glb" })
+            .ImportAsync(glb);
+
+        var targets = result.Meshes[0].Definition.MorphTargets;
+        targets.Should().HaveCount(2);
+        targets.Select(static target => target.Semantic)
+            .Should().Equal(GltfMorphTargetSemantic.Position, GltfMorphTargetSemantic.Normal);
+    }
+
     private static byte[] BuildGlb(byte[] json, byte[] bin)
     {
         int jsonPad = (4 - (json.Length % 4)) % 4;

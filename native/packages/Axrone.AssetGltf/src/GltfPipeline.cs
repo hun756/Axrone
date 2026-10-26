@@ -130,27 +130,43 @@ public static class GltfPipelineExtensions
     };
 
     /// <summary>Splits the GLB container and parses the JSON schema.</summary>
-    public static GltfPipeline<StateSchemaParsed> ParseSchema(this GltfPipeline<StateUnparsed> pipeline)
+    public static GltfPipeline<StateSchemaParsed> ParseSchema(this GltfPipeline<StateUnparsed> pipeline) =>
+        pipeline.ParseSchema(GltfImportLimits.Default, default);
+
+    /// <summary>Parses the container and JSON schema with explicit limits and cancellation.</summary>
+    public static GltfPipeline<StateSchemaParsed> ParseSchema(
+        this GltfPipeline<StateUnparsed> pipeline,
+        GltfImportLimits limits,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
+        ArgumentNullException.ThrowIfNull(limits);
 
         GltfContainerData container = GltfContainer.Parse(pipeline.SourceBytes);
-        GltfRawModel rawModel = GltfJsonParser.Parse(container.JsonBytes.Span);
-
-        ReadOnlySpan<char> version = rawModel.Version.AsSpan();
-        if (version.Length < 3 || version[0] != '2' || version[1] != '.')
+        GltfRawModel rawModel = GltfJsonParser.Parse(container.JsonBytes.Span, limits, cancellationToken);
+        try
         {
-            ThrowHelper.ThrowSchema($"Unsupported glTF version '{rawModel.Version}'. Only glTF 2.x is supported.");
-        }
+            ReadOnlySpan<byte> version = rawModel.GetStringBytes(rawModel.Version);
+            if (version.Length < 3 || version[0] != (byte)'2' || version[1] != (byte)'.')
+            {
+                ThrowHelper.ThrowSchema(
+                    $"Unsupported glTF version '{rawModel.GetString(rawModel.Version)}'. Only glTF 2.x is supported.");
+            }
 
-        return new GltfPipeline<StateSchemaParsed>(
-            pipeline.SourceBytes,
-            container.Format,
-            container.JsonBytes,
-            container.BinChunk,
-            rawModel,
-            null,
-            pipeline.Diagnostics);
+            return new GltfPipeline<StateSchemaParsed>(
+                pipeline.SourceBytes,
+                container.Format,
+                container.JsonBytes,
+                container.BinChunk,
+                rawModel,
+                null,
+                pipeline.Diagnostics);
+        }
+        catch
+        {
+            rawModel.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Validates extensions and attaches the resource runtime.</summary>
@@ -161,23 +177,31 @@ public static class GltfPipelineExtensions
         ArgumentNullException.ThrowIfNull(pipeline);
 
         GltfRawModel rawModel = pipeline.RawModel!;
-        foreach (string req in rawModel.ExtensionsRequired)
+        try
         {
-            if (!SupportedExtensions.Contains(req))
+            foreach (string req in rawModel.ExtensionsRequired)
             {
-                ThrowHelper.ThrowSchema($"Required glTF extension '{req}' is unsupported by the runtime engine.");
+                if (!SupportedExtensions.Contains(req))
+                {
+                    ThrowHelper.ThrowSchema($"Required glTF extension '{req}' is unsupported by the runtime engine.");
+                }
+            }
+
+            foreach (string used in rawModel.ExtensionsUsed)
+            {
+                if (!SupportedExtensions.Contains(used))
+                {
+                    pipeline.Diagnostics.Add(new GltfDiagnostic(
+                        GltfDiagnosticLevel.Warning,
+                        "gltf.extension.unsupported",
+                        $"Optional extension '{used}' is unhandled and will be bypassed."));
+                }
             }
         }
-
-        foreach (string used in rawModel.ExtensionsUsed)
+        catch
         {
-            if (!SupportedExtensions.Contains(used))
-            {
-                pipeline.Diagnostics.Add(new GltfDiagnostic(
-                    GltfDiagnosticLevel.Warning,
-                    "gltf.extension.unsupported",
-                    $"Optional extension '{used}' is unhandled and will be bypassed."));
-            }
+            rawModel.Dispose();
+            throw;
         }
 
         var runtime = new GltfResourceRuntimeCache(pipeline.BinChunk, resolver);

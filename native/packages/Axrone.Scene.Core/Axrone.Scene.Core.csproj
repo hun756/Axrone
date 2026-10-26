@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Scene</RootNamespace>
+    <AssemblyName>Axrone.Scene.Core</AssemblyName>
+    <Description>Scene graph core for the Axrone engine: generational actors, two-tier components, hierarchy visitors, transform stores and lifecycle dispatch.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA2225: Operator overloads need named alternatives — nominal scene
+         identifiers expose their raw/value constructors alongside operators. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1034: Nested types — duck-typed ref struct enumerators are an
+         intentional zero-allocation hierarchy traversal design. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
+    <!-- CA1051: Visible instance fields — component payloads are explicit
+         cache-line layouts, not encapsulation boundaries. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1032: Standard exception ctors — scene errors carry stable codes
+         instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1028: Byte-backed enums — wire-sized component kinds and flags. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1815: Equals on transient structs — traversal results are consumed
+         by context switches, never compared. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA1040: Empty marker interfaces — ISceneDataComponent and
+         ISceneBehaviour split the two component tiers at compile time. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1000: Static members on generic types — descriptor and store
+         factories live on the closed generic that owns the type id. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1819: Properties returning arrays — serialization and diagnostics
+         expose defensive snapshots, never hot-path buffers. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
+    <!-- CA1711: SceneActorFlags is a bitmask; "Flags" is the domain term and
+         matches the engine-wide convention for actor state bits. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA1031: Behaviour attachment and teardown must catch any exception to
+         restore structural invariants; attachment rethrows after rollback. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Scene.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Hash/Axrone.Hash.csproj" />
+    <ProjectReference Include="../Axrone.Ecs/Axrone.Ecs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>
