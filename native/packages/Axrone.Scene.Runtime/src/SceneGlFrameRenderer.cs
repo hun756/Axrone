@@ -11,6 +11,8 @@ public sealed class SceneGlFrameRenderer : IDisposable
     private readonly SceneRuntime _runtime;
     private readonly SceneGlAssetCache _assets;
     private readonly SceneGlDrawExecutor _executor;
+    private readonly SceneGlSpriteBatchRenderer _spriteRenderer;
+    private readonly bool _hasSprites;
     private bool _disposed;
 
     /// <summary>Creates a GL frame renderer for a runtime and context.</summary>
@@ -23,6 +25,8 @@ public sealed class SceneGlFrameRenderer : IDisposable
         _runtime = runtime;
         _assets = new SceneGlAssetCache(context, runtime.Assets);
         _executor = new SceneGlDrawExecutor(context, _assets);
+        _spriteRenderer = new SceneGlSpriteBatchRenderer(context, _assets);
+        _hasSprites = runtime.World.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
     }
 
     /// <summary>GPU-side asset cache.</summary>
@@ -63,6 +67,21 @@ public sealed class SceneGlFrameRenderer : IDisposable
                 pass,
                 frame.FrameState,
                 elapsedSeconds);
+
+            if (_hasSprites)
+            {
+                int spriteCount = frame.CollectSprites(pass.Id);
+                if (spriteCount > 0)
+                {
+                    _ = _spriteRenderer.Render(
+                        _runtime.World,
+                        camera,
+                        frame.SpriteItems,
+                        pass,
+                        frame.FrameState);
+                }
+            }
+
             passCount++;
         }
 
@@ -77,6 +96,7 @@ public sealed class SceneGlFrameRenderer : IDisposable
             return;
         }
 
+        _spriteRenderer.Dispose();
         _assets.Dispose();
         _disposed = true;
     }
