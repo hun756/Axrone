@@ -306,6 +306,28 @@ public sealed class SceneGlAssetCache : IDisposable
     public bool TryGetSampler(SceneAssetId<SamplerAssetTag> id, [NotNullWhen(true)] out GLSampler? sampler) =>
         _samplers.TryGetValue(id, out sampler);
 
+    /// <summary>Sampler used when a texture or sprite declares none.</summary>
+    public GLSampler DefaultSampler => _defaultSampler;
+
+    /// <summary>
+    /// Resolves the sampler a texture should be sampled with, falling back to
+    /// the cache default when the texture has no override.
+    /// </summary>
+    public bool TryGetTextureSampler(
+        SceneAssetId<TextureAssetTag> id,
+        [NotNullWhen(true)] out GLSampler? sampler)
+    {
+        if (_textureSamplers.TryGetValue(id, out SceneAssetId<SamplerAssetTag>? samplerId) &&
+            samplerId is { } resolved &&
+            _samplers.TryGetValue(resolved, out sampler))
+        {
+            return true;
+        }
+
+        sampler = _defaultSampler;
+        return true;
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
