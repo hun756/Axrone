@@ -1,11 +1,8 @@
 namespace Axrone.Scene.Snapshot;
 
 /// <summary>Snapshot loading options.</summary>
-public sealed record SceneSnapshotLoadOptions
+public sealed record SceneSnapshotLoadOptions : ScenePrefabInstantiateOptions
 {
-    /// <summary>Optional prefix applied to every instantiated actor name.</summary>
-    public string? NamePrefix { get; init; }
-
     /// <summary>Whether existing actors and render passes are cleared first.</summary>
     public bool ClearExisting { get; init; } = true;
 }
@@ -23,12 +20,14 @@ public sealed class SceneSnapshotLoader
     private readonly SceneWorld _world;
     private readonly SceneAssetRegistry _assets;
     private readonly SceneCodecRegistry _codecs;
+    private readonly ScenePrefabResolver? _prefabResolver;
 
     /// <summary>Creates a loader bound to a world, asset catalog and codec catalog.</summary>
     public SceneSnapshotLoader(
         SceneWorld world,
         SceneAssetRegistry assets,
-        SceneCodecRegistry codecs)
+        SceneCodecRegistry codecs,
+        ScenePrefabResolver? prefabResolver = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(assets);
@@ -37,6 +36,7 @@ public sealed class SceneSnapshotLoader
         _world = world;
         _assets = assets;
         _codecs = codecs;
+        _prefabResolver = prefabResolver;
     }
 
     /// <summary>Loads a snapshot into the bound world.</summary>
@@ -102,7 +102,12 @@ public sealed class SceneSnapshotLoader
                 _world,
                 _codecs,
                 snapshot.Prefab,
-                new ScenePrefabInstantiateOptions { NamePrefix = options.NamePrefix });
+                new ScenePrefabInstantiateOptions
+                {
+                    NamePrefix = options.NamePrefix,
+                    Resolver = options.Resolver ?? _prefabResolver,
+                    LiveOverrides = options.LiveOverrides
+                });
         }
         catch (SceneSnapshotException)
         {

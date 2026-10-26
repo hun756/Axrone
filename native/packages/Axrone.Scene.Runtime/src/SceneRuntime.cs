@@ -39,7 +39,7 @@ public sealed class SceneRuntime : IDisposable
 
         Prefabs = new ScenePrefabRegistry();
         PrefabResolver = new ScenePrefabResolver(Prefabs);
-        Snapshots = new SceneSnapshotLoader(World, Assets, Codecs);
+        Snapshots = new SceneSnapshotLoader(World, Assets, Codecs, PrefabResolver);
         Profiler = new SceneRuntimeProfiler(options.Profiler);
 
         Frame = new SceneFramePipeline(
@@ -117,12 +117,19 @@ public sealed class SceneRuntime : IDisposable
         return PrefabResolver.Resolve(prefabId, liveOverrides).Definition;
     }
 
-    /// <summary>Instantiates a prefab into the world.</summary>
+    /// <summary>Instantiates a prefab into the world, resolving composition first.</summary>
     public ScenePrefabInstantiationResult Instantiate(
         ScenePrefabDefinition prefab,
         ScenePrefabInstantiateOptions? options = null)
     {
         ThrowIfDisposed();
+
+        options ??= new ScenePrefabInstantiateOptions();
+        if (options.Resolver is null)
+        {
+            options = options with { Resolver = PrefabResolver };
+        }
+
         return ScenePrefabInstantiator.Instantiate(World, Codecs, prefab, options);
     }
 
