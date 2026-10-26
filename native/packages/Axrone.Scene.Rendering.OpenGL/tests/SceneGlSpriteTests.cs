@@ -1,5 +1,6 @@
 namespace Axrone.Scene.Rendering.OpenGL.Tests;
 
+using System.Runtime.InteropServices;
 using Axrone.Numeric;
 using Axrone.Render.OpenGL.Context;
 using Axrone.Render.OpenGL.Mock;
@@ -45,6 +46,13 @@ public sealed class SceneGlSpriteTests
         frameState.DrawCalls.Should().Be(2);
         frameState.TrianglesSubmitted.Should().Be(6);
         api.CallLog.Should().Contain(call => call.StartsWith("DrawElements", StringComparison.Ordinal));
+
+        // The final batch restarts its vertex base, so its uploaded indices must
+        // reference vertices 0..3 of that batch, not the global sprite slot.
+        byte[] indexStorage = api.BufferStorage.Values
+            .First(storage => storage.Length == sizeof(uint) * 6);
+        MemoryMarshal.Cast<byte, uint>(indexStorage.AsSpan()).ToArray()
+            .Should().Equal(0u, 1u, 2u, 0u, 2u, 3u);
     }
 
     [Fact]
