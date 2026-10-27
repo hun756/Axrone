@@ -77,7 +77,6 @@ public abstract class SceneBehaviour : ISceneBehaviour
     private bool _enabled = true;
     private bool _activeInHierarchy = true;
     private int _priority;
-
     /// <summary>Owning behaviour-table slot; <c>-1</c> while detached.</summary>
     internal int SlotIndex = -1;
 
@@ -101,6 +100,9 @@ public abstract class SceneBehaviour : ISceneBehaviour
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _actor.IsValid;
     }
+
+    /// <summary>Owning world, or <see langword="null"/> while detached.</summary>
+    public SceneWorld? World { get; private set; }
 
     /// <summary>Whether the behaviour has been destroyed.</summary>
     public bool IsDestroyed
@@ -177,7 +179,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     }
 
     /// <summary>Attaches the instance to an actor and records its dispatch priority.</summary>
-    internal void Attach(in SceneActor actor, int priority)
+    internal void Attach(in SceneActor actor, int priority, SceneWorld world)
     {
         if (_actor.IsValid)
         {
@@ -195,6 +197,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
 
         _actor = actor;
         _priority = priority;
+        World = world;
         _state = SceneBehaviourState.Detached;
     }
 
@@ -203,6 +206,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     {
         _actor = SceneActor.Null;
         _priority = 0;
+        World = null;
         SlotIndex = -1;
     }
 

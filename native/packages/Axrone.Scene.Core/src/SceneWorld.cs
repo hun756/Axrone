@@ -782,6 +782,8 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         _behaviours.SetActiveInHierarchy(in actor, active);
     }
 
+    SceneWorld ISceneBehaviourHost.World => this;
+
     void ISceneBehaviourHost.ReportBehaviourFault(SceneBehaviour behaviour, Exception exception)
     {
         SceneActor actor = behaviour.Actor;

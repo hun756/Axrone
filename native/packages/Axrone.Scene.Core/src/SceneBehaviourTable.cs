@@ -3,6 +3,9 @@ namespace Axrone.Scene;
 /// <summary>Host services the behaviour table needs from the owning world.</summary>
 internal interface ISceneBehaviourHost
 {
+    /// <summary>Owning world, exposed to behaviours for sibling component access.</summary>
+    SceneWorld World { get; }
+
     bool IsStarted { get; }
 
     bool IsActiveInHierarchy(SceneActor actor);
@@ -425,7 +428,7 @@ internal sealed class SceneBehaviourTable
 
         try
         {
-            behaviour.Attach(actor, descriptor.Priority);
+            behaviour.Attach(actor, descriptor.Priority, _host.World);
             behaviour.SlotIndex = slot;
         }
         catch (Exception)

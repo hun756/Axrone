@@ -95,4 +95,19 @@ public sealed class SceneBehaviourActiveTests
         world.Update(0.016f);
         behaviour.Updates.Should().Be(1);
     }
+
+    [Fact]
+    public void Behaviour_ExposesOwningWorldUntilDestroyed()
+    {
+        using SceneWorld world = SceneWorldFixture.Create3DWorld(out _);
+        SceneActor actor = world.CreateActor("Actor");
+        CounterBehaviour behaviour = world.AddBehaviour<CounterBehaviour>(actor);
+
+        behaviour.World.Should().BeSameAs(world);
+
+        world.DestroyActor(actor);
+
+        behaviour.World.Should().BeNull();
+        behaviour.IsAttached.Should().BeFalse();
+    }
 }
