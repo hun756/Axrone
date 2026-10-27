@@ -1,5 +1,16 @@
 namespace Axrone.Terrain;
 
+/// <summary>Normalized RGBA splat weights sampled from a weight buffer.</summary>
+/// <param name="R">Layer 0 weight in <c>[0, 1]</c>.</param>
+/// <param name="G">Layer 1 weight in <c>[0, 1]</c>.</param>
+/// <param name="B">Layer 2 weight in <c>[0, 1]</c>.</param>
+/// <param name="A">Layer 3 weight in <c>[0, 1]</c>.</param>
+public readonly record struct SplatWeights(float R, float G, float B, float A)
+{
+    /// <summary>Gets the sum of all channel weights.</summary>
+    public float Sum => R + G + B + A;
+}
+
 /// <summary>
 /// Per-texel splat blending shared by the texture-space painter and the chunk engine.
 /// Channel weights always sum to <see cref="WeightTotal"/>, so repeated stamps stay

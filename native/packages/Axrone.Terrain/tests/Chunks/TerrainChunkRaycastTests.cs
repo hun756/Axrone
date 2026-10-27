@@ -1,10 +1,9 @@
 using Axrone.Geometry;
 using Axrone.Numeric;
-using Axrone.Terrain.Chunks;
 using FluentAssertions;
 using Xunit;
 
-namespace Axrone.Terrain.Chunks.Tests;
+namespace Axrone.Terrain.Tests;
 
 public sealed class TerrainChunkRaycastTests
 {

@@ -6,4 +6,3 @@ global using Axrone.Geometry;
 global using Axrone.Memory;
 global using Axrone.Numeric;
 global using Axrone.Random;
-global using Axrone.Terrain;

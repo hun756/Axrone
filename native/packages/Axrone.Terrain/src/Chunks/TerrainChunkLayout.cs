@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>Lifecycle state stored in a chunk header.</summary>
 public enum TerrainChunkState

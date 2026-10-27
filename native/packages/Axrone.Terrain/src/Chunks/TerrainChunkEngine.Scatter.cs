@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>
 /// Deterministic foliage scatter. Candidate draws are fixed per candidate (position,

@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>Snapshot of one committed chunk's header.</summary>
 /// <param name="Coord">Chunk coordinate.</param>

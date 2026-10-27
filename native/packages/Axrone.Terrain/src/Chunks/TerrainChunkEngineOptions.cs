@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>Configuration for <see cref="TerrainChunkEngine"/>.</summary>
 public sealed class TerrainChunkEngineOptions

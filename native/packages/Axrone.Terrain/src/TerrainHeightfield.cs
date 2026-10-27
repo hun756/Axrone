@@ -1,11 +1,10 @@
 namespace Axrone.Terrain;
 
 /// <summary>
-/// Plain heightfield collider source matching the terrain mesh layout. Heights
-/// stay normalized while <see cref="ScaleY"/> carries the world height and
+/// Plain heightfield collider source matching the terrain mesh layout. Heights stay
+/// normalized while <see cref="ScaleY"/> carries the world height and
 /// <see cref="ScaleX"/>/<see cref="ScaleZ"/> describe the world-space cell size,
-/// mirroring the physics heightfield local-vertex convention (origin-centered
-/// grid).
+/// mirroring the physics heightfield local-vertex convention (origin-centered grid).
 /// </summary>
 public sealed class TerrainHeightfieldSource
 {
@@ -50,40 +49,4 @@ public sealed class TerrainHeightfieldSource
 
     /// <summary>Gets the world-space cell size along Z.</summary>
     public float ScaleZ { get; }
-}
-
-/// <summary>Creates physics-ready heightfield collider sources from a heightmap.</summary>
-public static class TerrainHeightfield
-{
-    /// <summary>Creates a heightfield source matching the terrain mesh layout.</summary>
-    /// <param name="heightmap">Heightmap whose resolution matches the descriptor.</param>
-    /// <param name="descriptor">Terrain footprint and resolution.</param>
-    /// <returns>A heightfield source owning a copy of the heights.</returns>
-    /// <exception cref="TerrainException">
-    /// The descriptor is invalid, or the heightmap resolution differs from it.
-    /// </exception>
-    public static TerrainHeightfieldSource Create(
-        TerrainHeightmap heightmap,
-        in TerrainDescriptor descriptor)
-    {
-        ArgumentNullException.ThrowIfNull(heightmap);
-        descriptor.Validate();
-
-        if (heightmap.Resolution != descriptor.Resolution)
-        {
-            throw new TerrainException(
-                FormattableString.Invariant(
-                    $"Heightmap resolution {heightmap.Resolution} does not match descriptor resolution {descriptor.Resolution}."),
-                TerrainErrorCode.HeightmapSizeMismatch);
-        }
-
-        int resolution = descriptor.Resolution;
-        return new TerrainHeightfieldSource(
-            heightmap.ToArray(),
-            resolution,
-            resolution,
-            descriptor.Width / (resolution - 1),
-            descriptor.MaxHeight,
-            descriptor.Length / (resolution - 1));
-    }
 }

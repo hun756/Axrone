@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>Mesh extraction from committed chunks.</summary>
 public sealed partial class TerrainChunkEngine

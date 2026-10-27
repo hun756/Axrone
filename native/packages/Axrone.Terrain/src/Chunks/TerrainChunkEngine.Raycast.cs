@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>A surface hit inside a committed chunk.</summary>
 /// <param name="Coord">Chunk coordinate.</param>

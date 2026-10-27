@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>
 /// Integer address of a terrain chunk on the infinite XZ grid. Chunks tile the plane, so

@@ -6,12 +6,6 @@ namespace Axrone.Terrain.Tests;
 
 public sealed class TerrainFoliageTests
 {
-    private static TerrainDescriptor CreateDescriptor(
-        float width = 64f,
-        float length = 64f,
-        float maxHeight = 20f,
-        int resolution = 33) => new(width, length, maxHeight, resolution);
-
     private static TerrainFoliageLayer CreateLayer(
         string id = "foliage_1",
         float density = 0.5f,
@@ -28,13 +22,6 @@ public sealed class TerrainFoliageTests
             AlignToNormal = false,
             MaxSlopeDeg = maxSlopeDeg,
         };
-
-    private static byte[] PaintEverywhere()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-        Array.Fill(density, (byte)255);
-        return density;
-    }
 
     [Fact]
     public void Layers_AcceptValidSet()
@@ -83,119 +70,29 @@ public sealed class TerrainFoliageTests
     }
 
     [Fact]
-    public void DensityBuffer_StartsEmpty()
+    public void DensityCodec_RoundTripsBuffers()
     {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-
-        density.Should().HaveCount(64 * 64);
-        density.Should().OnlyContain(value => value == 0);
-    }
-
-    [Fact]
-    public void DensityBuffer_RejectsInvalidResolution()
-    {
-        FluentActions.Invoking(() => TerrainFoliageDensity.CreateBuffer(100))
-            .Should().Throw<TerrainException>()
-            .Which.Code.Should().Be(TerrainErrorCode.InvalidResolution);
-    }
-
-    [Fact]
-    public void DensityStamp_RaisesOnlyInsideRadius()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-        var brush = new TerrainBrushOptions { Radius = 10f, Strength = 1f };
-
-        bool changed = TerrainFoliageDensity.ApplyStamp(density, 64, CreateDescriptor(), brush, 0f, 0f);
-
-        changed.Should().BeTrue();
-        TerrainFoliageDensity.Sample(density, 64, 0.5f, 0.5f).Should().BeGreaterThan(0f);
-        TerrainFoliageDensity.Sample(density, 64, 0f, 0f).Should().Be(0f);
-    }
-
-    [Fact]
-    public void DensityStamp_EraseRemovesPaintedDensity()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-        var brush = new TerrainBrushOptions { Radius = 12f, Strength = 1f };
-        TerrainDescriptor descriptor = CreateDescriptor();
-
-        for (var stamp = 0; stamp < 12; stamp++)
-        {
-            TerrainFoliageDensity.ApplyStamp(density, 64, descriptor, brush, 0f, 0f);
-        }
-
-        TerrainFoliageDensity.Sample(density, 64, 0.5f, 0.5f).Should().BeGreaterThan(0.8f);
-
-        for (var stamp = 0; stamp < 24; stamp++)
-        {
-            TerrainFoliageDensity.ApplyStamp(density, 64, descriptor, brush, 0f, 0f, erase: true);
-        }
-
-        TerrainFoliageDensity.Sample(density, 64, 0.5f, 0.5f).Should().Be(0f);
-    }
-
-    [Fact]
-    public void DensityStamp_RejectsMismatchedBuffer()
-    {
-        var density = new byte[16];
-
-        density.Invoking(buffer => TerrainFoliageDensity.ApplyStamp(
-                buffer,
-                64,
-                CreateDescriptor(),
-                new TerrainBrushOptions(),
-                0f,
-                0f))
-            .Should().Throw<TerrainException>()
-            .Which.Code.Should().Be(TerrainErrorCode.SplatSizeMismatch);
-    }
-
-    [Fact]
-    public void DensitySample_ReturnsExactCornerValues()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
+        const int resolution = 64;
+        var density = new byte[resolution * resolution];
         density[0] = 128;
-        density[63] = 255;
+        density[resolution - 1] = 255;
 
-        TerrainFoliageDensity.Sample(density, 64, 0f, 0f).Should().BeApproximately(128f / 255f, 0.01f);
-        TerrainFoliageDensity.Sample(density, 64, 1f, 0f).Should().BeApproximately(1f, 0.01f);
-    }
-
-    [Fact]
-    public void DensitySample_ClampsOutsideUnitRange()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-        density[0] = 200;
-
-        float inside = TerrainFoliageDensity.Sample(density, 64, 0f, 0f);
-        float outside = TerrainFoliageDensity.Sample(density, 64, -0.5f, -0.5f);
-
-        outside.Should().BeApproximately(inside, 1e-5f);
-    }
-
-    [Fact]
-    public void DensityCodec_RoundTripsPaintedBuffers()
-    {
-        byte[] density = TerrainFoliageDensity.CreateBuffer(64);
-        var brush = new TerrainBrushOptions { Radius = 16f, Strength = 1f };
-        TerrainFoliageDensity.ApplyStamp(density, 64, CreateDescriptor(), brush, 4f, -6f);
-
-        string payload = TerrainFoliageDensity.Encode(density);
-        TerrainFoliageDensity.IsPayload(payload).Should().BeTrue();
-        TerrainFoliageDensity.Decode(payload, 64).Should().Equal(density);
+        string payload = TerrainFoliageDensityCodec.Encode(density);
+        TerrainFoliageDensityCodec.IsPayload(payload).Should().BeTrue();
+        TerrainFoliageDensityCodec.Decode(payload, resolution).Should().Equal(density);
     }
 
     [Fact]
     public void DensityCodec_RejectsForeignPayloadsAndWrongResolution()
     {
-        TerrainFoliageDensity.IsPayload("atsp1:AAAA").Should().BeFalse();
+        TerrainFoliageDensityCodec.IsPayload("atsp1:AAAA").Should().BeFalse();
 
         "nope"
-            .Invoking(value => TerrainFoliageDensity.Decode(value, 64))
+            .Invoking(value => TerrainFoliageDensityCodec.Decode(value, 64))
             .Should().Throw<TerrainException>();
 
-        string payload = TerrainFoliageDensity.Encode(TerrainFoliageDensity.CreateBuffer(64));
-        payload.Invoking(value => TerrainFoliageDensity.Decode(value, 128))
+        string payload = TerrainFoliageDensityCodec.Encode(new byte[64 * 64]);
+        payload.Invoking(value => TerrainFoliageDensityCodec.Decode(value, 128))
             .Should().Throw<TerrainException>()
             .Which.Code.Should().Be(TerrainErrorCode.SplatSizeMismatch);
     }
@@ -203,162 +100,8 @@ public sealed class TerrainFoliageTests
     [Fact]
     public void DensityCodec_IsPayloadRejectsNonPayloads()
     {
-        TerrainFoliageDensity.IsPayload(null).Should().BeFalse();
-        TerrainFoliageDensity.IsPayload(string.Empty).Should().BeFalse();
-    }
-
-    [Fact]
-    public void Scatter_IsDeterministicForIdenticalInputs()
-    {
-        TerrainHeightmap heightmap = TerrainHeightmap.CreateFlat(33, 0.25f);
-        TerrainDescriptor descriptor = CreateDescriptor();
-        byte[] density = PaintEverywhere();
-        TerrainFoliageLayer layer = CreateLayer();
-
-        TerrainFoliageInstance[] first =
-            TerrainFoliageScatter.Scatter(heightmap, descriptor, density, 64, layer, 1337);
-        TerrainFoliageInstance[] second =
-            TerrainFoliageScatter.Scatter(heightmap, descriptor, density, 64, layer, 1337);
-        TerrainFoliageInstance[] reseeded =
-            TerrainFoliageScatter.Scatter(heightmap, descriptor, density, 64, layer, 7331);
-
-        first.Should().NotBeEmpty();
-        second.Should().Equal(first);
-        reseeded.Should().NotEqual(first);
-    }
-
-    [Fact]
-    public void Scatter_ScalesInstanceCountWithPaintedDensity()
-    {
-        TerrainHeightmap heightmap = TerrainHeightmap.CreateFlat(33, 0.25f);
-        TerrainDescriptor descriptor = CreateDescriptor();
-        TerrainFoliageLayer layer = CreateLayer(density: 1f);
-
-        byte[] half = PaintEverywhere();
-        Array.Fill(half, (byte)128);
-
-        TerrainFoliageInstance[] empty = TerrainFoliageScatter.Scatter(
-            heightmap,
-            descriptor,
-            TerrainFoliageDensity.CreateBuffer(64),
-            64,
-            layer,
-            42);
-        TerrainFoliageInstance[] sparse = TerrainFoliageScatter.Scatter(heightmap, descriptor, half, 64, layer, 42);
-        TerrainFoliageInstance[] dense = TerrainFoliageScatter.Scatter(
-            heightmap,
-            descriptor,
-            PaintEverywhere(),
-            64,
-            layer,
-            42);
-
-        empty.Should().BeEmpty();
-        sparse.Should().NotBeEmpty();
-        dense.Length.Should().BeGreaterThan((int)(sparse.Length * 1.5));
-        dense.Length.Should().BeLessThanOrEqualTo(TerrainLimits.MaxFoliageInstances);
-    }
-
-    [Fact]
-    public void Scatter_RespectsMaxSlopeFilter()
-    {
-        const int resolution = 33;
-        var heights = new float[resolution * resolution];
-        for (var z = 0; z < resolution; z++)
-        {
-            for (var x = 0; x < resolution; x++)
-            {
-                heights[(z * resolution) + x] = x / (float)(resolution - 1);
-            }
-        }
-
-        TerrainHeightmap ramp = TerrainHeightmap.FromRawHeights(resolution, heights);
-        TerrainDescriptor descriptor = CreateDescriptor();
-        byte[] density = PaintEverywhere();
-
-        TerrainFoliageInstance[] permissive = TerrainFoliageScatter.Scatter(
-            ramp,
-            descriptor,
-            density,
-            64,
-            CreateLayer(maxSlopeDeg: 90f),
-            42);
-        TerrainFoliageInstance[] blocked = TerrainFoliageScatter.Scatter(
-            ramp,
-            descriptor,
-            density,
-            64,
-            CreateLayer(maxSlopeDeg: 5f),
-            42);
-
-        permissive.Should().NotBeEmpty();
-        blocked.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Scatter_PlacesInstancesOnSurfaceWithinBounds()
-    {
-        TerrainDescriptor descriptor = CreateDescriptor();
-        TerrainFoliageInstance[] instances = TerrainFoliageScatter.Scatter(
-            TerrainHeightmap.CreateFlat(33, 0.5f),
-            descriptor,
-            PaintEverywhere(),
-            64,
-            CreateLayer(),
-            7);
-
-        foreach (TerrainFoliageInstance instance in instances)
-        {
-            MathF.Abs(instance.X).Should().BeLessThanOrEqualTo(descriptor.Width / 2f);
-            MathF.Abs(instance.Z).Should().BeLessThanOrEqualTo(descriptor.Length / 2f);
-            instance.Y.Should().BeApproximately(descriptor.MaxHeight * 0.5f, 1e-4f);
-            instance.Scale.Should().BeGreaterThanOrEqualTo(0.8f).And.BeLessThanOrEqualTo(1.4f);
-        }
-    }
-
-    [Fact]
-    public void Scatter_ReturnsEmptyForZeroLayerDensity()
-    {
-        TerrainFoliageInstance[] instances = TerrainFoliageScatter.Scatter(
-            TerrainHeightmap.CreateFlat(33),
-            CreateDescriptor(),
-            PaintEverywhere(),
-            64,
-            CreateLayer(density: 0f),
-            1);
-
-        instances.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Scatter_KeepsScaleWithinConfiguredRange()
-    {
-        TerrainFoliageInstance[] instances = TerrainFoliageScatter.Scatter(
-            TerrainHeightmap.CreateFlat(33, 0.5f),
-            CreateDescriptor(),
-            PaintEverywhere(),
-            64,
-            CreateLayer(minScale: 0.5f, maxScale: 2f),
-            99);
-
-        foreach (TerrainFoliageInstance instance in instances)
-        {
-            instance.Scale.Should().BeGreaterThanOrEqualTo(0.5f).And.BeLessThanOrEqualTo(2f);
-        }
-    }
-
-    [Fact]
-    public void Scatter_RespectsInstanceCap()
-    {
-        TerrainFoliageInstance[] instances = TerrainFoliageScatter.Scatter(
-            TerrainHeightmap.CreateFlat(33, 0.5f),
-            CreateDescriptor(width: 512f, length: 512f),
-            PaintEverywhere(),
-            64,
-            CreateLayer(density: 1f),
-            42);
-
-        instances.Length.Should().BeLessThanOrEqualTo(TerrainLimits.MaxFoliageInstances);
+        TerrainFoliageDensityCodec.IsPayload(null).Should().BeFalse();
+        TerrainFoliageDensityCodec.IsPayload(string.Empty).Should().BeFalse();
     }
 
     [Fact]

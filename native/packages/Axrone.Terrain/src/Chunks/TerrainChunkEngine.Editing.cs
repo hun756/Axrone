@@ -1,4 +1,4 @@
-namespace Axrone.Terrain.Chunks;
+namespace Axrone.Terrain;
 
 /// <summary>
 /// Sculpt, splat and foliage-density painting. Every stamp takes the engine write lock, so

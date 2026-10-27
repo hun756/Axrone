@@ -1,7 +1,6 @@
 using Axrone.Terrain;
-using Axrone.Terrain.Chunks;
 
-namespace Axrone.Terrain.Chunks.Tests;
+namespace Axrone.Terrain.Tests;
 
 internal sealed class FlatSurface : ITerrainSurface
 {

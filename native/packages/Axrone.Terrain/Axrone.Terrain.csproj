@@ -3,7 +3,7 @@
   <PropertyGroup>
     <RootNamespace>Axrone.Terrain</RootNamespace>
     <AssemblyName>Axrone.Terrain</AssemblyName>
-    <Description>Terrain heightmaps, deterministic noise, mesh building, sculpt/splat/foliage painting and heightfield collider sources for the Axrone engine.</Description>
+    <Description>Terrain data, deterministic noise, the chunked runtime, sculpt/splat/foliage painting, mesh building and grid raycasting for the Axrone engine.</Description>
   </PropertyGroup>
 
   <PropertyGroup Label="AotCompatibility">
@@ -49,6 +49,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+    <ProjectReference Include="../Axrone.Memory/Axrone.Memory.csproj" />
     <ProjectReference Include="../Axrone.Random/Axrone.Random.csproj" />
     <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
   </ItemGroup>
