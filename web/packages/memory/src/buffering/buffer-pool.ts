@@ -9,16 +9,16 @@ import { ByteChunk, ByteChunkPool } from './byte-chunk';
 export interface BufferPoolOptions {
     readonly initialCapacityPerBucket?: number;
     readonly maxCapacityPerBucket?: number;
-    readonly minFreePerBucket?: number;
     readonly preallocate?: boolean;
+    /**
+     * When true, buckets may grow past maxCapacityPerBucket; when false,
+     * allocation falls back to a direct (unpooled) ArrayBuffer at the limit.
+     */
     readonly autoExpand?: boolean;
-    readonly evictionPolicy?: 'none' | 'lru' | 'ttl' | 'fifo';
+    /** Idle eviction age in milliseconds. 0 disables TTL eviction. */
     readonly ttl?: number;
-    readonly enableMetrics?: boolean;
     readonly enableInstrumentation?: boolean;
     readonly name?: string;
-    readonly highWatermarkRatio?: number;
-    readonly lowWatermarkRatio?: number;
     /**
      * When true (default), buffers are zero-filled on release.
      * @default true
@@ -48,16 +48,11 @@ export class BufferPool {
         this.options = {
             initialCapacityPerBucket: options.initialCapacityPerBucket ?? 32,
             maxCapacityPerBucket: options.maxCapacityPerBucket ?? 512,
-            minFreePerBucket: options.minFreePerBucket ?? 4,
             preallocate: options.preallocate ?? false,
             autoExpand: options.autoExpand ?? true,
-            evictionPolicy: options.evictionPolicy ?? 'lru',
             ttl: options.ttl ?? 0,
-            enableMetrics: options.enableMetrics ?? false,
             enableInstrumentation: options.enableInstrumentation ?? false,
             name: options.name ?? 'BufferPool',
-            highWatermarkRatio: options.highWatermarkRatio ?? 0.85,
-            lowWatermarkRatio: options.lowWatermarkRatio ?? 0.25,
             zeroOnRelease: options.zeroOnRelease ?? true,
             validator: options.validator ?? (() => true),
             onAcquire: options.onAcquire ?? (() => {}),
