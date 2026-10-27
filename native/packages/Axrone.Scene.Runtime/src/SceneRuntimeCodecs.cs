@@ -37,6 +37,60 @@ public static class SceneRuntimeCodecs
         {
             codecs.Register(new SceneParticleSystemCodec());
         }
+
+        if (components.TryGetDataByType(typeof(SceneTerrainChunk3D), out _))
+        {
+            codecs.Register(new SceneTerrainChunk3DCodec());
+        }
+    }
+}
+
+/// <summary>JSON codec for <see cref="SceneTerrainChunk3D"/>.</summary>
+public sealed class SceneTerrainChunk3DCodec : SceneDataCodec<SceneTerrainChunk3D>
+{
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, in SceneTerrainChunk3D value)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("terrainId", value.TerrainId);
+        writer.WriteNumber("chunkX", value.ChunkX);
+        writer.WriteNumber("chunkZ", value.ChunkZ);
+        writer.WriteNumber("lodLevel", value.LodLevel);
+        writer.WriteBoolean("enabled", value.Enabled);
+    }
+
+    /// <inheritdoc/>
+    public override SceneTerrainChunk3D Read(JsonElement data)
+    {
+        SceneTerrainChunk3D value = SceneTerrainChunk3D.Default;
+
+        if (data.TryGetProperty("terrainId", out JsonElement terrainId))
+        {
+            value.TerrainId = terrainId.GetUInt32();
+        }
+
+        if (data.TryGetProperty("chunkX", out JsonElement chunkX))
+        {
+            value.ChunkX = chunkX.GetInt32();
+        }
+
+        if (data.TryGetProperty("chunkZ", out JsonElement chunkZ))
+        {
+            value.ChunkZ = chunkZ.GetInt32();
+        }
+
+        if (data.TryGetProperty("lodLevel", out JsonElement lodLevel))
+        {
+            value.LodLevel = lodLevel.GetInt32();
+        }
+
+        if (data.TryGetProperty("enabled", out JsonElement enabled))
+        {
+            value.Enabled = enabled.GetBoolean();
+        }
+
+        return value;
     }
 }
 

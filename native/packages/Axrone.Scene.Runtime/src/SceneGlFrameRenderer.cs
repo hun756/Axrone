@@ -39,6 +39,14 @@ public sealed class SceneGlFrameRenderer : IDisposable
         return _assets.UploadAll();
     }
 
+    /// <summary>Synchronizes streamed or chunked meshes without re-uploading unchanged geometry.</summary>
+    /// <returns>Upload counters for the incremental mesh pass.</returns>
+    public SceneGlUploadStats SyncAssets()
+    {
+        ThrowIfDisposed();
+        return _assets.SyncMeshes();
+    }
+
     /// <summary>Plans and renders one frame.</summary>
     public SceneRenderStats Render(int frameIndex, float elapsedSeconds = 0.0f)
     {

@@ -16,3 +16,4 @@ global using Axrone.Scene.Prefab;
 global using Axrone.Scene.Rendering;
 global using Axrone.Scene.Rendering.OpenGL;
 global using Axrone.Scene.Snapshot;
+global using Axrone.Terrain;

@@ -55,6 +55,45 @@ public class Aabb3DQueryTests
     }
 
     [Fact]
+    public void Ray_ReportsFullSlabInterval()
+    {
+        Aabb3D box = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Ray3D ray = new(new Vec3(-1.0F, 1.0F, 1.0F), new Vec3(1.0F, 0.0F, 0.0F));
+
+        bool hit = box.Intersects(in ray, out float tMin, out float tMax);
+
+        hit.Should().BeTrue();
+        tMin.Should().BeApproximately(1.0F, 1e-5F);
+        tMax.Should().BeApproximately(3.0F, 1e-5F);
+    }
+
+    [Fact]
+    public void Ray_InsideBox_ClampsEntryToZero()
+    {
+        Aabb3D box = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Ray3D ray = new(new Vec3(1.0F, 1.0F, 1.0F), new Vec3(1.0F, 0.0F, 0.0F));
+
+        bool hit = box.Intersects(in ray, out float tMin, out float tMax);
+
+        hit.Should().BeTrue();
+        tMin.Should().Be(0.0F);
+        tMax.Should().BeApproximately(1.0F, 1e-5F);
+    }
+
+    [Fact]
+    public void Ray_IntervalMiss_ReturnsFalse()
+    {
+        Aabb3D box = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);
+        Ray3D ray = new(new Vec3(-1.0F, 5.0F, 1.0F), new Vec3(1.0F, 0.0F, 0.0F));
+
+        bool hit = box.Intersects(in ray, out float tMin, out float tMax);
+
+        hit.Should().BeFalse();
+        tMin.Should().Be(0.0F);
+        tMax.Should().Be(0.0F);
+    }
+
+    [Fact]
     public void Sphere_Intersects_TrueAndFalse()
     {
         Aabb3D box = new(0.0F, 0.0F, 0.0F, 2.0F, 2.0F, 2.0F);

@@ -151,6 +151,7 @@ public static class SceneRuntimeProfiles
                 .AddRendering3D()
                 .AddLighting3D()
                 .AddPhysics3D()
+                .AddTerrain3D()
                 .AddParticles3D()
                 .AddCameraControllers());
 
@@ -163,6 +164,7 @@ public static class SceneRuntimeProfiles
                 .AddRendering3D()
                 .AddLighting3D()
                 .AddPhysics3D()
+                .AddTerrain3D()
                 .AddParticles3D()
                 .AddTransform2D()
                 .AddRendering2D(includeCamera: false)
@@ -178,6 +180,7 @@ public static class SceneRuntimeProfiles
                 .AddRendering3D()
                 .AddLighting3D()
                 .AddPhysics3D()
+                .AddTerrain3D()
                 .AddParticles3D()
                 .AddCameraControllers());
 

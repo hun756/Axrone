@@ -18,6 +18,7 @@ public sealed class SceneGlAssetCache : IDisposable
     private readonly SceneAssetRegistry _assets;
     private readonly Dictionary<SceneAssetId<ShaderAssetTag>, SceneGlShader> _shaders = new();
     private readonly Dictionary<SceneAssetId<MeshAssetTag>, GLMesh> _meshes = new();
+    private readonly Dictionary<SceneAssetId<MeshAssetTag>, SceneMeshDefinition> _meshSources = new();
     private readonly Dictionary<SceneAssetId<MaterialAssetTag>, SceneGlMaterial> _materials = new();
     private readonly Dictionary<SceneAssetId<TextureAssetTag>, GLTexture> _textures = new();
     private readonly Dictionary<SceneAssetId<SamplerAssetTag>, GLSampler> _samplers = new();
@@ -167,6 +168,7 @@ public sealed class SceneGlAssetCache : IDisposable
         }
 
         _meshes[definition.Id] = mesh;
+        _meshSources[definition.Id] = definition;
         return mesh;
     }
 
@@ -289,6 +291,71 @@ public sealed class SceneGlAssetCache : IDisposable
     /// <summary>Resolves an uploaded shader.</summary>
     public bool TryGetShader(SceneAssetId<ShaderAssetTag> id, [NotNullWhen(true)] out SceneGlShader? shader) =>
         _shaders.TryGetValue(id, out shader);
+
+    /// <summary>
+    /// Synchronizes uploaded meshes with the asset catalog without re-uploading unchanged
+    /// geometry. New or replaced definitions are uploaded, and definitions removed from the
+    /// catalog release their GPU mesh. Intended for chunked or streamed content.
+    /// </summary>
+    /// <returns>Upload counters; only <see cref="SceneGlUploadStats.Meshes"/> is populated.</returns>
+    public SceneGlUploadStats SyncMeshes()
+    {
+        ThrowIfDisposed();
+        _context.AssertRenderThread();
+
+        SceneMeshDefinition[] definitions = _assets.Meshes.Definitions();
+        var live = new HashSet<SceneAssetId<MeshAssetTag>>(definitions.Length);
+        var uploaded = 0;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            SceneMeshDefinition definition = definitions[i];
+            live.Add(definition.Id);
+            if (!_meshSources.TryGetValue(definition.Id, out SceneMeshDefinition? previous) ||
+                !ReferenceEquals(previous, definition))
+            {
+                RegisterMesh(definition);
+                uploaded++;
+            }
+        }
+
+        List<SceneAssetId<MeshAssetTag>>? stale = null;
+        foreach (SceneAssetId<MeshAssetTag> id in _meshSources.Keys)
+        {
+            if (!live.Contains(id))
+            {
+                (stale ??= []).Add(id);
+            }
+        }
+
+        if (stale is not null)
+        {
+            for (int i = 0; i < stale.Count; i++)
+            {
+                RemoveMesh(stale[i]);
+            }
+        }
+
+        return new SceneGlUploadStats(0, uploaded, 0, 0, 0);
+    }
+
+    /// <summary>Releases one uploaded mesh and forgets its source definition.</summary>
+    /// <param name="id">Mesh asset id.</param>
+    /// <returns><see langword="true"/> when the mesh was uploaded.</returns>
+    public bool RemoveMesh(SceneAssetId<MeshAssetTag> id)
+    {
+        ThrowIfDisposed();
+        _context.AssertRenderThread();
+
+        _meshSources.Remove(id);
+        if (_meshes.Remove(id, out GLMesh? mesh))
+        {
+            mesh.Dispose();
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>Resolves an uploaded mesh.</summary>
     public bool TryGetMesh(SceneAssetId<MeshAssetTag> id, [NotNullWhen(true)] out GLMesh? mesh) =>
@@ -439,6 +506,7 @@ public sealed class SceneGlAssetCache : IDisposable
         }
 
         _meshes.Clear();
+        _meshSources.Clear();
 
         foreach (GLTexture texture in _textures.Values)
         {
