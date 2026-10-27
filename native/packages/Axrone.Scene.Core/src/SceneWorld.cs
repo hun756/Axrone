@@ -31,6 +31,8 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     private int _structuralDepth;
     private int _activeActorCount;
     private bool _started;
+    private readonly List<SceneActor> _pendingDestroys = [];
+    private readonly HashSet<SceneActor> _pendingDestroySet = [];
 
     /// <summary>Creates a world with default options.</summary>
     public SceneWorld(SceneComponentRegistry registry, ISceneDiagnosticsSink? diagnostics = null)
@@ -158,16 +160,41 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         CreateActor(new SceneActorConfig(name, tag, layer, active));
 
     /// <summary>Destroys one actor and detaches its children.</summary>
+    /// <remarks>
+    /// Destruction requested while behaviours are iterating is deferred until
+    /// the current phase ends, so gameplay code can despawn actors safely from
+    /// Update/FixedUpdate without a manual command buffer.
+    /// </remarks>
     public bool DestroyActor(SceneActor actor)
     {
         ThrowIfDisposed();
-        ThrowIfIterating(nameof(DestroyActor));
 
         if (!_actors.TryResolve(actor, out int slot))
         {
             return false;
         }
 
+        if ((_actors.RecordAt(slot).Meta.Flags & SceneActorFlags.Destroying) != 0)
+        {
+            return false;
+        }
+
+        if (_iterationDepth > 0)
+        {
+            if (!_pendingDestroySet.Add(actor))
+            {
+                return false;
+            }
+
+            _pendingDestroys.Add(actor);
+            return true;
+        }
+
+        return DestroyActorCore(actor, slot);
+    }
+
+    private bool DestroyActorCore(SceneActor actor, int slot)
+    {
         ref SceneActorRecord record = ref _actors.RecordAt(slot);
         if ((record.Meta.Flags & SceneActorFlags.Destroying) != 0)
         {
@@ -209,6 +236,8 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(DestroyAllActors));
+
+        FlushPendingDestroys();
 
         for (int slot = 0; slot < _actors.Capacity; slot++)
         {
@@ -266,7 +295,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
         finally
         {
-            _iterationDepth--;
+            EndIteration();
         }
     }
 
@@ -286,7 +315,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
         finally
         {
-            _iterationDepth--;
+            EndIteration();
         }
     }
 
@@ -306,7 +335,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
         finally
         {
-            _iterationDepth--;
+            EndIteration();
         }
     }
 
@@ -678,7 +707,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
         finally
         {
-            _iterationDepth--;
+            EndIteration();
         }
     }
 
@@ -710,6 +739,8 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
 
         _behaviours.Clear();
+        _pendingDestroys.Clear();
+        _pendingDestroySet.Clear();
         _transform3D?.ClearAll();
         _transform2D?.ClearAll();
         _columns.ClearAll();
@@ -799,6 +830,43 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         {
             SceneThrowHelper.ThrowStructuralMutation(operation);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EndIteration()
+    {
+        _iterationDepth--;
+
+        if (_iterationDepth == 0)
+        {
+            FlushPendingDestroys();
+        }
+    }
+
+    /// <summary>
+    /// Destroys actors queued during iteration. Runs once the outermost
+    /// iteration completes, so component columns are never mutated while a
+    /// phase is traversing them.
+    /// </summary>
+    private void FlushPendingDestroys()
+    {
+        if (_pendingDestroys.Count == 0)
+        {
+            return;
+        }
+
+        int count = _pendingDestroys.Count;
+        for (int i = 0; i < count; i++)
+        {
+            SceneActor actor = _pendingDestroys[i];
+            if (_actors.TryResolve(actor, out int slot))
+            {
+                _ = DestroyActorCore(actor, slot);
+            }
+        }
+
+        _pendingDestroys.RemoveRange(0, count);
+        _pendingDestroySet.Clear();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
