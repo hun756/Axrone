@@ -13,7 +13,7 @@ import { ByteChunkPoolSet } from './byte-chunk';
 import type { ByteChunk } from './byte-chunk';
 import { BufferView } from './buffer-view';
 import { BufferUtils } from './utils';
-import { writeVarInt, readVarInt, writeJson, readJson } from './varint';
+import { writeJson, readJson } from './varint';
 
 /**
  * Pooled, endianness-aware binary buffer for reading and writing typed data.
@@ -516,23 +516,36 @@ export class ByteBuffer implements IByteBuffer {
             );
         }
 
-        this.putInt32(bytes.length);
-        return this.put(bytes);
+        const pos = this.pos;
+        const required = pos + 4 + bytes.length;
+        if (required > this.limitPos) {
+            this.ensureCapacity(required);
+        }
+
+        this.view.setInt32(pos, bytes.length, this.littleEndian);
+        this.u8Array.set(bytes, pos + 4);
+
+        this.pos = required <= this.limitPos ? required : this.limitPos;
+        return this;
     }
 
     getString(encoding: 'utf8' | 'utf16' = 'utf8'): string {
-        this.checkState();
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (pos + 4 > this.limitPos) this.checkReadableBytes(4);
 
-        const length = this.getInt32();
+        const length = this.view.getInt32(pos, this.littleEndian);
         if (length < 0 || length > STRING_DEFAULTS.MAX_WRITE_LENGTH) {
             throw new BufferUnderflowError(`Invalid string length: ${length}`);
         }
 
-        this.checkReadableBytes(length);
-        const bytes = this.u8Array.subarray(this.pos, this.pos + length);
-        this.movePosition(length);
+        const start = pos + 4;
+        if (start + length > this.limitPos) {
+            this.checkReadableBytes(4 + length);
+        }
 
-        return BufferUtils.decodeString(bytes, encoding);
+        this.pos = start + length;
+        return BufferUtils.decodeString(this.u8Array.subarray(start, start + length), encoding);
     }
 
     putCString(str: string): this {
@@ -883,15 +896,53 @@ export class ByteBuffer implements IByteBuffer {
     }
 
     putVarInt(value: number): this {
-        this.checkState();
-        this.checkReadOnly();
-        writeVarInt(this, value);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+        if (this.readOnly) this.checkReadOnly();
+        if (pos + 5 > this.limitPos) this.ensureCapacity(pos + 5);
+
+        const u8 = this.u8Array;
+        let temp = value >>> 0;
+        let p = pos;
+
+        do {
+            let b = temp & 0x7f;
+            temp >>>= 7;
+            if (temp !== 0) b |= 0x80;
+            u8[p++] = b;
+        } while (temp !== 0);
+
+        this.pos = p <= this.limitPos ? p : this.limitPos;
         return this;
     }
 
     getVarInt(): number {
-        this.checkState();
-        return readVarInt(this);
+        const pos = this.pos;
+        if (this.state === BufferState.Released) this.checkState();
+
+        const u8 = this.u8Array;
+        const limit = this.limitPos;
+        let p = pos;
+        let result = 0;
+        let shift = 0;
+        let b = 0;
+
+        do {
+            if (p >= limit) {
+                this.pos = p;
+                throw new BufferUnderflowError('VarInt exceeds readable range');
+            }
+            if (shift >= 32) {
+                this.pos = p;
+                throw new BufferUnderflowError('VarInt is too big');
+            }
+            b = u8[p++];
+            result |= (b & 0x7f) << shift;
+            shift += 7;
+        } while ((b & 0x80) !== 0);
+
+        this.pos = p;
+        return result >>> 0;
     }
 
     putJson<T>(value: T): this {
