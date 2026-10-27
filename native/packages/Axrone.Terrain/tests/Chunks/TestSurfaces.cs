@@ -50,7 +50,8 @@ internal static class TestEngine
         float density = 1f,
         float minScale = 0.8f,
         float maxScale = 1.4f,
-        float maxSlopeDeg = 90f) => new()
+        float maxSlopeDeg = 90f,
+        bool alignToNormal = false) => new()
         {
             Id = "grass",
             Name = "Grass",
@@ -58,7 +59,7 @@ internal static class TestEngine
             Density = density,
             MinScale = minScale,
             MaxScale = maxScale,
-            AlignToNormal = false,
+            AlignToNormal = alignToNormal,
             MaxSlopeDeg = maxSlopeDeg,
         };
 }

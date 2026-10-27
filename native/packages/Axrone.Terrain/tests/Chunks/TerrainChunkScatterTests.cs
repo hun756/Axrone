@@ -165,6 +165,36 @@ public sealed class TerrainChunkScatterTests
     }
 
     [Fact]
+    public void AlignToNormalStoresTheSurfaceNormal()
+    {
+        using TerrainChunkEngine engine = TestEngine.Create(new RampSurface(0.02f), maxHeight: 10f);
+        var coord = new TerrainChunkCoord(0, 0);
+        engine.CommitChunk(coord);
+        PaintDensity(engine);
+
+        var aligned = new TerrainFoliageInstance[1_000];
+        var upright = new TerrainFoliageInstance[1_000];
+
+        int alignedCount = engine.ScatterChunkFoliage(
+            coord,
+            0,
+            TestEngine.FoliageLayer(alignToNormal: true),
+            42,
+            aligned);
+        int uprightCount = engine.ScatterChunkFoliage(
+            coord,
+            0,
+            TestEngine.FoliageLayer(alignToNormal: false),
+            42,
+            upright);
+
+        alignedCount.Should().BeGreaterThan(0);
+        uprightCount.Should().Be(alignedCount);
+        aligned[0].Normal.Y.Should().BeLessThan(1f);
+        upright[0].Normal.Y.Should().BeApproximately(1f, 1e-6f);
+    }
+
+    [Fact]
     public void ScatterOnMissingChunkReturnsZero()
     {
         using TerrainChunkEngine engine = TestEngine.Create();
