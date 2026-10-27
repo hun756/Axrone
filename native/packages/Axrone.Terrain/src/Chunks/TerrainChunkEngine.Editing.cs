@@ -5,7 +5,7 @@ namespace Axrone.Terrain;
 /// a reader never observes a half-applied brush, and smoothing snapshots all affected
 /// chunks before writing so the result does not depend on iteration order.
 /// </summary>
-public sealed partial class TerrainChunkEngine
+public partial class TerrainEngine<TSurface, TBackoff, TObserver>
 {
     /// <summary>Applies a height brush around a world-space position.</summary>
     /// <param name="worldX">Brush center X.</param>
@@ -423,7 +423,7 @@ public sealed partial class TerrainChunkEngine
 
         float worldX = (current.Coord.X * _chunkSpan) + (gridX * _options.CellSize);
         float worldZ = (current.Coord.Z * _chunkSpan) + (gridZ * _options.CellSize);
-        return _options.Surface.SampleHeight(worldX, worldZ);
+        return _surface.EvaluateHeight(new WorldPosition2D(worldX, worldZ));
     }
 
     private static float ReadTargetHeight(BrushTarget target, int gridX, int gridZ)
@@ -434,29 +434,8 @@ public sealed partial class TerrainChunkEngine
         return heights[(gridZ * TerrainChunkLayout.VerticesPerAxis) + gridX];
     }
 
-    private void UpdateExtentsAndNormals(TerrainChunkView view)
-    {
-        Span<float> heights = view.Heights;
-        float min = float.PositiveInfinity;
-        float max = float.NegativeInfinity;
-        foreach (float height in heights)
-        {
-            if (height < min)
-            {
-                min = height;
-            }
-
-            if (height > max)
-            {
-                max = height;
-            }
-        }
-
-        ref TerrainChunkHeader header = ref view.Header;
-        header.MinHeight = min;
-        header.MaxHeight = max;
-        ComputeNormals(view);
-    }
+    private void UpdateExtentsAndNormals(TerrainChunkView view) =>
+        TerrainChunkOps.UpdateExtentsAndNormals(view, _options.CellSize);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int TerrainMathRound(float value) => (int)MathF.Floor(value + 0.5f);

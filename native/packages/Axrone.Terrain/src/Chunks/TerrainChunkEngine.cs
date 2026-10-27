@@ -11,7 +11,11 @@ public readonly record struct TerrainChunkInfo(
     float MinHeight,
     float MaxHeight,
     uint Generation,
-    TerrainChunkState State);
+    TerrainChunkState State)
+{
+    /// <summary>Gets the normalized height interval.</summary>
+    public HeightExtent Extent => new(MinHeight, MaxHeight);
+}
 
 /// <summary>
 /// Chunked terrain engine. Chunks are fixed 33x33 slots rented from a
@@ -19,26 +23,36 @@ public readonly record struct TerrainChunkInfo(
 /// queries run concurrently while commit/decommit stay exclusive. All public operations are
 /// safe under concurrent readers.
 /// </summary>
-public sealed partial class TerrainChunkEngine : IDisposable
+public partial class TerrainEngine<TSurface, TBackoff, TObserver> : IDisposable, IAsyncDisposable
+    where TSurface : struct, ISurfaceEvaluator<TSurface>
+    where TBackoff : struct, ISpinBackoff
+    where TObserver : struct, IChunkLifecyclePolicy<TObserver>
 {
-    private readonly TerrainChunkEngineOptions _options;
+    private readonly TerrainEngineOptions _options;
+    private readonly TSurface _surface;
     private readonly ContiguousSlabPool<TerrainChunkHeader> _pool;
     private readonly Dictionary<TerrainChunkCoord, ChunkEntry> _chunks;
     private readonly ReaderWriterLockSlim _gate;
+    private readonly Lock _lifecycleGate = new();
     private readonly float _chunkSpan;
     private uint _nextGeneration;
+    private int _activeReaders;
     private int _disposeState;
+    private volatile bool _drained;
     private volatile bool _disposed;
+    private ExceptionDispatchInfo? _fault;
 
     /// <summary>Creates an engine and reserves its chunk slab pool.</summary>
     /// <param name="options">Engine configuration.</param>
+    /// <param name="surface">Surface evaluator policy instance.</param>
     /// <exception cref="TerrainException">The options are invalid.</exception>
-    public TerrainChunkEngine(TerrainChunkEngineOptions options)
+    public TerrainEngine(TerrainEngineOptions options, TSurface surface)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
         _options = options;
+        _surface = surface;
         _chunkSpan = TerrainChunkLayout.Subdivisions * options.CellSize;
         _pool = new ContiguousSlabPool<TerrainChunkHeader>(
             TerrainChunkLayout.SlotBlocks,
@@ -49,7 +63,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     }
 
     /// <summary>Gets the engine configuration.</summary>
-    public TerrainChunkEngineOptions Options => _options;
+    public TerrainEngineOptions Options => _options;
 
     /// <summary>Gets the world-space size of one chunk side.</summary>
     public float ChunkSpan => _chunkSpan;
@@ -65,7 +79,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     {
         get
         {
-            _gate.EnterReadLock();
+            EnterRead();
             try
             {
                 ThrowIfDisposed();
@@ -73,7 +87,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
             }
             finally
             {
-                _gate.ExitReadLock();
+                ExitRead();
             }
         }
     }
@@ -111,13 +125,25 @@ public sealed partial class TerrainChunkEngine : IDisposable
             {
                 Populate(entry, coord);
                 _chunks.Add(coord, entry);
-                return true;
             }
             catch
             {
                 entry.Lease.Dispose();
                 throw;
             }
+
+            try
+            {
+                TObserver.OnMounted(coord);
+            }
+            catch
+            {
+                _chunks.Remove(coord, out _);
+                entry.Lease.Dispose();
+                throw;
+            }
+
+            return true;
         }
         finally
         {
@@ -140,7 +166,15 @@ public sealed partial class TerrainChunkEngine : IDisposable
                 return false;
             }
 
-            entry.Lease.Dispose();
+            try
+            {
+                TObserver.OnUnmounted(coord);
+            }
+            finally
+            {
+                entry.Lease.Dispose();
+            }
+
             return true;
         }
         finally
@@ -154,7 +188,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the chunk is resident.</returns>
     public bool IsChunkResident(TerrainChunkCoord coord)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -162,7 +196,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -172,7 +206,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the chunk is resident.</returns>
     public bool TryGetChunkInfo(TerrainChunkCoord coord, out TerrainChunkInfo info)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -193,7 +227,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -206,20 +240,46 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns>World-space elevation.</returns>
     public float SampleElevation(float worldX, float worldZ)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
             TerrainChunkCoord coord = WorldToCoord(worldX, worldZ);
             return _chunks.TryGetValue(coord, out ChunkEntry? entry)
                 ? SampleBilinearHeight(entry, coord, worldX, worldZ) * _options.MaxHeight
-                : _options.Surface.SampleHeight(worldX, worldZ) * _options.MaxHeight;
+                : _surface.EvaluateHeight(new WorldPosition2D(worldX, worldZ)) * _options.MaxHeight;
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
+
+    /// <summary>Samples world-space elevation at a domain position.</summary>
+    /// <param name="position">World XZ position.</param>
+    /// <returns>World-space elevation.</returns>
+    public float SampleElevation(WorldPosition2D position) => SampleElevation(position.X, position.Z);
+
+    /// <summary>Samples elevation from a resident chunk only.</summary>
+    /// <param name="position">World XZ position.</param>
+    /// <param name="worldHeight">Receives the world-space elevation.</param>
+    /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
+    public bool TryGetElevation(WorldPosition2D position, out float worldHeight) =>
+        TryGetChunkElevation(position.X, position.Z, out worldHeight);
+
+    /// <summary>Samples a world-space surface normal at a domain position.</summary>
+    /// <param name="position">World XZ position.</param>
+    /// <param name="normal">Receives the unit normal.</param>
+    /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
+    public bool TryGetNormal(WorldPosition2D position, out Vec3 normal) =>
+        TryGetNormal(position.X, position.Z, out normal);
+
+    /// <summary>Samples normalized RGBA splat weights at a domain position.</summary>
+    /// <param name="position">World XZ position.</param>
+    /// <param name="weights">Receives the weights when the chunk is resident.</param>
+    /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
+    public bool TryGetSplatWeights(WorldPosition2D position, out SplatWeights weights) =>
+        TryGetSplatWeights(position.X, position.Z, out weights);
 
     /// <summary>Samples elevation from a resident chunk only.</summary>
     /// <param name="worldX">World X.</param>
@@ -228,7 +288,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
     public bool TryGetChunkElevation(float worldX, float worldZ, out float worldHeight)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -244,7 +304,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -255,7 +315,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
     public bool TryGetNormal(float worldX, float worldZ, out Vec3 normal)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -271,7 +331,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -282,7 +342,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the containing chunk is resident.</returns>
     public bool TryGetSplatWeights(float worldX, float worldZ, out SplatWeights weights)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -298,7 +358,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -308,7 +368,7 @@ public sealed partial class TerrainChunkEngine : IDisposable
     /// <returns><see langword="true"/> when the chunk is resident.</returns>
     public bool TryGetChunkStatistics(TerrainChunkCoord coord, out TerrainStatistics statistics)
     {
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -342,19 +402,71 @@ public sealed partial class TerrainChunkEngine : IDisposable
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
+        }
+    }
+
+    /// <summary>Marks the engine as drained and optionally records a terminal fault.</summary>
+    /// <param name="error">Terminal error rethrown by later calls, or <see langword="null"/>.</param>
+    public void Complete(Exception? error = null)
+    {
+        lock (_lifecycleGate)
+        {
+            if (error is not null)
+            {
+                _fault = ExceptionDispatchInfo.Capture(error);
+            }
+
+            _drained = true;
+        }
+    }
+
+    /// <summary>Waits for in-flight readers to leave before returning.</summary>
+    /// <param name="cancellationToken">Cancels the wait.</param>
+    public async ValueTask DrainAsync(CancellationToken cancellationToken = default)
+    {
+        Complete();
+        TBackoff.Initialize(out int backoff);
+        while (Volatile.Read(ref _activeReaders) > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TBackoff.Advance(ref backoff);
+            await Task.Yield();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await DrainAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases chunk leases and the slab pool.</summary>
+    /// <param name="disposing">True for deterministic disposal.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing || Interlocked.Exchange(ref _disposeState, 1) != 0)
         {
             return;
         }
 
         _disposed = true;
+        Complete();
         _gate.EnterWriteLock();
         try
         {
@@ -375,83 +487,16 @@ public sealed partial class TerrainChunkEngine : IDisposable
 
     private void Populate(ChunkEntry entry, TerrainChunkCoord coord)
     {
-        TerrainChunkView view = entry.CreateView();
-        ref TerrainChunkHeader header = ref view.Header;
-        header.Coord = coord;
-        header.Generation = entry.Generation;
-        header.State = TerrainChunkState.Building;
-
-        float originX = coord.X * _chunkSpan;
-        float originZ = coord.Z * _chunkSpan;
-        float cellSize = _options.CellSize;
-        Span<float> heights = view.Heights;
-        float min = float.PositiveInfinity;
-        float max = float.NegativeInfinity;
-
-        for (var z = 0; z < TerrainChunkLayout.VerticesPerAxis; z++)
-        {
-            Span<float> row = heights.Slice(z * TerrainChunkLayout.VerticesPerAxis, TerrainChunkLayout.VerticesPerAxis);
-            _options.Surface.SampleRow(originX, originZ + (z * cellSize), cellSize, row);
-
-            for (var x = 0; x < row.Length; x++)
-            {
-                float height = float.IsFinite(row[x]) ? Math.Clamp(row[x], 0f, 1f) : 0f;
-                row[x] = height;
-                if (height < min)
-                {
-                    min = height;
-                }
-
-                if (height > max)
-                {
-                    max = height;
-                }
-            }
-        }
-
-        header.MinHeight = min;
-        header.MaxHeight = max;
-        ComputeNormals(view);
-
-        Span<byte> splat = view.Splat;
-        for (var index = 0; index < splat.Length; index += 4)
-        {
-            splat[index] = TerrainSplatMath.WeightTotal;
-            splat[index + 1] = 0;
-            splat[index + 2] = 0;
-            splat[index + 3] = 0;
-        }
-
-        view.Density.Clear();
-        header.State = TerrainChunkState.Ready;
-    }
-
-    private void ComputeNormals(TerrainChunkView view)
-    {
-        Span<float> heights = view.Heights;
-        float cellSize = _options.CellSize;
-        const int stride = TerrainChunkLayout.VerticesPerAxis;
-        const int last = TerrainChunkLayout.Subdivisions;
-
-        for (var z = 0; z < stride; z++)
-        {
-            for (var x = 0; x < stride; x++)
-            {
-                int index = (z * stride) + x;
-                float left = x > 0 ? heights[index - 1] : heights[index];
-                float right = x < last ? heights[index + 1] : heights[index];
-                float near = z > 0 ? heights[index - stride] : heights[index];
-                float far = z < last ? heights[index + stride] : heights[index];
-
-                int spanX = (x > 0 ? 1 : 0) + (x < last ? 1 : 0);
-                int spanZ = (z > 0 ? 1 : 0) + (z < last ? 1 : 0);
-                float dx = (right - left) / (spanX * cellSize);
-                float dz = (far - near) / (spanZ * cellSize);
-
-                float inverse = 1f / MathF.Sqrt((dx * dx) + 1f + (dz * dz));
-                view.SetNormal(index, new Vec3(-dx * inverse, inverse, -dz * inverse));
-            }
-        }
+        var staged = new StagedChunk<ChunkStages.Uninitialized>(entry.CreateView());
+        StagedChunk<ChunkStages.HeightsPopulated> heights = staged.PopulateHeights(
+            _surface,
+            coord,
+            _chunkSpan,
+            _options.CellSize,
+            entry.Generation);
+        StagedChunk<ChunkStages.NormalsComputed> normals = heights.ComputeNormals(_options.CellSize);
+        StagedChunk<ChunkStages.Materialized> materialized = normals.InitializeMaterials();
+        materialized.Finalize();
     }
 
     private float SampleBilinearHeight(ChunkEntry entry, TerrainChunkCoord coord, float worldX, float worldZ)
@@ -542,10 +587,10 @@ public sealed partial class TerrainChunkEngine : IDisposable
     private Vec3 ProceduralNormal(float worldX, float worldZ)
     {
         float epsilon = _options.CellSize * 0.25f;
-        float left = _options.Surface.SampleHeight(worldX - epsilon, worldZ);
-        float right = _options.Surface.SampleHeight(worldX + epsilon, worldZ);
-        float near = _options.Surface.SampleHeight(worldX, worldZ - epsilon);
-        float far = _options.Surface.SampleHeight(worldX, worldZ + epsilon);
+        float left = _surface.EvaluateHeight(new WorldPosition2D(worldX - epsilon, worldZ));
+        float right = _surface.EvaluateHeight(new WorldPosition2D(worldX + epsilon, worldZ));
+        float near = _surface.EvaluateHeight(new WorldPosition2D(worldX, worldZ - epsilon));
+        float far = _surface.EvaluateHeight(new WorldPosition2D(worldX, worldZ + epsilon));
 
         float dx = (right - left) / (2f * epsilon);
         float dz = (far - near) / (2f * epsilon);
@@ -553,7 +598,23 @@ public sealed partial class TerrainChunkEngine : IDisposable
         return new Vec3(-dx * inverse, inverse, -dz * inverse);
     }
 
-    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+    private void EnterRead()
+    {
+        _gate.EnterReadLock();
+        Interlocked.Increment(ref _activeReaders);
+    }
+
+    private void ExitRead()
+    {
+        Interlocked.Decrement(ref _activeReaders);
+        _gate.ExitReadLock();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        _fault?.Throw();
+        ObjectDisposedException.ThrowIf(_disposed || _drained, this);
+    }
 
     private sealed class ChunkEntry
     {

@@ -60,12 +60,17 @@ public readonly record struct TerrainFoliageLayer
 /// <param name="Z">Local Z on the origin-centered grid.</param>
 /// <param name="RotationY">Yaw rotation in radians.</param>
 /// <param name="Scale">Uniform instance scale.</param>
+/// <param name="Normal">
+/// Surface normal when the layer aligns to the terrain, otherwise <see cref="Vec3.UnitY"/>;
+/// <see cref="Vec3.Zero"/> for instances built outside the scatter path.
+/// </param>
 public readonly record struct TerrainFoliageInstance(
     float X,
     float Y,
     float Z,
     float RotationY,
-    float Scale);
+    float Scale,
+    Vec3 Normal = default);
 
 /// <summary>Validates authored layer definitions.</summary>
 public static class TerrainValidation

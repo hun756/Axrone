@@ -6,7 +6,7 @@ namespace Axrone.Terrain;
 /// candidate budget depends only on the chunk, and the output is independent of the caller's
 /// destination length.
 /// </summary>
-public sealed partial class TerrainChunkEngine
+public partial class TerrainEngine<TSurface, TBackoff, TObserver>
 {
     private static readonly int FoliageCandidatesPerChunk =
         (int)MathF.Ceiling(TerrainChunkLayout.VertexCount * TerrainLimits.FoliageCandidatesPerTexel);
@@ -43,7 +43,7 @@ public sealed partial class TerrainChunkEngine
             return 0;
         }
 
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -99,7 +99,8 @@ public sealed partial class TerrainChunkEngine
                     worldY,
                     worldZ,
                     rotation,
-                    layer.MinScale + ((layer.MaxScale - layer.MinScale) * scaleT));
+                    layer.MinScale + ((layer.MaxScale - layer.MinScale) * scaleT),
+                    layer.AlignToNormal ? normal : Vec3.UnitY);
 
                 if (written == destination.Length)
                 {
@@ -111,7 +112,7 @@ public sealed partial class TerrainChunkEngine
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 

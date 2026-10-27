@@ -15,6 +15,18 @@ public sealed class TerrainChunkEngineOptions
     /// <summary>Gets the number of chunk slots the pool reserves. Defaults to 256.</summary>
     public int PoolCapacity { get; init; } = 256;
 
+    internal static TerrainEngineOptions ToEngineOptions(TerrainChunkEngineOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+        return new TerrainEngineOptions
+        {
+            CellSize = options.CellSize,
+            MaxHeight = options.MaxHeight,
+            PoolCapacity = options.PoolCapacity,
+        };
+    }
+
     /// <summary>Validates the options.</summary>
     /// <exception cref="TerrainException">A value is outside its documented domain.</exception>
     public void Validate()

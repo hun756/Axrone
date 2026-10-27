@@ -42,6 +42,10 @@
     <!-- CA1002: Do not expose generic lists — the public surface returns
          arrays; kept for internal List usage in scatter. -->
     <NoWarn>$(NoWarn);CA1002</NoWarn>
+    <!-- CA1040: Empty marker interfaces drive the typestate chunk pipeline. -->
+    <NoWarn>$(NoWarn);CA1040</NoWarn>
+    <!-- CA1034: Nested types — chunk pipeline stages are deliberately nested. -->
+    <NoWarn>$(NoWarn);CA1034</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">

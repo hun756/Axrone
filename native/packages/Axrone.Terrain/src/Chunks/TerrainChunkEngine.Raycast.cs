@@ -15,15 +15,12 @@ public readonly record struct TerrainChunkHit(
     float U,
     float V);
 
-/// <summary>One cell address inside a chunk grid.</summary>
-internal readonly record struct TerrainGridCell(int X, int Z);
-
 /// <summary>
 /// Chunk-grid raycasting: a 2D DDA walks chunks in ray order, a second DDA walks the 32x32
 /// cells of each resident chunk, and each cell tests its two triangles with the library
 /// Möller-Trumbore implementation. No allocation and no per-cell AABB test.
 /// </summary>
-public sealed partial class TerrainChunkEngine
+public partial class TerrainEngine<TSurface, TBackoff, TObserver>
 {
     private const float HitEpsilon = 1e-4f;
 
@@ -41,7 +38,7 @@ public sealed partial class TerrainChunkEngine
             return false;
         }
 
-        _gate.EnterReadLock();
+        EnterRead();
         try
         {
             ThrowIfDisposed();
@@ -63,7 +60,7 @@ public sealed partial class TerrainChunkEngine
         }
         finally
         {
-            _gate.ExitReadLock();
+            ExitRead();
         }
     }
 
@@ -102,7 +99,7 @@ public sealed partial class TerrainChunkEngine
         float maxHeight = _options.MaxHeight;
         const int stride = TerrainChunkLayout.VerticesPerAxis;
 
-        foreach (TerrainGridCell cell in new CellTraversal(
+        foreach (GridCoord cell in new CellTraversal(
                      in ray,
                      originX,
                      originZ,
@@ -254,7 +251,7 @@ internal ref struct CellTraversal
     private float _tMaxZ;
     private bool _started;
     private bool _completed;
-    private TerrainGridCell _current;
+    private GridCoord _current;
 
     public CellTraversal(
         in Ray3D ray,
@@ -305,7 +302,7 @@ internal ref struct CellTraversal
                 return false;
             }
 
-            _current = new TerrainGridCell(_x, _z);
+            _current = new GridCoord(_x, _z);
             return true;
         }
 
@@ -332,9 +329,9 @@ internal ref struct CellTraversal
             return false;
         }
 
-        _current = new TerrainGridCell(_x, _z);
+        _current = new GridCoord(_x, _z);
         return true;
     }
 
-    public readonly TerrainGridCell Current => _current;
+    public readonly GridCoord Current => _current;
 }
