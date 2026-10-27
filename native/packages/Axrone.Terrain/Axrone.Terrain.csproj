@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Terrain</RootNamespace>
+    <AssemblyName>Axrone.Terrain</AssemblyName>
+    <Description>Terrain heightmaps, deterministic noise, mesh building, sculpt/splat/foliage painting and heightfield collider sources for the Axrone engine.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1032: Standard exception ctors — terrain errors carry stable codes
+         instead of free-form messages. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA2237: Exceptions are not [Serializable] — the engine never uses
+         BinaryFormatter and serialization is via explicit codecs. -->
+    <NoWarn>$(NoWarn);CA2237</NoWarn>
+    <!-- CA1305: Numeric formatting uses FormattableString.Invariant at every
+         message site; analyzer cannot see through the helper. -->
+    <NoWarn>$(NoWarn);CA1305</NoWarn>
+    <!-- CA1819: Mesh buffers expose live arrays intentionally for pinning
+         and GPU upload without copying. -->
+    <NoWarn>$(NoWarn);CA1819</NoWarn>
+    <!-- CA1051: Visible instance fields — none; kept for parity with layout
+         structs that may be added later. -->
+    <NoWarn>$(NoWarn);CA1051</NoWarn>
+    <!-- CA1815: Equals on transient structs — terrain results are consumed by
+         value, not compared. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+    <!-- CA2225: Operators need named alternatives — nominal types expose
+         explicit members instead of operators. -->
+    <NoWarn>$(NoWarn);CA2225</NoWarn>
+    <!-- CA1062: Public argument validation is centralized in Validate() and
+         ThrowIfNull guards; analyzer flags every span-taking member. -->
+    <NoWarn>$(NoWarn);CA1062</NoWarn>
+    <!-- CA1002: Do not expose generic lists — the public surface returns
+         arrays; kept for internal List usage in scatter. -->
+    <NoWarn>$(NoWarn);CA1002</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Terrain.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.Random/Axrone.Random.csproj" />
+    <ProjectReference Include="../Axrone.Utility/Axrone.Utility.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

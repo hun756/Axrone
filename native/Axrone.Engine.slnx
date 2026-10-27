@@ -60,6 +60,7 @@
     <Project Path="packages/Axrone.Simd/tests/Axrone.Simd.Tests.csproj" />
     <Project Path="packages/Axrone.Utility/Axrone.Utility.csproj" />
     <Project Path="packages/Axrone.Utility/tests/Axrone.Utility.Tests.csproj" />
+    <Project Path="packages/Axrone.Terrain/Axrone.Terrain.csproj" />
     <Project Path="packages/Axrone.Asset/Axrone.Asset.csproj" />
     <Project Path="packages/Axrone.Asset/tests/Axrone.Asset.Tests.csproj" />
     <Project Path="packages/Axrone.Asset2D/Axrone.Asset2D.csproj" />
