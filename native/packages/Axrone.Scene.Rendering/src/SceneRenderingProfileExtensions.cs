@@ -56,6 +56,10 @@ public static class SceneRenderingProfileExtensions
             SceneComponentTraits.Singleton | SceneComponentTraits.Serializable,
             priority: 100);
 
+        builder.AddBehaviour<SceneSpriteAnimatorBehaviour>(
+            "SpriteAnimator",
+            priority: 110);
+
         return builder;
     }
 
