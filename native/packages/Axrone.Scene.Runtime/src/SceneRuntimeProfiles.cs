@@ -146,7 +146,8 @@ public static class SceneRuntimeProfiles
             static builder => builder
                 .AddTransform3D()
                 .AddRendering3D()
-                .AddLighting3D());
+                .AddLighting3D()
+                .AddPhysics3D());
 
     private static SceneRuntimeProfile CreateMixed() =>
         Create(
@@ -156,6 +157,7 @@ public static class SceneRuntimeProfiles
                 .AddTransform3D()
                 .AddRendering3D()
                 .AddLighting3D()
+                .AddPhysics3D()
                 .AddTransform2D()
                 .AddRendering2D(includeCamera: false));
 
@@ -166,7 +168,8 @@ public static class SceneRuntimeProfiles
             static builder => builder
                 .AddTransform3D()
                 .AddRendering3D()
-                .AddLighting3D());
+                .AddLighting3D()
+                .AddPhysics3D());
 
     private static SceneRuntimeProfile Create(
         string id,
