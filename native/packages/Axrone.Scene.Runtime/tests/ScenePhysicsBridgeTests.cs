@@ -1,6 +1,7 @@
 namespace Axrone.Scene.Runtime.Tests;
 
 using Axrone.Numeric;
+using Axrone.Physics3D;
 using Axrone.Scene;
 using Axrone.Scene.Runtime;
 using FluentAssertions;
@@ -98,6 +99,26 @@ public sealed class ScenePhysicsBridgeTests
         }
 
         bridge.ContactEventCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Bridge_AppliesMassOverride()
+    {
+        using SceneWorld world = CreatePhysicsWorld();
+        using var bridge = new ScenePhysicsBridge3D(world);
+
+        SceneActor actor = world.CreateActor("Heavy");
+        world.GetTransform3D(actor).SetPosition(new Vec3(0.0f, 5.0f, 0.0f));
+        SceneRigidbody3D body = SceneRigidbody3D.Default;
+        body.Mass = 3.0f;
+        world.AddData(actor, body);
+        world.AddData(actor, SceneCollider3D.Default);
+        world.UpdateTransforms();
+
+        bridge.SyncBodies();
+
+        bridge.TryGetBody(actor, out BodyId bodyId).Should().BeTrue();
+        bridge.PhysicsWorld.Bodies.GetMass(bodyId).Should().Be(3.0f);
     }
 
     private static SceneWorld CreatePhysicsWorld()

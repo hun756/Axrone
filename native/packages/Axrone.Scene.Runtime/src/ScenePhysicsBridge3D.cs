@@ -65,6 +65,7 @@ public sealed class ScenePhysicsBridge3D : IDisposable
             {
                 CreateBody(actor, in rigidbody);
                 AttachColliders(actor, bodyId: _bodies[actor]);
+                ApplyMassOverride(actor, in rigidbody);
             }
         }
 
@@ -144,6 +145,10 @@ public sealed class ScenePhysicsBridge3D : IDisposable
         return null;
     }
 
+    /// <summary>Resolves the physics body owned by a scene actor.</summary>
+    public bool TryGetBody(SceneActor actor, out BodyId bodyId) =>
+        _bodies.TryGetValue(actor, out bodyId);
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -210,76 +215,84 @@ public sealed class ScenePhysicsBridge3D : IDisposable
 
     private void AttachColliders(SceneActor actor, BodyId bodyId)
     {
-        foreach (SceneActor scanActor in _world.Actors)
+        if (!_world.TryGetData(actor, out SceneCollider3D collider) || !collider.Enabled)
         {
-            if (scanActor != actor)
-            {
-                continue;
-            }
-
-            if (!_world.TryGetData(scanActor, out SceneCollider3D collider) || !collider.Enabled)
-            {
-                continue;
-            }
-
-            var material = new PhysicsMaterial(collider.Friction, collider.Restitution);
-            Vec3 center = collider.Offset;
-
-            switch (collider.Shape)
-            {
-                case SceneColliderShape3D.Sphere:
-                    _physicsWorld.Shapes.AttachSphere<
-                        SurfaceAreaHeuristicStrategy,
-                        NullSpatialMetricsSink>(
-                        _physicsWorld.Bodies,
-                        _physicsWorld.Broadphase,
-                        bodyId,
-                        center,
-                        collider.Radius,
-                        collider.Density,
-                        default,
-                        material,
-                        default,
-                        Quat.Identity,
-                        collider.IsTrigger);
-                    break;
-                case SceneColliderShape3D.Box:
-                    _physicsWorld.Shapes.AttachBox<
-                        SurfaceAreaHeuristicStrategy,
-                        NullSpatialMetricsSink>(
-                        _physicsWorld.Bodies,
-                        _physicsWorld.Broadphase,
-                        bodyId,
-                        center,
-                        collider.BoxHalfExtents,
-                        collider.Density,
-                        default,
-                        material,
-                        default,
-                        Quat.Identity,
-                        collider.IsTrigger);
-                    break;
-                case SceneColliderShape3D.Capsule:
-                    var p0 = center + new Vec3(0.0f, collider.CapsuleHalfHeight, 0.0f);
-                    var p1 = center - new Vec3(0.0f, collider.CapsuleHalfHeight, 0.0f);
-                    _physicsWorld.Shapes.AttachCapsule<
-                        SurfaceAreaHeuristicStrategy,
-                        NullSpatialMetricsSink>(
-                        _physicsWorld.Bodies,
-                        _physicsWorld.Broadphase,
-                        bodyId,
-                        p0,
-                        p1,
-                        collider.Radius,
-                        collider.Density,
-                        default,
-                        material,
-                        default,
-                        Quat.Identity,
-                        collider.IsTrigger);
-                    break;
-            }
+            return;
         }
+
+        var material = new PhysicsMaterial(collider.Friction, collider.Restitution);
+        Vec3 center = collider.Offset;
+
+        switch (collider.Shape)
+        {
+            case SceneColliderShape3D.Sphere:
+                _physicsWorld.Shapes.AttachSphere<
+                    SurfaceAreaHeuristicStrategy,
+                    NullSpatialMetricsSink>(
+                    _physicsWorld.Bodies,
+                    _physicsWorld.Broadphase,
+                    bodyId,
+                    center,
+                    collider.Radius,
+                    collider.Density,
+                    default,
+                    material,
+                    default,
+                    Quat.Identity,
+                    collider.IsTrigger);
+                break;
+            case SceneColliderShape3D.Box:
+                _physicsWorld.Shapes.AttachBox<
+                    SurfaceAreaHeuristicStrategy,
+                    NullSpatialMetricsSink>(
+                    _physicsWorld.Bodies,
+                    _physicsWorld.Broadphase,
+                    bodyId,
+                    center,
+                    collider.BoxHalfExtents,
+                    collider.Density,
+                    default,
+                    material,
+                    default,
+                    Quat.Identity,
+                    collider.IsTrigger);
+                break;
+            case SceneColliderShape3D.Capsule:
+                var p0 = center + new Vec3(0.0f, collider.CapsuleHalfHeight, 0.0f);
+                var p1 = center - new Vec3(0.0f, collider.CapsuleHalfHeight, 0.0f);
+                _physicsWorld.Shapes.AttachCapsule<
+                    SurfaceAreaHeuristicStrategy,
+                    NullSpatialMetricsSink>(
+                    _physicsWorld.Bodies,
+                    _physicsWorld.Broadphase,
+                    bodyId,
+                    p0,
+                    p1,
+                    collider.Radius,
+                    collider.Density,
+                    default,
+                    material,
+                    default,
+                    Quat.Identity,
+                    collider.IsTrigger);
+                break;
+        }
+    }
+
+    private void ApplyMassOverride(SceneActor actor, in SceneRigidbody3D rigidbody)
+    {
+        if (rigidbody.Mass <= 0.0f || rigidbody.BodyType == SceneBodyType.Static)
+        {
+            return;
+        }
+
+        BodyId bodyId = _bodies[actor];
+        Vec3 inverseInertia = _physicsWorld.Bodies.GetInverseInertia(bodyId);
+        var inertia = new Vec3(
+            inverseInertia.X > 0.0f ? 1.0f / inverseInertia.X : 0.0f,
+            inverseInertia.Y > 0.0f ? 1.0f / inverseInertia.Y : 0.0f,
+            inverseInertia.Z > 0.0f ? 1.0f / inverseInertia.Z : 0.0f);
+        _physicsWorld.Bodies.SetMassData(bodyId, rigidbody.Mass, inertia);
     }
 
     private void ThrowIfDisposed()
