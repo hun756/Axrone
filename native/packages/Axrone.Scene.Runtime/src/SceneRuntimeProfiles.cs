@@ -151,7 +151,8 @@ public static class SceneRuntimeProfiles
                 .AddRendering3D()
                 .AddLighting3D()
                 .AddPhysics3D()
-                .AddParticles3D());
+                .AddParticles3D()
+                .AddCameraControllers());
 
     private static SceneRuntimeProfile CreateMixed() =>
         Create(
@@ -165,7 +166,8 @@ public static class SceneRuntimeProfiles
                 .AddParticles3D()
                 .AddTransform2D()
                 .AddRendering2D(includeCamera: false)
-                .AddPhysics2D());
+                .AddPhysics2D()
+                .AddCameraControllers());
 
     private static SceneRuntimeProfile CreateFull() =>
         Create(
@@ -176,7 +178,8 @@ public static class SceneRuntimeProfiles
                 .AddRendering3D()
                 .AddLighting3D()
                 .AddPhysics3D()
-                .AddParticles3D());
+                .AddParticles3D()
+                .AddCameraControllers());
 
     private static SceneRuntimeProfile Create(
         string id,
