@@ -41,6 +41,7 @@ public sealed class SceneRuntime : IDisposable
         PrefabResolver = new ScenePrefabResolver(Prefabs);
         Snapshots = new SceneSnapshotLoader(World, Assets, Codecs, PrefabResolver);
         Profiler = new SceneRuntimeProfiler(options.Profiler);
+        Physics = new ScenePhysicsBridge3D(World);
 
         Frame = new SceneFramePipeline(
             World,
@@ -85,6 +86,9 @@ public sealed class SceneRuntime : IDisposable
 
     /// <summary>Frame profiler; recording is opt-in through the runtime options.</summary>
     public SceneRuntimeProfiler Profiler { get; }
+
+    /// <summary>3D physics bridge; active when the profile registers physics components.</summary>
+    public ScenePhysicsBridge3D Physics { get; }
 
     /// <summary>Viewport width forwarded to the frame planner.</summary>
     public int ViewportWidth
@@ -161,6 +165,7 @@ public sealed class SceneRuntime : IDisposable
         }
 
         Frame.Dispose();
+        Physics.Dispose();
         Profiler.Dispose();
         World.Dispose();
         _disposed = true;

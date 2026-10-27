@@ -42,6 +42,13 @@ public sealed class SceneRuntimeSystem : IGameLoopSystem<SceneRuntimeFrameState>
         using SceneProfilerScope fixedUpdate = _profiler.MeasurePhase(SceneRuntimePhase.FixedUpdate);
         _runtime.World.FixedUpdate(ToSeconds(ctx.StepDelta));
         _runtime.World.UpdateTransforms();
+
+        if (_runtime.PhysicsBridges.Bridge3D)
+        {
+            _runtime.Physics.SyncBodies();
+            _runtime.Physics.Step(ToSeconds(ctx.StepDelta));
+            _runtime.Physics.SyncTransformsFromPhysics();
+        }
     }
 
     /// <inheritdoc/>
