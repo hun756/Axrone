@@ -100,6 +100,41 @@ public readonly partial struct Aabb3D : ISpanFormattable, ISpanParsable<Aabb3D>
         return false;
     }
 
+    /// <summary>
+    /// Tests the ray against the box and reports the full slab interval: the distance where
+    /// the ray enters and the distance where it leaves. The entry distance is clamped to
+    /// zero when the origin is inside, so a grid walker can march <c>[tMin, tMax]</c> without
+    /// re-deriving the interval. A ray that leaves before entering is a miss.
+    /// </summary>
+    /// <param name="ray">The ray to test.</param>
+    /// <param name="tMin">The distance along the ray where the interval starts.</param>
+    /// <param name="tMax">The distance along the ray where the interval ends.</param>
+    /// <returns><see langword="true"/> if the slab intervals overlap in front of the origin.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public bool Intersects(in Ray3D ray, out float tMin, out float tMax)
+    {
+        float t1x = (Min.X - ray.Origin.X) * ray.InvDirection.X;
+        float t2x = (Max.X - ray.Origin.X) * ray.InvDirection.X;
+        float t1y = (Min.Y - ray.Origin.Y) * ray.InvDirection.Y;
+        float t2y = (Max.Y - ray.Origin.Y) * ray.InvDirection.Y;
+        float t1z = (Min.Z - ray.Origin.Z) * ray.InvDirection.Z;
+        float t2z = (Max.Z - ray.Origin.Z) * ray.InvDirection.Z;
+
+        float tNear = MathF.Max(MathF.Min(t1x, t2x), MathF.Max(MathF.Min(t1y, t2y), MathF.Min(t1z, t2z)));
+        float tFar = MathF.Min(MathF.Max(t1x, t2x), MathF.Min(MathF.Max(t1y, t2y), MathF.Max(t1z, t2z)));
+
+        if (tFar < MathF.Max(tNear, 0.0F))
+        {
+            tMin = 0.0F;
+            tMax = 0.0F;
+            return false;
+        }
+
+        tMin = tNear < 0.0F ? 0.0F : tNear;
+        tMax = tFar;
+        return true;
+    }
+
     /// <summary>Determines whether the sphere overlaps the box; touching counts as an overlap.</summary>
     /// <param name="sphere">The sphere to test.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
