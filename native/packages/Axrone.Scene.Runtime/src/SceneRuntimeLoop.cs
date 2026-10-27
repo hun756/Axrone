@@ -9,6 +9,7 @@ using Axrone.GameLoop;
 /// </summary>
 public sealed class SceneRuntimeLoop : IDisposable
 {
+    private readonly SceneRuntime _runtime;
     private readonly GameLoopKernel<
         SceneRuntimeFrameState,
         HighResolutionStopwatchClock,
@@ -27,6 +28,7 @@ public sealed class SceneRuntimeLoop : IDisposable
         ArgumentNullException.ThrowIfNull(runtime);
         options ??= new SceneRuntimeLoopOptions();
 
+        _runtime = runtime;
         _kernel = new GameLoopKernel<
             SceneRuntimeFrameState,
             HighResolutionStopwatchClock,
@@ -62,11 +64,36 @@ public sealed class SceneRuntimeLoop : IDisposable
     /// <summary>Frames advanced so far.</summary>
     public FrameIndex Frame => _kernel.Frame;
 
-    /// <summary>Starts the loop.</summary>
+    /// <summary>Starts the loop and the scene world lifecycle.</summary>
     public void Start(GameTime? timestamp = null)
     {
         ThrowIfDisposed();
-        _kernel.TransitionToRunning(timestamp);
+
+        if (Status == GameLoopStatus.Running)
+        {
+            _runtime.World.Start();
+            return;
+        }
+
+        var previousStatus = Status;
+        try
+        {
+            _kernel.TransitionToRunning(timestamp);
+            _runtime.World.Start();
+        }
+        catch
+        {
+            // Rollback to previous state (Idle, Stopped, or Paused)
+            if (previousStatus == GameLoopStatus.Paused)
+            {
+                _kernel.TransitionToPaused();
+            }
+            else
+            {
+                _kernel.TransitionToStopped();
+            }
+            throw;
+        }
     }
 
     /// <summary>Pauses the loop.</summary>
@@ -76,11 +103,12 @@ public sealed class SceneRuntimeLoop : IDisposable
         _kernel.TransitionToPaused();
     }
 
-    /// <summary>Stops the loop.</summary>
+    /// <summary>Stops the loop and resets all behaviours for a fresh start.</summary>
     public void Stop()
     {
         ThrowIfDisposed();
         _kernel.TransitionToStopped();
+        _runtime.World.Stop();
     }
 
     /// <summary>Advances one frame.</summary>
@@ -96,6 +124,11 @@ public sealed class SceneRuntimeLoop : IDisposable
         if (_disposed)
         {
             return;
+        }
+
+        if (Status == GameLoopStatus.Running)
+        {
+            _runtime.World.Stop();
         }
 
         _kernel.Dispose();

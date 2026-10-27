@@ -105,6 +105,76 @@ public sealed class SceneGlTests
     }
 
     [Fact]
+    public void DrawExecutor_AppliesFogUniforms()
+    {
+        using var fixture = new SceneGlFixture();
+        RegisterFogUniforms(fixture);
+        using var shader = new SceneGlShader(
+            fixture.Context,
+            "fog-test",
+            "void main(){}",
+            "void main(){}");
+        var fog = new SceneFogState(
+            Enabled: true,
+            Color: new Vec3(0.5f, 0.6f, 0.7f),
+            Mode: SceneFogMode.Linear,
+            Density: 0.25f,
+            RangeStart: 5.0f,
+            RangeEnd: 50.0f);
+
+        fixture.Api.ClearCallLog();
+        SceneGlDrawExecutor.ApplyFog(shader, in fog);
+
+        fixture.Api.CallLog.Should().Contain(call => call.StartsWith("Uniform1(", StringComparison.Ordinal));
+        fixture.Api.CallLog.Should().Contain(call => call.StartsWith("Uniform2(", StringComparison.Ordinal));
+        fixture.Api.CallLog.Should().Contain(call => call.StartsWith("Uniform3(", StringComparison.Ordinal));
+
+        fixture.Api.ClearCallLog();
+        SceneGlDrawExecutor.ApplyFog(shader, SceneFogState.Default);
+
+        fixture.Api.CallLog.Should().Contain(call => call.StartsWith("Uniform1(", StringComparison.Ordinal));
+        fixture.Api.CallLog.Should().NotContain(call => call.StartsWith("Uniform2(", StringComparison.Ordinal));
+        fixture.Api.CallLog.Should().NotContain(call => call.StartsWith("Uniform3(", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DrawExecutor_RecordsFogState()
+    {
+        using var fixture = new SceneGlFixture();
+        using var cache = new SceneGlAssetCache(fixture.Context, fixture.Assets);
+        _ = cache.UploadAll();
+        using SceneWorld world = fixture.CreateWorld(out SceneActor cameraActor, out SceneActor rendererActor);
+        SceneCameraFrame frame = new SceneCameraFrameCollector().Collect(world, cameraActor, 1280, 720)!;
+        var pass = new SceneRenderPassDefinition(SceneRenderPassIds.Main, clearMask: SceneClearMask.None);
+        var frameState = new SceneRenderFrameState();
+        frameState.Begin(1);
+        var items = new[] { fixture.CreateItem(rendererActor) };
+        var executor = new SceneGlDrawExecutor(fixture.Context, cache);
+        var fog = new SceneFogState(true, Vec3.One, SceneFogMode.Exponential, 0.5f, 0.0f, 100.0f);
+
+        _ = executor.Render(world, frame, items, lighting: null, pass, frameState, fog: fog);
+
+        executor.LastFog.Should().Be(fog);
+    }
+
+    private static void RegisterFogUniforms(SceneGlFixture fixture)
+    {
+        (string Name, int Size, uint Type)[] uniforms =
+        [
+            ("u_FogEnabled", 1, 0x1404),
+            ("u_FogColor", 1, 0x1406),
+            ("u_FogMode", 1, 0x1404),
+            ("u_FogDensity", 1, 0x1406),
+            ("u_FogStartEnd", 1, 0x1406)
+        ];
+
+        for (uint program = 1; program <= 512; program++)
+        {
+            fixture.Api.SetActiveUniforms(program, uniforms);
+        }
+    }
+
+    [Fact]
     public void DrawExecutor_ClearsPass()
     {
         using var fixture = new SceneGlFixture();

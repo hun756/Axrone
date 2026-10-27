@@ -20,6 +20,8 @@
     <Project Path="packages/Axrone.Scene.Snapshot/tests/Axrone.Scene.Snapshot.Tests.csproj" />
     <Project Path="packages/Axrone.Scene.Runtime/Axrone.Scene.Runtime.csproj" />
     <Project Path="packages/Axrone.Scene.Runtime/tests/Axrone.Scene.Runtime.Tests.csproj" />
+    <Project Path="packages/Axrone.Scene.Gltf/Axrone.Scene.Gltf.csproj" />
+    <Project Path="packages/Axrone.Scene.Gltf/tests/Axrone.Scene.Gltf.Tests.csproj" />
     <Project Path="packages/Axrone.Scene.Runtime/samples/SceneRuntime.Smoke/SceneRuntime.Smoke.csproj" />
     <Project Path="packages/Axrone.Scene.Runtime/benchmarks/Axrone.Scene.Runtime.Benchmarks.csproj" />
     <Project Path="packages/Axrone.GameLoop/Axrone.GameLoop.csproj" />

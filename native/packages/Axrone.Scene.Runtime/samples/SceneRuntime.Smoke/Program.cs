@@ -5,16 +5,9 @@ using Axrone.Scene.Rendering;
 using Axrone.Scene.Runtime;
 using Axrone.Scene.Snapshot;
 
-SceneProfile profile = new SceneProfileBuilder(
-        new SceneProfileId(SceneStringId.FromName("smoke/profile")))
-    .AddTransform3D()
-    .AddRendering3D()
-    .AddLighting3D()
-    .Build();
-
 using var runtime = new SceneRuntime(new SceneRuntimeOptions
 {
-    Profile = profile,
+    RuntimeProfile = SceneRuntimeProfiles.ThreeD,
     ViewportWidth = 320,
     ViewportHeight = 180
 });

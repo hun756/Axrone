@@ -151,6 +151,131 @@ public sealed class ScenePrefabTests
         copy.GetName(result.Actors[0]).Should().Be("copy_Root");
     }
 
+    [Fact]
+    public void Instantiate_ResolvesInlineNestedInstances()
+    {
+        SceneProfile profile = CreateProfile();
+        SceneCodecRegistry codecs = CreateCodecs(profile);
+        using SceneWorld world = profile.CreateWorld();
+
+        var basePrefab = new ScenePrefabDefinition(
+            "prefab/base",
+            [
+                CreateEmptyActor("root", "Root"),
+                new SceneActorSnapshot(
+                    "child",
+                    "Child",
+                    0,
+                    "Untagged",
+                    active: true,
+                    persistent: false,
+                    pooled: false,
+                    components: [],
+                    parentNodeId: "root")
+            ]);
+
+        var host = new ScenePrefabDefinition(
+            "prefab/host",
+            [CreateEmptyActor("host-root", "Host")],
+            nested:
+            [
+                new ScenePrefabNestedInstance(
+                    "turret",
+                    ScenePrefabReference.FromInline(basePrefab),
+                    parentNodeId: "host-root",
+                    namePrefix: "T-")
+            ]);
+
+        ScenePrefabInstantiationResult result = ScenePrefabInstantiator.Instantiate(world, codecs, host);
+
+        result.Actors.Should().HaveCount(3);
+        result.NodeMap.Keys.Should().Contain("turret::root").And.Contain("turret::child");
+        world.GetName(result.NodeMap["turret::root"]).Should().Be("T-Root");
+        world.Hierarchy.ParentOf(result.NodeMap["turret::root"]).Should().Be(result.NodeMap["host-root"]);
+        world.Hierarchy.ParentOf(result.NodeMap["turret::child"]).Should().Be(result.NodeMap["turret::root"]);
+    }
+
+    [Fact]
+    public void Instantiate_RegistryReferenceWithoutResolverFailsLoudly()
+    {
+        SceneProfile profile = CreateProfile();
+        SceneCodecRegistry codecs = CreateCodecs(profile);
+        using SceneWorld world = profile.CreateWorld();
+
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant(
+            "prefab/missing",
+            "prefab/variant");
+
+        Action act = () => ScenePrefabInstantiator.Instantiate(world, codecs, variant);
+
+        act.Should().Throw<ScenePrefabException>()
+            .Where(exception => exception.Code == ScenePrefabErrorCodes.ResolutionFailed);
+        world.ActorCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Instantiate_ResolvesRegistryVariantWithResolver()
+    {
+        SceneProfile profile = CreateProfile();
+        SceneCodecRegistry codecs = CreateCodecs(profile);
+        using SceneWorld world = profile.CreateWorld();
+
+        var basePrefab = new ScenePrefabDefinition(
+            "prefab/base",
+            [CreateEmptyActor("root", "Root")]);
+        var registry = new ScenePrefabRegistry().Register(basePrefab);
+        var resolver = new ScenePrefabResolver(registry);
+
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant(
+            "prefab/base",
+            "prefab/variant",
+            [
+                new ScenePrefabSetActorFieldOperation(
+                    "root",
+                    ScenePrefabActorField.Name,
+                    ScenePrefabActorFieldValue.FromString("VariantRoot"))
+            ]);
+
+        ScenePrefabInstantiationResult result = ScenePrefabInstantiator.Instantiate(
+            world,
+            codecs,
+            variant,
+            new ScenePrefabInstantiateOptions { Resolver = resolver });
+
+        result.Actors.Should().ContainSingle();
+        world.GetName(result.Actors[0]).Should().Be("VariantRoot");
+    }
+
+    [Fact]
+    public void Instantiate_AppliesLiveOverrides()
+    {
+        SceneProfile profile = CreateProfile();
+        SceneCodecRegistry codecs = CreateCodecs(profile);
+        using SceneWorld world = profile.CreateWorld();
+
+        var prefab = new ScenePrefabDefinition(
+            "prefab/live",
+            [CreateEmptyActor("root", "Root")]);
+
+        ScenePrefabInstantiationResult result = ScenePrefabInstantiator.Instantiate(
+            world,
+            codecs,
+            prefab,
+            new ScenePrefabInstantiateOptions
+            {
+                LiveOverrides =
+                [
+                    new ScenePrefabSetActorFieldOperation(
+                        "root",
+                        ScenePrefabActorField.Name,
+                        ScenePrefabActorFieldValue.FromString("Renamed"))
+                ]
+            });
+
+        result.Actors.Should().ContainSingle();
+        world.GetName(result.Actors[0]).Should().Be("Renamed");
+    }
+
     private static SceneProfile CreateProfile()
     {
         var builder = new SceneProfileBuilder(

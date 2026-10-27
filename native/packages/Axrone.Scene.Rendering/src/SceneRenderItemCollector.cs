@@ -11,6 +11,9 @@ public sealed class SceneRenderItemCollector
     private int _count;
     private readonly RenderItemComparer _comparer;
 
+    /// <summary>Items rejected by frustum culling during the last collect.</summary>
+    public int CulledCount { get; private set; }
+
     /// <summary>Creates a collector with an initial item capacity.</summary>
     public SceneRenderItemCollector(int initialCapacity = 256)
     {
@@ -51,6 +54,7 @@ public sealed class SceneRenderItemCollector
         ArgumentNullException.ThrowIfNull(cameraFrame);
 
         _count = 0;
+        CulledCount = 0;
         EnsureCapacity(Math.Max(world.ActorCount, 16));
 
         CameraFrustum frustum = cameraFrame.Frustum;
@@ -95,6 +99,7 @@ public sealed class SceneRenderItemCollector
 
             if (cull && hasWorldBounds && !frustum.IntersectsSphere(in worldBounds))
             {
+                CulledCount++;
                 continue;
             }
 
@@ -127,7 +132,11 @@ public sealed class SceneRenderItemCollector
 
     /// <summary>Drops the current plan without releasing the buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Clear() => _count = 0;
+    public void Clear()
+    {
+        _count = 0;
+        CulledCount = 0;
+    }
 
     private void EnsureCapacity(int required)
     {

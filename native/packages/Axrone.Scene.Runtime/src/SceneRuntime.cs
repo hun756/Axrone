@@ -7,14 +7,12 @@ namespace Axrone.Scene.Runtime;
 /// </summary>
 public sealed class SceneRuntime : IDisposable
 {
-    private readonly SceneProfile _profile;
     private bool _disposed;
 
     /// <summary>Creates a runtime with an optional shared asset catalog.</summary>
     public SceneRuntime(SceneRuntimeOptions options, SceneAssetRegistry? assets = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(options.Profile);
 
         if (options.ViewportWidth <= 0 || options.ViewportHeight <= 0)
         {
@@ -28,20 +26,26 @@ public sealed class SceneRuntime : IDisposable
                 $"Local-light capacity must not be negative; received {options.MaxLocalLights}.");
         }
 
-        _profile = options.Profile;
+        RuntimeProfile = SceneRuntimeProfiles.Resolve(options.RuntimeProfile, options.Profile);
+        SceneProfile profile = RuntimeProfile.Profile;
         Assets = assets ?? new SceneAssetRegistry();
         World = options.WorldOptions is { } worldOptions
-            ? _profile.CreateWorld(worldOptions)
-            : _profile.CreateWorld();
+            ? profile.CreateWorld(worldOptions)
+            : profile.CreateWorld();
 
         Codecs = new SceneCodecRegistry(World.Registry);
         ScenePrefabCodecs.RegisterCore(Codecs, World.Registry);
         SceneRenderingCodecs.Register(Codecs, World.Registry, Assets);
+        SceneRuntimeCodecs.Register(Codecs, World.Registry);
 
         Prefabs = new ScenePrefabRegistry();
         PrefabResolver = new ScenePrefabResolver(Prefabs);
-        Snapshots = new SceneSnapshotLoader(World, Assets, Codecs);
+        Snapshots = new SceneSnapshotLoader(World, Assets, Codecs, PrefabResolver);
         Profiler = new SceneRuntimeProfiler(options.Profiler);
+        Physics = RuntimeProfile.PhysicsBridges.Bridge3D ? new ScenePhysicsBridge3D(World) : null;
+        Physics2D = RuntimeProfile.PhysicsBridges.Bridge2D ? new ScenePhysicsBridge2D(World) : null;
+        Particles = new SceneParticleBridge3D(World);
+        HasParticles = World.Registry.TryGetDataByType(typeof(SceneParticleSystem), out _);
 
         Frame = new SceneFramePipeline(
             World,
@@ -54,8 +58,14 @@ public sealed class SceneRuntime : IDisposable
             options.MaxLocalLights);
     }
 
-    /// <summary>Active scene profile.</summary>
-    public SceneProfile Profile => _profile;
+    /// <summary>Resolved runtime profile (built-in or custom).</summary>
+    public SceneRuntimeProfile RuntimeProfile { get; }
+
+    /// <summary>Active scene composition.</summary>
+    public SceneProfile Profile => RuntimeProfile.Profile;
+
+    /// <summary>Physics bridges this runtime's profile participates in.</summary>
+    public ScenePhysicsBridgeSelection PhysicsBridges => RuntimeProfile.PhysicsBridges;
 
     /// <summary>Scene world that owns actors, components and behaviours.</summary>
     public SceneWorld World { get; }
@@ -80,6 +90,18 @@ public sealed class SceneRuntime : IDisposable
 
     /// <summary>Frame profiler; recording is opt-in through the runtime options.</summary>
     public SceneRuntimeProfiler Profiler { get; }
+
+    /// <summary>3D physics bridge; null when the profile does not step 3D physics.</summary>
+    public ScenePhysicsBridge3D? Physics { get; }
+
+    /// <summary>2D physics bridge; null when the profile does not step 2D physics.</summary>
+    public ScenePhysicsBridge2D? Physics2D { get; }
+
+    /// <summary>Particle bridge; active when the profile registers particle components.</summary>
+    public SceneParticleBridge3D Particles { get; }
+
+    /// <summary>Whether the profile registers particle systems.</summary>
+    public bool HasParticles { get; }
 
     /// <summary>Viewport width forwarded to the frame planner.</summary>
     public int ViewportWidth
@@ -112,12 +134,19 @@ public sealed class SceneRuntime : IDisposable
         return PrefabResolver.Resolve(prefabId, liveOverrides).Definition;
     }
 
-    /// <summary>Instantiates a prefab into the world.</summary>
+    /// <summary>Instantiates a prefab into the world, resolving composition first.</summary>
     public ScenePrefabInstantiationResult Instantiate(
         ScenePrefabDefinition prefab,
         ScenePrefabInstantiateOptions? options = null)
     {
         ThrowIfDisposed();
+
+        options ??= new ScenePrefabInstantiateOptions();
+        if (options.Resolver is null)
+        {
+            options = options with { Resolver = PrefabResolver };
+        }
+
         return ScenePrefabInstantiator.Instantiate(World, Codecs, prefab, options);
     }
 
@@ -149,6 +178,9 @@ public sealed class SceneRuntime : IDisposable
         }
 
         Frame.Dispose();
+        Particles.Dispose();
+        Physics2D?.Dispose();
+        Physics?.Dispose();
         Profiler.Dispose();
         World.Dispose();
         _disposed = true;

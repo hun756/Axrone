@@ -42,6 +42,28 @@ public sealed class SceneRuntimeSystem : IGameLoopSystem<SceneRuntimeFrameState>
         using SceneProfilerScope fixedUpdate = _profiler.MeasurePhase(SceneRuntimePhase.FixedUpdate);
         _runtime.World.FixedUpdate(ToSeconds(ctx.StepDelta));
         _runtime.World.UpdateTransforms();
+
+        float stepSeconds = ToSeconds(ctx.StepDelta);
+
+        if (_runtime.Physics is { } physics)
+        {
+            physics.SyncBodies();
+            physics.Step(stepSeconds);
+            physics.SyncTransformsFromPhysics();
+        }
+
+        if (_runtime.Physics2D is { } physics2D)
+        {
+            physics2D.SyncBodies();
+            physics2D.Step(stepSeconds);
+            physics2D.SyncTransformsFromPhysics();
+        }
+
+        if (_runtime.HasParticles)
+        {
+            _runtime.Particles.SyncSystems();
+            _runtime.Particles.Step(stepSeconds);
+        }
     }
 
     /// <inheritdoc/>

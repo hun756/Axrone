@@ -18,14 +18,15 @@ public static class ScenePrefabInstantiator
         ArgumentNullException.ThrowIfNull(codecs);
         ArgumentNullException.ThrowIfNull(prefab);
 
-        var created = new List<SceneActor>(prefab.Actors.Count);
-        var nodeMap = new Dictionary<string, SceneActor>(prefab.Actors.Count, StringComparer.Ordinal);
+        ScenePrefabDefinition effective = Prepare(prefab, options);
+        var created = new List<SceneActor>(effective.Actors.Count);
+        var nodeMap = new Dictionary<string, SceneActor>(effective.Actors.Count, StringComparer.Ordinal);
 
         try
         {
-            for (int i = 0; i < prefab.Actors.Count; i++)
+            for (int i = 0; i < effective.Actors.Count; i++)
             {
-                SceneActorSnapshot snapshot = prefab.Actors[i];
+                SceneActorSnapshot snapshot = effective.Actors[i];
                 string name = options?.NamePrefix is { Length: > 0 } prefix
                     ? string.Concat(prefix, snapshot.Name)
                     : snapshot.Name;
@@ -42,9 +43,9 @@ public static class ScenePrefabInstantiator
                 nodeMap.Add(snapshot.NodeId, actor);
             }
 
-            for (int i = 0; i < prefab.Actors.Count; i++)
+            for (int i = 0; i < effective.Actors.Count; i++)
             {
-                SceneActorSnapshot snapshot = prefab.Actors[i];
+                SceneActorSnapshot snapshot = effective.Actors[i];
                 if (snapshot.ParentNodeId is not { } parentNodeId)
                 {
                     continue;
@@ -61,9 +62,9 @@ public static class ScenePrefabInstantiator
                 world.Hierarchy.SetParent(nodeMap[snapshot.NodeId], parent);
             }
 
-            for (int i = 0; i < prefab.Actors.Count; i++)
+            for (int i = 0; i < effective.Actors.Count; i++)
             {
-                SceneActorSnapshot snapshot = prefab.Actors[i];
+                SceneActorSnapshot snapshot = effective.Actors[i];
                 SceneActor actor = nodeMap[snapshot.NodeId];
 
                 for (int componentIndex = 0; componentIndex < snapshot.Components.Count; componentIndex++)
@@ -97,6 +98,35 @@ public static class ScenePrefabInstantiator
                 "Prefab instantiation failed and was rolled back.",
                 inner: exception);
         }
+    }
+
+    /// <summary>
+    /// Flattens variant and nested composition, then applies live instance
+    /// overrides. Registry references require a resolver with a prefab source;
+    /// without one they fail loudly instead of instantiating nothing.
+    /// </summary>
+    private static ScenePrefabDefinition Prepare(
+        ScenePrefabDefinition prefab,
+        ScenePrefabInstantiateOptions? options)
+    {
+        ScenePrefabDefinition effective = prefab;
+        bool hasComposition =
+            prefab.Base is not null ||
+            prefab.Nested.Count > 0 ||
+            prefab.Overrides.Count > 0;
+
+        if (hasComposition)
+        {
+            ScenePrefabResolver resolver = options?.Resolver ?? new ScenePrefabResolver();
+            effective = resolver.Resolve(effective).Definition;
+        }
+
+        if (options?.LiveOverrides is { Count: > 0 } overrides)
+        {
+            effective = ScenePrefabOverrides.Apply(effective, overrides);
+        }
+
+        return effective;
     }
 
     private static void Rollback(SceneWorld world, List<SceneActor> created)

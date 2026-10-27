@@ -239,6 +239,32 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Pipeline_RecordsCulledSprites()
+    {
+        using var runtime = Create2DRuntime(out SceneAssetRegistry assets);
+        SceneAssetId<TextureAssetTag> textureId = assets.CreateId<TextureAssetTag>("texture/sprite");
+        SceneWorld world = runtime.World;
+
+        SceneActor visible = world.CreateActor("Visible");
+        world.GetTransform2D(visible).SetPosition(Vec2.Zero);
+        SceneSpriteRenderer visibleSprite = SceneSpriteRenderer.Default;
+        visibleSprite.TextureId = textureId;
+        world.AddData(visible, visibleSprite);
+
+        SceneActor culled = world.CreateActor("Culled");
+        world.GetTransform2D(culled).SetPosition(new Vec2(100.0f, 0.0f));
+        SceneSpriteRenderer culledSprite = SceneSpriteRenderer.Default;
+        culledSprite.TextureId = textureId;
+        world.AddData(culled, culledSprite);
+
+        world.UpdateTransforms();
+
+        runtime.Frame.Plan(0).Should().BeTrue();
+        runtime.Frame.CollectSprites(SceneRenderPassIds.Main).Should().Be(1);
+        runtime.Frame.Complete(1).CulledCount.Should().Be(1);
+    }
+
+    [Fact]
     public void Pipeline_ResolvesFogState()
     {
         using var runtime = CreateRenderableRuntime(out _, out _);
@@ -337,6 +363,160 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Loop_StartsAndStopsWorldLifecycle()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        runtime.World.IsStarted.Should().BeFalse();
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        runtime.World.IsStarted.Should().BeTrue();
+
+        loop.Stop();
+        runtime.World.IsStarted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Loop_DispatchesBehavioursAfterStart()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/loop-behaviour")))
+            .AddTransform3D()
+            .AddBehaviour<CountingBehaviour>("Counting")
+            .Build();
+
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        SceneActor actor = runtime.World.CreateActor("Actor");
+        CountingBehaviour behaviour = runtime.World.AddBehaviour<CountingBehaviour>(actor);
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+        behaviour.UpdateCount.Should().Be(0);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        _ = loop.Tick(GameTime.FromMilliseconds(16.67));
+
+        behaviour.UpdateCount.Should().Be(1);
+        behaviour.FixedUpdateCount.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public void Loop_StopThenStart_RerunsStartAndOnEnable()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/loop-restart")))
+            .AddTransform3D()
+            .AddBehaviour<CountingBehaviour>("Counting")
+            .Build();
+
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        SceneActor actor = runtime.World.CreateActor("Actor");
+        CountingBehaviour behaviour = runtime.World.AddBehaviour<CountingBehaviour>(actor);
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        behaviour.StartCount.Should().Be(1);
+        behaviour.EnableCount.Should().Be(1);
+        loop.Stop();
+
+        loop.Start(GameTime.FromMilliseconds(16.67));
+        behaviour.StartCount.Should().Be(2);
+        behaviour.EnableCount.Should().Be(2);
+
+        _ = loop.Tick(GameTime.FromMilliseconds(33.34));
+        behaviour.UpdateCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Loop_DisposeStopsWorld()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        var loop = new SceneRuntimeLoop(runtime);
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        runtime.World.IsStarted.Should().BeTrue();
+
+        loop.Dispose();
+
+        runtime.World.IsStarted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Loop_StartIsIdempotent()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        loop.Start(GameTime.FromMilliseconds(1.0));
+
+        loop.Status.Should().Be(GameLoopStatus.Running);
+        runtime.World.IsStarted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Instantiate_ResolvesRegisteredVariant()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        ScenePrefabDefinition basePrefab = CreatePrefab("prefab/base");
+        runtime.RegisterPrefab(basePrefab);
+
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant(
+            "prefab/base",
+            "prefab/variant",
+            [
+                new ScenePrefabSetActorFieldOperation(
+                    "root",
+                    ScenePrefabActorField.Name,
+                    ScenePrefabActorFieldValue.FromString("VariantRoot"))
+            ]);
+        runtime.RegisterPrefab(variant);
+
+        ScenePrefabInstantiationResult result = runtime.Instantiate(variant);
+
+        result.Actors.Should().HaveCount(2);
+        runtime.World.GetName(result.NodeMap["root"]).Should().Be("VariantRoot");
+    }
+
+    [Fact]
+    public void LoadSnapshot_AppliesLiveOverrides()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        SceneSnapshot snapshot = CreateSnapshot(out _);
+
+        ScenePrefabInstantiationResult result = runtime.LoadSnapshot(
+            snapshot,
+            new SceneSnapshotLoadOptions
+            {
+                LiveOverrides =
+                [
+                    new ScenePrefabSetActorFieldOperation(
+                        "root",
+                        ScenePrefabActorField.Tag,
+                        ScenePrefabActorFieldValue.FromString("Live"))
+                ]
+            });
+
+        result.Actors.Should().HaveCount(2);
+        runtime.World.GetTag(result.NodeMap["root"]).Should().Be("Live");
+    }
+
+    [Fact]
+    public void LoadSnapshot_ResolvesRegisteredVariantPrefab()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        ScenePrefabDefinition basePrefab = CreatePrefab("prefab/base");
+        runtime.RegisterPrefab(basePrefab);
+        ScenePrefabDefinition variant = ScenePrefabVariants.CreateVariant("prefab/base", "prefab/variant");
+        runtime.RegisterPrefab(variant);
+
+        var snapshot = new SceneSnapshot(variant, [], [], [], [], [], []);
+        ScenePrefabInstantiationResult result = runtime.LoadSnapshot(snapshot);
+
+        result.Actors.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void CaptureSnapshot_RoundTripsIntoAnotherRuntime()
     {
         using var source = CreateRenderableRuntime(out _, out _);
@@ -352,6 +532,85 @@ public sealed class SceneRuntimeTests
         target.Frame.Passes.Count.Should().Be(1);
         target.Frame.Plan(0).Should().BeTrue();
         target.Frame.CollectItems(SceneRenderPassIds.Main).Should().Be(1);
+    }
+
+    [Fact]
+    public void CaptureSnapshot_RoundTripsRuntimeComponents()
+    {
+        using var source = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = CreateRuntimeComponentProfile()
+        });
+
+        SceneActor actor = source.World.CreateActor("Body");
+        source.World.GetTransform3D(actor).SetPosition(new Vec3(1.0f, 2.0f, 3.0f));
+
+        SceneRigidbody3D body = SceneRigidbody3D.Default;
+        body.BodyType = SceneBodyType.Kinematic;
+        body.LinearVelocity = new Vec3(4.0f, 5.0f, 6.0f);
+        body.GravityScale = 0.25f;
+        body.Mass = 2.5f;
+        source.World.AddData(actor, body);
+
+        SceneCollider3D collider = SceneCollider3D.Box(1.0f, 2.0f, 3.0f, density: 5.0f);
+        collider.Friction = 0.75f;
+        source.World.AddData(actor, collider);
+
+        SceneParticleSystem particles = SceneParticleSystem.Default;
+        particles.EmissionRate = 42.0f;
+        particles.StartColor = new Vec4(0.1f, 0.2f, 0.3f, 0.4f);
+        particles.MaxParticles = 64;
+        source.World.AddData(actor, particles);
+        source.World.UpdateTransforms();
+
+        SceneSnapshot snapshot = source.CaptureSnapshot("prefab/runtime-components");
+
+        using var target = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = CreateRuntimeComponentProfile()
+        });
+        ScenePrefabInstantiationResult result = target.LoadSnapshot(snapshot);
+
+        result.Actors.Should().ContainSingle();
+        SceneActor loaded = result.Actors[0];
+        target.World.GetData<SceneRigidbody3D>(loaded).Should().Be(body);
+        target.World.GetData<SceneCollider3D>(loaded).Should().Be(collider);
+        target.World.GetData<SceneParticleSystem>(loaded).Should().Be(particles);
+    }
+
+    [Fact]
+    public void CaptureSnapshot_RoundTrips2DComponents()
+    {
+        using var source = new SceneRuntime(new SceneRuntimeOptions
+        {
+            RuntimeProfile = SceneRuntimeProfiles.TwoD
+        });
+
+        SceneActor actor = source.World.CreateActor("Body2D");
+        source.World.GetTransform2D(actor).SetPosition(new Vec2(1.0f, 2.0f));
+
+        SceneRigidbody2D body = SceneRigidbody2D.Default;
+        body.Mass = 2.0f;
+        body.AngularVelocity = 1.5f;
+        source.World.AddData(actor, body);
+
+        SceneCollider2D collider = SceneCollider2D.Box(1.0f, 2.0f, density: 3.0f);
+        collider.IsTrigger = true;
+        source.World.AddData(actor, collider);
+        source.World.UpdateTransforms();
+
+        SceneSnapshot snapshot = source.CaptureSnapshot("prefab/runtime-2d");
+
+        using var target = new SceneRuntime(new SceneRuntimeOptions
+        {
+            RuntimeProfile = SceneRuntimeProfiles.TwoD
+        });
+        ScenePrefabInstantiationResult result = target.LoadSnapshot(snapshot);
+
+        result.Actors.Should().ContainSingle();
+        SceneActor loaded = result.Actors[0];
+        target.World.GetData<SceneRigidbody2D>(loaded).Should().Be(body);
+        target.World.GetData<SceneCollider2D>(loaded).Should().Be(collider);
     }
 
     [Fact]
@@ -398,6 +657,25 @@ public sealed class SceneRuntimeTests
 
         outcome.Kind.Should().Be(FrameOutcomeKind.Halted);
         loop.Status.Should().Be(GameLoopStatus.Idle);
+    }
+
+    private sealed class CountingBehaviour : SceneBehaviour
+    {
+        public int StartCount { get; private set; }
+
+        public int EnableCount { get; private set; }
+
+        public int UpdateCount { get; private set; }
+
+        public int FixedUpdateCount { get; private set; }
+
+        public override void Start() => StartCount++;
+
+        public override void OnEnable() => EnableCount++;
+
+        public override void Update(float deltaSeconds) => UpdateCount++;
+
+        public override void FixedUpdate(float deltaSeconds) => FixedUpdateCount++;
     }
 
     private static SceneRuntime Create2DRuntime(out SceneAssetRegistry assets)
@@ -461,6 +739,13 @@ public sealed class SceneRuntimeTests
             .AddTransform3D()
             .AddRendering3D()
             .AddLighting3D()
+            .Build();
+
+    private static SceneProfile CreateRuntimeComponentProfile() =>
+        new SceneProfileBuilder(new SceneProfileId(SceneStringId.FromName("test/runtime-components")))
+            .AddTransform3D()
+            .AddPhysics3D()
+            .AddParticles3D()
             .Build();
 
     private static SceneRuntime CreateRenderableRuntime(

@@ -3,8 +3,14 @@ namespace Axrone.Scene.Runtime;
 /// <summary>Runtime composition settings.</summary>
 public sealed record SceneRuntimeOptions
 {
-    /// <summary>Profile that decides which components and capabilities exist.</summary>
-    public required SceneProfile Profile { get; init; }
+    /// <summary>
+    /// Built-in or custom runtime profile. When null, <see cref="Profile"/> is
+    /// used if provided, otherwise <see cref="SceneRuntimeProfiles.Full"/>.
+    /// </summary>
+    public SceneRuntimeProfile? RuntimeProfile { get; init; }
+
+    /// <summary>Custom scene composition used when no runtime profile is set.</summary>
+    public SceneProfile? Profile { get; init; }
 
     /// <summary>Optional world sizing and capacity settings.</summary>
     public SceneWorldOptions? WorldOptions { get; init; }

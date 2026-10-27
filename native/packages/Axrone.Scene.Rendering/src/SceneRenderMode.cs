@@ -26,6 +26,9 @@ public interface ISceneFrameItemSource
     /// <summary>Resolved lighting for the current frame, or null for 2D frames.</summary>
     LightingSelectionState? Lighting { get; }
 
+    /// <summary>Resolved fog settings for the current frame.</summary>
+    SceneFogState Fog { get; }
+
     /// <summary>Collects and returns mesh items for one pass.</summary>
     ReadOnlySpan<SceneRenderItem> CollectMeshes(SceneAssetId<RenderPassAssetTag> passId);
 

@@ -393,10 +393,20 @@ public sealed class ScenePrefabDefinition
 }
 
 /// <summary>Instantiation settings.</summary>
-public sealed record ScenePrefabInstantiateOptions
+public record ScenePrefabInstantiateOptions
 {
     /// <summary>Optional prefix applied to every actor name.</summary>
     public string? NamePrefix { get; init; }
+
+    /// <summary>
+    /// Resolver used to flatten variants and nested instances before creation.
+    /// When null, a resolver without a registry source is used, so inline
+    /// references still work and registry references fail loudly.
+    /// </summary>
+    public ScenePrefabResolver? Resolver { get; init; }
+
+    /// <summary>Instance overrides applied after resolution and before creation.</summary>
+    public IReadOnlyList<ScenePrefabOverrideOperation>? LiveOverrides { get; init; }
 }
 
 /// <summary>Actors created by one instantiation, keyed by prefab node id.</summary>

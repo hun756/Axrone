@@ -75,8 +75,8 @@ public abstract class SceneBehaviour : ISceneBehaviour
     private SceneActor _actor = SceneActor.Null;
     private SceneBehaviourState _state = SceneBehaviourState.Detached;
     private bool _enabled = true;
+    private bool _activeInHierarchy = true;
     private int _priority;
-
     /// <summary>Owning behaviour-table slot; <c>-1</c> while detached.</summary>
     internal int SlotIndex = -1;
 
@@ -101,6 +101,9 @@ public abstract class SceneBehaviour : ISceneBehaviour
         get => _actor.IsValid;
     }
 
+    /// <summary>Owning world, or <see langword="null"/> while detached.</summary>
+    public SceneWorld? World { get; private set; }
+
     /// <summary>Whether the behaviour has been destroyed.</summary>
     public bool IsDestroyed
     {
@@ -124,17 +127,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
             }
 
             _enabled = value;
-
-            if (_state == SceneBehaviourState.Enabled)
-            {
-                _state = SceneBehaviourState.Disabled;
-                OnDisable();
-            }
-            else if (_state == SceneBehaviourState.Disabled)
-            {
-                _state = SceneBehaviourState.Enabled;
-                OnEnable();
-            }
+            RefreshDispatchState();
         }
     }
 
@@ -186,7 +179,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     }
 
     /// <summary>Attaches the instance to an actor and records its dispatch priority.</summary>
-    internal void Attach(in SceneActor actor, int priority)
+    internal void Attach(in SceneActor actor, int priority, SceneWorld world)
     {
         if (_actor.IsValid)
         {
@@ -204,6 +197,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
 
         _actor = actor;
         _priority = priority;
+        World = world;
         _state = SceneBehaviourState.Detached;
     }
 
@@ -212,6 +206,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     {
         _actor = SceneActor.Null;
         _priority = 0;
+        World = null;
         SlotIndex = -1;
     }
 
@@ -227,7 +222,26 @@ public abstract class SceneBehaviour : ISceneBehaviour
         _state = SceneBehaviourState.Awake;
     }
 
-    /// <summary>Runs Start and applies the initial enabled state.</summary>
+    /// <summary>
+    /// Reverts Started/Enabled/Disabled back to Awake so the next world Start
+    /// re-runs Start and OnEnable without a fresh instance.
+    /// </summary>
+    internal void ResetForRestart()
+    {
+        if (_state == SceneBehaviourState.Enabled)
+        {
+            OnDisable();
+        }
+
+        if (_state is SceneBehaviourState.Started or
+            SceneBehaviourState.Enabled or
+            SceneBehaviourState.Disabled)
+        {
+            _state = SceneBehaviourState.Awake;
+        }
+    }
+
+    /// <summary>Runs Start and applies the initial enabled and hierarchy state.</summary>
     internal void StartInternal()
     {
         if (_state != SceneBehaviourState.Awake)
@@ -238,7 +252,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
         Start();
         _state = SceneBehaviourState.Started;
 
-        if (_enabled)
+        if (_enabled && _activeInHierarchy)
         {
             _state = SceneBehaviourState.Enabled;
             OnEnable();
@@ -246,6 +260,47 @@ public abstract class SceneBehaviour : ISceneBehaviour
         else
         {
             _state = SceneBehaviourState.Disabled;
+        }
+    }
+
+    /// <summary>
+    /// Applies hierarchy activation without touching the caller-controlled
+    /// enabled flag, firing enable/disable only on effective transitions.
+    /// </summary>
+    internal void SetActiveInHierarchyInternal(bool active)
+    {
+        if (_activeInHierarchy == active)
+        {
+            if (active && _state == SceneBehaviourState.Disabled && _enabled)
+            {
+                _state = SceneBehaviourState.Enabled;
+                OnEnable();
+            }
+
+            return;
+        }
+
+        _activeInHierarchy = active;
+        RefreshDispatchState();
+    }
+
+    private void RefreshDispatchState()
+    {
+        if (_state is not (SceneBehaviourState.Enabled or SceneBehaviourState.Disabled))
+        {
+            return;
+        }
+
+        bool shouldDispatch = _enabled && _activeInHierarchy;
+        if (shouldDispatch && _state == SceneBehaviourState.Disabled)
+        {
+            _state = SceneBehaviourState.Enabled;
+            OnEnable();
+        }
+        else if (!shouldDispatch && _state == SceneBehaviourState.Enabled)
+        {
+            _state = SceneBehaviourState.Disabled;
+            OnDisable();
         }
     }
 

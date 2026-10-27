@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Axrone.Scene.Gltf</RootNamespace>
+    <AssemblyName>Axrone.Scene.Gltf</AssemblyName>
+    <Description>glTF to scene adapter: converts Axrone.AssetGltf import results into scene snapshots with meshes, materials, textures and prefabs.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Label="AotCompatibility">
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SuppressedRules">
+    <!-- CA1032: Standard exception ctors — adapter failures carry stable codes. -->
+    <NoWarn>$(NoWarn);CA1032</NoWarn>
+    <!-- CA1815: Equals on transient structs — diagnostics are consumed positionally. -->
+    <NoWarn>$(NoWarn);CA1815</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="PublicApi">
+    <InternalsVisibleTo Include="Axrone.Scene.Gltf.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Axrone.AssetGltf/Axrone.AssetGltf.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Core/Axrone.Scene.Core.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Assets/Axrone.Scene.Assets.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Rendering/Axrone.Scene.Rendering.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Prefab/Axrone.Scene.Prefab.csproj" />
+    <ProjectReference Include="../Axrone.Scene.Snapshot/Axrone.Scene.Snapshot.csproj" />
+    <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
+    <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Compile Remove="benchmarks/**" />
+  </ItemGroup>
+
+</Project>

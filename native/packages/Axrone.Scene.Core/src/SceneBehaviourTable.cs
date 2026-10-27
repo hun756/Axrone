@@ -3,7 +3,12 @@ namespace Axrone.Scene;
 /// <summary>Host services the behaviour table needs from the owning world.</summary>
 internal interface ISceneBehaviourHost
 {
+    /// <summary>Owning world, exposed to behaviours for sibling component access.</summary>
+    SceneWorld World { get; }
+
     bool IsStarted { get; }
+
+    bool IsActiveInHierarchy(SceneActor actor);
 
     void ReportBehaviourFault(SceneBehaviour behaviour, Exception exception);
 }
@@ -235,6 +240,55 @@ internal sealed class SceneBehaviourTable
         }
     }
 
+    /// <summary>Reverts every started behaviour back to Awake so the next Start re-runs Start.</summary>
+    public void ResetAll()
+    {
+        for (int i = 0; i < _orderCount; i++)
+        {
+            SceneBehaviourSlot entry = _slots[_order[i]];
+            if (entry.Behaviour is not { } behaviour)
+            {
+                continue;
+            }
+
+            try
+            {
+                behaviour.ResetForRestart();
+            }
+            catch (Exception exception)
+            {
+                _host.ReportBehaviourFault(behaviour, exception);
+            }
+        }
+    }
+
+    /// <summary>Applies hierarchy activation to every behaviour on an actor.</summary>
+    public void SetActiveInHierarchy(in SceneActor actor, bool active)
+    {
+        int actorSlot = _actors.Resolve(actor);
+        int slot = _actors.BehaviourHeadAt(actorSlot);
+
+        while (slot >= 0)
+        {
+            SceneBehaviourSlot entry = _slots[slot];
+            int next = entry.Next;
+
+            if (entry.Behaviour is { } behaviour)
+            {
+                try
+                {
+                    behaviour.SetActiveInHierarchyInternal(active);
+                }
+                catch (Exception exception)
+                {
+                    _host.ReportBehaviourFault(behaviour, exception);
+                }
+            }
+
+            slot = next;
+        }
+    }
+
     /// <summary>Dispatches one fixed update in priority order.</summary>
     public void FixedUpdateAll(float deltaSeconds)
     {
@@ -374,7 +428,7 @@ internal sealed class SceneBehaviourTable
 
         try
         {
-            behaviour.Attach(actor, descriptor.Priority);
+            behaviour.Attach(actor, descriptor.Priority, _host.World);
             behaviour.SlotIndex = slot;
         }
         catch (Exception)
@@ -390,6 +444,9 @@ internal sealed class SceneBehaviourTable
 
         try
         {
+            // Hierarchy state is known before Start so attaching to an inactive
+            // actor never fires a spurious OnEnable.
+            behaviour.SetActiveInHierarchyInternal(_host.IsActiveInHierarchy(actor));
             behaviour.AwakeInternal();
             if (_host.IsStarted)
             {
