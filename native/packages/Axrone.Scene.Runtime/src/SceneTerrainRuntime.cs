@@ -6,9 +6,11 @@ using Axrone.Scene.Rendering;
 /// <summary>Scene actor and optional physics attachment owned by one terrain chunk.</summary>
 /// <param name="Actor">Rendering actor.</param>
 /// <param name="Physics">Heightfield attachment, or <see langword="null"/> without physics.</param>
+/// <param name="LodLevel">Current mesh LOD level.</param>
 public readonly record struct SceneTerrainChunkHandle(
     SceneActor Actor,
-    TerrainPhysicsAttachment? Physics);
+    TerrainPhysicsAttachment? Physics,
+    int LodLevel);
 
 /// <summary>
 /// Binds a <see cref="TerrainChunkEngine"/> to the scene: each committed chunk becomes a
@@ -22,6 +24,7 @@ public sealed class SceneTerrainRuntime : IDisposable
     private readonly TerrainChunkEngine _engine;
     private readonly ScenePhysicsBridge3D? _physics;
     private readonly SceneTerrainRuntimeOptions _options;
+    private readonly SceneAssetId<MaterialAssetTag> _materialId;
     private readonly Dictionary<TerrainChunkCoord, TerrainChunkActor> _chunks = [];
     private bool _disposed;
 
@@ -48,6 +51,9 @@ public sealed class SceneTerrainRuntime : IDisposable
         _engine = engine;
         _options = options;
         _physics = physics;
+        _materialId = options.MaterialId.IsValid
+            ? options.MaterialId
+            : SceneTerrainMaterialFactory.EnsureDefault(assets);
     }
 
     /// <summary>Creates a terrain runtime over a scene runtime's world, assets and physics.</summary>
@@ -73,13 +79,30 @@ public sealed class SceneTerrainRuntime : IDisposable
     /// <summary>Gets the number of scene-bound chunks.</summary>
     public int ChunkCount => _chunks.Count;
 
-    /// <summary>Commits a terrain chunk and publishes its scene actor, mesh and collider.</summary>
+    /// <summary>Gets the coordinates of every scene-bound chunk.</summary>
+    public IEnumerable<TerrainChunkCoord> ChunkCoords => _chunks.Keys;
+
+    /// <summary>Commits a terrain chunk at LOD zero.</summary>
     /// <param name="coord">Chunk coordinate.</param>
     /// <returns><see langword="true"/> when the chunk was bound.</returns>
+    public bool CommitChunk(TerrainChunkCoord coord) => CommitChunk(coord, 0);
+
+    /// <summary>Commits a terrain chunk and publishes its scene actor, mesh and collider.</summary>
+    /// <param name="coord">Chunk coordinate.</param>
+    /// <param name="lodLevel">Mesh LOD level in <c>[0, 2]</c>.</param>
+    /// <returns><see langword="true"/> when the chunk was bound.</returns>
+    /// <exception cref="TerrainException">The LOD level is invalid.</exception>
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
-    public bool CommitChunk(TerrainChunkCoord coord)
+    public bool CommitChunk(TerrainChunkCoord coord, int lodLevel)
     {
         ThrowIfDisposed();
+        if (!TerrainChunkLod.IsValid(lodLevel))
+        {
+            throw new TerrainException(
+                FormattableString.Invariant($"Invalid terrain LOD level: {lodLevel}."),
+                TerrainErrorCode.ValidationFailed);
+        }
+
         if (_chunks.ContainsKey(coord) || !_engine.CommitChunk(coord))
         {
             return false;
@@ -93,7 +116,7 @@ public sealed class SceneTerrainRuntime : IDisposable
 
         try
         {
-            TerrainVertexMesh mesh = _engine.BuildChunkVertexMesh(coord)
+            TerrainVertexMesh mesh = _engine.BuildChunkLodMesh(coord, lodLevel)
                 ?? throw new TerrainException("Committed chunk produced no mesh.", TerrainErrorCode.ValidationFailed);
 
             string name = FormattableString.Invariant($"terrain/{_options.TerrainId}/{coord.X}/{coord.Z}");
@@ -112,7 +135,7 @@ public sealed class SceneTerrainRuntime : IDisposable
 
             SceneMeshRenderer renderer = SceneMeshRenderer.Default;
             renderer.MeshId = meshId;
-            renderer.MaterialId = _options.MaterialId;
+            renderer.MaterialId = _materialId;
             renderer.PassId = _options.PassId;
             _world.AddData(actor, renderer);
 
@@ -121,7 +144,7 @@ public sealed class SceneTerrainRuntime : IDisposable
                 TerrainId = _options.TerrainId,
                 ChunkX = coord.X,
                 ChunkZ = coord.Z,
-                LodLevel = 0,
+                LodLevel = lodLevel,
                 Enabled = true,
             };
             _world.AddData(actor, component);
@@ -135,7 +158,7 @@ public sealed class SceneTerrainRuntime : IDisposable
                 }
             }
 
-            _chunks.Add(coord, new TerrainChunkActor(actor, meshId, physics));
+            _chunks.Add(coord, new TerrainChunkActor(actor, meshId, physics, lodLevel));
             return true;
         }
         catch
@@ -188,6 +211,45 @@ public sealed class SceneTerrainRuntime : IDisposable
         return true;
     }
 
+    /// <summary>Rebuilds a bound chunk's mesh at a new LOD without releasing its terrain data.</summary>
+    /// <param name="coord">Chunk coordinate.</param>
+    /// <param name="lodLevel">New LOD level in <c>[0, 2]</c>.</param>
+    /// <returns><see langword="true"/> when the chunk was bound and the mesh was rebuilt.</returns>
+    /// <exception cref="TerrainException">The LOD level is invalid.</exception>
+    /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
+    public bool RebuildChunk(TerrainChunkCoord coord, int lodLevel)
+    {
+        ThrowIfDisposed();
+        if (!TerrainChunkLod.IsValid(lodLevel))
+        {
+            throw new TerrainException(
+                FormattableString.Invariant($"Invalid terrain LOD level: {lodLevel}."),
+                TerrainErrorCode.ValidationFailed);
+        }
+
+        if (!_chunks.TryGetValue(coord, out TerrainChunkActor entry))
+        {
+            return false;
+        }
+
+        TerrainVertexMesh? mesh = _engine.BuildChunkLodMesh(coord, lodLevel);
+        if (mesh is null)
+        {
+            return false;
+        }
+
+        _assets.Meshes.Register(TerrainChunkMeshAdapter.Create(entry.MeshId, mesh));
+
+        ref SceneMeshRenderer renderer = ref _world.GetData<SceneMeshRenderer>(entry.Actor);
+        renderer.MeshId = entry.MeshId;
+
+        ref SceneTerrainChunk3D component = ref _world.GetData<SceneTerrainChunk3D>(entry.Actor);
+        component.LodLevel = lodLevel;
+
+        _chunks[coord] = entry with { LodLevel = lodLevel };
+        return true;
+    }
+
     /// <summary>Reads the scene handle for a bound chunk.</summary>
     /// <param name="coord">Chunk coordinate.</param>
     /// <param name="handle">Receives the actor and physics attachment.</param>
@@ -197,7 +259,7 @@ public sealed class SceneTerrainRuntime : IDisposable
         ThrowIfDisposed();
         if (_chunks.TryGetValue(coord, out TerrainChunkActor entry))
         {
-            handle = new SceneTerrainChunkHandle(entry.Actor, entry.Physics);
+            handle = new SceneTerrainChunkHandle(entry.Actor, entry.Physics, entry.LodLevel);
             return true;
         }
 
@@ -233,5 +295,6 @@ public sealed class SceneTerrainRuntime : IDisposable
     private readonly record struct TerrainChunkActor(
         SceneActor Actor,
         SceneAssetId<MeshAssetTag> MeshId,
-        TerrainPhysicsAttachment? Physics);
+        TerrainPhysicsAttachment? Physics,
+        int LodLevel);
 }

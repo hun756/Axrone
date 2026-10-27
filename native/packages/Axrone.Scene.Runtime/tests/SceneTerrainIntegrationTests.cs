@@ -86,6 +86,8 @@ public sealed class SceneTerrainIntegrationTests
 
         world.TryGetData(actor, out SceneMeshRenderer renderer).Should().BeTrue();
         assets.Meshes.TryGet(renderer.MeshId, out _).Should().BeTrue();
+        renderer.MaterialId.IsValid.Should().BeTrue();
+        assets.Materials.TryGet(renderer.MaterialId, out _).Should().BeTrue();
 
         terrain.TryGetChunk(coord, out SceneTerrainChunkHandle handle).Should().BeTrue();
         handle.Actor.Should().Be(actor);
