@@ -18,7 +18,6 @@ public readonly record struct SplatWeights(float R, float G, float B, float A)
 /// </summary>
 public static class TerrainSplatPainter
 {
-    private const int WeightTotal = 255;
 
     /// <summary>Creates an RGBA weight buffer fully assigned to the first layer.</summary>
     /// <param name="resolution">Splat resolution; one of 64, 128 or 256.</param>
@@ -31,7 +30,7 @@ public static class TerrainSplatPainter
         var splat = new byte[resolution * resolution * 4];
         for (var index = 0; index < splat.Length; index += 4)
         {
-            splat[index] = WeightTotal;
+            splat[index] = TerrainSplatMath.WeightTotal;
         }
 
         return splat;
@@ -120,48 +119,13 @@ public static class TerrainSplatPainter
                 }
 
                 int offset = ((texelZ * resolution) + texelX) * 4;
-                int current = splat[offset + layerIndex];
-                int target = Math.Min(
-                    WeightTotal,
-                    TerrainMath.RoundHalfUp(
-                        current + ((WeightTotal - current) * brush.Strength * weight * TerrainLimits.SplatStampScale)));
-                if (target == current)
+                if (TerrainSplatMath.Paint(
+                        splat.Slice(offset, 4),
+                        layerIndex,
+                        brush.Strength * weight * TerrainLimits.SplatStampScale))
                 {
-                    continue;
+                    changed = true;
                 }
-
-                splat[offset + layerIndex] = (byte)target;
-                int remaining = WeightTotal - target;
-                int othersTotal = WeightTotal - current;
-
-                var distributed = 0;
-                var lastOtherChannel = -1;
-                for (var channel = 0; channel < 4; channel++)
-                {
-                    if (channel == layerIndex)
-                    {
-                        continue;
-                    }
-
-                    lastOtherChannel = channel;
-                    int value = splat[offset + channel];
-                    int scaled = othersTotal > 0
-                        ? TerrainMath.RoundHalfUp((value / (float)othersTotal) * remaining)
-                        : channel == (layerIndex + 1) % 4
-                            ? remaining
-                            : 0;
-                    splat[offset + channel] = (byte)scaled;
-                    distributed += scaled;
-                }
-
-                int remainder = remaining - distributed;
-                if (remainder != 0 && lastOtherChannel >= 0)
-                {
-                    splat[offset + lastOtherChannel] =
-                        (byte)Math.Max(0, splat[offset + lastOtherChannel] + remainder);
-                }
-
-                changed = true;
             }
         }
 
