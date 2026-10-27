@@ -242,11 +242,12 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
     }
 
-    /// <summary>Stops lifecycle dispatch without destroying actors.</summary>
+    /// <summary>Stops lifecycle dispatch and reverts all behaviours to Awake.</summary>
     public void Stop()
     {
         ThrowIfDisposed();
         Volatile.Write(ref _started, false);
+        _behaviours.ResetAll();
     }
 
     /// <summary>Runs fixed update for enabled behaviours.</summary>

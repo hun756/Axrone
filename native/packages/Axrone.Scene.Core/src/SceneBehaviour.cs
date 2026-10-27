@@ -218,6 +218,25 @@ public abstract class SceneBehaviour : ISceneBehaviour
         _state = SceneBehaviourState.Awake;
     }
 
+    /// <summary>
+    /// Reverts Started/Enabled/Disabled back to Awake so the next world Start
+    /// re-runs Start and OnEnable without a fresh instance.
+    /// </summary>
+    internal void ResetForRestart()
+    {
+        if (_state == SceneBehaviourState.Enabled)
+        {
+            OnDisable();
+        }
+
+        if (_state is SceneBehaviourState.Started or
+            SceneBehaviourState.Enabled or
+            SceneBehaviourState.Disabled)
+        {
+            _state = SceneBehaviourState.Awake;
+        }
+    }
+
     /// <summary>Runs Start and applies the initial enabled and hierarchy state.</summary>
     internal void StartInternal()
     {

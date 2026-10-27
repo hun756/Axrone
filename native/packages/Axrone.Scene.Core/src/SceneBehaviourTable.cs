@@ -237,6 +237,28 @@ internal sealed class SceneBehaviourTable
         }
     }
 
+    /// <summary>Reverts every started behaviour back to Awake so the next Start re-runs Start.</summary>
+    public void ResetAll()
+    {
+        for (int i = 0; i < _orderCount; i++)
+        {
+            SceneBehaviourSlot entry = _slots[_order[i]];
+            if (entry.Behaviour is not { } behaviour)
+            {
+                continue;
+            }
+
+            try
+            {
+                behaviour.ResetForRestart();
+            }
+            catch (Exception exception)
+            {
+                _host.ReportBehaviourFault(behaviour, exception);
+            }
+        }
+    }
+
     /// <summary>Applies hierarchy activation to every behaviour on an actor.</summary>
     public void SetActiveInHierarchy(in SceneActor actor, bool active)
     {
