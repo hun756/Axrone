@@ -42,7 +42,8 @@ public sealed class SceneRuntime : IDisposable
         PrefabResolver = new ScenePrefabResolver(Prefabs);
         Snapshots = new SceneSnapshotLoader(World, Assets, Codecs, PrefabResolver);
         Profiler = new SceneRuntimeProfiler(options.Profiler);
-        Physics = new ScenePhysicsBridge3D(World);
+        Physics = RuntimeProfile.PhysicsBridges.Bridge3D ? new ScenePhysicsBridge3D(World) : null;
+        Physics2D = RuntimeProfile.PhysicsBridges.Bridge2D ? new ScenePhysicsBridge2D(World) : null;
         Particles = new SceneParticleBridge3D(World);
         HasParticles = World.Registry.TryGetDataByType(typeof(SceneParticleSystem), out _);
 
@@ -90,8 +91,11 @@ public sealed class SceneRuntime : IDisposable
     /// <summary>Frame profiler; recording is opt-in through the runtime options.</summary>
     public SceneRuntimeProfiler Profiler { get; }
 
-    /// <summary>3D physics bridge; active when the profile registers physics components.</summary>
-    public ScenePhysicsBridge3D Physics { get; }
+    /// <summary>3D physics bridge; null when the profile does not step 3D physics.</summary>
+    public ScenePhysicsBridge3D? Physics { get; }
+
+    /// <summary>2D physics bridge; null when the profile does not step 2D physics.</summary>
+    public ScenePhysicsBridge2D? Physics2D { get; }
 
     /// <summary>Particle bridge; active when the profile registers particle components.</summary>
     public SceneParticleBridge3D Particles { get; }
@@ -175,7 +179,8 @@ public sealed class SceneRuntime : IDisposable
 
         Frame.Dispose();
         Particles.Dispose();
-        Physics.Dispose();
+        Physics2D?.Dispose();
+        Physics?.Dispose();
         Profiler.Dispose();
         World.Dispose();
         _disposed = true;

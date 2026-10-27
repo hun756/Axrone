@@ -137,7 +137,10 @@ public static class SceneRuntimeProfiles
         Create(
             SceneRuntimeProfileIds.TwoD,
             SceneRuntimeProfileKind.TwoD,
-            static builder => builder.AddTransform2D().AddRendering2D());
+            static builder => builder
+                .AddTransform2D()
+                .AddRendering2D()
+                .AddPhysics2D());
 
     private static SceneRuntimeProfile CreateThreeD() =>
         Create(
@@ -161,7 +164,8 @@ public static class SceneRuntimeProfiles
                 .AddPhysics3D()
                 .AddParticles3D()
                 .AddTransform2D()
-                .AddRendering2D(includeCamera: false));
+                .AddRendering2D(includeCamera: false)
+                .AddPhysics2D());
 
     private static SceneRuntimeProfile CreateFull() =>
         Create(

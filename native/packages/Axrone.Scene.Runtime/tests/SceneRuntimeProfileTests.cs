@@ -75,6 +75,9 @@ public sealed class SceneRuntimeProfileTests
         profile.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _).Should().BeTrue();
         profile.Registry.TryGetDataByType(typeof(SceneMeshRenderer), out _).Should().BeFalse();
         profile.Registry.TryGetDataByType(typeof(SceneFog), out _).Should().BeFalse();
+        profile.Registry.TryGetDataByType(typeof(SceneRigidbody2D), out _).Should().BeTrue();
+        profile.Registry.TryGetDataByType(typeof(SceneCollider2D), out _).Should().BeTrue();
+        profile.Registry.TryGetDataByType(typeof(SceneRigidbody3D), out _).Should().BeFalse();
     }
 
     [Fact]
@@ -103,6 +106,8 @@ public sealed class SceneRuntimeProfileTests
         profile.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _).Should().BeTrue();
         profile.Registry.TryGetDataByType(typeof(SceneMeshRenderer), out _).Should().BeTrue();
         profile.Registry.TryGetDataByType(typeof(SceneDirectionalLight), out _).Should().BeTrue();
+        profile.Registry.TryGetDataByType(typeof(SceneRigidbody2D), out _).Should().BeTrue();
+        profile.Registry.TryGetDataByType(typeof(SceneRigidbody3D), out _).Should().BeTrue();
     }
 
     [Fact]
@@ -140,6 +145,8 @@ public sealed class SceneRuntimeProfileTests
         runtime.Profile.HasTransform3D.Should().BeTrue();
         runtime.Profile.HasTransform2D.Should().BeFalse();
         runtime.PhysicsBridges.Bridge3D.Should().BeTrue();
+        runtime.Physics.Should().NotBeNull();
+        runtime.Physics2D.Should().BeNull();
     }
 
     [Fact]
@@ -154,6 +161,20 @@ public sealed class SceneRuntimeProfileTests
         runtime.World.HasTransform2D.Should().BeTrue();
         runtime.World.HasTransform3D.Should().BeFalse();
         runtime.PhysicsBridges.Should().Be(new ScenePhysicsBridgeSelection(false, true));
+        runtime.Physics.Should().BeNull();
+        runtime.Physics2D.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Runtime_StepsBothBridgesForMixedProfile()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions
+        {
+            RuntimeProfile = SceneRuntimeProfiles.Mixed
+        });
+
+        runtime.Physics.Should().NotBeNull();
+        runtime.Physics2D.Should().NotBeNull();
     }
 
     [Fact]

@@ -579,6 +579,41 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void CaptureSnapshot_RoundTrips2DComponents()
+    {
+        using var source = new SceneRuntime(new SceneRuntimeOptions
+        {
+            RuntimeProfile = SceneRuntimeProfiles.TwoD
+        });
+
+        SceneActor actor = source.World.CreateActor("Body2D");
+        source.World.GetTransform2D(actor).SetPosition(new Vec2(1.0f, 2.0f));
+
+        SceneRigidbody2D body = SceneRigidbody2D.Default;
+        body.Mass = 2.0f;
+        body.AngularVelocity = 1.5f;
+        source.World.AddData(actor, body);
+
+        SceneCollider2D collider = SceneCollider2D.Box(1.0f, 2.0f, density: 3.0f);
+        collider.IsTrigger = true;
+        source.World.AddData(actor, collider);
+        source.World.UpdateTransforms();
+
+        SceneSnapshot snapshot = source.CaptureSnapshot("prefab/runtime-2d");
+
+        using var target = new SceneRuntime(new SceneRuntimeOptions
+        {
+            RuntimeProfile = SceneRuntimeProfiles.TwoD
+        });
+        ScenePrefabInstantiationResult result = target.LoadSnapshot(snapshot);
+
+        result.Actors.Should().ContainSingle();
+        SceneActor loaded = result.Actors[0];
+        target.World.GetData<SceneRigidbody2D>(loaded).Should().Be(body);
+        target.World.GetData<SceneCollider2D>(loaded).Should().Be(collider);
+    }
+
+    [Fact]
     public void Loop_TicksRuntimeAndRenders()
     {
         var api = new MockGLApi { EnableCallLogging = true };

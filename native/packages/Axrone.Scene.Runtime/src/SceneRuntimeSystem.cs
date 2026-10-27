@@ -43,17 +43,26 @@ public sealed class SceneRuntimeSystem : IGameLoopSystem<SceneRuntimeFrameState>
         _runtime.World.FixedUpdate(ToSeconds(ctx.StepDelta));
         _runtime.World.UpdateTransforms();
 
-        if (_runtime.PhysicsBridges.Bridge3D)
+        float stepSeconds = ToSeconds(ctx.StepDelta);
+
+        if (_runtime.Physics is { } physics)
         {
-            _runtime.Physics.SyncBodies();
-            _runtime.Physics.Step(ToSeconds(ctx.StepDelta));
-            _runtime.Physics.SyncTransformsFromPhysics();
+            physics.SyncBodies();
+            physics.Step(stepSeconds);
+            physics.SyncTransformsFromPhysics();
+        }
+
+        if (_runtime.Physics2D is { } physics2D)
+        {
+            physics2D.SyncBodies();
+            physics2D.Step(stepSeconds);
+            physics2D.SyncTransformsFromPhysics();
         }
 
         if (_runtime.HasParticles)
         {
             _runtime.Particles.SyncSystems();
-            _runtime.Particles.Step(ToSeconds(ctx.StepDelta));
+            _runtime.Particles.Step(stepSeconds);
         }
     }
 
