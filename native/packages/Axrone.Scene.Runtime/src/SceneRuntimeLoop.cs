@@ -75,15 +75,23 @@ public sealed class SceneRuntimeLoop : IDisposable
             return;
         }
 
-        _kernel.TransitionToRunning(timestamp);
-
+        var previousStatus = Status;
         try
         {
+            _kernel.TransitionToRunning(timestamp);
             _runtime.World.Start();
         }
         catch
         {
-            _kernel.TransitionToStopped();
+            // Rollback to previous state (Idle, Stopped, or Paused)
+            if (previousStatus == GameLoopStatus.Paused)
+            {
+                _kernel.TransitionToPaused();
+            }
+            else
+            {
+                _kernel.TransitionToStopped();
+            }
             throw;
         }
     }
@@ -95,12 +103,12 @@ public sealed class SceneRuntimeLoop : IDisposable
         _kernel.TransitionToPaused();
     }
 
-    /// <summary>Stops the loop and the scene world lifecycle.</summary>
+    /// <summary>Stops the loop and resets all behaviours for a fresh start.</summary>
     public void Stop()
     {
         ThrowIfDisposed();
-        _runtime.World.Stop();
         _kernel.TransitionToStopped();
+        _runtime.World.Stop();
     }
 
     /// <summary>Advances one frame.</summary>
@@ -116,6 +124,11 @@ public sealed class SceneRuntimeLoop : IDisposable
         if (_disposed)
         {
             return;
+        }
+
+        if (Status == GameLoopStatus.Running)
+        {
+            _runtime.World.Stop();
         }
 
         _kernel.Dispose();
