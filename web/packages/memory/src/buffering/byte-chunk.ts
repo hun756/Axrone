@@ -1301,8 +1301,22 @@ export class ByteCursor implements Disposable {
 export interface ByteChunkPoolOptions {
     readonly chunkSize?: number | undefined;
     readonly maxIdle?: number | undefined;
+    readonly maxTotal?: number | undefined;
+    readonly preallocate?: number | undefined;
     readonly clearOnRelease?: boolean | undefined;
+    readonly ttl?: number | undefined;
+    readonly validator?: ((chunk: ByteChunk<'MUT', 'OWNED'>) => boolean) | null;
+    readonly onAcquire?: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
+    readonly onRelease?: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
+    readonly onEvict?: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
     readonly metrics?: IMetricsSink<ChunkLifecycleEvent> | undefined;
+}
+
+export class ByteChunkPoolExhaustedError extends Error {
+    constructor(limit: number) {
+        super(`ByteChunkPool exhausted: ${limit} chunks already created`);
+        this.name = 'ByteChunkPoolExhaustedError';
+    }
 }
 
 let nextPoolTag = 1;
@@ -1310,20 +1324,50 @@ let nextPoolTag = 1;
 export class ByteChunkPool implements IChunkPoolRecycler {
     private readonly _chunkSize: number;
     private readonly _maxIdle: number;
+    private _maxTotal: number;
     private readonly _clearOnRelease: boolean;
+    private readonly _ttl: number;
+    private readonly _validator: ((chunk: ByteChunk<'MUT', 'OWNED'>) => boolean) | null;
+    private readonly _onAcquire: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
+    private readonly _onRelease: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
+    private readonly _onEvict: ((chunk: ByteChunk<'MUT', 'OWNED'>) => void) | null;
     private readonly _metrics: IMetricsSink<ChunkLifecycleEvent> | null;
     private readonly _idleStack: ByteChunk<'MUT', 'OWNED'>[] = [];
+    private readonly _idleSince: number[] = [];
     private readonly _poolTag: number;
-    private _totalCreated: number = 0;
-    private _activeAllocated: number = 0;
-    private _isDisposed: boolean = false;
+    private _totalCreated = 0;
+    private _activeAllocated = 0;
+    private _allocations = 0;
+    private _releases = 0;
+    private _hits = 0;
+    private _evictions = 0;
+    private _isDisposed = false;
 
     public constructor(options: ByteChunkPoolOptions = {}) {
         this._chunkSize = (options.chunkSize ?? 512) | 0;
-        this._maxIdle = (options.maxIdle ?? 1024) | 0;
+        this._maxIdle = options.maxIdle ?? 1024;
+        this._maxTotal = options.maxTotal ?? Number.POSITIVE_INFINITY;
         this._clearOnRelease = options.clearOnRelease ?? false;
+        this._ttl = options.ttl ?? 0;
+        this._validator = options.validator ?? null;
+        this._onAcquire = options.onAcquire ?? null;
+        this._onRelease = options.onRelease ?? null;
+        this._onEvict = options.onEvict ?? null;
         this._metrics = options.metrics ?? null;
         this._poolTag = (nextPoolTag = (nextPoolTag + 1) >>> 0);
+
+        const preallocate = Math.min(
+            options.preallocate ?? 0,
+            this._maxIdle,
+            this._maxTotal,
+            this._chunkSize <= 1 << 20 ? Number.MAX_SAFE_INTEGER : 0
+        );
+        const now = Date.now();
+        for (let i = 0; i < preallocate; i++) {
+            this._idleStack.push(ByteChunk.allocate({ capacity: this._chunkSize, mutability: 'MUT' }));
+            this._idleSince.push(now);
+            this._totalCreated = (this._totalCreated + 1) >>> 0;
+        }
     }
 
     public acquire(): ByteChunk<'MUT', 'OWNED'> {
@@ -1331,26 +1375,22 @@ export class ByteChunkPool implements IChunkPoolRecycler {
             throw new Error('Cannot acquire from disposed ByteChunkPool');
         }
 
-        this._activeAllocated = (this._activeAllocated + 1) >>> 0;
-
-        const cached = this._idleStack.pop();
-        if (cached !== undefined) {
-            friendReinitializeChunk(cached, 'MUT');
-            friendAttachRecycler(cached, this, this._poolTag);
-
-            if (this._metrics !== null) {
-                this._metrics.emit({ kind: 'retain', id: cached.id, count: 1, epoch: cached.epoch });
-            }
+        const cached = this._takeIdle();
+        if (cached !== null) {
+            this._allocations = (this._allocations + 1) >>> 0;
+            this._hits = (this._hits + 1) >>> 0;
+            this._activate(cached);
             return cached;
         }
 
-        const chunk = ByteChunk.allocate({
-            capacity: this._chunkSize,
-            mutability: 'MUT',
-            metrics: this._metrics ?? undefined,
-        });
+        if (this._totalCreated >= this._maxTotal) {
+            throw new ByteChunkPoolExhaustedError(this._maxTotal);
+        }
+
+        this._allocations = (this._allocations + 1) >>> 0;
+        const chunk = ByteChunk.allocate({ capacity: this._chunkSize, mutability: 'MUT' });
         this._totalCreated = (this._totalCreated + 1) >>> 0;
-        friendAttachRecycler(chunk, this, this._poolTag);
+        this._activate(chunk, true);
         return chunk;
     }
 
@@ -1359,14 +1399,14 @@ export class ByteChunkPool implements IChunkPoolRecycler {
             return null;
         }
 
-        const cached = this._idleStack.pop();
-        if (cached === undefined) {
+        const cached = this._takeIdle();
+        if (cached === null) {
             return null;
         }
 
-        this._activeAllocated = (this._activeAllocated + 1) >>> 0;
-        friendReinitializeChunk(cached, 'MUT');
-        friendAttachRecycler(cached, this, this._poolTag);
+        this._allocations = (this._allocations + 1) >>> 0;
+        this._hits = (this._hits + 1) >>> 0;
+        this._activate(cached);
         return cached;
     }
 
@@ -1381,8 +1421,12 @@ export class ByteChunkPool implements IChunkPoolRecycler {
         // Idempotence guard: a second release no longer matches the pool tag.
         internals._poolTag = 0;
         this._activeAllocated = (this._activeAllocated - 1) >>> 0;
+        this._releases = (this._releases + 1) >>> 0;
+        this._onRelease?.(chunk as ByteChunk<'MUT', 'OWNED'>);
 
         if (this._idleStack.length >= this._maxIdle) {
+            this._evictions = (this._evictions + 1) >>> 0;
+            this._onEvict?.(chunk as ByteChunk<'MUT', 'OWNED'>);
             return;
         }
 
@@ -1391,6 +1435,7 @@ export class ByteChunkPool implements IChunkPoolRecycler {
         }
 
         this._idleStack.push(chunk as ByteChunk<'MUT', 'OWNED'>);
+        this._idleSince.push(Date.now());
     }
 
     public recycle(chunk: ByteChunk<any, any>): void {
@@ -1409,8 +1454,37 @@ export class ByteChunkPool implements IChunkPoolRecycler {
         return this._totalCreated;
     }
 
+    public getAllocations(): number {
+        return this._allocations;
+    }
+
+    public getReleases(): number {
+        return this._releases;
+    }
+
+    public getHits(): number {
+        return this._hits;
+    }
+
+    public getEvictions(): number {
+        return this._evictions;
+    }
+
+    public getHitRatio(): number {
+        return this._allocations > 0 ? this._hits / this._allocations : 0;
+    }
+
+    public resize(maxTotal: number): void {
+        this._maxTotal = Math.max(0, maxTotal);
+    }
+
     public clear(): void {
-        this._idleStack.length = 0;
+        while (this._idleStack.length > 0) {
+            const chunk = this._idleStack.pop()!;
+            this._idleSince.pop();
+            this._evictions = (this._evictions + 1) >>> 0;
+            this._onEvict?.(chunk);
+        }
     }
 
     public [Symbol.dispose](): void {
@@ -1418,6 +1492,45 @@ export class ByteChunkPool implements IChunkPoolRecycler {
             this._isDisposed = true;
             this.clear();
         }
+    }
+
+    private _takeIdle(): ByteChunk<'MUT', 'OWNED'> | null {
+        const now = Date.now();
+
+        while (this._idleStack.length > 0) {
+            const chunk = this._idleStack.pop()!;
+            const since = this._idleSince.pop()!;
+
+            if (this._ttl > 0 && now - since > this._ttl) {
+                this._evictions = (this._evictions + 1) >>> 0;
+                this._onEvict?.(chunk);
+                continue;
+            }
+
+            if (this._validator !== null && !this._validator(chunk)) {
+                this._evictions = (this._evictions + 1) >>> 0;
+                this._onEvict?.(chunk);
+                continue;
+            }
+
+            return chunk;
+        }
+
+        return null;
+    }
+
+    private _activate(chunk: ByteChunk<'MUT', 'OWNED'>, attached = false): void {
+        this._activeAllocated = (this._activeAllocated + 1) >>> 0;
+        friendReinitializeChunk(chunk, 'MUT');
+        if (!attached) {
+            friendAttachRecycler(chunk, this, this._poolTag);
+        } else {
+            friendAttachRecycler(chunk, this, this._poolTag);
+        }
+        if (this._metrics !== null) {
+            this._metrics.emit({ kind: 'retain', id: chunk.id, count: 1, epoch: chunk.epoch });
+        }
+        this._onAcquire?.(chunk);
     }
 }
 
