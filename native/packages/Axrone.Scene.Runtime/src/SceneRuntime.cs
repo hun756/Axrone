@@ -42,6 +42,8 @@ public sealed class SceneRuntime : IDisposable
         Snapshots = new SceneSnapshotLoader(World, Assets, Codecs, PrefabResolver);
         Profiler = new SceneRuntimeProfiler(options.Profiler);
         Physics = new ScenePhysicsBridge3D(World);
+        Particles = new SceneParticleBridge3D(World);
+        HasParticles = World.Registry.TryGetDataByType(typeof(SceneParticleSystem), out _);
 
         Frame = new SceneFramePipeline(
             World,
@@ -89,6 +91,12 @@ public sealed class SceneRuntime : IDisposable
 
     /// <summary>3D physics bridge; active when the profile registers physics components.</summary>
     public ScenePhysicsBridge3D Physics { get; }
+
+    /// <summary>Particle bridge; active when the profile registers particle components.</summary>
+    public SceneParticleBridge3D Particles { get; }
+
+    /// <summary>Whether the profile registers particle systems.</summary>
+    public bool HasParticles { get; }
 
     /// <summary>Viewport width forwarded to the frame planner.</summary>
     public int ViewportWidth
@@ -165,6 +173,7 @@ public sealed class SceneRuntime : IDisposable
         }
 
         Frame.Dispose();
+        Particles.Dispose();
         Physics.Dispose();
         Profiler.Dispose();
         World.Dispose();

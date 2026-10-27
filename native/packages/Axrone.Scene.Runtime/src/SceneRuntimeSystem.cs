@@ -49,6 +49,12 @@ public sealed class SceneRuntimeSystem : IGameLoopSystem<SceneRuntimeFrameState>
             _runtime.Physics.Step(ToSeconds(ctx.StepDelta));
             _runtime.Physics.SyncTransformsFromPhysics();
         }
+
+        if (_runtime.HasParticles)
+        {
+            _runtime.Particles.SyncSystems();
+            _runtime.Particles.Step(ToSeconds(ctx.StepDelta));
+        }
     }
 
     /// <inheritdoc/>

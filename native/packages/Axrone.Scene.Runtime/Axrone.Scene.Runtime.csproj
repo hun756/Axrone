@@ -33,6 +33,7 @@
     <ProjectReference Include="../Axrone.Scene.Snapshot/Axrone.Scene.Snapshot.csproj" />
     <ProjectReference Include="../Axrone.GameLoop/Axrone.GameLoop.csproj" />
     <ProjectReference Include="../Axrone.Physics3D/Axrone.Physics3D.csproj" />
+    <ProjectReference Include="../Axrone.Particles/Axrone.Particles.csproj" />
     <ProjectReference Include="../Axrone.Numeric/Axrone.Numeric.csproj" />
     <ProjectReference Include="../Axrone.Geometry/Axrone.Geometry.csproj" />
     <ProjectReference Include="../Axrone.Lighting/Axrone.Lighting.csproj" />
