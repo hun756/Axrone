@@ -402,6 +402,46 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void Loop_StopThenStart_RerunsStartAndOnEnable()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/loop-restart")))
+            .AddTransform3D()
+            .AddBehaviour<CountingBehaviour>("Counting")
+            .Build();
+
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        SceneActor actor = runtime.World.CreateActor("Actor");
+        CountingBehaviour behaviour = runtime.World.AddBehaviour<CountingBehaviour>(actor);
+        using var loop = new SceneRuntimeLoop(runtime);
+
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        behaviour.StartCount.Should().Be(1);
+        behaviour.EnableCount.Should().Be(1);
+        loop.Stop();
+
+        loop.Start(GameTime.FromMilliseconds(16.67));
+        behaviour.StartCount.Should().Be(2);
+        behaviour.EnableCount.Should().Be(2);
+
+        _ = loop.Tick(GameTime.FromMilliseconds(33.34));
+        behaviour.UpdateCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Loop_DisposeStopsWorld()
+    {
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
+        var loop = new SceneRuntimeLoop(runtime);
+        loop.Start(GameTime.FromMilliseconds(0.0));
+        runtime.World.IsStarted.Should().BeTrue();
+
+        loop.Dispose();
+
+        runtime.World.IsStarted.Should().BeFalse();
+    }
+
+    [Fact]
     public void Loop_StartIsIdempotent()
     {
         using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = CreateProfile() });
@@ -542,9 +582,17 @@ public sealed class SceneRuntimeTests
 
     private sealed class CountingBehaviour : SceneBehaviour
     {
+        public int StartCount { get; private set; }
+
+        public int EnableCount { get; private set; }
+
         public int UpdateCount { get; private set; }
 
         public int FixedUpdateCount { get; private set; }
+
+        public override void Start() => StartCount++;
+
+        public override void OnEnable() => EnableCount++;
 
         public override void Update(float deltaSeconds) => UpdateCount++;
 
