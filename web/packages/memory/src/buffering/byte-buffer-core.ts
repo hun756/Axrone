@@ -328,6 +328,17 @@ export class ByteBuffer implements IByteBuffer {
         return this;
     }
 
+    /**
+     * Zero-copy view over [begin, end). Does not change position or limit.
+     * The view aliases the pooled buffer: do not retain it past `release()`.
+     */
+    subarray(begin: number = this.pos, end: number = this.limitPos): Uint8Array {
+        this.checkState();
+        const start = Math.max(0, Math.min(begin, this.limitPos));
+        const stop = Math.max(start, Math.min(end, this.limitPos));
+        return this.u8Array.subarray(start, stop);
+    }
+
     slice(begin?: number, end?: number): ByteBuffer {
         this.checkState();
         const start = begin ?? this.pos;

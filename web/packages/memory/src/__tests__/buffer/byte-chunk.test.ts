@@ -126,6 +126,24 @@ describe('ByteChunkPool', () => {
     });
 });
 
+describe('ByteBuffer zero-copy borrow', () => {
+    it('subarray returns a view without copying or moving position', () => {
+        ByteChunkPoolSet.resetInstance();
+        const buffer = ByteBuffer.alloc(64);
+        buffer.putInt32(0x11223344);
+        buffer.flip();
+
+        const view = buffer.subarray(0, 4);
+        expect(view.buffer).toBe(buffer.getBuffer());
+        expect(view.byteLength).toBe(4);
+        expect(view[0]).toBe(0x11);
+        expect(buffer.position).toBe(0);
+
+        buffer.release();
+        ByteChunkPoolSet.resetInstance();
+    });
+});
+
 describe('ByteChunkPoolSet', () => {
     it('buckets requests to powers of two and reuses buffers', () => {
         const set = new ByteChunkPoolSet({ clearOnRelease: false, maxIdlePerBucket: 4 });
