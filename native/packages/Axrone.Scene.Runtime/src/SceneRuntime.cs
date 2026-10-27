@@ -36,6 +36,7 @@ public sealed class SceneRuntime : IDisposable
         Codecs = new SceneCodecRegistry(World.Registry);
         ScenePrefabCodecs.RegisterCore(Codecs, World.Registry);
         SceneRenderingCodecs.Register(Codecs, World.Registry, Assets);
+        SceneRuntimeCodecs.Register(Codecs, World.Registry);
 
         Prefabs = new ScenePrefabRegistry();
         PrefabResolver = new ScenePrefabResolver(Prefabs);

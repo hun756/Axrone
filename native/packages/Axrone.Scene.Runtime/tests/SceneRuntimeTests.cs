@@ -535,6 +535,50 @@ public sealed class SceneRuntimeTests
     }
 
     [Fact]
+    public void CaptureSnapshot_RoundTripsRuntimeComponents()
+    {
+        using var source = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = CreateRuntimeComponentProfile()
+        });
+
+        SceneActor actor = source.World.CreateActor("Body");
+        source.World.GetTransform3D(actor).SetPosition(new Vec3(1.0f, 2.0f, 3.0f));
+
+        SceneRigidbody3D body = SceneRigidbody3D.Default;
+        body.BodyType = SceneBodyType.Kinematic;
+        body.LinearVelocity = new Vec3(4.0f, 5.0f, 6.0f);
+        body.GravityScale = 0.25f;
+        body.Mass = 2.5f;
+        source.World.AddData(actor, body);
+
+        SceneCollider3D collider = SceneCollider3D.Box(1.0f, 2.0f, 3.0f, density: 5.0f);
+        collider.Friction = 0.75f;
+        source.World.AddData(actor, collider);
+
+        SceneParticleSystem particles = SceneParticleSystem.Default;
+        particles.EmissionRate = 42.0f;
+        particles.StartColor = new Vec4(0.1f, 0.2f, 0.3f, 0.4f);
+        particles.MaxParticles = 64;
+        source.World.AddData(actor, particles);
+        source.World.UpdateTransforms();
+
+        SceneSnapshot snapshot = source.CaptureSnapshot("prefab/runtime-components");
+
+        using var target = new SceneRuntime(new SceneRuntimeOptions
+        {
+            Profile = CreateRuntimeComponentProfile()
+        });
+        ScenePrefabInstantiationResult result = target.LoadSnapshot(snapshot);
+
+        result.Actors.Should().ContainSingle();
+        SceneActor loaded = result.Actors[0];
+        target.World.GetData<SceneRigidbody3D>(loaded).Should().Be(body);
+        target.World.GetData<SceneCollider3D>(loaded).Should().Be(collider);
+        target.World.GetData<SceneParticleSystem>(loaded).Should().Be(particles);
+    }
+
+    [Fact]
     public void Loop_TicksRuntimeAndRenders()
     {
         var api = new MockGLApi { EnableCallLogging = true };
@@ -660,6 +704,13 @@ public sealed class SceneRuntimeTests
             .AddTransform3D()
             .AddRendering3D()
             .AddLighting3D()
+            .Build();
+
+    private static SceneProfile CreateRuntimeComponentProfile() =>
+        new SceneProfileBuilder(new SceneProfileId(SceneStringId.FromName("test/runtime-components")))
+            .AddTransform3D()
+            .AddPhysics3D()
+            .AddParticles3D()
             .Build();
 
     private static SceneRuntime CreateRenderableRuntime(
