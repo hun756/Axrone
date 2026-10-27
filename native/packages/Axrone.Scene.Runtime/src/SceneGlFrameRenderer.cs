@@ -22,7 +22,11 @@ public sealed class SceneGlFrameRenderer : IDisposable
         _context = context;
         _runtime = runtime;
         _assets = new SceneGlAssetCache(context, runtime.Assets);
-        _orchestrator = new SceneGlRenderOrchestrator(context, _assets, runtime.World);
+        _orchestrator = new SceneGlRenderOrchestrator(
+            context,
+            _assets,
+            runtime.World,
+            runtime.HasParticles ? runtime.Particles : null);
     }
 
     /// <summary>GPU-side asset cache.</summary>

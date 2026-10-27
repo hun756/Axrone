@@ -2,21 +2,32 @@ namespace Axrone.Scene.Rendering.OpenGL;
 
 /// <summary>
 /// Executes a planned frame across every active render path. For each pass it
-/// submits 3D meshes through the draw executor and 2D sprites through the
-/// sprite batch, so mixed 2D/3D scenes share one deterministic pass order.
+/// submits 3D meshes through the draw executor, 2D sprites through the sprite
+/// batch and particles through the point-sprite batch, so mixed 2D/3D scenes
+/// share one deterministic pass order.
 /// </summary>
 public sealed class SceneGlRenderOrchestrator : IDisposable
 {
     private readonly SceneGlDrawExecutor _meshExecutor;
     private readonly SceneGlSpriteBatchRenderer _spriteRenderer;
+    private readonly ISceneParticleSource? _particles;
+    private readonly SceneGlParticleBatchRenderer? _particleRenderer;
     private readonly bool _hasSpriteComponent;
     private bool _disposed;
 
     /// <summary>Creates an orchestrator over an uploaded GPU asset cache.</summary>
+    /// <param name="context">Render-thread GL context.</param>
+    /// <param name="assets">Uploaded GPU asset cache.</param>
+    /// <param name="world">World whose actors are submitted.</param>
+    /// <param name="particles">
+    /// Optional particle source; when supplied, particle point draws are
+    /// interleaved into every blending pass.
+    /// </param>
     public SceneGlRenderOrchestrator(
         GLContext context,
         SceneGlAssetCache assets,
-        SceneWorld world)
+        SceneWorld world,
+        ISceneParticleSource? particles = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(assets);
@@ -25,6 +36,12 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         _meshExecutor = new SceneGlDrawExecutor(context, assets);
         _spriteRenderer = new SceneGlSpriteBatchRenderer(context, assets);
         _hasSpriteComponent = world.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
+
+        if (particles is not null)
+        {
+            _particles = particles;
+            _particleRenderer = new SceneGlParticleBatchRenderer(context);
+        }
     }
 
     /// <summary>Mesh executor used by the orchestrator (diagnostics/tests).</summary>
@@ -73,6 +90,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                 }
             }
 
+            RenderParticles(camera, pass, frameState);
+
             passCount++;
         }
 
@@ -87,8 +106,30 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
             return;
         }
 
+        _particleRenderer?.Dispose();
         _spriteRenderer.Dispose();
         _disposed = true;
+    }
+
+    private void RenderParticles(
+        SceneCameraFrame camera,
+        SceneRenderPassDefinition pass,
+        SceneRenderFrameState frameState)
+    {
+        if (_particleRenderer is null || pass.Blend == false)
+        {
+            return;
+        }
+
+        int systems = _particles!.SystemCount;
+        for (int i = 0; i < systems; i++)
+        {
+            SceneParticleSnapshot snapshot = _particles.GetSnapshot(i);
+            if (snapshot.Count > 0)
+            {
+                _ = _particleRenderer.Render(snapshot, camera, pass, frameState);
+            }
+        }
     }
 
     private void ThrowIfDisposed()
