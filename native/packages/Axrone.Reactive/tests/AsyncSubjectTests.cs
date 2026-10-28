@@ -1,0 +1,82 @@
+namespace Axrone.Reactive.Tests;
+
+public class AsyncSubjectTests
+{
+    [Fact]
+    public void OnlyTheLastValueIsEmittedOnCompletion()
+    {
+        using var subject = new AsyncSubject<int>();
+        var observer = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(observer);
+
+        subject.OnNext(1);
+        subject.OnNext(2);
+        observer.Values.Should().BeEmpty();
+
+        subject.OnCompleted();
+
+        observer.Values.Should().Equal(2);
+        observer.Completed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LateSubscriberAfterCompletionReceivesValueThenCompletion()
+    {
+        using var subject = new AsyncSubject<int>();
+        subject.OnNext(42);
+        subject.OnCompleted();
+
+        var late = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(late);
+
+        late.Values.Should().Equal(42);
+        late.Completed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FaultEmitsErrorWithoutValue()
+    {
+        using var subject = new AsyncSubject<int>();
+        subject.OnNext(9);
+        var fault = new InvalidOperationException("async fault");
+        subject.OnError(fault);
+
+        var early = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(early);
+        var late = new RecordingObserver<int>();
+        using var lateSubscription = subject.Subscribe(late);
+
+        early.Values.Should().BeEmpty();
+        early.Error.Should().BeSameAs(fault);
+        late.Values.Should().BeEmpty();
+        late.Error.Should().BeSameAs(fault);
+        subject.IsFaulted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CompletionWithoutAValueCompletesEmpty()
+    {
+        using var subject = new AsyncSubject<int>();
+        subject.OnCompleted();
+
+        var late = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(late);
+
+        late.Values.Should().BeEmpty();
+        late.Completed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValuesAfterCompletionAreIgnored()
+    {
+        using var subject = new AsyncSubject<int>();
+        subject.OnNext(1);
+        subject.OnCompleted();
+        subject.OnNext(2);
+
+        var late = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(late);
+
+        late.Values.Should().Equal(1);
+    }
+}
