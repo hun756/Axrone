@@ -194,6 +194,7 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
         }),
         bindBuffer: vi.fn(),
         bufferData: vi.fn(),
+        bufferSubData: vi.fn(),
         deleteBuffer: vi.fn((buffer: object) => {
             buffers.delete(buffer);
         }),
