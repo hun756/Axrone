@@ -11,8 +11,10 @@ public sealed partial class World : IDisposable
     private readonly EntityStore _entities;
     private readonly IDiagnosticsSink _diagnostics;
     private readonly ArchetypeQueryCache _queryCache = new();
+    private readonly RemovalJournal _removals = new();
     private readonly Lock _structuralSync = new();
     private long _frameCount;
+    private int _tick;
 
     /// <summary>Archetype graph.</summary>
     public ArchetypeGraph Archetypes => _archetypes;
@@ -27,6 +29,15 @@ public sealed partial class World : IDisposable
 
     /// <summary>Stepped frame count.</summary>
     public long FrameCount => Volatile.Read(ref _frameCount);
+
+    /// <summary>Current change tick, advanced by <see cref="Step"/>.</summary>
+    public int Tick => Volatile.Read(ref _tick);
+
+    /// <summary>Retained component-removal count.</summary>
+    public int RemovalCount => _removals.Count;
+
+    /// <summary>Removals lost because the removal ring was full.</summary>
+    public long DroppedRemovals => _removals.DroppedCount;
 
     /// <summary>Creates a world.</summary>
     public World(int initialCapacity = 4096, IDiagnosticsSink? diagnostics = null)
@@ -67,7 +78,9 @@ public sealed partial class World : IDisposable
 
             if (currentArch.Mask.IsSet(compId))
             {
-                currentArch.GetColumn<T>()!.Set(loc.Row, in component);
+                ComponentColumn<T> column = currentArch.GetColumn<T>()!;
+                column.Set(loc.Row, in component);
+                column.MarkChanged(loc.Row, Tick);
                 return;
             }
 
@@ -105,6 +118,7 @@ public sealed partial class World : IDisposable
             }
 
             nextArch.GetColumn<T>()!.Set(newRow, in component);
+            nextArch.GetColumn<T>()!.MarkAdded(newRow, Tick);
 
             if (currentArch.RemoveRow(loc.Row, out Entity movedEntity))
             {
@@ -173,10 +187,49 @@ public sealed partial class World : IDisposable
             }
 
             _entities.UpdateRecord(entity.Id, nextArch.Id, newRow);
+            _removals.Record(entity, compId, Tick);
         }
     }
 
-    /// <summary>References a component for direct mutation.</summary>
+    /// <summary>
+    /// Overwrites an existing component and marks it changed. Use this instead of writing
+    /// through <see cref="GetComponent{T}"/> when change detection matters.
+    /// </summary>
+    public void SetComponent<T>(scoped in Entity entity, scoped in T component) where T : unmanaged
+    {
+        using (_structuralSync.EnterScope())
+        {
+            EntityLookupResult loc = _entities.Resolve(entity);
+            if (loc.Kind != EntityLookupResultKind.Found)
+            {
+                EcsThrowHelper.ThrowEntityNotFound(entity);
+            }
+
+            Archetype arch = _archetypes.GetArchetype(loc.ArchetypeId);
+            ComponentColumn<T>? column = arch.GetColumn<T>();
+            if (column == null)
+            {
+                EcsThrowHelper.ThrowComponentNotFound(typeof(T).Name);
+            }
+
+            column.Set(loc.Row, in component);
+            column.MarkChanged(loc.Row, Tick);
+        }
+    }
+
+    /// <summary>Collects entities that lost a component after <paramref name="sinceTick"/>.</summary>
+    public int GetRemoved<T>(int sinceTick, Span<Entity> results) where T : unmanaged =>
+        _removals.GetRemoved(ComponentType<T>.Id, sinceTick, results);
+
+    /// <summary>Whether an entity lost a component after <paramref name="sinceTick"/>.</summary>
+    public bool WasRemoved<T>(scoped in Entity entity, int sinceTick) where T : unmanaged =>
+        _removals.WasRemoved(in entity, ComponentType<T>.Id, sinceTick);
+
+    /// <summary>
+    /// References a component for direct mutation. Writes through the returned reference
+    /// are not change-tracked; call <see cref="SetComponent{T}"/> when a changed tick is
+    /// required.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref T GetComponent<T>(scoped in Entity entity) where T : unmanaged
     {
@@ -217,6 +270,16 @@ public sealed partial class World : IDisposable
             if (_entities.TryFree(entity, out EntityRecord record))
             {
                 Archetype arch = _archetypes.GetArchetype(record.ArchetypeId);
+                ComponentMask mask = arch.Mask;
+                for (ushort value = 0; value < 256; value++)
+                {
+                    ComponentId componentId = new(value);
+                    if (mask.IsSet(componentId))
+                    {
+                        _removals.Record(entity, componentId, Tick);
+                    }
+                }
+
                 if (arch.RemoveRow(record.Row, out Entity movedEntity))
                 {
                     _entities.UpdateRecord(movedEntity.Id, arch.Id, record.Row);
@@ -227,11 +290,12 @@ public sealed partial class World : IDisposable
         }
     }
 
-    /// <summary>Advances the frame counter.</summary>
+    /// <summary>Advances the frame counter and the change tick.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Step()
     {
         Interlocked.Increment(ref _frameCount);
+        Interlocked.Increment(ref _tick);
     }
 
     /// <summary>Opens a single-component query.</summary>

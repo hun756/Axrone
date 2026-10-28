@@ -80,12 +80,31 @@ public readonly ref struct Chunk1<T1> where T1 : unmanaged
     /// <summary>Component slice.</summary>
     public readonly Span<T1> Column1;
 
-    /// <summary>Creates a chunk.</summary>
+    /// <summary>Added tick per row; aligned with <see cref="Entities"/>.</summary>
+    public readonly ReadOnlySpan<int> Added1;
+
+    /// <summary>Changed tick per row; aligned with <see cref="Entities"/>.</summary>
+    public readonly ReadOnlySpan<int> Changed1;
+
+    /// <summary>Creates a chunk without change ticks.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Chunk1(ReadOnlySpan<Entity> entities, Span<T1> c1)
+        : this(entities, c1, default, default)
+    {
+    }
+
+    /// <summary>Creates a chunk with change ticks.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Chunk1(
+        ReadOnlySpan<Entity> entities,
+        Span<T1> c1,
+        ReadOnlySpan<int> added1,
+        ReadOnlySpan<int> changed1)
     {
         Entities = entities;
         Column1 = c1;
+        Added1 = added1;
+        Changed1 = changed1;
     }
 
     /// <summary>Row count.</summary>
@@ -112,13 +131,43 @@ public readonly ref struct Chunk2<T1, T2> where T1 : unmanaged where T2 : unmana
     /// <summary>Second slice.</summary>
     public readonly Span<T2> Column2;
 
-    /// <summary>Creates a chunk.</summary>
+    /// <summary>First added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added1;
+
+    /// <summary>First changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed1;
+
+    /// <summary>Second added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added2;
+
+    /// <summary>Second changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed2;
+
+    /// <summary>Creates a chunk without change ticks.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Chunk2(ReadOnlySpan<Entity> entities, Span<T1> c1, Span<T2> c2)
+        : this(entities, c1, c2, default, default, default, default)
+    {
+    }
+
+    /// <summary>Creates a chunk with change ticks.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Chunk2(
+        ReadOnlySpan<Entity> entities,
+        Span<T1> c1,
+        Span<T2> c2,
+        ReadOnlySpan<int> added1,
+        ReadOnlySpan<int> changed1,
+        ReadOnlySpan<int> added2,
+        ReadOnlySpan<int> changed2)
     {
         Entities = entities;
         Column1 = c1;
         Column2 = c2;
+        Added1 = added1;
+        Changed1 = changed1;
+        Added2 = added2;
+        Changed2 = changed2;
     }
 
     /// <summary>Row count.</summary>
@@ -152,14 +201,55 @@ public readonly ref struct Chunk3<T1, T2, T3>
     /// <summary>Third slice.</summary>
     public readonly Span<T3> Column3;
 
-    /// <summary>Creates a chunk.</summary>
+    /// <summary>First added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added1;
+
+    /// <summary>First changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed1;
+
+    /// <summary>Second added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added2;
+
+    /// <summary>Second changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed2;
+
+    /// <summary>Third added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added3;
+
+    /// <summary>Third changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed3;
+
+    /// <summary>Creates a chunk without change ticks.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Chunk3(ReadOnlySpan<Entity> entities, Span<T1> c1, Span<T2> c2, Span<T3> c3)
+        : this(entities, c1, c2, c3, default, default, default, default, default, default)
+    {
+    }
+
+    /// <summary>Creates a chunk with change ticks.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Chunk3(
+        ReadOnlySpan<Entity> entities,
+        Span<T1> c1,
+        Span<T2> c2,
+        Span<T3> c3,
+        ReadOnlySpan<int> added1,
+        ReadOnlySpan<int> changed1,
+        ReadOnlySpan<int> added2,
+        ReadOnlySpan<int> changed2,
+        ReadOnlySpan<int> added3,
+        ReadOnlySpan<int> changed3)
     {
         Entities = entities;
         Column1 = c1;
         Column2 = c2;
         Column3 = c3;
+        Added1 = added1;
+        Changed1 = changed1;
+        Added2 = added2;
+        Changed2 = changed2;
+        Added3 = added3;
+        Changed3 = changed3;
     }
 
     /// <summary>Row count.</summary>
@@ -198,15 +288,72 @@ public readonly ref struct Chunk4<T1, T2, T3, T4>
     /// <summary>Fourth slice.</summary>
     public readonly Span<T4> Column4;
 
-    /// <summary>Creates a chunk.</summary>
+    /// <summary>First added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added1;
+
+    /// <summary>First changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed1;
+
+    /// <summary>Second added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added2;
+
+    /// <summary>Second changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed2;
+
+    /// <summary>Third added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added3;
+
+    /// <summary>Third changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed3;
+
+    /// <summary>Fourth added tick per row.</summary>
+    public readonly ReadOnlySpan<int> Added4;
+
+    /// <summary>Fourth changed tick per row.</summary>
+    public readonly ReadOnlySpan<int> Changed4;
+
+    /// <summary>Creates a chunk without change ticks.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Chunk4(ReadOnlySpan<Entity> entities, Span<T1> c1, Span<T2> c2, Span<T3> c3, Span<T4> c4)
+    public Chunk4(
+        ReadOnlySpan<Entity> entities,
+        Span<T1> c1,
+        Span<T2> c2,
+        Span<T3> c3,
+        Span<T4> c4)
+        : this(entities, c1, c2, c3, c4, default, default, default, default, default, default, default, default)
+    {
+    }
+
+    /// <summary>Creates a chunk with change ticks.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Chunk4(
+        ReadOnlySpan<Entity> entities,
+        Span<T1> c1,
+        Span<T2> c2,
+        Span<T3> c3,
+        Span<T4> c4,
+        ReadOnlySpan<int> added1,
+        ReadOnlySpan<int> changed1,
+        ReadOnlySpan<int> added2,
+        ReadOnlySpan<int> changed2,
+        ReadOnlySpan<int> added3,
+        ReadOnlySpan<int> changed3,
+        ReadOnlySpan<int> added4,
+        ReadOnlySpan<int> changed4)
     {
         Entities = entities;
         Column1 = c1;
         Column2 = c2;
         Column3 = c3;
         Column4 = c4;
+        Added1 = added1;
+        Changed1 = changed1;
+        Added2 = added2;
+        Changed2 = changed2;
+        Added3 = added3;
+        Changed3 = changed3;
+        Added4 = added4;
+        Changed4 = changed4;
     }
 
     /// <summary>Row count.</summary>
@@ -286,7 +433,13 @@ public readonly ref struct Query1<T1> where T1 : unmanaged
                 Archetype arch = _archetypes[_matches[_index]];
                 if (arch.Count > 0)
                 {
-                    _current = new Chunk1<T1>(arch.Entities, arch.GetColumn<T1>()!.AsSpan());
+                    ComponentColumn<T1> c1 = arch.GetColumn<T1>()!;
+                    int count = arch.Count;
+                    _current = new Chunk1<T1>(
+                        arch.Entities,
+                        c1.AsSpan(),
+                        c1.AddedTicks[..count],
+                        c1.ChangedTicks[..count]);
                     return true;
                 }
             }
@@ -373,10 +526,17 @@ public readonly ref struct Query2<T1, T2> where T1 : unmanaged where T2 : unmana
                 Archetype arch = _archetypes[_matches[_index]];
                 if (arch.Count > 0)
                 {
+                    ComponentColumn<T1> c1 = arch.GetColumn<T1>()!;
+                    ComponentColumn<T2> c2 = arch.GetColumn<T2>()!;
+                    int count = arch.Count;
                     _current = new Chunk2<T1, T2>(
                         arch.Entities,
-                        arch.GetColumn<T1>()!.AsSpan(),
-                        arch.GetColumn<T2>()!.AsSpan());
+                        c1.AsSpan(),
+                        c2.AsSpan(),
+                        c1.AddedTicks[..count],
+                        c1.ChangedTicks[..count],
+                        c2.AddedTicks[..count],
+                        c2.ChangedTicks[..count]);
                     return true;
                 }
             }
@@ -470,11 +630,21 @@ public readonly ref struct Query3<T1, T2, T3>
                 Archetype arch = _archetypes[_matches[_index]];
                 if (arch.Count > 0)
                 {
+                    ComponentColumn<T1> c1 = arch.GetColumn<T1>()!;
+                    ComponentColumn<T2> c2 = arch.GetColumn<T2>()!;
+                    ComponentColumn<T3> c3 = arch.GetColumn<T3>()!;
+                    int count = arch.Count;
                     _current = new Chunk3<T1, T2, T3>(
                         arch.Entities,
-                        arch.GetColumn<T1>()!.AsSpan(),
-                        arch.GetColumn<T2>()!.AsSpan(),
-                        arch.GetColumn<T3>()!.AsSpan());
+                        c1.AsSpan(),
+                        c2.AsSpan(),
+                        c3.AsSpan(),
+                        c1.AddedTicks[..count],
+                        c1.ChangedTicks[..count],
+                        c2.AddedTicks[..count],
+                        c2.ChangedTicks[..count],
+                        c3.AddedTicks[..count],
+                        c3.ChangedTicks[..count]);
                     return true;
                 }
             }
@@ -570,12 +740,25 @@ public readonly ref struct Query4<T1, T2, T3, T4>
                 Archetype arch = _archetypes[_matches[_index]];
                 if (arch.Count > 0)
                 {
+                    ComponentColumn<T1> c1 = arch.GetColumn<T1>()!;
+                    ComponentColumn<T2> c2 = arch.GetColumn<T2>()!;
+                    ComponentColumn<T3> c3 = arch.GetColumn<T3>()!;
+                    ComponentColumn<T4> c4 = arch.GetColumn<T4>()!;
+                    int count = arch.Count;
                     _current = new Chunk4<T1, T2, T3, T4>(
                         arch.Entities,
-                        arch.GetColumn<T1>()!.AsSpan(),
-                        arch.GetColumn<T2>()!.AsSpan(),
-                        arch.GetColumn<T3>()!.AsSpan(),
-                        arch.GetColumn<T4>()!.AsSpan());
+                        c1.AsSpan(),
+                        c2.AsSpan(),
+                        c3.AsSpan(),
+                        c4.AsSpan(),
+                        c1.AddedTicks[..count],
+                        c1.ChangedTicks[..count],
+                        c2.AddedTicks[..count],
+                        c2.ChangedTicks[..count],
+                        c3.AddedTicks[..count],
+                        c3.ChangedTicks[..count],
+                        c4.AddedTicks[..count],
+                        c4.ChangedTicks[..count]);
                     return true;
                 }
             }

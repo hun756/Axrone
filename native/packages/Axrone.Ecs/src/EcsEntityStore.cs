@@ -80,8 +80,8 @@ public sealed class EntityStore
     /// <summary>Creates a store.</summary>
     public EntityStore(int initialCapacity = 4096)
     {
-        _records = GC.AllocateUninitializedArray<EntityRecord>(initialCapacity);
-        _freeList = GC.AllocateUninitializedArray<int>(initialCapacity);
+        _records = GC.AllocateArray<EntityRecord>(initialCapacity, pinned: true);
+        _freeList = GC.AllocateArray<int>(initialCapacity, pinned: true);
         _freeCount = 0;
         _nextId = 1;
         _aliveCount = 0;
@@ -186,7 +186,7 @@ public sealed class EntityStore
     private void Grow()
     {
         int newCap = _records.Length * 2;
-        EntityRecord[] grown = GC.AllocateUninitializedArray<EntityRecord>(newCap);
+        EntityRecord[] grown = GC.AllocateArray<EntityRecord>(newCap, pinned: true);
         Array.Copy(_records, grown, _records.Length);
         for (int i = _records.Length; i < newCap; i++)
         {

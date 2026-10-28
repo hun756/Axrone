@@ -68,4 +68,10 @@ internal static class EcsThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowExhaustiveMatchFailure() =>
         throw new EcsConfigurationException("ecs.exhaustive-match", "Non-exhaustive match on a discriminated union branch.");
+
+    /// <summary>Throws when a removal journal is created with a non-positive capacity.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidJournalCapacity(int capacity) =>
+        throw new EcsConfigurationException("ecs.invalid-journal-capacity", $"Removal journal capacity must be positive, but was {capacity}.");
 }

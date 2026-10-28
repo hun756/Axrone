@@ -3,6 +3,16 @@ namespace Axrone.Ecs;
 using Axrone.Collections;
 
 /// <summary>
+/// Visits one row whose change tick is newer than a checkpoint.
+/// </summary>
+/// <typeparam name="T1">Component type.</typeparam>
+public interface IChangeVisitor<T1> where T1 : unmanaged
+{
+    /// <summary>Visits a changed row.</summary>
+    void Visit(Entity entity, ref T1 value, int tick);
+}
+
+/// <summary>
 /// World job dispatch: entity-aware policies plus the shared
 /// <see cref="ISpanVisitor{T, TState}"/> and <see cref="ISlotConsumer{T, TState}"/>
 /// batch visitors over column slices.
@@ -123,6 +133,50 @@ public sealed partial class World
                     ref Unsafe.Add(ref c2Ref, i),
                     ref Unsafe.Add(ref c3Ref, i),
                     ref Unsafe.Add(ref c4Ref, i));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Visits every row whose changed tick is newer than <paramref name="sinceTick"/>.
+    /// </summary>
+    public void ForEachChanged<TVisitor, T1>(int sinceTick, ref TVisitor visitor)
+        where TVisitor : struct, IChangeVisitor<T1>
+        where T1 : unmanaged
+    {
+        foreach (Chunk1<T1> chunk in Query<T1>())
+        {
+            Span<T1> column = chunk.Column1;
+            ReadOnlySpan<int> ticks = chunk.Changed1;
+            ReadOnlySpan<Entity> entities = chunk.Entities;
+            for (int row = 0; row < chunk.Length; row++)
+            {
+                if (EcsTick.IsNewer(ticks[row], sinceTick))
+                {
+                    visitor.Visit(entities[row], ref column[row], ticks[row]);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Visits every row whose added tick is newer than <paramref name="sinceTick"/>.
+    /// </summary>
+    public void ForEachAdded<TVisitor, T1>(int sinceTick, ref TVisitor visitor)
+        where TVisitor : struct, IChangeVisitor<T1>
+        where T1 : unmanaged
+    {
+        foreach (Chunk1<T1> chunk in Query<T1>())
+        {
+            Span<T1> column = chunk.Column1;
+            ReadOnlySpan<int> ticks = chunk.Added1;
+            ReadOnlySpan<Entity> entities = chunk.Entities;
+            for (int row = 0; row < chunk.Length; row++)
+            {
+                if (EcsTick.IsNewer(ticks[row], sinceTick))
+                {
+                    visitor.Visit(entities[row], ref column[row], ticks[row]);
+                }
             }
         }
     }

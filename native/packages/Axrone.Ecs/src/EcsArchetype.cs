@@ -44,7 +44,7 @@ public sealed class Archetype : IDisposable
         Id = id;
         Mask = mask;
         _columns = columns;
-        _entities = GC.AllocateUninitializedArray<Entity>(initialCapacity);
+        _entities = GC.AllocateArray<Entity>(initialCapacity, pinned: true);
         _count = 0;
 
         Array.Fill(_componentMap, (short)-1);
@@ -121,7 +121,7 @@ public sealed class Archetype : IDisposable
     private void Grow()
     {
         int newCap = _entities.Length * 2;
-        Entity[] grown = GC.AllocateUninitializedArray<Entity>(newCap);
+        Entity[] grown = GC.AllocateArray<Entity>(newCap, pinned: true);
         Array.Copy(_entities, grown, _count);
         _entities = grown;
 
