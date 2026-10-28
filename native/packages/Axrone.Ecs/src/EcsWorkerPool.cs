@@ -13,7 +13,6 @@ internal sealed unsafe class EcsWorkerPool : IDisposable
     private readonly int _workerCount;
     private readonly Thread[] _threads;
     private readonly AutoResetEvent[] _signals;
-    private readonly ManualResetEventSlim _done = new(false);
     private readonly Exception?[] _errors;
     private readonly Lock _runGate = new();
     private nint _state;
@@ -74,7 +73,6 @@ internal sealed unsafe class EcsWorkerPool : IDisposable
             _itemCount = itemCount;
             _pending = _threads.Length;
             Array.Clear(_errors);
-            _done.Reset();
 
             for (int index = 0; index < _signals.Length; index++)
             {
@@ -96,9 +94,10 @@ internal sealed unsafe class EcsWorkerPool : IDisposable
                 s_inWorker = previous;
             }
 
-            if (_pending > 0)
+            var spinner = new SpinWait();
+            while (Volatile.Read(ref _pending) > 0)
             {
-                _done.Wait();
+                spinner.SpinOnce();
             }
 
             for (int index = 0; index < _errors.Length; index++)
@@ -130,8 +129,6 @@ internal sealed unsafe class EcsWorkerPool : IDisposable
             _threads[index].Join();
             _signals[index].Dispose();
         }
-
-        _done.Dispose();
     }
 
     private void WorkerLoop(int workerId)
@@ -158,10 +155,7 @@ internal sealed unsafe class EcsWorkerPool : IDisposable
             finally
             {
                 s_inWorker = previous;
-                if (Interlocked.Decrement(ref _pending) == 0)
-                {
-                    _done.Set();
-                }
+                Interlocked.Decrement(ref _pending);
             }
         }
     }
