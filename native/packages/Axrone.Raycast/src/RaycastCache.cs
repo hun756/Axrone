@@ -27,7 +27,7 @@ public sealed class RaycastCache2D
             ThrowHelper.ThrowArgumentOutOfRange(nameof(capacity));
         }
 
-        _entries = new Entry[capacity];
+        _entries = GC.AllocateArray<Entry>(capacity, pinned: true);
         _mask = capacity - 1;
     }
 
@@ -146,7 +146,7 @@ public sealed class RaycastCache3D
             ThrowHelper.ThrowArgumentOutOfRange(nameof(capacity));
         }
 
-        _entries = new Entry[capacity];
+        _entries = GC.AllocateArray<Entry>(capacity, pinned: true);
         _mask = capacity - 1;
     }
 
