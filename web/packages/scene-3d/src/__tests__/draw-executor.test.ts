@@ -73,7 +73,7 @@ describe('SceneDrawExecutor', () => {
                 textures: {
                     get: () => undefined,
                 },
-                resolveSampler: () => ({ bind: vi.fn() } as any),
+                resolveSampler: () => ({ bind: vi.fn() }) as any,
             },
             morphMeshRuntime: {
                 resolve: vi.fn(() => mesh as any),
@@ -91,39 +91,38 @@ describe('SceneDrawExecutor', () => {
 
         const frameState = new SceneRenderFrameState().begin(9);
 
-        executor.execute(
-            {
-                transform: {
-                    worldMatrix: new Mat4(),
-                } as any,
-                renderer: {
-                    id: 'renderer-1',
-                    meshId: 'mesh',
-                    materialId: 'material',
-                    getUniformEntries: () => [['u_Instance', instanceUniform]] as const,
-                    forEachUniformEntry: (cb: (name: string, value: unknown) => void) =>
-                        cb('u_Instance', instanceUniform),
-                } as any,
+        const item = {
+            transform: {
+                worldMatrix: new Mat4(),
+            } as any,
+            renderer: {
+                id: 'renderer-1',
+                meshId: 'mesh',
+                materialId: 'material',
+                getUniformEntries: () => [['u_Instance', instanceUniform]] as const,
+                forEachUniformEntry: (cb: (name: string, value: unknown) => void) =>
+                    cb('u_Instance', instanceUniform),
+            } as any,
+        };
+        const context = {
+            renderPass: {} as any,
+            cameraFrame: {
+                camera: {} as any,
+                viewMatrix: new Mat4(),
+                projectionMatrix: new Mat4(),
+                viewProjectionMatrix: new Mat4(),
+                position: new Vec3(0, 0, 5),
             },
-            {
-                renderPass: {} as any,
-                cameraFrame: {
-                    camera: {} as any,
-                    viewMatrix: new Mat4(),
-                    projectionMatrix: new Mat4(),
-                    viewProjectionMatrix: new Mat4(),
-                    position: new Vec3(0, 0, 5),
-                },
-                lighting: {} as any,
-                fog: {} as any,
-                elapsedSeconds: 1,
-                deltaSeconds: 0.016,
-                frame: 9,
-                viewportWidth: 1280,
-                viewportHeight: 720,
-            },
-            frameState
-        );
+            lighting: {} as any,
+            fog: {} as any,
+            elapsedSeconds: 1,
+            deltaSeconds: 0.016,
+            frame: 9,
+            viewportWidth: 1280,
+            viewportHeight: 720,
+        };
+
+        executor.execute(item, context, frameState);
 
         expect(renderStateApplier.apply).toHaveBeenCalledTimes(1);
         expect(gl.useProgram).toHaveBeenCalledWith(shader.program);
@@ -137,10 +136,28 @@ describe('SceneDrawExecutor', () => {
         expect(materialTextureBinder.bind).toHaveBeenCalledTimes(1);
         expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(1);
         expect(uniformWriter.write).toHaveBeenNthCalledWith(1, shader, 'u_Base', 1);
-        expect(uniformWriter.write).toHaveBeenNthCalledWith(2, shader, 'u_Instance', instanceUniform);
+        expect(uniformWriter.write).toHaveBeenNthCalledWith(
+            2,
+            shader,
+            'u_Instance',
+            instanceUniform
+        );
         expect(gl.drawElements).toHaveBeenCalledWith(4, 6, 5123, 0);
         expect(frameState.drawCalls).toBe(1);
         expect(frameState.trianglesSubmitted).toBe(2);
         expect([...frameState.activeRendererIds]).toEqual(['renderer-1']);
+
+        executor.execute(item, context, frameState);
+        expect(renderStateApplier.apply).toHaveBeenCalledTimes(1);
+        expect(gl.useProgram).toHaveBeenCalledTimes(1);
+        expect(gl.bindVertexArray).toHaveBeenCalledTimes(1);
+        expect(applyMissingVertexAttributeDefaults).toHaveBeenCalledTimes(1);
+        expect(gl.drawElements).toHaveBeenCalledTimes(2);
+
+        executor.resetState();
+        executor.execute(item, context, frameState);
+        expect(renderStateApplier.apply).toHaveBeenCalledTimes(2);
+        expect(gl.useProgram).toHaveBeenCalledTimes(2);
+        expect(gl.drawElements).toHaveBeenCalledTimes(3);
     });
 });

@@ -2,10 +2,7 @@ import type { LightingUniformValueMap } from '@axrone/lighting';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneFogState } from '../fog-state';
 import type { SceneLightingState } from '../lighting-collector';
-import {
-    resolveSceneMaterialPass,
-    type SceneMaterialResource,
-} from '../material-registry';
+import { resolveSceneMaterialPass, type SceneMaterialResource } from '../material-registry';
 import type { SceneMeshResource } from '../mesh-registry';
 import type { SceneMorphMeshRuntime } from '../morph-mesh-runtime';
 import type { SceneRenderFrameState } from './render-frame-state';
@@ -87,8 +84,25 @@ interface SceneDrawExecutorDependencies {
     readonly variantResolver?: SceneShaderVariantResolver;
 }
 
+interface SceneDrawStateCache {
+    readonly frame: number;
+    readonly renderPass: SceneRenderPassResource;
+    readonly mesh: SceneMeshResource;
+    readonly material: SceneMaterialResource;
+    readonly materialPass: ReturnType<typeof resolveSceneMaterialPass>;
+    readonly shader: SceneShaderResource;
+    readonly fogEnabled: boolean;
+}
+
 export class SceneDrawExecutor {
+    private _lastDrawState: SceneDrawStateCache | null = null;
+
     constructor(private readonly _dependencies: SceneDrawExecutorDependencies) {}
+
+    /** Clears the consecutive-draw binding cache at a pass boundary. */
+    resetState(): void {
+        this._lastDrawState = null;
+    }
 
     execute(
         item: SceneRenderItem,
@@ -109,22 +123,48 @@ export class SceneDrawExecutor {
             return;
         }
 
-        const materialPass = resolveSceneMaterialPass(material, context.renderPass.materialPassId);
-        if (context.renderPass.materialPassId != null && !materialPass) {
-            return;
-        }
-
         frameState.markActiveRenderer(item.renderer.id);
 
-        const shader = this._resolveShader(material, context.fog);
-        if (!shader) {
-            return;
-        }
+        const cached = this._lastDrawState;
+        const reuseBindings =
+            cached !== null &&
+            cached.frame === context.frame &&
+            cached.renderPass === context.renderPass &&
+            cached.mesh === mesh &&
+            cached.material === material &&
+            cached.fogEnabled === context.fog.enabled;
 
-        this._dependencies.renderStateApplier.apply(shader, context.renderPass, materialPass);
-        this._dependencies.gl.useProgram(shader.program);
-        this._dependencies.gl.bindVertexArray(mesh.vertexArray);
-        this._dependencies.applyMissingVertexAttributeDefaults(mesh);
+        let materialPass: ReturnType<typeof resolveSceneMaterialPass>;
+        let shader: SceneShaderResource;
+        if (reuseBindings) {
+            materialPass = cached!.materialPass;
+            shader = cached!.shader;
+        } else {
+            materialPass = resolveSceneMaterialPass(material, context.renderPass.materialPassId);
+            if (context.renderPass.materialPassId != null && !materialPass) {
+                return;
+            }
+
+            const resolvedShader = this._resolveShader(material, context.fog);
+            if (!resolvedShader) {
+                return;
+            }
+            shader = resolvedShader;
+
+            this._dependencies.renderStateApplier.apply(shader, context.renderPass, materialPass);
+            this._dependencies.gl.useProgram(shader.program);
+            this._dependencies.gl.bindVertexArray(mesh.vertexArray);
+            this._dependencies.applyMissingVertexAttributeDefaults(mesh);
+            this._lastDrawState = {
+                frame: context.frame,
+                renderPass: context.renderPass,
+                mesh,
+                material,
+                materialPass,
+                shader,
+                fogEnabled: context.fog.enabled,
+            };
+        }
 
         this._dependencies.frameUniformBinder.apply(shader, {
             modelMatrix: item.transform.worldMatrix,
@@ -167,10 +207,8 @@ export class SceneDrawExecutor {
         });
 
         const primitiveMode =
-            this._dependencies.renderStateApplier.resolvePrimitiveMode?.(
-                mesh.mode,
-                materialPass
-            ) ?? mesh.mode;
+            this._dependencies.renderStateApplier.resolvePrimitiveMode?.(mesh.mode, materialPass) ??
+            mesh.mode;
 
         if (mesh.indexBuffer && mesh.indexType !== null && mesh.indexCount > 0) {
             this._dependencies.gl.drawElements(primitiveMode, mesh.indexCount, mesh.indexType, 0);
