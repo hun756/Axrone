@@ -9,12 +9,17 @@ public sealed partial class World : IDisposable
 {
     private readonly ArchetypeGraph _archetypes = new();
     private readonly EntityStore _entities;
-    private readonly IDiagnosticsSink _diagnostics;
+    private IDiagnosticsSink _diagnostics;
+    private readonly ArchetypeQueryCache _queryCache = new();
+    private readonly RemovalJournal _removals = new();
     private readonly Lock _structuralSync = new();
     private long _frameCount;
+    private int _tick;
 
     /// <summary>Archetype graph.</summary>
     public ArchetypeGraph Archetypes => _archetypes;
+
+    internal ArchetypeQueryCache QueryCache => _queryCache;
 
     /// <summary>Entity store.</summary>
     public EntityStore Entities => _entities;
@@ -22,14 +27,34 @@ public sealed partial class World : IDisposable
     /// <summary>Diagnostics sink.</summary>
     public IDiagnosticsSink Diagnostics => _diagnostics;
 
+    /// <summary>
+    /// Replaces the diagnostics sink. Call before structural operations begin; the bridge
+    /// package uses this to install a lifecycle-recording wrapper.
+    /// </summary>
+    public void SetDiagnosticsSink(IDiagnosticsSink sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        _diagnostics = sink;
+    }
+
     /// <summary>Stepped frame count.</summary>
     public long FrameCount => Volatile.Read(ref _frameCount);
 
+    /// <summary>Current change tick, advanced by <see cref="Step"/>.</summary>
+    public int Tick => Volatile.Read(ref _tick);
+
+    /// <summary>Retained component-removal count.</summary>
+    public int RemovalCount => _removals.Count;
+
+    /// <summary>Removals lost because the removal ring was full.</summary>
+    public long DroppedRemovals => _removals.DroppedCount;
+
     /// <summary>Creates a world.</summary>
-    public World(int initialCapacity = 4096, IDiagnosticsSink? diagnostics = null)
+    public World(int initialCapacity = 4096, IDiagnosticsSink? diagnostics = null, int workerCount = 0)
     {
         _entities = new EntityStore(initialCapacity);
         _diagnostics = diagnostics ?? NullDiagnosticsSink.Instance;
+        _requestedWorkerCount = workerCount > 0 ? workerCount : Math.Max(1, Environment.ProcessorCount);
     }
 
     /// <summary>Begins a draft entity in the root archetype.</summary>
@@ -42,6 +67,7 @@ public sealed partial class World : IDisposable
             Archetype root = _archetypes.GetArchetype(new ArchetypeId(0));
             int row = root.AllocateRow(Entity.Null);
             entity = _entities.Allocate(root.Id, row);
+            root.SetEntityRow(row, in entity);
             _diagnostics.OnEntityCreated(entity);
         }
 
@@ -64,7 +90,9 @@ public sealed partial class World : IDisposable
 
             if (currentArch.Mask.IsSet(compId))
             {
-                currentArch.GetColumn<T>()!.Set(loc.Row, in component);
+                ComponentColumn<T> column = currentArch.GetColumn<T>()!;
+                column.Set(loc.Row, in component);
+                column.MarkChanged(loc.Row, Tick);
                 return;
             }
 
@@ -102,6 +130,7 @@ public sealed partial class World : IDisposable
             }
 
             nextArch.GetColumn<T>()!.Set(newRow, in component);
+            nextArch.GetColumn<T>()!.MarkAdded(newRow, Tick);
 
             if (currentArch.RemoveRow(loc.Row, out Entity movedEntity))
             {
@@ -170,10 +199,56 @@ public sealed partial class World : IDisposable
             }
 
             _entities.UpdateRecord(entity.Id, nextArch.Id, newRow);
+            _removals.Record(entity, compId, Tick);
         }
     }
 
-    /// <summary>References a component for direct mutation.</summary>
+    /// <summary>
+    /// Overwrites an existing component and marks it changed. Use this instead of writing
+    /// through <see cref="GetComponent{T}"/> when change detection matters.
+    /// </summary>
+    public void SetComponent<T>(scoped in Entity entity, scoped in T component) where T : unmanaged
+    {
+        using (_structuralSync.EnterScope())
+        {
+            EntityLookupResult loc = _entities.Resolve(entity);
+            if (loc.Kind != EntityLookupResultKind.Found)
+            {
+                EcsThrowHelper.ThrowEntityNotFound(entity);
+            }
+
+            Archetype arch = _archetypes.GetArchetype(loc.ArchetypeId);
+            ComponentColumn<T>? column = arch.GetColumn<T>();
+            if (column == null)
+            {
+                EcsThrowHelper.ThrowComponentNotFound(typeof(T).Name);
+            }
+
+            column.Set(loc.Row, in component);
+            column.MarkChanged(loc.Row, Tick);
+        }
+    }
+
+    /// <summary>Collects entities that lost a component after <paramref name="sinceTick"/>.</summary>
+    public int GetRemoved<T>(int sinceTick, Span<Entity> results) where T : unmanaged =>
+        _removals.GetRemoved(ComponentType<T>.Id, sinceTick, results);
+
+    /// <summary>
+    /// Collects entities that lost a component after <paramref name="sinceTick"/>, alongside
+    /// the removal tick for each entry.
+    /// </summary>
+    public int GetRemoved<T>(int sinceTick, Span<Entity> results, Span<int> ticks) where T : unmanaged =>
+        _removals.GetRemoved(ComponentType<T>.Id, sinceTick, results, ticks);
+
+    /// <summary>Whether an entity lost a component after <paramref name="sinceTick"/>.</summary>
+    public bool WasRemoved<T>(scoped in Entity entity, int sinceTick) where T : unmanaged =>
+        _removals.WasRemoved(in entity, ComponentType<T>.Id, sinceTick);
+
+    /// <summary>
+    /// References a component for direct mutation. Writes through the returned reference
+    /// are not change-tracked; call <see cref="SetComponent{T}"/> when a changed tick is
+    /// required.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref T GetComponent<T>(scoped in Entity entity) where T : unmanaged
     {
@@ -214,6 +289,16 @@ public sealed partial class World : IDisposable
             if (_entities.TryFree(entity, out EntityRecord record))
             {
                 Archetype arch = _archetypes.GetArchetype(record.ArchetypeId);
+                ComponentMask mask = arch.Mask;
+                for (ushort value = 0; value < 256; value++)
+                {
+                    ComponentId componentId = new(value);
+                    if (mask.IsSet(componentId))
+                    {
+                        _removals.Record(entity, componentId, Tick);
+                    }
+                }
+
                 if (arch.RemoveRow(record.Row, out Entity movedEntity))
                 {
                     _entities.UpdateRecord(movedEntity.Id, arch.Id, record.Row);
@@ -224,12 +309,16 @@ public sealed partial class World : IDisposable
         }
     }
 
-    /// <summary>Advances the frame counter.</summary>
+    /// <summary>Advances the frame counter and the change tick.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Step()
     {
         Interlocked.Increment(ref _frameCount);
+        Interlocked.Increment(ref _tick);
     }
+
+    /// <summary>Restores the change tick from a snapshot.</summary>
+    internal void RestoreTick(int tick) => Volatile.Write(ref _tick, tick);
 
     /// <summary>Opens a single-component query.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -239,9 +328,25 @@ public sealed partial class World : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Query2<T1, T2> Query<T1, T2>() where T1 : unmanaged where T2 : unmanaged => new(this);
 
+    /// <summary>Opens a three-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query3<T1, T2, T3> Query<T1, T2, T3>()
+        where T1 : unmanaged
+        where T2 : unmanaged
+        where T3 : unmanaged => new(this);
+
+    /// <summary>Opens a four-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query4<T1, T2, T3, T4> Query<T1, T2, T3, T4>()
+        where T1 : unmanaged
+        where T2 : unmanaged
+        where T3 : unmanaged
+        where T4 : unmanaged => new(this);
+
     /// <inheritdoc/>
     public void Dispose()
     {
+        DisposeParallelInfrastructure();
         _archetypes.Dispose();
     }
 

@@ -63,15 +63,22 @@ public interface IComponentColumn : IDisposable
 public static class ComponentRegistry
 {
     private static readonly Dictionary<ushort, Func<int, IComponentColumn>> _factories = new();
+    private static readonly Dictionary<ushort, IComponentCommandBinding> _bindings = new();
     private static readonly Lock _gate = new();
 
-    /// <summary>Registers a column factory.</summary>
+    /// <summary>Registers a column factory and its deferred-command binding.</summary>
     public static void Register<T>() where T : unmanaged
     {
         lock (_gate)
         {
             ushort id = ComponentType<T>.Id.Value;
+            if (_factories.ContainsKey(id))
+            {
+                return;
+            }
+
             _factories[id] = static capacity => new ComponentColumn<T>(capacity);
+            _bindings[id] = new ComponentCommandBinding<T>();
         }
     }
 
@@ -89,6 +96,15 @@ public static class ComponentRegistry
         EcsThrowHelper.ThrowUnknownComponentType(id);
         return null!;
     }
+
+    /// <summary>Finds the deferred-command binding for a registered type.</summary>
+    internal static bool TryGetBinding(ComponentId id, out IComponentCommandBinding? binding)
+    {
+        lock (_gate)
+        {
+            return _bindings.TryGetValue(id.Value, out binding);
+        }
+    }
 }
 
 /// <summary>
@@ -98,6 +114,8 @@ public static class ComponentRegistry
 public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
 {
     private T[] _buffer;
+    private int[] _added;
+    private int[] _changed;
 
     /// <inheritdoc/>
     public ComponentId Id
@@ -116,12 +134,20 @@ public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
     /// <summary>Creates a column.</summary>
     public ComponentColumn(int initialCapacity)
     {
-        _buffer = GC.AllocateUninitializedArray<T>(initialCapacity);
+        _buffer = GC.AllocateArray<T>(initialCapacity, pinned: true);
+        _added = GC.AllocateArray<int>(initialCapacity, pinned: true);
+        _changed = GC.AllocateArray<int>(initialCapacity, pinned: true);
     }
 
     /// <summary>Views all rows.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Span<T> AsSpan() => _buffer;
+
+    /// <summary>Views the added-tick of every capacity slot.</summary>
+    public ReadOnlySpan<int> AddedTicks => _added;
+
+    /// <summary>Views the changed-tick of every capacity slot.</summary>
+    public ReadOnlySpan<int> ChangedTicks => _changed;
 
     /// <summary>References a row.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -129,6 +155,40 @@ public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
     {
         ref T start = ref MemoryMarshal.GetArrayDataReference(_buffer);
         return ref Unsafe.Add(ref start, (uint)row);
+    }
+
+    /// <summary>Reads the tick at which a row was added.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetAddedTick(int row)
+    {
+        ref int start = ref MemoryMarshal.GetArrayDataReference(_added);
+        return Unsafe.Add(ref start, (uint)row);
+    }
+
+    /// <summary>Reads the tick at which a row last changed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetChangedTick(int row)
+    {
+        ref int start = ref MemoryMarshal.GetArrayDataReference(_changed);
+        return Unsafe.Add(ref start, (uint)row);
+    }
+
+    /// <summary>Marks a row as added and changed at <paramref name="tick"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void MarkAdded(int row, int tick)
+    {
+        ref int added = ref MemoryMarshal.GetArrayDataReference(_added);
+        ref int changed = ref MemoryMarshal.GetArrayDataReference(_changed);
+        Unsafe.Add(ref added, (uint)row) = tick;
+        Unsafe.Add(ref changed, (uint)row) = tick;
+    }
+
+    /// <summary>Marks a row as changed at <paramref name="tick"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void MarkChanged(int row, int tick)
+    {
+        ref int changed = ref MemoryMarshal.GetArrayDataReference(_changed);
+        Unsafe.Add(ref changed, (uint)row) = tick;
     }
 
     /// <summary>Writes a row.</summary>
@@ -142,9 +202,16 @@ public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
     /// <inheritdoc/>
     public void Resize(int newCapacity)
     {
-        T[] grown = GC.AllocateUninitializedArray<T>(newCapacity);
-        Array.Copy(_buffer, grown, Math.Min(_buffer.Length, newCapacity));
+        T[] grown = GC.AllocateArray<T>(newCapacity, pinned: true);
+        int[] added = GC.AllocateArray<int>(newCapacity, pinned: true);
+        int[] changed = GC.AllocateArray<int>(newCapacity, pinned: true);
+        int copy = Math.Min(_buffer.Length, newCapacity);
+        Array.Copy(_buffer, grown, copy);
+        Array.Copy(_added, added, copy);
+        Array.Copy(_changed, changed, copy);
         _buffer = grown;
+        _added = added;
+        _changed = changed;
     }
 
     /// <inheritdoc/>
@@ -152,7 +219,11 @@ public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
     public void MoveRow(int fromRow, int toRow)
     {
         ref T start = ref MemoryMarshal.GetArrayDataReference(_buffer);
+        ref int added = ref MemoryMarshal.GetArrayDataReference(_added);
+        ref int changed = ref MemoryMarshal.GetArrayDataReference(_changed);
         Unsafe.Add(ref start, (uint)toRow) = Unsafe.Add(ref start, (uint)fromRow);
+        Unsafe.Add(ref added, (uint)toRow) = Unsafe.Add(ref added, (uint)fromRow);
+        Unsafe.Add(ref changed, (uint)toRow) = Unsafe.Add(ref changed, (uint)fromRow);
     }
 
     /// <inheritdoc/>
@@ -161,11 +232,22 @@ public sealed class ComponentColumn<T> : IComponentColumn where T : unmanaged
     {
         ComponentColumn<T> target = Unsafe.As<ComponentColumn<T>>(destinationColumn);
         target.Set(destinationRow, in Get(sourceRow));
+        target.SetTicks(destinationRow, GetAddedTick(sourceRow), GetChangedTick(sourceRow));
+    }
+
+    private void SetTicks(int row, int addedTick, int changedTick)
+    {
+        ref int added = ref MemoryMarshal.GetArrayDataReference(_added);
+        ref int changed = ref MemoryMarshal.GetArrayDataReference(_changed);
+        Unsafe.Add(ref added, (uint)row) = addedTick;
+        Unsafe.Add(ref changed, (uint)row) = changedTick;
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
         _buffer = Array.Empty<T>();
+        _added = Array.Empty<int>();
+        _changed = Array.Empty<int>();
     }
 }

@@ -18,6 +18,7 @@ internal struct EcsSharedNameB
 {
 }
 
+[Collection("ScriptRegistry")]
 public sealed class EcsScriptRegistryTests : IDisposable
 {
     public EcsScriptRegistryTests() => ScriptRegistry.Clear();

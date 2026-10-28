@@ -29,13 +29,17 @@ public sealed class BehaviorSubject<T> : ObservableBase<T>, IObserver<T>
     }
 
     /// <inheritdoc/>
-    public override IDisposable Subscribe(IObserver<T> observer)
+    public override IDisposable Subscribe(IObserver<T> observer) =>
+        Subscribe(observer, ObservationPriority.Normal);
+
+    /// <inheritdoc/>
+    public override IDisposable Subscribe(IObserver<T> observer, ObservationPriority priority)
     {
         ArgumentNullException.ThrowIfNull(observer);
 
         Thread.MemoryBarrier();
         T snapshot = _current;
-        IDisposable subscription = base.Subscribe(observer);
+        IDisposable subscription = base.Subscribe(observer, priority);
         if (!IsTerminated)
         {
             observer.OnNext(snapshot);

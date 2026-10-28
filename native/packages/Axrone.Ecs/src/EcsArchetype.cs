@@ -44,7 +44,7 @@ public sealed class Archetype : IDisposable
         Id = id;
         Mask = mask;
         _columns = columns;
-        _entities = GC.AllocateUninitializedArray<Entity>(initialCapacity);
+        _entities = GC.AllocateArray<Entity>(initialCapacity, pinned: true);
         _count = 0;
 
         Array.Fill(_componentMap, (short)-1);
@@ -95,6 +95,14 @@ public sealed class Archetype : IDisposable
         return row;
     }
 
+    /// <summary>Writes the entity handle of an allocated row.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetEntityRow(int row, in Entity entity)
+    {
+        ref Entity start = ref MemoryMarshal.GetArrayDataReference(_entities);
+        Unsafe.Add(ref start, (uint)row) = entity;
+    }
+
     /// <summary>Swap-removes a row; reports the moved entity when one shifts.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool RemoveRow(int row, out Entity movedEntity)
@@ -121,7 +129,7 @@ public sealed class Archetype : IDisposable
     private void Grow()
     {
         int newCap = _entities.Length * 2;
-        Entity[] grown = GC.AllocateUninitializedArray<Entity>(newCap);
+        Entity[] grown = GC.AllocateArray<Entity>(newCap, pinned: true);
         Array.Copy(_entities, grown, _count);
         _entities = grown;
 
@@ -152,10 +160,14 @@ public sealed class ArchetypeGraph : IDisposable
 {
     private Archetype[] _archetypes = new Archetype[32];
     private int _count;
+    private int _version;
     private readonly Lock _gate = new();
 
     /// <summary>Archetype count.</summary>
     public int Count => Volatile.Read(ref _count);
+
+    /// <summary>Graph version, bumped whenever an archetype is created.</summary>
+    public int Version => Volatile.Read(ref _version);
 
     /// <summary>Creates a graph with the root empty archetype.</summary>
     public ArchetypeGraph()
@@ -200,6 +212,7 @@ public sealed class ArchetypeGraph : IDisposable
             Archetype created = new(new ArchetypeId(id), mask, columns);
             _archetypes[id] = created;
             _count++;
+            Interlocked.Increment(ref _version);
             return created;
         }
     }

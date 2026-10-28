@@ -441,3 +441,112 @@ public readonly struct HashDigest : IEquatable<HashDigest>, IComparable<HashDige
     public static bool operator !=(in HashDigest left, in HashDigest right) => !left.Equals(right);
     public static implicit operator ReadOnlySpan<byte>(in HashDigest digest) => digest.AsSpan();
 }
+
+/// <summary>160-bit digest used by SHA-1.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public readonly struct Digest160 : IHashDigest<Digest160>
+{
+    public readonly uint Part1;
+    public readonly uint Part2;
+    public readonly uint Part3;
+    public readonly uint Part4;
+    public readonly uint Part5;
+
+    public Digest160(uint part1, uint part2, uint part3, uint part4, uint part5)
+    {
+        Part1 = part1;
+        Part2 = part2;
+        Part3 = part3;
+        Part4 = part4;
+        Part5 = part5;
+    }
+
+    public Digest160(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < ByteCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(bytes), bytes.Length, "Span too short for Digest160.");
+        }
+
+        Part1 = MemoryMarshal.Read<uint>(bytes);
+        Part2 = MemoryMarshal.Read<uint>(bytes[4..]);
+        Part3 = MemoryMarshal.Read<uint>(bytes[8..]);
+        Part4 = MemoryMarshal.Read<uint>(bytes[12..]);
+        Part5 = MemoryMarshal.Read<uint>(bytes[16..]);
+    }
+
+    public static int ByteCount => sizeof(uint) * 5;
+
+    [UnscopedRef]
+    public ReadOnlySpan<byte> AsSpan() =>
+        MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<uint, byte>(ref Unsafe.AsRef(in Part1)), ByteCount);
+
+    public void CopyTo(Span<byte> destination) => AsSpan().CopyTo(destination);
+
+    public bool TryCopyTo(Span<byte> destination)
+    {
+        if (destination.Length >= ByteCount)
+        {
+            AsSpan().CopyTo(destination);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static Digest160 FromSpan(ReadOnlySpan<byte> span) => new(span);
+
+    public bool Equals(Digest160 other) =>
+        Part1 == other.Part1 &&
+        Part2 == other.Part2 &&
+        Part3 == other.Part3 &&
+        Part4 == other.Part4 &&
+        Part5 == other.Part5;
+
+    public override bool Equals(object? obj) => obj is Digest160 other && Equals(other);
+
+    public int CompareTo(Digest160 other) => AsSpan().SequenceCompareTo(other.AsSpan());
+
+    public override int GetHashCode() => HashCode.Combine(Part1, Part2, Part3, Part4, Part5);
+
+    public static bool operator ==(Digest160 left, Digest160 right) => left.Equals(right);
+
+    public static bool operator !=(Digest160 left, Digest160 right) => !left.Equals(right);
+
+    public override string ToString() => ToString(null, null);
+
+    public string ToString(string? format, IFormatProvider? formatProvider) =>
+        string.Create(ByteCount * 2, (this, format), (span, state) => HexConverter.TryFormat(state.Item1.AsSpan(), span, out _, state.format));
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        HexConverter.TryFormat(AsSpan(), destination, out charsWritten, format);
+
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null) =>
+        HexConverter.TryFormatUtf8(AsSpan(), utf8Destination, out bytesWritten, format);
+
+    public static bool TryParse(ReadOnlySpan<char> chars, out Digest160 result)
+    {
+        Span<byte> buffer = stackalloc byte[ByteCount];
+        if (HexConverter.TryParse(chars, buffer, out _) && buffer.Length == ByteCount)
+        {
+            result = FromSpan(buffer);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> utf8Chars, out Digest160 result)
+    {
+        Span<byte> buffer = stackalloc byte[ByteCount];
+        if (HexConverter.TryParseUtf8(utf8Chars, buffer, out _) && buffer.Length == ByteCount)
+        {
+            result = FromSpan(buffer);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+}

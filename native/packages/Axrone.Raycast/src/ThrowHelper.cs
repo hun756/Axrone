@@ -44,4 +44,28 @@ internal static class ThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static T ThrowInvalidOperation<T>(string message) =>
         throw new InvalidOperationException(message);
+
+    /// <summary>Rejects an invalid ray, query limit or cast volume.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidQuery(string message) =>
+        throw new RaycastException(message, RaycastErrorCode.InvalidQuery);
+
+    /// <summary>Rejects a reference to a shape that was never registered.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowShapeNotFound() =>
+        throw new RaycastException("Shape id was not registered.", RaycastErrorCode.ShapeNotFound);
+
+    /// <summary>Rejects a shape id that is already registered.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDuplicateShape() =>
+        throw new InvalidOperationException("Shape id is already registered.");
+
+    /// <summary>Rejects parallel inputs whose lengths disagree.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentMismatch(string message) =>
+        throw new ArgumentException(message);
 }

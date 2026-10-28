@@ -4,7 +4,7 @@ namespace Axrone.Reactive;
 /// Lazy stream operators. Composition allocates one node; subscribing allocates one subscription;
 /// notifications never allocate. No schedulers, no timers — the engine drives threads.
 /// </summary>
-public static class ObservableOperators
+public static partial class ObservableOperators
 {
     /// <summary>Forwards only values satisfying the predicate.</summary>
     public static IObservable<T> Where<T>(this IObservable<T> source, Func<T, bool> predicate)

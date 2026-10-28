@@ -39,6 +39,10 @@
     <NoWarn>$(NoWarn);CA1008</NoWarn>
     <!-- CA1067: Must override Equals — digest structs use FixedTimeEquals via IEquatable, object.Equals not overridden by design -->
     <NoWarn>$(NoWarn);CA1067</NoWarn>
+    <!-- CA2000: CreateHasher transfers ownership of the returned hasher to the caller. -->
+    <NoWarn>$(NoWarn);CA2000</NoWarn>
+    <!-- CA5350: SHA-1 is exposed for compatibility and checksum interop, not for security. -->
+    <NoWarn>$(NoWarn);CA5350</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
