@@ -10,11 +10,14 @@ public sealed partial class World : IDisposable
     private readonly ArchetypeGraph _archetypes = new();
     private readonly EntityStore _entities;
     private readonly IDiagnosticsSink _diagnostics;
+    private readonly ArchetypeQueryCache _queryCache = new();
     private readonly Lock _structuralSync = new();
     private long _frameCount;
 
     /// <summary>Archetype graph.</summary>
     public ArchetypeGraph Archetypes => _archetypes;
+
+    internal ArchetypeQueryCache QueryCache => _queryCache;
 
     /// <summary>Entity store.</summary>
     public EntityStore Entities => _entities;
@@ -238,6 +241,21 @@ public sealed partial class World : IDisposable
     /// <summary>Opens a two-component query.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Query2<T1, T2> Query<T1, T2>() where T1 : unmanaged where T2 : unmanaged => new(this);
+
+    /// <summary>Opens a three-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query3<T1, T2, T3> Query<T1, T2, T3>()
+        where T1 : unmanaged
+        where T2 : unmanaged
+        where T3 : unmanaged => new(this);
+
+    /// <summary>Opens a four-component query.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Query4<T1, T2, T3, T4> Query<T1, T2, T3, T4>()
+        where T1 : unmanaged
+        where T2 : unmanaged
+        where T3 : unmanaged
+        where T4 : unmanaged => new(this);
 
     /// <inheritdoc/>
     public void Dispose()

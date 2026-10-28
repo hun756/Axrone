@@ -152,10 +152,14 @@ public sealed class ArchetypeGraph : IDisposable
 {
     private Archetype[] _archetypes = new Archetype[32];
     private int _count;
+    private int _version;
     private readonly Lock _gate = new();
 
     /// <summary>Archetype count.</summary>
     public int Count => Volatile.Read(ref _count);
+
+    /// <summary>Graph version, bumped whenever an archetype is created.</summary>
+    public int Version => Volatile.Read(ref _version);
 
     /// <summary>Creates a graph with the root empty archetype.</summary>
     public ArchetypeGraph()
@@ -200,6 +204,7 @@ public sealed class ArchetypeGraph : IDisposable
             Archetype created = new(new ArchetypeId(id), mask, columns);
             _archetypes[id] = created;
             _count++;
+            Interlocked.Increment(ref _version);
             return created;
         }
     }
