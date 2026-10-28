@@ -596,5 +596,18 @@ describe('Component', () => {
             await Promise.all(promises);
             expect(component.state).toBe('awake');
         });
+
+        it('exposes a monotonic revision for render caches', () => {
+            const initial = component.revision;
+            component.enabled = false;
+            const afterDisable = component.revision;
+            expect(afterDisable).toBeGreaterThan(initial);
+
+            component.enabled = false;
+            expect(component.revision).toBe(afterDisable);
+
+            component.enabled = true;
+            expect(component.revision).toBeGreaterThan(afterDisable);
+        });
     });
 });

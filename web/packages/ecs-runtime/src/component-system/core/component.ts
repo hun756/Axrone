@@ -126,6 +126,8 @@ export abstract class Component<
     private _enabled: boolean;
     private _persistent: boolean;
     private _executeInEditMode: boolean;
+    /** Monotonic revision for render-cache invalidation; not serialized. */
+    private _revision = 0;
 
     private _creationTime: number;
     private _lastUpdateTime: number = 0;
@@ -148,7 +150,8 @@ export abstract class Component<
 
     constructor(config: TConfig = {} as TConfig) {
         this._creationTime = performance.now();
-        this._id = (config.id ?? `${this.constructor.name}_${Component._nextComponentId++}`) as ComponentId;
+        this._id = (config.id ??
+            `${this.constructor.name}_${Component._nextComponentId++}`) as ComponentId;
         this._priority = (config.priority ?? 0) as ComponentPriority;
         this._enabled = config.enabled ?? true;
         this._persistent = config.persistent ?? false;
@@ -180,6 +183,20 @@ export abstract class Component<
 
     get state(): ComponentState {
         return this._state;
+    }
+
+    /**
+     * Monotonic render-relevant revision. Subclasses call `touch()` from any
+     * mutator whose result affects rendering; consumers may cache derived
+     * render data and compare this value to decide whether a rebuild is needed.
+     */
+    get revision(): number {
+        return this._revision;
+    }
+
+    /** @internal — marks render-relevant state as changed. */
+    protected touch(): void {
+        this._revision = (this._revision + 1) >>> 0;
     }
 
     get priority(): ComponentPriority {
@@ -226,6 +243,10 @@ export abstract class Component<
 
         const wasEnabled = this._enabled;
         this._enabled = value;
+
+        if (wasEnabled !== value) {
+            this.touch();
+        }
 
         if (wasEnabled !== value && this._state !== 'uninitialized') {
             try {
@@ -782,8 +803,12 @@ export abstract class Component<
             return undefined;
         }
 
-        const worldAny = this.world as unknown as { registry?: { Transform?: ComponentType<Transform> } } | null;
-        const TransformClass = worldAny?.registry?.Transform ?? (globalThis as unknown as { Transform?: ComponentType<Transform> }).Transform;
+        const worldAny = this.world as unknown as {
+            registry?: { Transform?: ComponentType<Transform> };
+        } | null;
+        const TransformClass =
+            worldAny?.registry?.Transform ??
+            (globalThis as unknown as { Transform?: ComponentType<Transform> }).Transform;
 
         if (TransformClass) {
             return this.actor.getComponent(TransformClass);
@@ -805,7 +830,10 @@ export abstract class Component<
                 return this.world.getActor(queryResults[0].entity);
             }
         } catch (error) {
-            console.warn(`Failed to query for component ${getComponentTypeName(componentType)}:`, error);
+            console.warn(
+                `Failed to query for component ${getComponentTypeName(componentType)}:`,
+                error
+            );
         }
 
         return undefined;
@@ -831,7 +859,10 @@ export abstract class Component<
 
             return results;
         } catch (error) {
-            console.warn(`Failed to query for components ${getComponentTypeName(componentType)}:`, error);
+            console.warn(
+                `Failed to query for components ${getComponentTypeName(componentType)}:`,
+                error
+            );
             return [];
         }
     }
@@ -1025,7 +1056,13 @@ export abstract class Component<
 
     on(eventType: string, handler: (data: unknown) => void): () => void {
         try {
-            const eventBus = (this.world as unknown as { eventBus?: { on: (eventType: string, handler: (data: unknown) => void) => () => void } })?.eventBus;
+            const eventBus = (
+                this.world as unknown as {
+                    eventBus?: {
+                        on: (eventType: string, handler: (data: unknown) => void) => () => void;
+                    };
+                }
+            )?.eventBus;
             if (eventBus && typeof eventBus.on === 'function') {
                 const unsubscribe = eventBus.on(eventType, handler);
                 this._getEventSubscriptions().add(unsubscribe);
