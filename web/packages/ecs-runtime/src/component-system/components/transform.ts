@@ -203,17 +203,11 @@ export class Transform extends Component {
         const parentScale = parent.worldScale;
 
         this._position.x +=
-            Math.abs(parentScale.x) > WORLD_TRANSLATION_EPSILON
-                ? localDelta.x / parentScale.x
-                : 0;
+            Math.abs(parentScale.x) > WORLD_TRANSLATION_EPSILON ? localDelta.x / parentScale.x : 0;
         this._position.y +=
-            Math.abs(parentScale.y) > WORLD_TRANSLATION_EPSILON
-                ? localDelta.y / parentScale.y
-                : 0;
+            Math.abs(parentScale.y) > WORLD_TRANSLATION_EPSILON ? localDelta.y / parentScale.y : 0;
         this._position.z +=
-            Math.abs(parentScale.z) > WORLD_TRANSLATION_EPSILON
-                ? localDelta.z / parentScale.z
-                : 0;
+            Math.abs(parentScale.z) > WORLD_TRANSLATION_EPSILON ? localDelta.z / parentScale.z : 0;
 
         this.markLocalDirty();
     }
@@ -311,9 +305,7 @@ export class Transform extends Component {
         return undefined;
     }
 
-    findChildrenWithComponent<T extends Component>(
-        componentType: ComponentType<T>
-    ): Transform[] {
+    findChildrenWithComponent<T extends Component>(componentType: ComponentType<T>): Transform[] {
         const results: Transform[] = [];
 
         for (const child of this.children) {
@@ -586,6 +578,7 @@ export class Transform extends Component {
     }
 
     private markWorldDirty(): void {
+        this.touch();
         this._worldDirty = true;
 
         for (const child of this.children) {
