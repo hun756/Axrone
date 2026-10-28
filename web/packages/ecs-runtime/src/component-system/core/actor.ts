@@ -102,10 +102,14 @@ export class Actor<
 
     private _started = false;
     private _destroyed = false;
+    /** Monotonic revision for render-cache invalidation; not serialized. */
+    private _revision = 0;
 
     private readonly _eventBus: EventBus | null;
     private readonly _eventSubscriptions = new Set<() => void>();
-    private _indexChangeHandler: ((kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void) | null = null;
+    private _indexChangeHandler:
+        | ((kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void)
+        | null = null;
 
     private readonly _cleanupTasks = new Set<() => void>();
     private _updateFrame = 0;
@@ -172,9 +176,7 @@ export class Actor<
         return Actor._componentMetadataMap.get(componentType);
     }
 
-    static createWithComponents<
-        TWorld extends World<any> = World<any>,
-    >(
+    static createWithComponents<TWorld extends World<any> = World<any>>(
         world: TWorld,
         config: ActorConfig,
         components: readonly ActorPreloadedComponentEntry[]
@@ -194,6 +196,18 @@ export class Actor<
             skipCoreComponents: true,
             preloadedComponents: components,
         } as ActorConfig) as Actor<TWorld>;
+    }
+
+    /**
+     * Monotonic render-relevant revision. Incremented when the actor or its
+     * component set changes in a way that can affect rendering.
+     */
+    get revision(): number {
+        return this._revision;
+    }
+
+    private _touchRevision(): void {
+        this._revision = (this._revision + 1) >>> 0;
     }
 
     get name(): string {
@@ -227,6 +241,10 @@ export class Actor<
         const wasActive = this._active;
         this._active = value;
         this._state = value ? 'active' : 'inactive';
+
+        if (wasActive !== value) {
+            this._touchRevision();
+        }
 
         if (wasActive !== value) {
             try {
@@ -363,7 +381,9 @@ export class Actor<
             throw new ComponentError(
                 'Invalid component type provided',
                 this.id,
-                getComponentTypeName((componentType as unknown as ComponentType) ?? { name: 'unknown' })
+                getComponentTypeName(
+                    (componentType as unknown as ComponentType) ?? { name: 'unknown' }
+                )
             );
         }
 
@@ -403,6 +423,7 @@ export class Actor<
 
             this._components.set(componentType, component);
             this._componentPriorities.set(componentType, metadata?.priority ?? 0);
+            this._touchRevision();
 
             this.world.addComponent(this.entity, componentName as any, component);
 
@@ -452,6 +473,7 @@ export class Actor<
             this._components.delete(componentType);
             this._componentPriorities.delete(componentType);
             this._componentDependencies.delete(componentType);
+            this._touchRevision();
 
             this.world.removeComponent(this.entity, getComponentTypeName(componentType) as any);
 
@@ -615,6 +637,7 @@ export class Actor<
 
         try {
             this._state = 'destroying';
+            this._touchRevision();
 
             this._emitEvent('actor:destroying', { actor: this, immediate });
 
@@ -711,9 +734,7 @@ export class Actor<
         }
     }
 
-    private _initializePreloadedComponents(
-        entries: readonly ActorPreloadedComponentEntry[]
-    ): void {
+    private _initializePreloadedComponents(entries: readonly ActorPreloadedComponentEntry[]): void {
         const finalizeEntries: Array<{
             readonly component: Component;
             readonly componentName: string;
@@ -812,9 +833,16 @@ export class Actor<
         fallback: ComponentType<Component>,
         ensureRegistered: boolean = true
     ): ComponentType<Component> | undefined {
-        const worldAny = this.world as unknown as { registry?: Record<string, ComponentType<Component>> };
-        const globalAny = globalThis as unknown as { Hierarchy?: ComponentType<Hierarchy>; Transform?: ComponentType<Transform> };
-        const registryComponent = (worldAny.registry?.[name] ?? globalAny[name] ?? fallback) as ComponentType<Component>;
+        const worldAny = this.world as unknown as {
+            registry?: Record<string, ComponentType<Component>>;
+        };
+        const globalAny = globalThis as unknown as {
+            Hierarchy?: ComponentType<Hierarchy>;
+            Transform?: ComponentType<Transform>;
+        };
+        const registryComponent = (worldAny.registry?.[name] ??
+            globalAny[name] ??
+            fallback) as ComponentType<Component>;
 
         if (!registryComponent) {
             return undefined;
@@ -963,9 +991,17 @@ export class Actor<
         };
     }
 
-    subscribeIndexChanges(handler: (kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void): () => void {
+    subscribeIndexChanges(
+        handler: (
+            kind: 'tag' | 'layer',
+            oldValue: string | number,
+            newValue: string | number
+        ) => void
+    ): () => void {
         this._indexChangeHandler = handler;
-        return () => { this._indexChangeHandler = null; };
+        return () => {
+            this._indexChangeHandler = null;
+        };
     }
 
     toString(): string {
