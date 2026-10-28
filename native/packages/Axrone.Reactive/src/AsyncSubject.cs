@@ -15,7 +15,7 @@ public sealed class AsyncSubject<T> : ObservableBase<T>, IObserver<T>
     /// <summary>Stores the latest value without emitting it.</summary>
     public void OnNext(T value)
     {
-        if (IsTerminated)
+        if (Volatile.Read(ref _completed) != 0 || IsTerminated)
         {
             return;
         }
@@ -28,10 +28,12 @@ public sealed class AsyncSubject<T> : ObservableBase<T>, IObserver<T>
     /// <summary>Delivers a terminal fault; no value is emitted.</summary>
     public void OnError(Exception error)
     {
-        if (!IsTerminated)
+        if (Interlocked.Exchange(ref _completed, 1) != 0)
         {
-            Fault(error);
+            return;
         }
+
+        Fault(error);
     }
 
     /// <summary>Emits the last value, then completes; completes empty when no value arrived.</summary>
@@ -65,5 +67,16 @@ public sealed class AsyncSubject<T> : ObservableBase<T>, IObserver<T>
         }
 
         return base.Subscribe(observer, priority);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Interlocked.Exchange(ref _completed, 1);
+        }
+
+        base.Dispose(disposing);
     }
 }

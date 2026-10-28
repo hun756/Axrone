@@ -13,6 +13,7 @@ public sealed class ReplaySubject<T> : ObservableBase<T>, IObserver<T>
     private readonly Lock _gate = new();
     private int _head;
     private int _count;
+    private int _closed;
 
     /// <summary>Creates a replay subject with a bounded history.</summary>
     /// <param name="bufferSize">Number of values replayed to late subscribers.</param>
@@ -28,13 +29,13 @@ public sealed class ReplaySubject<T> : ObservableBase<T>, IObserver<T>
     /// <summary>Publishes and records a value.</summary>
     public void OnNext(T value)
     {
-        if (IsTerminated)
-        {
-            return;
-        }
-
         lock (_gate)
         {
+            if (_closed != 0 || IsTerminated)
+            {
+                return;
+            }
+
             _buffer[_head] = value;
             _head = (_head + 1) % _buffer.Length;
             if (_count < _buffer.Length)
@@ -47,10 +48,36 @@ public sealed class ReplaySubject<T> : ObservableBase<T>, IObserver<T>
     }
 
     /// <summary>Delivers a terminal fault.</summary>
-    public void OnError(Exception error) => Fault(error);
+    public void OnError(Exception error)
+    {
+        lock (_gate)
+        {
+            if (_closed != 0)
+            {
+                return;
+            }
+
+            _closed = 1;
+        }
+
+        Fault(error);
+    }
 
     /// <summary>Delivers completion.</summary>
-    public void OnCompleted() => Complete();
+    public void OnCompleted()
+    {
+        lock (_gate)
+        {
+            if (_closed != 0)
+            {
+                return;
+            }
+
+            _closed = 1;
+        }
+
+        Complete();
+    }
 
     /// <inheritdoc/>
     public override IDisposable Subscribe(IObserver<T> observer) =>
@@ -99,5 +126,19 @@ public sealed class ReplaySubject<T> : ObservableBase<T>, IObserver<T>
 
             return snapshot;
         }
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            lock (_gate)
+            {
+                _closed = 1;
+            }
+        }
+
+        base.Dispose(disposing);
     }
 }
