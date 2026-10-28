@@ -2,22 +2,18 @@ import type { Asset2DBorderLike, SpriteAtlasFrame } from '@axrone/asset-2d';
 import { Component, script } from '@axrone/ecs-runtime';
 import { Color, Rect, Vec2 } from '@axrone/numeric';
 import type { IColorLike, IVec2Like } from '@axrone/numeric';
-import type {
-    Render2DRectLike,
-    Render2DSizeLike,
-} from '@axrone/render-2d';
+import type { Render2DRectLike, Render2DSizeLike } from '@axrone/render-2d';
+import {
+    BORDER_MUTATION_KEYS,
+    COLOR_MUTATION_KEYS,
+    RECT_MUTATION_KEYS,
+    VEC2_MUTATION_KEYS,
+    trackLiveMutations,
+} from './live-value-tracking';
 
-export type SpriteRendererVec2Input =
-    | Vec2
-    | Readonly<IVec2Like>
-    | readonly [number, number];
-export type SpriteRendererSizeInput =
-    | Vec2
-    | Render2DSizeLike
-    | readonly [number, number];
-export type SpriteRendererRectInput =
-    | Render2DRectLike
-    | readonly [number, number, number, number];
+export type SpriteRendererVec2Input = Vec2 | Readonly<IVec2Like> | readonly [number, number];
+export type SpriteRendererSizeInput = Vec2 | Render2DSizeLike | readonly [number, number];
+export type SpriteRendererRectInput = Render2DRectLike | readonly [number, number, number, number];
 export type SpriteRendererBorderInput =
     | Asset2DBorderLike
     | readonly [number, number, number, number]
@@ -66,9 +62,7 @@ export interface SpriteRendererConfig {
 const isTuple2 = (value: unknown): value is readonly [number, number] =>
     Array.isArray(value) && value.length >= 2;
 
-const isTuple4 = (
-    value: unknown
-): value is readonly [number, number, number, number] =>
+const isTuple4 = (value: unknown): value is readonly [number, number, number, number] =>
     Array.isArray(value) && value.length >= 4;
 
 const toVec2 = (
@@ -125,6 +119,18 @@ const toRect = (
     return Rect.from(value);
 };
 
+const bordersEqual = (
+    left: SpriteRendererBorderState | null,
+    right: SpriteRendererBorderState | null
+): boolean =>
+    left === right ||
+    (left !== null &&
+        right !== null &&
+        left.left === right.left &&
+        left.right === right.right &&
+        left.top === right.top &&
+        left.bottom === right.bottom);
+
 const toBorder = (
     value: SpriteRendererBorderInput | undefined,
     fallback: SpriteRendererBorderState | null = null
@@ -170,6 +176,14 @@ export class SpriteRenderer extends Component {
     private _renderOrder: number;
     private _sortingLayer: number;
     private _passId: string;
+    // Raw backing objects stay proxy-free for render hot paths. The public
+    // getters return mutation-tracked views over the same objects.
+    private readonly _rawSize: Vec2;
+    private readonly _rawSourceSize: Vec2;
+    private readonly _rawAnchor: Vec2;
+    private readonly _rawColor: Color;
+    private readonly _rawUvRect: SpriteRendererRectState;
+    private _rawSliceBorder: SpriteRendererBorderState | null;
     private readonly _size: Vec2;
     private readonly _sourceSize: Vec2;
     private readonly _anchor: Vec2;
@@ -187,12 +201,27 @@ export class SpriteRenderer extends Component {
         this._renderOrder = config.renderOrder ?? 0;
         this._sortingLayer = config.sortingLayer ?? 0;
         this._passId = config.passId ?? 'main';
-        this._size = toVec2(config.size, 1, 1);
-        this._sourceSize = toVec2(config.sourceSize ?? config.size, this._size.x, this._size.y);
-        this._anchor = toVec2(config.anchor, 0.5, 0.5);
-        this._color = toColor(config.color);
-        this._uvRect = toRect(config.uvRect);
-        this._sliceBorder = toBorder(config.sliceBorder);
+        this._rawSize = toVec2(config.size, 1, 1);
+        this._rawSourceSize = toVec2(
+            config.sourceSize ?? config.size,
+            this._rawSize.x,
+            this._rawSize.y
+        );
+        this._rawAnchor = toVec2(config.anchor, 0.5, 0.5);
+        this._rawColor = toColor(config.color);
+        this._rawUvRect = toRect(config.uvRect);
+        this._rawSliceBorder = toBorder(config.sliceBorder);
+
+        this._size = trackLiveMutations(this._rawSize, VEC2_MUTATION_KEYS, () => this.touch());
+        this._sourceSize = trackLiveMutations(this._rawSourceSize, VEC2_MUTATION_KEYS, () =>
+            this.touch()
+        );
+        this._anchor = trackLiveMutations(this._rawAnchor, VEC2_MUTATION_KEYS, () => this.touch());
+        this._color = trackLiveMutations(this._rawColor, COLOR_MUTATION_KEYS, () => this.touch());
+        this._uvRect = trackLiveMutations(this._rawUvRect, RECT_MUTATION_KEYS, () => this.touch());
+        this._sliceBorder = this._rawSliceBorder
+            ? trackLiveMutations(this._rawSliceBorder, BORDER_MUTATION_KEYS, () => this.touch())
+            : null;
         this._flipX = config.flipX ?? false;
         this._flipY = config.flipY ?? false;
 
@@ -211,7 +240,11 @@ export class SpriteRenderer extends Component {
     }
 
     set textureId(value: string | null) {
+        if (this._textureId === value) {
+            return;
+        }
         this._textureId = value;
+        this.touch();
     }
 
     get materialId(): string | null {
@@ -219,7 +252,11 @@ export class SpriteRenderer extends Component {
     }
 
     set materialId(value: string | null) {
+        if (this._materialId === value) {
+            return;
+        }
         this._materialId = value;
+        this.touch();
     }
 
     get visible(): boolean {
@@ -227,7 +264,11 @@ export class SpriteRenderer extends Component {
     }
 
     set visible(value: boolean) {
+        if (this._visible === value) {
+            return;
+        }
         this._visible = value;
+        this.touch();
     }
 
     get renderOrder(): number {
@@ -235,7 +276,11 @@ export class SpriteRenderer extends Component {
     }
 
     set renderOrder(value: number) {
+        if (this._renderOrder === value) {
+            return;
+        }
         this._renderOrder = value;
+        this.touch();
     }
 
     get sortingLayer(): number {
@@ -243,7 +288,11 @@ export class SpriteRenderer extends Component {
     }
 
     set sortingLayer(value: number) {
+        if (this._sortingLayer === value) {
+            return;
+        }
         this._sortingLayer = value;
+        this.touch();
     }
 
     get passId(): string {
@@ -251,7 +300,11 @@ export class SpriteRenderer extends Component {
     }
 
     set passId(value: string) {
+        if (this._passId === value) {
+            return;
+        }
         this._passId = value;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -260,9 +313,13 @@ export class SpriteRenderer extends Component {
     }
 
     set size(value: SpriteRendererSizeInput) {
-        const next = toVec2(value, this._size.x, this._size.y);
-        this._size.x = next.x;
-        this._size.y = next.y;
+        const next = toVec2(value, this._rawSize.x, this._rawSize.y);
+        if (this._rawSize.x === next.x && this._rawSize.y === next.y) {
+            return;
+        }
+        this._rawSize.x = next.x;
+        this._rawSize.y = next.y;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -271,9 +328,13 @@ export class SpriteRenderer extends Component {
     }
 
     set sourceSize(value: SpriteRendererSizeInput) {
-        const next = toVec2(value, this._sourceSize.x, this._sourceSize.y);
-        this._sourceSize.x = next.x;
-        this._sourceSize.y = next.y;
+        const next = toVec2(value, this._rawSourceSize.x, this._rawSourceSize.y);
+        if (this._rawSourceSize.x === next.x && this._rawSourceSize.y === next.y) {
+            return;
+        }
+        this._rawSourceSize.x = next.x;
+        this._rawSourceSize.y = next.y;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -282,9 +343,13 @@ export class SpriteRenderer extends Component {
     }
 
     set anchor(value: SpriteRendererVec2Input) {
-        const next = toVec2(value, this._anchor.x, this._anchor.y);
-        this._anchor.x = next.x;
-        this._anchor.y = next.y;
+        const next = toVec2(value, this._rawAnchor.x, this._rawAnchor.y);
+        if (this._rawAnchor.x === next.x && this._rawAnchor.y === next.y) {
+            return;
+        }
+        this._rawAnchor.x = next.x;
+        this._rawAnchor.y = next.y;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -293,11 +358,20 @@ export class SpriteRenderer extends Component {
     }
 
     set color(value: SpriteRendererColorInput) {
-        const next = toColor(value, this._color);
-        this._color.r = next.r;
-        this._color.g = next.g;
-        this._color.b = next.b;
-        this._color.a = next.a;
+        const next = toColor(value, this._rawColor);
+        if (
+            this._rawColor.r === next.r &&
+            this._rawColor.g === next.g &&
+            this._rawColor.b === next.b &&
+            this._rawColor.a === next.a
+        ) {
+            return;
+        }
+        this._rawColor.r = next.r;
+        this._rawColor.g = next.g;
+        this._rawColor.b = next.b;
+        this._rawColor.a = next.a;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -306,11 +380,20 @@ export class SpriteRenderer extends Component {
     }
 
     set uvRect(value: SpriteRendererRectInput) {
-        const next = toRect(value, this._uvRect);
-        this._uvRect.x = next.x;
-        this._uvRect.y = next.y;
-        this._uvRect.width = next.width;
-        this._uvRect.height = next.height;
+        const next = toRect(value, this._rawUvRect);
+        if (
+            this._rawUvRect.x === next.x &&
+            this._rawUvRect.y === next.y &&
+            this._rawUvRect.width === next.width &&
+            this._rawUvRect.height === next.height
+        ) {
+            return;
+        }
+        this._rawUvRect.x = next.x;
+        this._rawUvRect.y = next.y;
+        this._rawUvRect.width = next.width;
+        this._rawUvRect.height = next.height;
+        this.touch();
     }
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
@@ -319,7 +402,15 @@ export class SpriteRenderer extends Component {
     }
 
     set sliceBorder(value: SpriteRendererBorderInput) {
-        this._sliceBorder = toBorder(value);
+        const next = toBorder(value);
+        if (bordersEqual(this._rawSliceBorder, next)) {
+            return;
+        }
+        this._rawSliceBorder = next;
+        this._sliceBorder = next
+            ? trackLiveMutations(next, BORDER_MUTATION_KEYS, () => this.touch())
+            : null;
+        this.touch();
     }
 
     get flipX(): boolean {
@@ -327,7 +418,11 @@ export class SpriteRenderer extends Component {
     }
 
     set flipX(value: boolean) {
+        if (this._flipX === value) {
+            return;
+        }
         this._flipX = value;
+        this.touch();
     }
 
     get flipY(): boolean {
@@ -335,7 +430,11 @@ export class SpriteRenderer extends Component {
     }
 
     set flipY(value: boolean) {
+        if (this._flipY === value) {
+            return;
+        }
         this._flipY = value;
+        this.touch();
     }
 
     get hasRenderableSource(): boolean {
@@ -343,59 +442,131 @@ export class SpriteRenderer extends Component {
     }
 
     get isNineSlice(): boolean {
-        return this._sliceBorder !== null;
+        return this._rawSliceBorder !== null;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderSize(): Vec2 {
+        return this._rawSize;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderSourceSize(): Vec2 {
+        return this._rawSourceSize;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderAnchor(): Vec2 {
+        return this._rawAnchor;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderColor(): Color {
+        return this._rawColor;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderUvRect(): SpriteRendererRectState {
+        return this._rawUvRect;
+    }
+
+    /** @internal Proxy-free backing values for render hot paths. */
+    getRenderSliceBorder(): SpriteRendererBorderState | null {
+        return this._rawSliceBorder;
     }
 
     setSize(width: number, height: number): this {
-        this._size.x = width;
-        this._size.y = height;
+        if (this._rawSize.x === width && this._rawSize.y === height) {
+            return this;
+        }
+        this._rawSize.x = width;
+        this._rawSize.y = height;
+        this.touch();
         return this;
     }
 
     setSourceSize(width: number, height: number): this {
-        this._sourceSize.x = width;
-        this._sourceSize.y = height;
+        if (this._rawSourceSize.x === width && this._rawSourceSize.y === height) {
+            return this;
+        }
+        this._rawSourceSize.x = width;
+        this._rawSourceSize.y = height;
+        this.touch();
         return this;
     }
 
     setAnchor(x: number, y: number): this {
-        this._anchor.x = x;
-        this._anchor.y = y;
+        if (this._rawAnchor.x === x && this._rawAnchor.y === y) {
+            return this;
+        }
+        this._rawAnchor.x = x;
+        this._rawAnchor.y = y;
+        this.touch();
         return this;
     }
 
     setColor(value: SpriteRendererColorInput): this {
-        const next = toColor(value, this._color);
-        this._color.r = next.r;
-        this._color.g = next.g;
-        this._color.b = next.b;
-        this._color.a = next.a;
+        const next = toColor(value, this._rawColor);
+        if (
+            this._rawColor.r === next.r &&
+            this._rawColor.g === next.g &&
+            this._rawColor.b === next.b &&
+            this._rawColor.a === next.a
+        ) {
+            return this;
+        }
+        this._rawColor.r = next.r;
+        this._rawColor.g = next.g;
+        this._rawColor.b = next.b;
+        this._rawColor.a = next.a;
+        this.touch();
         return this;
     }
 
     setUVRect(x: number, y: number, width: number, height: number): this {
-        this._uvRect.x = x;
-        this._uvRect.y = y;
-        this._uvRect.width = width;
-        this._uvRect.height = height;
+        if (
+            this._rawUvRect.x === x &&
+            this._rawUvRect.y === y &&
+            this._rawUvRect.width === width &&
+            this._rawUvRect.height === height
+        ) {
+            return this;
+        }
+        this._rawUvRect.x = x;
+        this._rawUvRect.y = y;
+        this._rawUvRect.width = width;
+        this._rawUvRect.height = height;
+        this.touch();
         return this;
     }
 
     setSliceBorder(left: number, right: number, top: number, bottom: number): this {
-        this._sliceBorder = { left, right, top, bottom };
+        const next: SpriteRendererBorderState = { left, right, top, bottom };
+        if (bordersEqual(this._rawSliceBorder, next)) {
+            return this;
+        }
+        this._rawSliceBorder = next;
+        this._sliceBorder = trackLiveMutations(next, BORDER_MUTATION_KEYS, () => this.touch());
+        this.touch();
         return this;
     }
 
     clearSliceBorder(): this {
+        if (this._rawSliceBorder === null) {
+            return this;
+        }
+        this._rawSliceBorder = null;
         this._sliceBorder = null;
+        this.touch();
         return this;
     }
 
-    applyFrame(
-        frame: SpriteAtlasFrame,
-        options: SpriteRendererFrameApplyOptions = {}
-    ): this {
-        this._textureId = frame.textureId;
+    applyFrame(frame: SpriteAtlasFrame, options: SpriteRendererFrameApplyOptions = {}): this {
+        if (this._textureId !== frame.textureId) {
+            this._textureId = frame.textureId;
+            this.touch();
+        }
+
         this.setUVRect(frame.uvRect.x, frame.uvRect.y, frame.uvRect.width, frame.uvRect.height);
 
         if (!options.preserveSize) {
@@ -411,7 +582,7 @@ export class SpriteRenderer extends Component {
         }
 
         if (!options.preserveSliceBorder) {
-            this._sliceBorder = toBorder(frame.sliceBorder);
+            this.sliceBorder = toBorder(frame.sliceBorder);
         }
 
         return this;
@@ -429,12 +600,7 @@ export class SpriteRenderer extends Component {
             sourceSize: [this._sourceSize.x, this._sourceSize.y],
             anchor: [this._anchor.x, this._anchor.y],
             color: [this._color.r, this._color.g, this._color.b, this._color.a],
-            uvRect: [
-                this._uvRect.x,
-                this._uvRect.y,
-                this._uvRect.width,
-                this._uvRect.height,
-            ],
+            uvRect: [this._uvRect.x, this._uvRect.y, this._uvRect.width, this._uvRect.height],
             sliceBorder: this._sliceBorder
                 ? [
                       this._sliceBorder.left,
@@ -505,5 +671,8 @@ export class SpriteRenderer extends Component {
         if (typeof data.flipY === 'boolean') {
             this._flipY = data.flipY;
         }
+
+        // Direct field writes above bypass the setters; one touch covers them all.
+        this.touch();
     }
 }
