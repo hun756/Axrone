@@ -207,6 +207,7 @@ export class SceneRenderRuntime {
 
     render(params: SceneRenderRuntimeParams): void {
         const renderFrame = this._renderFrameState.begin(params.frame);
+        renderFrame.setTrackActiveRenderers(this._morphMeshRuntime.hasCachedMeshes);
         this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
         const actors = this._options.getActors();
         const camera = selectSceneCamera(actors);
@@ -342,7 +343,9 @@ export class SceneRenderRuntime {
         });
 
         this._options.gl.bindVertexArray(null);
-        this._morphMeshRuntime.prune(renderFrame.activeRendererIds);
+        if (renderFrame.tracksActiveRenderers) {
+            this._morphMeshRuntime.prune(renderFrame.activeRendererIds);
+        }
     }
 
     releaseBaseMesh(meshId: string): void {

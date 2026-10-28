@@ -99,6 +99,10 @@ export class SceneMorphMeshRuntime {
 
     constructor(private readonly _options: SceneMorphMeshRuntimeOptions) {}
 
+    get hasCachedMeshes(): boolean {
+        return this._caches.size > 0;
+    }
+
     resolve(
         renderer: Pick<
             MeshRenderer,
