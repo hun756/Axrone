@@ -7,6 +7,10 @@ namespace Axrone.Reactive;
 /// <para><b>Allocation contract:</b> subscribing allocates (subscription node plus one array
 /// copy — cold path); publishing never allocates and never locks, readers take a snapshot
 /// reference. Concurrent publishes may interleave per observer.</para>
+/// <para><b>Ordering:</b> the subscription snapshot is sorted by
+/// <see cref="ObservationPriority"/> (high, normal, low) and then registration order.
+/// Within one priority, a concurrently inserted subscription keeps subscription-id order,
+/// so notify order is deterministic.</para>
 /// <para><b>Backpressure:</b> none — this is a push model. A slow observer blocks the publishing
 /// thread for every subscriber behind it. Shed, sample, or buffer upstream (operators,
 /// transport queues) instead of slowing observers.</para>
@@ -25,10 +29,11 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
     private const int StateCompleted = 1;
     private const int StateFaulted = 2;
 
-    private IObserver<T>[] _observers = [];
+    private SubscriptionEntry[] _observers = [];
     private int _terminal;
     private Exception? _error;
     private int _disposed;
+    private long _nextSubscriptionId;
 
     /// <summary>Guards fault publication only; hot paths never take it.</summary>
     private readonly Lock _faultGate = new();
@@ -39,8 +44,18 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
     /// <summary>Whether error/completed was delivered.</summary>
     public bool IsTerminated => Volatile.Read(ref _terminal) != StateActive;
 
+    /// <summary>Whether the terminal signal was a fault.</summary>
+    public bool IsFaulted => Volatile.Read(ref _terminal) == StateFaulted;
+
     /// <inheritdoc/>
-    public virtual IDisposable Subscribe(IObserver<T> observer)
+    public virtual IDisposable Subscribe(IObserver<T> observer) =>
+        Subscribe(observer, ObservationPriority.Normal);
+
+    /// <summary>
+    /// Subscribes at an explicit priority. High runs first, low last; equal priorities keep
+    /// registration order.
+    /// </summary>
+    public virtual IDisposable Subscribe(IObserver<T> observer, ObservationPriority priority)
     {
         ArgumentNullException.ThrowIfNull(observer);
 
@@ -56,21 +71,41 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
             return SubscribeTerminal(observer);
         }
 
+        long id = Interlocked.Increment(ref _nextSubscriptionId);
         while (true)
         {
-            IObserver<T>[] current = Volatile.Read(ref _observers);
+            SubscriptionEntry[] current = Volatile.Read(ref _observers);
             if (Volatile.Read(ref _terminal) != StateActive)
             {
                 return SubscribeTerminal(observer);
             }
 
-            var next = new IObserver<T>[current.Length + 1];
-            Array.Copy(current, next, current.Length);
-            next[current.Length] = observer;
+            var next = new SubscriptionEntry[current.Length + 1];
+            int insert = 0;
+            while (insert < current.Length)
+            {
+                int comparison = current[insert].Priority.CompareTo(priority);
+                if (comparison > 0 || (comparison == 0 && current[insert].Id > id))
+                {
+                    break;
+                }
+
+                insert++;
+            }
+
+            Array.Copy(current, 0, next, 0, insert);
+            next[insert] = new SubscriptionEntry(observer, priority, id);
+            Array.Copy(current, insert, next, insert + 1, current.Length - insert);
+
             if (Interlocked.CompareExchange(ref _observers, next, current) == current)
             {
+                if (Volatile.Read(ref _terminal) != StateActive)
+                {
+                    return Unsubscribe(id) ? SubscribeTerminal(observer) : NoopDisposable.Instance;
+                }
+
                 ReactiveTelemetry.Subscribed();
-                return new Subscription(this, observer);
+                return new Subscription(this, id);
             }
         }
     }
@@ -83,10 +118,10 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
             return;
         }
 
-        IObserver<T>[] snapshot = Volatile.Read(ref _observers);
+        SubscriptionEntry[] snapshot = Volatile.Read(ref _observers);
         for (int i = 0; i < snapshot.Length; i++)
         {
-            snapshot[i].OnNext(value);
+            snapshot[i].Observer.OnNext(value);
         }
     }
 
@@ -101,10 +136,10 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
         ReactiveTelemetry.SourceCompleted();
         ReactiveEventSource.Log.SourceCompleted();
 
-        IObserver<T>[] snapshot = Interlocked.Exchange(ref _observers, []);
+        SubscriptionEntry[] snapshot = Interlocked.Exchange(ref _observers, []);
         for (int i = 0; i < snapshot.Length; i++)
         {
-            snapshot[i].OnCompleted();
+            snapshot[i].Observer.OnCompleted();
         }
     }
 
@@ -113,7 +148,7 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
     {
         ArgumentNullException.ThrowIfNull(error);
 
-        IObserver<T>[] snapshot;
+        SubscriptionEntry[] snapshot;
         lock (_faultGate)
         {
             if (_terminal != StateActive)
@@ -131,7 +166,7 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
 
         for (int i = 0; i < snapshot.Length; i++)
         {
-            snapshot[i].OnError(error);
+            snapshot[i].Observer.OnError(error);
         }
     }
 
@@ -176,15 +211,15 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
         return NoopDisposable.Instance;
     }
 
-    private void Unsubscribe(Subscription subscription)
+    private bool Unsubscribe(long subscriptionId)
     {
         while (true)
         {
-            IObserver<T>[] current = Volatile.Read(ref _observers);
+            SubscriptionEntry[] current = Volatile.Read(ref _observers);
             int index = -1;
             for (int i = 0; i < current.Length; i++)
             {
-                if (ReferenceEquals(current[i], subscription.Observer))
+                if (current[i].Id == subscriptionId)
                 {
                     index = i;
                     break;
@@ -193,37 +228,50 @@ public abstract class ObservableBase<T> : IObservable<T>, IDisposable
 
             if (index < 0)
             {
-                return;
+                return false;
             }
 
-            var next = new IObserver<T>[current.Length - 1];
+            var next = new SubscriptionEntry[current.Length - 1];
             Array.Copy(current, 0, next, 0, index);
             Array.Copy(current, index + 1, next, index, current.Length - index - 1);
             if (Interlocked.CompareExchange(ref _observers, next, current) == current)
             {
-                return;
+                return true;
             }
+        }
+    }
+
+    private readonly struct SubscriptionEntry
+    {
+        public readonly IObserver<T> Observer;
+        public readonly ObservationPriority Priority;
+        public readonly long Id;
+
+        public SubscriptionEntry(IObserver<T> observer, ObservationPriority priority, long id)
+        {
+            Observer = observer;
+            Priority = priority;
+            Id = id;
         }
     }
 
     private sealed class Subscription : IDisposable
     {
         private readonly ObservableBase<T> _source;
+        private readonly long _id;
         private int _disposed;
 
-        public IObserver<T> Observer { get; }
-
-        public Subscription(ObservableBase<T> source, IObserver<T> observer)
+        public Subscription(ObservableBase<T> source, long id)
         {
             _source = source;
-            Observer = observer;
+            _id = id;
         }
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                _source.Unsubscribe(this);
+                _source.Unsubscribe(_id);
             }
         }
     }
