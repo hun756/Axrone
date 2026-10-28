@@ -170,9 +170,7 @@ const cloneSceneMaterialPassDefinition = (
 const cloneSceneMaterialPassDefinitions = (
     definitions: readonly SceneMaterialPassDefinition[] | undefined
 ): readonly SceneMaterialPassDefinition[] | undefined =>
-    definitions
-        ? Object.freeze(definitions.map(cloneSceneMaterialPassDefinition))
-        : undefined;
+    definitions ? Object.freeze(definitions.map(cloneSceneMaterialPassDefinition)) : undefined;
 
 const compareTextureBindings = (
     left: readonly [string, SceneMaterialTextureBinding],
@@ -282,10 +280,7 @@ export const normalizeSceneTextureBinding = (
     if (!binding.textureId) {
         throw new Error('Sprite material texture binding requires a non-empty texture id');
     }
-    if (
-        binding.unit !== undefined &&
-        (!Number.isInteger(binding.unit) || binding.unit < 0)
-    ) {
+    if (binding.unit !== undefined && (!Number.isInteger(binding.unit) || binding.unit < 0)) {
         throw new Error(
             `Invalid texture unit ${String(binding.unit)} for texture '${binding.textureId}'`
         );
@@ -329,7 +324,9 @@ const bridgeSurfaceTextureMaps = (resource: SceneMaterialResource): void => {
     }
 
     for (const entry of SURFACE_MAP_TO_UNIFORM) {
-        const map = surface[entry.surfaceKey] as SceneMaterialSurfaceTextureBindingDefinition | undefined;
+        const map = surface[entry.surfaceKey] as
+            | SceneMaterialSurfaceTextureBindingDefinition
+            | undefined;
         if (!map?.textureId) {
             continue;
         }
@@ -453,7 +450,11 @@ const normalizeTextureMap = (
             continue;
         }
         const binding = normalizeSceneTextureBinding(v);
-        normalized[k] = { textureId: binding.textureId, samplerId: binding.samplerId, unit: binding.unit };
+        normalized[k] = {
+            textureId: binding.textureId,
+            samplerId: binding.samplerId,
+            unit: binding.unit,
+        };
     }
     return normalized;
 };
@@ -512,6 +513,7 @@ export class SceneMaterialRegistry {
     private readonly _handles = new Map<string, SceneMaterialHandle>();
     private readonly _textureSlots = new Map<string, readonly SceneMaterialTextureSlot[]>();
     private readonly _observables: SceneMaterialObservables | null;
+    private _revision = 0;
 
     constructor(options?: { observables?: SceneMaterialObservables }) {
         this._observables = options?.observables ?? null;
@@ -519,6 +521,19 @@ export class SceneMaterialRegistry {
 
     get size(): number {
         return this._resources.size;
+    }
+
+    /**
+     * Monotonic revision for render-cache invalidation. Bumped whenever the
+     * render-visible state of any material changes so cached render lists and
+     * primitives can decide whether a rebuild is required.
+     */
+    get revision(): number {
+        return this._revision;
+    }
+
+    private _touchRevision(): void {
+        this._revision = (this._revision + 1) >>> 0;
     }
 
     create(definition: SceneMaterialDefinition): SceneMaterialHandle {
@@ -583,6 +598,7 @@ export class SceneMaterialRegistry {
         const handle = toHandle(resource);
         this._handles.set(resource.id, handle);
         this._textureSlots.set(resource.id, createTextureSlots(resource));
+        this._touchRevision();
         if (!suppressCreated) {
             this._observables?._notifyMaterialCreated(resource.id);
         }
@@ -616,6 +632,7 @@ export class SceneMaterialRegistry {
         }
 
         this._observables?._notifyUniformChanged(id, resolvedName);
+        this._touchRevision();
         return true;
     }
 
@@ -633,6 +650,7 @@ export class SceneMaterialRegistry {
             return false;
         }
 
+        let changed = false;
         for (const [name, value] of Object.entries(uniforms)) {
             const resolvedName = resolveAlias(name);
             material.uniforms.set(resolvedName, value);
@@ -646,6 +664,11 @@ export class SceneMaterialRegistry {
                 });
             }
             this._observables?._notifyUniformChanged(id, resolvedName);
+            changed = true;
+        }
+
+        if (changed) {
+            this._touchRevision();
         }
 
         return true;
@@ -683,6 +706,7 @@ export class SceneMaterialRegistry {
         this._handles.set(id, toHandle(material));
         this._textureSlots.set(id, createTextureSlots(material));
         this._observables?._notifyTextureChanged(id, name);
+        this._touchRevision();
 
         return true;
     }
@@ -707,6 +731,7 @@ export class SceneMaterialRegistry {
         this._handles.set(id, toHandle(material));
         this._textureSlots.set(id, createTextureSlots(material));
         this._observables?._notifyTextureChanged(id, name);
+        this._touchRevision();
         return true;
     }
 
@@ -776,6 +801,7 @@ export class SceneMaterialRegistry {
             }
         }
 
+        this._touchRevision();
         return true;
     }
 
@@ -804,6 +830,7 @@ export class SceneMaterialRegistry {
         this._handles.set(id, toHandle(material));
         this._textureSlots.set(id, createTextureSlots(material));
         this._observables?._notifyTextureChanged(id, name);
+        this._touchRevision();
 
         return true;
     }
@@ -816,6 +843,7 @@ export class SceneMaterialRegistry {
         this._textureSlots.delete(id);
         if (existed) {
             this._observables?._notifyMaterialDeleted(id);
+            this._touchRevision();
         }
         return existed;
     }
@@ -835,10 +863,7 @@ export class SceneMaterialRegistry {
             uniforms:
                 source.uniforms.size > 0
                     ? Object.fromEntries(
-                          [...source.uniforms.entries()].map(([k, v]) => [
-                              k,
-                              cloneSceneValue(v),
-                          ])
+                          [...source.uniforms.entries()].map(([k, v]) => [k, cloneSceneValue(v)])
                       )
                     : undefined,
             textures:
@@ -866,8 +891,12 @@ export class SceneMaterialRegistry {
         const clonedResource = this._resources.get(newId);
         if (clonedResource && source.keywords.size > 0) {
             for (const [keyword, entry] of source.keywords) {
-                clonedResource.keywords.set(keyword, { enabled: entry.enabled, source: entry.source });
+                clonedResource.keywords.set(keyword, {
+                    enabled: entry.enabled,
+                    source: entry.source,
+                });
             }
+            this._touchRevision();
         }
 
         this._observables?._notifyMaterialCloned(sourceId, newId);
@@ -889,6 +918,7 @@ export class SceneMaterialRegistry {
         }
         material.keywords.set(keyword, { enabled, source: 'explicit' });
         this._observables?._notifyKeywordChanged(id, keyword, enabled);
+        this._touchRevision();
         return true;
     }
 
@@ -901,6 +931,7 @@ export class SceneMaterialRegistry {
         const current = entry?.enabled ?? false;
         material.keywords.set(keyword, { enabled: !current, source: 'explicit' });
         this._observables?._notifyKeywordChanged(id, keyword, !current);
+        this._touchRevision();
         return true;
     }
 
@@ -946,5 +977,6 @@ export class SceneMaterialRegistry {
         this._definitions.clear();
         this._handles.clear();
         this._textureSlots.clear();
+        this._touchRevision();
     }
 }
