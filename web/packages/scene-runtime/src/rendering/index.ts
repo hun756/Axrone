@@ -11,6 +11,8 @@
 export { SceneDrawExecutionContextCache } from './draw-execution-context';
 export type { SceneDrawExecutorContext } from './draw-executor';
 export { SceneDrawExecutor } from './draw-executor';
+export { createRenderCacheCameraKey } from './render-cache-key';
+export type { RenderCacheViewport } from './render-cache-key';
 export { SceneRenderFrameState } from './render-frame-state';
 export { SceneRenderPassPreparer } from './render-pass-preparer';
 export type { SceneRenderItem } from './render-item-collector';
@@ -20,14 +22,8 @@ export type {
     SceneRenderPassResource,
     SceneRenderPassRegistryOptions,
 } from './render-pass-registry';
-export {
-    cloneSceneRenderPassDefinition,
-    SceneRenderPassRegistry,
-} from './render-pass-registry';
-export type {
-    SceneRenderRuntimeOptions,
-    SceneRenderRuntimeParams,
-} from './scene-render-runtime';
+export { cloneSceneRenderPassDefinition, SceneRenderPassRegistry } from './render-pass-registry';
+export type { SceneRenderRuntimeOptions, SceneRenderRuntimeParams } from './scene-render-runtime';
 export { SceneRenderRuntime } from './scene-render-runtime';
 export { SceneRenderPipeline } from './scene-render-pipeline';
 export type {
@@ -43,8 +39,5 @@ export type {
 export { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 export { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
 export { SceneDirectGlPassGuard } from './internal/render-state-guard';
-export type {
-    SceneLodEvaluateParams,
-    SceneLodEvaluateStats,
-} from './lod-evaluator';
+export type { SceneLodEvaluateParams, SceneLodEvaluateStats } from './lod-evaluator';
 export { SceneLodEvaluator } from './lod-evaluator';
