@@ -8,6 +8,35 @@ using System.Text.RegularExpressions;
 public sealed record ScriptRegistration(ScriptMetadata Metadata, Type ComponentType);
 
 /// <summary>
+/// Reflection-free registration descriptor for generated or hand-written catalogs.
+/// The caller guarantees that <see cref="ComponentType"/> is an unmanaged struct.
+/// </summary>
+public sealed class ScriptDescriptor
+{
+    /// <summary>Creates a descriptor and copies the property metadata.</summary>
+    public ScriptDescriptor(
+        Type componentType,
+        ScriptMetadata metadata,
+        ReadOnlySpan<PropertyMetadata> properties)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ComponentType = componentType;
+        Metadata = metadata;
+        Properties = properties.ToArray();
+    }
+
+    /// <summary>Component type.</summary>
+    public Type ComponentType { get; }
+
+    /// <summary>Resolved script metadata.</summary>
+    public ScriptMetadata Metadata { get; }
+
+    /// <summary>Inspector/serialization property metadata.</summary>
+    public ReadOnlyMemory<PropertyMetadata> Properties { get; }
+}
+
+/// <summary>
 /// Validation outcome: errors fail registration, warnings do not.
 /// </summary>
 public readonly record struct ScriptValidation(bool IsValid, string[] Errors, string[] Warnings);
@@ -25,14 +54,20 @@ public static class ScriptRegistry
     private static readonly Dictionary<Type, Dictionary<string, PropertyMetadata>> _properties = new();
     private static readonly Lock _gate = new();
 
-    /// <summary>Registers a component type.</summary>
+    /// <summary>Registers a component type from its attributes.</summary>
+    [RequiresUnreferencedCode(
+        "Attribute and field metadata use reflection. Use RegisterCompiled with an explicit descriptor for Native AOT.")]
     public static ScriptMetadata Register<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
-        T>()
+    T>()
         where T : unmanaged => Register(typeof(T));
 
-    /// <summary>Registers a component type. Only unmanaged component types
-    /// are accepted; classes, interfaces and managed structs are rejected.</summary>
+    /// <summary>
+    /// Registers a component type from its attributes. Only unmanaged component types
+    /// are accepted; classes, interfaces and managed structs are rejected.
+    /// </summary>
+    [RequiresUnreferencedCode(
+        "Attribute and field metadata use reflection. Use RegisterCompiled with an explicit descriptor for Native AOT.")]
     public static ScriptMetadata Register(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
         Type componentType)
@@ -66,6 +101,44 @@ public static class ScriptRegistry
             attribute?.Deprecated ?? false,
             attribute?.DeprecationMessage);
 
+        return RegisterCompiledCore(componentType, metadata, CollectProperties(componentType));
+    }
+
+    /// <summary>
+    /// Registers resolved metadata and properties without reflection. This is the
+    /// Native AOT path used by generated catalogs and hand-written descriptors.
+    /// </summary>
+    public static ScriptMetadata RegisterCompiled<T>(
+        ScriptMetadata metadata,
+        ReadOnlySpan<PropertyMetadata> properties)
+        where T : unmanaged => RegisterCompiledCore(typeof(T), metadata, properties.ToArray());
+
+    /// <summary>Registers a compiled descriptor without reflection.</summary>
+    public static ScriptMetadata RegisterCompiled(ScriptDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        return RegisterCompiledCore(
+            descriptor.ComponentType,
+            descriptor.Metadata,
+            descriptor.Properties.ToArray());
+    }
+
+    private static ScriptMetadata RegisterCompiledCore(
+        Type componentType,
+        ScriptMetadata metadata,
+        PropertyMetadata[] properties)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(properties);
+        if (!componentType.IsValueType)
+        {
+            throw new EcsConfigurationException(
+                "ecs.invalid-script",
+                $"Type '{componentType.Name}' is not an unmanaged component type.");
+        }
+
+        Type[] dependencies = metadata.Dependencies ?? [];
         ScriptValidation validation = Validate(componentType, metadata, dependencies);
         if (!validation.IsValid)
         {
@@ -76,18 +149,9 @@ public static class ScriptRegistry
 
         lock (_gate)
         {
-            if (_byName.TryGetValue(name, out ScriptRegistration? existing) &&
-                existing.ComponentType != componentType)
-            {
-                validation = new ScriptValidation(
-                    true,
-                    [],
-                    [.. validation.Warnings, $"Script name '{name}' is already declared by {existing.ComponentType.Name}."]);
-            }
-
-            _byName[name] = new ScriptRegistration(metadata, componentType);
+            _byName[metadata.ScriptName] = new ScriptRegistration(metadata, componentType);
             _byType[componentType] = metadata;
-            CollectPropertyMetadata(componentType);
+            _properties[componentType] = BuildPropertyMap(properties);
             if (dependencies.Length > 0)
             {
                 _dependencies[componentType] = new HashSet<Type>(dependencies);
@@ -95,6 +159,18 @@ public static class ScriptRegistry
         }
 
         return metadata;
+    }
+
+    private static Dictionary<string, PropertyMetadata> BuildPropertyMap(PropertyMetadata[] properties)
+    {
+        Dictionary<string, PropertyMetadata> map = new(StringComparer.Ordinal);
+        for (int index = 0; index < properties.Length; index++)
+        {
+            PropertyMetadata entry = properties[index];
+            map[entry.PropertyKey] = entry;
+        }
+
+        return map;
     }
 
     /// <summary>Looks up metadata by type.</summary>
@@ -267,13 +343,15 @@ public static class ScriptRegistry
         }
     }
 
-    private static void CollectPropertyMetadata(
+    [RequiresUnreferencedCode(
+        "Attribute and field metadata use reflection. Use RegisterCompiled with an explicit descriptor for Native AOT.")]
+    private static PropertyMetadata[] CollectProperties(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)]
         Type componentType)
     {
         Dictionary<string, PropertyMetadata> collected = new(StringComparer.Ordinal);
         CollectChain(componentType, collected);
-        _properties[componentType] = collected;
+        return [.. collected.Values];
     }
 
     private static void CollectChain(
