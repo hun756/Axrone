@@ -1,5 +1,7 @@
 import { Mat4 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';
+import { Transform } from '@axrone/ecs-runtime';
+import { MeshRenderer } from '../components/mesh-renderer';
 import { SceneRenderFrameState } from '../rendering/render-frame-state';
 import { SceneRenderPipeline } from '../rendering/scene-render-pipeline';
 
@@ -43,7 +45,9 @@ const createMockGL = (): WebGL2RenderingContext => {
         DEPTH_COMPONENT24: 0x81a6,
         DEPTH_COMPONENT: 0x1902,
         UNSIGNED_INT: 0x1405,
-        createShader: vi.fn((type: number) => ({ id: nextShaderId++, type }) as unknown as WebGLShader),
+        createShader: vi.fn(
+            (type: number) => ({ id: nextShaderId++, type }) as unknown as WebGLShader
+        ),
         shaderSource: vi.fn(),
         compileShader: vi.fn(),
         getShaderParameter: vi.fn(() => true),
@@ -70,7 +74,9 @@ const createMockGL = (): WebGL2RenderingContext => {
         activeTexture: vi.fn(),
         texParameteri: vi.fn(),
         texStorage2D: vi.fn(),
-        createFramebuffer: vi.fn(() => ({ id: nextFramebufferId++ }) as unknown as WebGLFramebuffer),
+        createFramebuffer: vi.fn(
+            () => ({ id: nextFramebufferId++ }) as unknown as WebGLFramebuffer
+        ),
         deleteFramebuffer: vi.fn(),
         bindFramebuffer: vi.fn(),
         framebufferTexture2D: vi.fn(),
@@ -382,5 +388,105 @@ describe('SceneRenderPipeline', () => {
         expect(spriteClear).toHaveBeenCalledTimes(1);
         pipeline.dispose();
         expect(spriteClear).toHaveBeenCalledTimes(2);
+    });
+
+    it('reuses cached primitives while item and registry revisions are unchanged', () => {
+        const gl = createMockGL();
+        const execute = vi.fn();
+        const pipeline = new SceneRenderPipeline({
+            gl,
+            drawExecutor: {
+                execute,
+            },
+        });
+
+        const transform = new Transform();
+        const renderer = new MeshRenderer({
+            meshId: 'mesh:cube',
+            materialId: 'material:cube',
+            passId: 'main',
+        });
+        const renderItems = [{ transform, renderer }];
+        const renderPass = {
+            id: 'main',
+            rendererPassId: 'main',
+            clearFlags: ['color', 'depth'],
+            clearColor: null,
+            clearDepth: null,
+        } as any;
+        const cameraFrame = {
+            camera: {
+                id: 'camera:main',
+                clearFlags: ['color', 'depth'],
+                clearColor: [0.1, 0.2, 0.3, 1],
+                clearDepth: 1,
+                near: 0.1,
+                far: 100,
+            },
+            viewMatrix: new Mat4(),
+            projectionMatrix: new Mat4(),
+            viewProjectionMatrix: new Mat4(),
+            camera3D: {
+                frustum: {},
+            },
+            position: [0, 0, 5],
+        } as any;
+        const lighting = {
+            stats: {
+                selectedDirectionalCount: 0,
+                selectedPointCount: 0,
+                selectedSpotCount: 0,
+            },
+        } as any;
+        const resolveMaterial = vi.fn(() => ({
+            materialId: 'material:cube',
+            shadingModel: 'pbr' as const,
+            alphaMode: 'opaque' as const,
+            transparent: false,
+        }));
+
+        const renderFrame = (materialRevision: number, shaderRevision = 0) =>
+            pipeline.render({
+                actors: [{} as any],
+                frame: 1,
+                deltaSeconds: 1 / 60,
+                viewportWidth: 640,
+                viewportHeight: 360,
+                cameraFrame,
+                lighting,
+                renderPass,
+                drawContext: {} as any,
+                frameState: new SceneRenderFrameState().begin(1),
+                renderItems,
+                materialRevision,
+                meshRevision: 1,
+                shaderRevision,
+                resolveBounds: () => null,
+                resolveMaterial,
+            });
+
+        const first = renderFrame(1);
+        expect(first.primitiveCacheHit).toBe(false);
+        expect(resolveMaterial).toHaveBeenCalledTimes(1);
+
+        const second = renderFrame(1);
+        expect(second.primitiveCacheHit).toBe(true);
+        expect(resolveMaterial).toHaveBeenCalledTimes(1);
+        expect(execute).toHaveBeenCalledTimes(2);
+
+        renderer.materialId = 'material:other';
+        const third = renderFrame(1);
+        expect(third.primitiveCacheHit).toBe(false);
+        expect(resolveMaterial).toHaveBeenCalledTimes(2);
+
+        const fourth = renderFrame(2);
+        expect(fourth.primitiveCacheHit).toBe(false);
+        expect(resolveMaterial).toHaveBeenCalledTimes(3);
+
+        const fifth = renderFrame(2, 1);
+        expect(fifth.primitiveCacheHit).toBe(false);
+        expect(resolveMaterial).toHaveBeenCalledTimes(4);
+
+        pipeline.dispose();
     });
 });

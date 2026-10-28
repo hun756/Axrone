@@ -23,6 +23,7 @@ import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { MeshRenderer } from '../components/mesh-renderer';
 import type { SceneDrawExecutor, SceneDrawExecutorContext } from './draw-executor';
 import type { SceneLightingState } from '../lighting-collector';
+import { ScenePrimitiveCache } from './render-cache';
 import type { SceneRenderFrameState } from './render-frame-state';
 import type { SceneRenderItem } from './render-item-collector';
 import type { SceneRenderPassResource } from './render-pass-registry';
@@ -56,6 +57,15 @@ export interface SceneRenderPipelineParams {
         readonly alphaMode: SceneMaterialAlphaMode;
         readonly transparent: boolean;
     };
+    /**
+     * Current material-registry revision. When both revisions are provided the
+     * primitive list is cached per pass and reused while the scene is static.
+     */
+    readonly materialRevision?: number;
+    /** Current mesh-registry revision; see {@link materialRevision}. */
+    readonly meshRevision?: number;
+    /** Current shader-registry revision; see {@link materialRevision}. */
+    readonly shaderRevision?: number;
 }
 
 type SceneSpriteBatchRenderer = Pick<SceneSpriteBatchRuntime, 'render' | 'clear'>;
@@ -88,9 +98,7 @@ const toVector4Tuple = (
         | { readonly x: number; readonly y: number; readonly z: number; readonly w: number }
         | readonly [number, number, number, number]
 ): readonly [number, number, number, number] =>
-    'x' in value
-        ? [value.x, value.y, value.z, value.w]
-        : [value[0], value[1], value[2], value[3]];
+    'x' in value ? [value.x, value.y, value.z, value.w] : [value[0], value[1], value[2], value[3]];
 
 const createDirectionalLightId = (index: number): string => `scene-light:directional:${index}`;
 const createPointLightId = (index: number): string => `scene-light:point:${index}`;
@@ -120,9 +128,7 @@ const resolveRenderClearState = (
     return {
         ...(clearFlags.includes('color')
             ? {
-                  color: toVector4Tuple(
-                      renderPass.clearColor ?? cameraFrame.camera.clearColor
-                  ),
+                  color: toVector4Tuple(renderPass.clearColor ?? cameraFrame.camera.clearColor),
               }
             : {}),
         ...(clearFlags.includes('depth')
@@ -214,12 +220,8 @@ const toRenderLights = (lighting: SceneLightingState): readonly RenderLight[] =>
             ],
             intensity: lighting.spotIntensities[index] ?? 1,
             range: lighting.spotRanges[index] ?? 1,
-            innerConeRadians: Math.acos(
-                clampCosine(lighting.spotInnerConeCosines[index] ?? 0)
-            ),
-            outerConeRadians: Math.acos(
-                clampCosine(lighting.spotOuterConeCosines[index] ?? 0)
-            ),
+            innerConeRadians: Math.acos(clampCosine(lighting.spotInnerConeCosines[index] ?? 0)),
+            outerConeRadians: Math.acos(clampCosine(lighting.spotOuterConeCosines[index] ?? 0)),
         });
     }
 
@@ -310,7 +312,9 @@ const pushUniqueWarnings = (target: string[], warnings: readonly string[]): void
 
 interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
-    readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'>;
+    readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'> & {
+        readonly resetState?: () => void;
+    };
     readonly spriteBatchRuntime?: SceneSpriteBatchRenderer;
     readonly particleBatchRuntime?: SceneParticleBatchRenderer;
     readonly lineBatchRuntime?: SceneLineBatchRenderer;
@@ -322,10 +326,11 @@ interface SceneRenderPipelineOptions {
 interface ActiveExecutionState {
     readonly drawContext: SceneDrawExecutorContext;
     readonly frameState: SceneRenderFrameState;
+    readonly primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
 }
 
 export class SceneRenderPipeline {
-    private readonly _primitiveLookup = new Map<string, SceneRenderItem>();
+    private readonly _primitiveCache = new ScenePrimitiveCache();
     private readonly _options: SceneRenderPipelineOptions;
     private _activeExecution: ActiveExecutionState | null = null;
     private _backend: ManagedWebGL2RenderPassLibrary;
@@ -346,9 +351,7 @@ export class SceneRenderPipeline {
         return createWebGL2RenderPassLibrary({
             gl: this._options.gl,
             directFrameOutput:
-                !hdrEnabled &&
-                (tonemapping?.mode ?? 'none') === 'none' &&
-                !hasPostProcess,
+                !hdrEnabled && (tonemapping?.mode ?? 'none') === 'none' && !hasPostProcess,
             executors: [
                 defineWebGL2RenderPassExecutor({
                     kind: 'opaque',
@@ -403,8 +406,9 @@ export class SceneRenderPipeline {
         }
 
         const drawCallsBefore = this._activeExecution.frameState.drawCalls;
+        const primitiveLookup = this._activeExecution.primitiveLookup;
         for (const primitive of pass.items?.toArray() ?? []) {
-            const item = this._primitiveLookup.get(primitive.id);
+            const item = primitiveLookup.get(primitive.id);
             if (item) {
                 this._options.drawExecutor.execute(
                     item,
@@ -420,34 +424,46 @@ export class SceneRenderPipeline {
     }
 
     render(params: SceneRenderPipelineParams): SceneRenderPlanningStats {
+        this._options.drawExecutor.resetState?.();
         const clearState = resolveRenderClearState(params.cameraFrame, params.renderPass);
         const camera = toRenderCameraState(params.cameraFrame, clearState);
         const lights = toRenderLights(params.lighting);
-        const primitives: RenderPrimitiveInstance[] = [];
 
-        this._primitiveLookup.clear();
+        const cacheEnabled =
+            params.materialRevision !== undefined && params.meshRevision !== undefined;
+        let primitives: readonly RenderPrimitiveInstance[];
+        let primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
+        let primitiveCacheHit = false;
 
-        for (let index = 0; index < params.renderItems.length; index += 1) {
-            const item = params.renderItems[index]!;
-            const primitiveId = `scene-primitive:${item.renderer.id}`;
-            const material = createMaterialSnapshot(item, params.resolveMaterial(item.renderer));
-
-            primitives.push({
-                id: primitiveId,
-                meshId: item.renderer.meshId ?? `scene-mesh:${item.renderer.id}`,
-                material,
-                worldMatrix: item.transform.worldMatrix,
-                bounds: toRenderBounds(params.resolveBounds(item.renderer)),
-                sortBias: item.renderer.renderOrder,
-                visible: item.renderer.visible,
-                receivesLighting: item.renderer.receiveLighting,
+        if (cacheEnabled) {
+            const cached = this._primitiveCache.resolve({
+                rendererPassId: params.renderPass.rendererPassId,
+                renderPass: params.renderPass,
+                renderItems: params.renderItems,
+                viewportWidth: params.viewportWidth,
+                viewportHeight: params.viewportHeight,
+                materialRevision: params.materialRevision!,
+                meshRevision: params.meshRevision!,
+                shaderRevision: params.shaderRevision ?? 0,
+                build: (out, lookup) => this._buildPrimitives(params, out, lookup),
             });
-            this._primitiveLookup.set(primitiveId, item);
+            primitives = cached.primitives;
+            primitiveLookup = cached.lookup;
+            primitiveCacheHit = cached.hit;
+        } else {
+            // No registry revisions supplied — caching would be unsound, so
+            // rebuild exactly as before.
+            const built: RenderPrimitiveInstance[] = [];
+            const lookup = new Map<string, SceneRenderItem>();
+            this._buildPrimitives(params, built, lookup);
+            primitives = built;
+            primitiveLookup = lookup;
         }
 
         this._activeExecution = {
             drawContext: params.drawContext,
             frameState: params.frameState,
+            primitiveLookup,
         };
 
         try {
@@ -527,17 +543,44 @@ export class SceneRenderPipeline {
                 spriteTransparentCount: spriteStats?.drawnSpriteCount ?? 0,
                 spriteBatchCount: spriteStats?.spriteBatchCount ?? 0,
                 skippedSpriteCount: spriteStats?.skippedSpriteCount ?? 0,
+                ...(cacheEnabled ? { primitiveCacheHit } : {}),
+                ...(spriteStats ? { spriteBatchCacheHit: spriteStats.cacheHit === true } : {}),
                 warnings: Object.freeze(warnings),
             });
         } finally {
+            // Cached primitive lookups stay owned by the per-pass cache entry;
+            // only the active execution reference is dropped here.
             this._activeExecution = null;
-            this._primitiveLookup.clear();
+        }
+    }
+
+    private _buildPrimitives(
+        params: SceneRenderPipelineParams,
+        primitives: RenderPrimitiveInstance[],
+        lookup: Map<string, SceneRenderItem>
+    ): void {
+        for (let index = 0; index < params.renderItems.length; index += 1) {
+            const item = params.renderItems[index]!;
+            const primitiveId = `scene-primitive:${item.renderer.id}`;
+            const material = createMaterialSnapshot(item, params.resolveMaterial(item.renderer));
+
+            primitives.push({
+                id: primitiveId,
+                meshId: item.renderer.meshId ?? `scene-mesh:${item.renderer.id}`,
+                material,
+                worldMatrix: item.transform.worldMatrix,
+                bounds: toRenderBounds(params.resolveBounds(item.renderer)),
+                sortBias: item.renderer.renderOrder,
+                visible: item.renderer.visible,
+                receivesLighting: item.renderer.receiveLighting,
+            });
+            lookup.set(primitiveId, item);
         }
     }
 
     reset(): void {
         this._activeExecution = null;
-        this._primitiveLookup.clear();
+        this._primitiveCache.clear();
         this._options.spriteBatchRuntime?.clear();
         this._options.particleBatchRuntime?.clear();
         this._options.lineBatchRuntime?.clear();
@@ -547,7 +590,7 @@ export class SceneRenderPipeline {
         this._backend = this._createBackend();
         this._pipeline = this._createPipeline();
     }
-                                    
+
     /**
      * Recovers from a lost-and-restored WebGL context: forgets every cached
      * GPU handle without issuing GL delete calls (the objects are already
@@ -556,7 +599,7 @@ export class SceneRenderPipeline {
      */
     invalidateContextResources(): void {
         this._activeExecution = null;
-        this._primitiveLookup.clear();
+        this._primitiveCache.clear();
         // Batch runtimes drop their GL objects; delete calls are no-ops on a
         // lost context, so clear() is safe and resets their lazy creation.
         this._options.spriteBatchRuntime?.clear();
@@ -576,7 +619,7 @@ export class SceneRenderPipeline {
         this._options.lineBatchRuntime?.clear();
         this._options.billboardBatchRuntime?.clear();
         this._activeExecution = null;
-        this._primitiveLookup.clear();
+        this._primitiveCache.clear();
     }
 }
 

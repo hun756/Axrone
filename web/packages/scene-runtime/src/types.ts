@@ -592,6 +592,12 @@ export interface SceneRenderPlanningStats {
     readonly spriteTransparentCount: number;
     readonly spriteBatchCount: number;
     readonly skippedSpriteCount: number;
+    /** Optional diagnostics: the sprite batch path reused its cached build. */
+    readonly spriteBatchCacheHit?: boolean;
+    /** Optional diagnostics: the 3D render-item collection was reused. */
+    readonly renderListCacheHit?: boolean;
+    /** Optional diagnostics: the 3D primitive list/material snapshots were reused. */
+    readonly primitiveCacheHit?: boolean;
     readonly warnings: readonly string[];
 }
 

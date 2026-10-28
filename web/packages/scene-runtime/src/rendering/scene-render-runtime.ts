@@ -15,6 +15,7 @@ import { resolveSceneMaterialPass } from '../material-registry';
 import { SceneMaterialTextureBinder } from '../material-texture-binder';
 import { SceneMorphMeshRuntime } from '../morph-mesh-runtime';
 import { SceneRenderFrameState } from './render-frame-state';
+import { SceneRenderListCache } from './render-cache';
 import { SceneRenderItemCollector } from './render-item-collector';
 import { SceneRenderPipeline } from './scene-render-pipeline';
 import { SceneRenderPassPreparer } from './render-pass-preparer';
@@ -78,6 +79,7 @@ export class SceneRenderRuntime {
     private readonly _lightingCollector: SceneLightingCollector;
     private readonly _cameraFrameCollector = new SceneCameraFrameStateCollector();
     private readonly _renderItemCollector = new SceneRenderItemCollector();
+    private readonly _renderListCache = new SceneRenderListCache();
     private readonly _renderFrameState = new SceneRenderFrameState();
     private readonly _drawExecutionContextCache = new SceneDrawExecutionContextCache();
     private readonly _materialTextureBinder: SceneMaterialTextureBinder;
@@ -103,7 +105,10 @@ export class SceneRenderRuntime {
 
     constructor(private readonly _options: SceneRenderRuntimeOptions) {
         this._lightingCollector = new SceneLightingCollector(4);
-        this._materialTextureBinder = new SceneMaterialTextureBinder(_options.gl, _options.stateCache);
+        this._materialTextureBinder = new SceneMaterialTextureBinder(
+            _options.gl,
+            _options.stateCache
+        );
         this._renderPassPreparer = new SceneRenderPassPreparer(
             _options.gl,
             _options.defaultClearColor
@@ -182,7 +187,10 @@ export class SceneRenderRuntime {
         };
     }
 
-    private _isBlendedRenderer(renderer: import('../components/mesh-renderer').MeshRenderer, renderPass: import('./render-pass-registry').SceneRenderPassResource): boolean {
+    private _isBlendedRenderer(
+        renderer: import('../components/mesh-renderer').MeshRenderer,
+        renderPass: import('./render-pass-registry').SceneRenderPassResource
+    ): boolean {
         if (renderer.materialId === null) {
             return false;
         }
@@ -240,6 +248,11 @@ export class SceneRenderRuntime {
         let planningSpriteTransparentCount = 0;
         let planningSpriteBatchCount = 0;
         let planningSkippedSpriteCount = 0;
+        let planningSpriteBatchPassCount = 0;
+        let planningSpriteBatchCacheHit = true;
+        let planningRenderListCacheHit = true;
+        let planningPrimitiveCacheHit = true;
+        let planningCachedPassCount = 0;
         const planningWarnings: string[] = [];
 
         for (const renderPass of renderPasses) {
@@ -261,21 +274,36 @@ export class SceneRenderRuntime {
                 viewportHeight: params.viewportHeight,
             });
 
-            const renderItems = this._renderItemCollector.collect(
+            const materialRevision = this._options.resources.materials.revision;
+            const meshRevision = this._options.resources.meshes.revision;
+            const shaderRevision = this._options.resources.shaders.revision;
+
+            // Reuses the previous sorted item list when nothing render-relevant
+            // changed; otherwise runs the full collect/cull/sort path.
+            const renderListResult = this._renderListCache.resolve({
+                rendererPassId: renderPass.rendererPassId,
+                renderPass,
                 actors,
-                renderPass.rendererPassId,
-                {
-                    cameraPosition: cameraFrame.position,
-                    cameraFrustum: cameraFrame.camera3D.frustum,
-                    resolveBounds: (renderer) => {
-                        const meshId = renderer.meshId;
-                        return meshId
-                            ? this._options.resources.meshes.getDefinition(meshId)?.bounds
-                            : undefined;
-                    },
-                    isBlended: (renderer) => this._isBlendedRenderer(renderer, renderPass),
-                }
-            );
+                cameraFrame,
+                viewportWidth: params.viewportWidth,
+                viewportHeight: params.viewportHeight,
+                materialRevision,
+                meshRevision,
+                shaderRevision,
+                collect: () =>
+                    this._renderItemCollector.collect(actors, renderPass.rendererPassId, {
+                        cameraPosition: cameraFrame.position,
+                        cameraFrustum: cameraFrame.camera3D.frustum,
+                        resolveBounds: (renderer) => {
+                            const meshId = renderer.meshId;
+                            return meshId
+                                ? this._options.resources.meshes.getDefinition(meshId)?.bounds
+                                : undefined;
+                        },
+                        isBlended: (renderer) => this._isBlendedRenderer(renderer, renderPass),
+                    }),
+            });
+            const renderItems = renderListResult.items;
 
             const meshPlanning = this._renderPipeline.render({
                 frame: params.frame,
@@ -289,6 +317,9 @@ export class SceneRenderRuntime {
                 drawContext,
                 frameState: renderFrame,
                 renderItems,
+                materialRevision,
+                meshRevision,
+                shaderRevision,
                 resolveBounds: (renderer) => {
                     const meshId = renderer.meshId;
                     return meshId
@@ -304,7 +335,7 @@ export class SceneRenderRuntime {
                     const shadingModel =
                         rawShadingModel === 'unlit' || rawShadingModel === 'pbr'
                             ? rawShadingModel
-                            : 'custom' as const;
+                            : ('custom' as const);
                     return {
                         materialId: material?.id ?? renderer.materialId,
                         shadingModel,
@@ -315,6 +346,11 @@ export class SceneRenderRuntime {
                     };
                 },
             });
+
+            planningCachedPassCount += 1;
+            planningRenderListCacheHit = planningRenderListCacheHit && renderListResult.hit;
+            planningPrimitiveCacheHit =
+                planningPrimitiveCacheHit && (meshPlanning.primitiveCacheHit ?? false);
 
             planningPassCount += meshPlanning.passCount;
             planningOpaqueCount += meshPlanning.opaqueCount;
@@ -329,6 +365,11 @@ export class SceneRenderRuntime {
             planningSpriteTransparentCount += meshPlanning.spriteTransparentCount;
             planningSpriteBatchCount += meshPlanning.spriteBatchCount;
             planningSkippedSpriteCount += meshPlanning.skippedSpriteCount;
+            if (meshPlanning.spriteBatchCacheHit !== undefined) {
+                planningSpriteBatchPassCount += 1;
+                planningSpriteBatchCacheHit =
+                    planningSpriteBatchCacheHit && meshPlanning.spriteBatchCacheHit;
+            }
         }
 
         this._planningStats = Object.freeze({
@@ -339,6 +380,15 @@ export class SceneRenderRuntime {
             spriteTransparentCount: planningSpriteTransparentCount,
             spriteBatchCount: planningSpriteBatchCount,
             skippedSpriteCount: planningSkippedSpriteCount,
+            ...(planningSpriteBatchPassCount > 0
+                ? { spriteBatchCacheHit: planningSpriteBatchCacheHit }
+                : {}),
+            ...(planningCachedPassCount > 0
+                ? {
+                      renderListCacheHit: planningRenderListCacheHit,
+                      primitiveCacheHit: planningPrimitiveCacheHit,
+                  }
+                : {}),
             warnings: Object.freeze(planningWarnings),
         });
 
@@ -367,6 +417,7 @@ export class SceneRenderRuntime {
 
     clear(): void {
         this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
+        this._renderListCache.clear();
         this._renderPassPreparer.reset();
         this._renderPipeline.reset();
         this._morphMeshRuntime.clear();
