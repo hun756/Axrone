@@ -40,10 +40,11 @@ public sealed partial class World : IDisposable
     public long DroppedRemovals => _removals.DroppedCount;
 
     /// <summary>Creates a world.</summary>
-    public World(int initialCapacity = 4096, IDiagnosticsSink? diagnostics = null)
+    public World(int initialCapacity = 4096, IDiagnosticsSink? diagnostics = null, int workerCount = 0)
     {
         _entities = new EntityStore(initialCapacity);
         _diagnostics = diagnostics ?? NullDiagnosticsSink.Instance;
+        _requestedWorkerCount = workerCount > 0 ? workerCount : Math.Max(1, Environment.ProcessorCount);
     }
 
     /// <summary>Begins a draft entity in the root archetype.</summary>
@@ -324,6 +325,7 @@ public sealed partial class World : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        DisposeParallelInfrastructure();
         _archetypes.Dispose();
     }
 

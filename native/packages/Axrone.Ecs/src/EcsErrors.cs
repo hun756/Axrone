@@ -88,4 +88,58 @@ internal static class EcsThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowArgumentOutOfRange(string paramName) =>
         throw new ArgumentOutOfRangeException(paramName);
+
+    /// <summary>Throws when a nested parallel job would deadlock on the shared pool.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowParallelReentrancy() =>
+        throw new EcsConfigurationException(
+            "ecs.parallel-reentrancy",
+            "A chunk-parallel job cannot run from inside a parallel system batch; mark the system structural.");
+
+    /// <summary>Throws when fewer command buffers than workers were supplied.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCommandBufferCount(int actual, int required) =>
+        throw new EcsConfigurationException(
+            "ecs.command-buffer-count",
+            $"Parallel command playback requires at least {required} buffers, but received {actual}.");
+
+    /// <summary>Throws when a system id is the invalid sentinel.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidSystemId() =>
+        throw new EcsConfigurationException("ecs.invalid-system-id", "A system id must be non-zero.");
+
+    /// <summary>Throws when a system id is registered twice.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowDuplicateSystem(SystemId id) =>
+        throw new EcsConfigurationException(
+            "ecs.duplicate-system",
+            $"System id {id.Value} is already registered.");
+
+    /// <summary>Throws when a system dependency was never registered.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowMissingSystemDependency(SystemId system, SystemId dependency) =>
+        throw new EcsConfigurationException(
+            "ecs.system-missing-dependency",
+            $"System {system.Value} depends on unregistered system {dependency.Value}.");
+
+    /// <summary>Throws when system dependencies contain a cycle.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSystemCycle(SystemId system) =>
+        throw new EcsConfigurationException(
+            "ecs.system-cycle",
+            $"System dependency cycle detected at system {system.Value}.");
+
+    /// <summary>Throws when a dependency is scheduled in a later phase.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSystemPhaseDependency(SystemId system, SystemId dependency) =>
+        throw new EcsConfigurationException(
+            "ecs.system-phase-dependency",
+            $"System {system.Value} cannot depend on {dependency.Value} in a later phase.");
 }

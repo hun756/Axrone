@@ -36,6 +36,9 @@
     <!-- CA1819: Properties returning arrays — attribute arguments only
          support arrays for dependency and tag lists. -->
     <NoWarn>$(NoWarn);CA1819</NoWarn>
+    <!-- CA1031: Catching general exceptions — worker ranges capture the first
+         failure per worker and rethrow it on the calling thread after join. -->
+    <NoWarn>$(NoWarn);CA1031</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
