@@ -22,6 +22,15 @@
          typestate entry point; the stage parameter only exists on the generic
          builder, so the factory cannot live elsewhere without losing the stage. -->
     <NoWarn>$(NoWarn);CA1000</NoWarn>
+    <!-- CA1028: RaycastFlags and RaycastLayer are 32-bit masks applied to the physics
+         layer word; RaycastShapeKind is a byte so a shape descriptor stays compact. -->
+    <NoWarn>$(NoWarn);CA1028</NoWarn>
+    <!-- CA1711: RaycastFlags is the documented physics-contract name for the option
+         set and is consumed by scene/physics callers by that name. -->
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+    <!-- CA2217: RaycastLayer.All deliberately spans every bit, including bits that no
+         named member owns, so it is not a combination of the declared members. -->
+    <NoWarn>$(NoWarn);CA2217</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
