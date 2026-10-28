@@ -85,17 +85,35 @@ internal sealed class RemovalJournal
     }
 
     /// <summary>Collects removals of one component newer than <paramref name="sinceTick"/>.</summary>
-    public int GetRemoved(ComponentId componentId, int sinceTick, Span<Entity> results)
+    public int GetRemoved(ComponentId componentId, int sinceTick, Span<Entity> results) =>
+        GetRemoved(componentId, sinceTick, results, default);
+
+    /// <summary>
+    /// Collects removals of one component and their removal ticks. The tick span may be
+    /// shorter than the entity span; the shorter length bounds the result.
+    /// </summary>
+    public int GetRemoved(
+        ComponentId componentId,
+        int sinceTick,
+        Span<Entity> results,
+        Span<int> ticks)
     {
         lock (_gate)
         {
+            int limit = ticks.IsEmpty ? results.Length : Math.Min(results.Length, ticks.Length);
             int written = 0;
-            for (int offset = 0; offset < _count && written < results.Length; offset++)
+            for (int offset = 0; offset < _count && written < limit; offset++)
             {
                 RemovalRecord record = _records[(_start + offset) % _records.Length];
                 if (record.ComponentId == componentId && EcsTick.IsNewer(record.Tick, sinceTick))
                 {
-                    results[written++] = record.Entity;
+                    results[written] = record.Entity;
+                    if (!ticks.IsEmpty)
+                    {
+                        ticks[written] = record.Tick;
+                    }
+
+                    written++;
                 }
             }
 

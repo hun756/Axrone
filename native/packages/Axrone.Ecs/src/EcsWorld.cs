@@ -9,7 +9,7 @@ public sealed partial class World : IDisposable
 {
     private readonly ArchetypeGraph _archetypes = new();
     private readonly EntityStore _entities;
-    private readonly IDiagnosticsSink _diagnostics;
+    private IDiagnosticsSink _diagnostics;
     private readonly ArchetypeQueryCache _queryCache = new();
     private readonly RemovalJournal _removals = new();
     private readonly Lock _structuralSync = new();
@@ -26,6 +26,16 @@ public sealed partial class World : IDisposable
 
     /// <summary>Diagnostics sink.</summary>
     public IDiagnosticsSink Diagnostics => _diagnostics;
+
+    /// <summary>
+    /// Replaces the diagnostics sink. Call before structural operations begin; the bridge
+    /// package uses this to install a lifecycle-recording wrapper.
+    /// </summary>
+    public void SetDiagnosticsSink(IDiagnosticsSink sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        _diagnostics = sink;
+    }
 
     /// <summary>Stepped frame count.</summary>
     public long FrameCount => Volatile.Read(ref _frameCount);
@@ -222,6 +232,13 @@ public sealed partial class World : IDisposable
     /// <summary>Collects entities that lost a component after <paramref name="sinceTick"/>.</summary>
     public int GetRemoved<T>(int sinceTick, Span<Entity> results) where T : unmanaged =>
         _removals.GetRemoved(ComponentType<T>.Id, sinceTick, results);
+
+    /// <summary>
+    /// Collects entities that lost a component after <paramref name="sinceTick"/>, alongside
+    /// the removal tick for each entry.
+    /// </summary>
+    public int GetRemoved<T>(int sinceTick, Span<Entity> results, Span<int> ticks) where T : unmanaged =>
+        _removals.GetRemoved(ComponentType<T>.Id, sinceTick, results, ticks);
 
     /// <summary>Whether an entity lost a component after <paramref name="sinceTick"/>.</summary>
     public bool WasRemoved<T>(scoped in Entity entity, int sinceTick) where T : unmanaged =>

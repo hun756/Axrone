@@ -66,6 +66,67 @@ public readonly struct SystemContext
     public int SinceTick { get; }
 }
 
+/// <summary>Immutable context for system and frame execution callbacks.</summary>
+public readonly struct SystemEventContext
+{
+    /// <summary>Creates an event context.</summary>
+    public SystemEventContext(
+        SystemId id,
+        SystemPhase phase,
+        int priority,
+        int tick,
+        long frame,
+        float deltaTime)
+    {
+        Id = id;
+        Phase = phase;
+        Priority = priority;
+        Tick = tick;
+        Frame = frame;
+        DeltaTime = deltaTime;
+    }
+
+    /// <summary>System identity.</summary>
+    public SystemId Id { get; }
+
+    /// <summary>System phase.</summary>
+    public SystemPhase Phase { get; }
+
+    /// <summary>System priority.</summary>
+    public int Priority { get; }
+
+    /// <summary>World change tick.</summary>
+    public int Tick { get; }
+
+    /// <summary>World frame count.</summary>
+    public long Frame { get; }
+
+    /// <summary>Frame delta in seconds.</summary>
+    public float DeltaTime { get; }
+}
+
+/// <summary>
+/// Optional scheduler observer. Callbacks may run on parallel workers, so implementations
+/// must be thread-safe and must not perform structural world mutation.
+/// </summary>
+public interface ISystemEventListener
+{
+    /// <summary>Called before the first phase of a run.</summary>
+    void OnFrameStarting(int tick, long frame, float deltaTime);
+
+    /// <summary>Called after every phase completed, including on failure.</summary>
+    void OnFrameCompleted(int tick, long frame, float deltaTime);
+
+    /// <summary>Called before one system executes.</summary>
+    void OnSystemStarting(in SystemEventContext context);
+
+    /// <summary>Called after one system completed successfully.</summary>
+    void OnSystemCompleted(in SystemEventContext context);
+
+    /// <summary>Called when a system throws; the exception is rethrown afterwards.</summary>
+    void OnSystemFaulted(in SystemEventContext context, Exception exception);
+}
+
 /// <summary>
 /// Monomorphized system policy. Registration reads <see cref="Descriptor"/> once and
 /// stores a generic runner, so execution performs one virtual call per system and no
@@ -113,6 +174,7 @@ public sealed class SystemScheduler : IDisposable
     private readonly Lock _gate = new();
     private readonly BatchState _batchState;
     private readonly GCHandle _batchStateHandle;
+    private ISystemEventListener? _listener;
     private bool _dirty = true;
     private bool _enabled = true;
     private bool _disposed;
@@ -135,6 +197,10 @@ public sealed class SystemScheduler : IDisposable
 
     /// <summary>Gets the number of registered systems.</summary>
     public int SystemCount => _registrations.Count;
+
+    /// <summary>Installs or clears the optional system/frame observer.</summary>
+    public void SetListener(ISystemEventListener? listener) =>
+        Volatile.Write(ref _listener, listener);
 
     /// <summary>Registers a monomorphized system policy.</summary>
     public SystemScheduler Add<TPolicy>(ReadOnlySpan<SystemId> dependencies = default)
@@ -206,13 +272,22 @@ public sealed class SystemScheduler : IDisposable
         _world.Step();
         int tick = _world.Tick;
         long frame = _world.FrameCount;
-        for (int phase = 0; phase < _plans.Length; phase++)
+        ISystemEventListener? listener = Volatile.Read(ref _listener);
+        listener?.OnFrameStarting(tick, frame, deltaTime);
+        try
         {
-            PhasePlan? plan = _plans[phase];
-            if (plan is not null)
+            for (int phase = 0; phase < _plans.Length; phase++)
             {
-                RunPlan(plan, tick, frame, deltaTime);
+                PhasePlan? plan = _plans[phase];
+                if (plan is not null)
+                {
+                    RunPlan(plan, tick, frame, deltaTime);
+                }
             }
+        }
+        finally
+        {
+            listener?.OnFrameCompleted(tick, frame, deltaTime);
         }
     }
 
@@ -309,8 +384,28 @@ public sealed class SystemScheduler : IDisposable
     private void RunRegistration(int index, int tick, long frame, float deltaTime)
     {
         SystemRegistration registration = _registrations[index];
+        ISystemEventListener? listener = Volatile.Read(ref _listener);
+        var eventContext = new SystemEventContext(
+            registration.Descriptor.Id,
+            registration.Descriptor.Phase,
+            registration.Descriptor.Priority,
+            tick,
+            frame,
+            deltaTime);
+        listener?.OnSystemStarting(in eventContext);
+
         var context = new SystemContext(tick, frame, deltaTime, registration.LastTick);
-        registration.Runner.Run(_world, in context);
+        try
+        {
+            registration.Runner.Run(_world, in context);
+        }
+        catch (Exception error)
+        {
+            listener?.OnSystemFaulted(in eventContext, error);
+            throw;
+        }
+
+        listener?.OnSystemCompleted(in eventContext);
         registration.LastTick = tick;
     }
 
