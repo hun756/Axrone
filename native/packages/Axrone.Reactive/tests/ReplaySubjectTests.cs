@@ -64,6 +64,21 @@ public class ReplaySubjectTests
     }
 
     [Fact]
+    public void ValuesAfterCompletionDoNotEnterTheReplayBuffer()
+    {
+        using var subject = new ReplaySubject<int>(3);
+        subject.OnNext(1);
+        subject.OnCompleted();
+        subject.OnNext(2);
+
+        var late = new RecordingObserver<int>();
+        using var subscription = subject.Subscribe(late);
+
+        late.Values.Should().Equal(1);
+        late.Completed.Should().BeTrue();
+    }
+
+    [Fact]
     public void InvalidBufferSizeThrows()
     {
         Action create = () => _ = new ReplaySubject<int>(0);
