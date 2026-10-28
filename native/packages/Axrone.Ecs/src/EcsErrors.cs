@@ -142,4 +142,56 @@ internal static class EcsThrowHelper
         throw new EcsConfigurationException(
             "ecs.system-phase-dependency",
             $"System {system.Value} cannot depend on {dependency.Value} in a later phase.");
+
+    /// <summary>Throws when a snapshot component has no registered codec.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotMissingCodec(ComponentId id) =>
+        throw new EcsConfigurationException(
+            "ecs.snapshot-missing-codec",
+            $"Component id {id.Value} has no registered snapshot codec.");
+
+    /// <summary>Throws when a snapshot stable id has no registered codec.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotMissingStableCodec(ushort stableId) =>
+        throw new EcsConfigurationException(
+            "ecs.snapshot-missing-codec",
+            $"Snapshot stable component id {stableId} has no registered codec.");
+
+    /// <summary>Throws when a snapshot is structurally invalid.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotInvalid(string detail) =>
+        throw new EcsConfigurationException("ecs.snapshot-invalid", detail);
+
+    /// <summary>Throws when the snapshot checksum does not match.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotChecksum() =>
+        throw new EcsConfigurationException("ecs.snapshot-checksum", "Snapshot checksum does not match the payload.");
+
+    /// <summary>Throws when a snapshot restore targets a non-empty world.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotNotEmpty() =>
+        throw new EcsConfigurationException(
+            "ecs.snapshot-not-empty",
+            "Snapshot restore requires an empty world.");
+
+    /// <summary>Throws when two codecs claim the same stable id.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotDuplicateStableId(ushort stableId) =>
+        throw new EcsConfigurationException(
+            "ecs.snapshot-duplicate-stable-id",
+            $"Snapshot stable component id {stableId} is already registered.");
+
+    /// <summary>Throws when a codec payload does not consume exactly its declared length.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowSnapshotInvalidPayload() =>
+        throw new EcsConfigurationException(
+            "ecs.snapshot-invalid-payload",
+            "Snapshot component payload did not consume exactly its declared length.");
 }

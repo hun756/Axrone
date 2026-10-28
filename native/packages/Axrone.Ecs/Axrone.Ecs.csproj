@@ -39,6 +39,9 @@
     <!-- CA1031: Catching general exceptions — worker ranges capture the first
          failure per worker and rethrow it on the calling thread after join. -->
     <NoWarn>$(NoWarn);CA1031</NoWarn>
+    <!-- CA1000: Static members on generic types — BlittableCodec implements the
+         static-abstract IComponentCodec contract; those members cannot move. -->
+    <NoWarn>$(NoWarn);CA1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="PublicApi">
@@ -47,6 +50,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Axrone.Collections/Axrone.Collections.csproj" />
+    <ProjectReference Include="../Axrone.Hash/Axrone.Hash.csproj" />
   </ItemGroup>
 
   <ItemGroup>

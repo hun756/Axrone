@@ -95,6 +95,14 @@ public sealed class Archetype : IDisposable
         return row;
     }
 
+    /// <summary>Writes the entity handle of an allocated row.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetEntityRow(int row, in Entity entity)
+    {
+        ref Entity start = ref MemoryMarshal.GetArrayDataReference(_entities);
+        Unsafe.Add(ref start, (uint)row) = entity;
+    }
+
     /// <summary>Swap-removes a row; reports the moved entity when one shifts.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool RemoveRow(int row, out Entity movedEntity)

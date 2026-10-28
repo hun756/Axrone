@@ -57,6 +57,7 @@ public sealed partial class World : IDisposable
             Archetype root = _archetypes.GetArchetype(new ArchetypeId(0));
             int row = root.AllocateRow(Entity.Null);
             entity = _entities.Allocate(root.Id, row);
+            root.SetEntityRow(row, in entity);
             _diagnostics.OnEntityCreated(entity);
         }
 
@@ -298,6 +299,9 @@ public sealed partial class World : IDisposable
         Interlocked.Increment(ref _frameCount);
         Interlocked.Increment(ref _tick);
     }
+
+    /// <summary>Restores the change tick from a snapshot.</summary>
+    internal void RestoreTick(int tick) => Volatile.Write(ref _tick, tick);
 
     /// <summary>Opens a single-component query.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
