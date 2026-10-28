@@ -53,22 +53,22 @@ public sealed class EcsReactiveBridge : IDisposable, ISystemEventListener
     }
 
     /// <summary>Gets the entity created/destroyed stream.</summary>
-    public IObservable<EntityLifecycleEvent> EntityLifecycle => _lifecycle;
+    public ObservableBase<EntityLifecycleEvent> EntityLifecycle => _lifecycle;
 
     /// <summary>Gets the frame-started stream.</summary>
-    public IObservable<FrameEvent> FrameStarted => _frameStarted;
+    public ObservableBase<FrameEvent> FrameStarted => _frameStarted;
 
     /// <summary>Gets the frame-completed stream.</summary>
-    public IObservable<FrameEvent> FrameCompleted => _frameCompleted;
+    public ObservableBase<FrameEvent> FrameCompleted => _frameCompleted;
 
     /// <summary>Gets the system-started stream.</summary>
-    public IObservable<SystemEvent> SystemStarted => _systemStarted;
+    public ObservableBase<SystemEvent> SystemStarted => _systemStarted;
 
     /// <summary>Gets the system-completed stream.</summary>
-    public IObservable<SystemEvent> SystemCompleted => _systemCompleted;
+    public ObservableBase<SystemEvent> SystemCompleted => _systemCompleted;
 
     /// <summary>Gets the system-faulted stream.</summary>
-    public IObservable<SystemFaultEvent> SystemFaulted => _systemFaulted;
+    public ObservableBase<SystemFaultEvent> SystemFaulted => _systemFaulted;
 
     /// <summary>Starts tracking one component type; repeated calls return the same stream.</summary>
     public ComponentChanges<T> Track<T>() where T : unmanaged

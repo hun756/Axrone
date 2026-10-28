@@ -25,13 +25,13 @@ public sealed class ComponentChanges<T> : IComponentPoller, IDisposable
     }
 
     /// <summary>Gets the added-component stream.</summary>
-    public IObservable<ComponentAddedEvent<T>> Added => _added;
+    public ObservableBase<ComponentAddedEvent<T>> Added => _added;
 
     /// <summary>Gets the changed-component stream; newly added rows are reported once on Added.</summary>
-    public IObservable<ComponentChangedEvent<T>> Changed => _changed;
+    public ObservableBase<ComponentChangedEvent<T>> Changed => _changed;
 
     /// <summary>Gets the removed-component stream.</summary>
-    public IObservable<ComponentRemovedEvent<T>> Removed => _removed;
+    public ObservableBase<ComponentRemovedEvent<T>> Removed => _removed;
 
     int IComponentPoller.Poll(int tick, Span<Entity> removalEntities, Span<int> removalTicks)
     {
