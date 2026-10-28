@@ -28,6 +28,7 @@ import { SceneShaderFactory } from '../scene-shader-factory';
 import type { SceneShaderResource } from '../shader-registry';
 import { createSprite2DShaderDefinition } from '../sprite-2d-shader';
 import { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
+import { SpriteInstancedRenderer } from './sprite-instanced-renderer';
 import type { SceneUniformWriteTarget } from '../uniform-writer';
 
 const MIN_CLIP_W = 1e-6;
@@ -181,6 +182,8 @@ export class SceneSpriteBatchRuntime {
     private readonly _submissionRendererIds: string[] = [];
     private readonly _batchCache = new Map<string, SceneSpriteBatchCacheEntry>();
     private readonly _missStreak = new Map<string, number>();
+    private _instancedRenderer: SpriteInstancedRenderer | null = null;
+    private _instancedUnavailable = false;
     private readonly _replayWarnings: string[] = [];
     private readonly _cacheEnabled: boolean;
     private readonly _worldPointScratch = new Float32Array(3);
@@ -244,6 +247,10 @@ export class SceneSpriteBatchRuntime {
                 return this._replayCache(cached, params, passId);
             }
         }
+
+        const missStreak = (this._missStreak.get(passId) ?? 0) + 1;
+        this._missStreak.set(passId, missStreak);
+        const useInstanced = !this._cacheEnabled || missStreak >= 3;
 
         const items = this._collector.collect(params.actors, passId, {
             cameraFrustum: params.cameraFrame.camera3D.frustum,
@@ -348,6 +355,24 @@ export class SceneSpriteBatchRuntime {
             });
         }
 
+        if (useInstanced && allowedSpriteCount > 0) {
+            const instancedCount = this._tryDrawInstanced(
+                this._submissions,
+                allowedSpriteCount,
+                params,
+                warnings
+            );
+            if (instancedCount !== null) {
+                return Object.freeze({
+                    drawnSpriteCount: instancedCount,
+                    spriteBatchCount: 1,
+                    skippedSpriteCount,
+                    warnings: Object.freeze(warnings),
+                    cacheHit: false,
+                });
+            }
+        }
+
         const failureStats = Object.freeze({
             drawnSpriteCount: 0,
             spriteBatchCount: 0,
@@ -441,6 +466,10 @@ export class SceneSpriteBatchRuntime {
     }
 
     clear(): void {
+        this._instancedRenderer?.clear();
+        this._instancedRenderer = null;
+        this._instancedUnavailable = false;
+
         if (this._defaultShader) {
             this._shaderFactory.delete(this._defaultShader);
             this._defaultShader = null;
@@ -861,6 +890,63 @@ export class SceneSpriteBatchRuntime {
         }
 
         return null;
+    }
+
+    private _tryDrawInstanced(
+        submissions: readonly Render2DSpriteSubmission[],
+        count: number,
+        params: SceneSpriteBatchRuntimeRenderParams,
+        warnings: string[]
+    ): number | null {
+        if (this._instancedUnavailable || count <= 0) {
+            return null;
+        }
+
+        let textureId: string | null = null;
+        for (let index = 0; index < count; index += 1) {
+            const submission = submissions[index]!;
+            if (
+                submission.source.kind !== 'texture' ||
+                submission.mask !== undefined ||
+                submission.clipRect !== undefined ||
+                submission.slice !== undefined
+            ) {
+                return null;
+            }
+            if (textureId === null) {
+                textureId = submission.source.textureId;
+            } else if (textureId !== submission.source.textureId) {
+                return null;
+            }
+        }
+
+        if (textureId === null || !this._options.resources.textures.get(textureId)) {
+            return null;
+        }
+
+        let renderer = this._instancedRenderer;
+        if (!renderer) {
+            try {
+                renderer = new SpriteInstancedRenderer({
+                    gl: this._options.gl,
+                    resources: this._options.resources,
+                    renderStateApplier: this._options.renderStateApplier,
+                    stateCache: this._options.stateCache,
+                });
+                this._instancedRenderer = renderer;
+            } catch (error) {
+                this._instancedUnavailable = true;
+                warnings.push(
+                    `sprite instanced path unavailable: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                );
+                return null;
+            }
+        }
+
+        const drawn = renderer.draw(submissions, count, params, textureId);
+        return drawn > 0 ? drawn : null;
     }
 
     private _ensureResources(): void {

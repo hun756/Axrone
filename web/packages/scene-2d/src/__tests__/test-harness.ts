@@ -232,6 +232,8 @@ export const createMockGL = (canvas: HTMLCanvasElement) => {
         uniform1uiv: vi.fn(),
         drawArrays: vi.fn(),
         drawElements: vi.fn(),
+        drawElementsInstanced: vi.fn(),
+        vertexAttribDivisor: vi.fn(),
         createTexture: vi.fn(() => {
             const texture = {};
             textures.add(texture);
