@@ -1,6 +1,7 @@
 namespace Axrone.Reactive.Ecs.Tests;
 
 using Axrone.Ecs;
+using Axrone.Reactive;
 using FluentAssertions;
 using Xunit;
 
@@ -345,6 +346,27 @@ public sealed class EcsReactiveBridgeTests
 
         added.Values.Should().HaveCount(3);
         added.Values.Select(value => value.Value.X).Should().Equal(0.0f, 1.0f, 2.0f);
+    }
+
+    [Fact]
+    public void BridgeStreamsHonorSubscriberPriority()
+    {
+        ComponentRegistry.Register<BridgePosition>();
+        using var world = new World(workerCount: 1);
+        using var bridge = new EcsReactiveBridge(world);
+        ComponentChanges<BridgePosition> changes = bridge.Track<BridgePosition>();
+        var order = new List<string>();
+        using var high = changes.Added.Subscribe(
+            new DelegateObserver<ComponentAddedEvent<BridgePosition>>(_ => order.Add("high")),
+            ObservationPriority.High);
+        using var low = changes.Added.Subscribe(
+            new DelegateObserver<ComponentAddedEvent<BridgePosition>>(_ => order.Add("low")),
+            ObservationPriority.Low);
+
+        _ = world.BeginEntity().With(new BridgePosition(1.0f, 0.0f)).Commit();
+        bridge.Poll();
+
+        order.Should().Equal("high", "low");
     }
 
     [Fact]
