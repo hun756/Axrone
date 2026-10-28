@@ -63,15 +63,22 @@ public interface IComponentColumn : IDisposable
 public static class ComponentRegistry
 {
     private static readonly Dictionary<ushort, Func<int, IComponentColumn>> _factories = new();
+    private static readonly Dictionary<ushort, IComponentCommandBinding> _bindings = new();
     private static readonly Lock _gate = new();
 
-    /// <summary>Registers a column factory.</summary>
+    /// <summary>Registers a column factory and its deferred-command binding.</summary>
     public static void Register<T>() where T : unmanaged
     {
         lock (_gate)
         {
             ushort id = ComponentType<T>.Id.Value;
+            if (_factories.ContainsKey(id))
+            {
+                return;
+            }
+
             _factories[id] = static capacity => new ComponentColumn<T>(capacity);
+            _bindings[id] = new ComponentCommandBinding<T>();
         }
     }
 
@@ -88,6 +95,15 @@ public static class ComponentRegistry
 
         EcsThrowHelper.ThrowUnknownComponentType(id);
         return null!;
+    }
+
+    /// <summary>Finds the deferred-command binding for a registered type.</summary>
+    internal static bool TryGetBinding(ComponentId id, out IComponentCommandBinding? binding)
+    {
+        lock (_gate)
+        {
+            return _bindings.TryGetValue(id.Value, out binding);
+        }
     }
 }
 

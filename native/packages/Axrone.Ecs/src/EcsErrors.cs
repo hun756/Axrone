@@ -74,4 +74,18 @@ internal static class EcsThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowInvalidJournalCapacity(int capacity) =>
         throw new EcsConfigurationException("ecs.invalid-journal-capacity", $"Removal journal capacity must be positive, but was {capacity}.");
+
+    /// <summary>Throws when a command payload length does not match the component size.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidCommandPayload(int actual, int expected) =>
+        throw new EcsConfigurationException(
+            "ecs.invalid-command-payload",
+            $"Command payload length {actual} does not match the component size {expected}.");
+
+    /// <summary>Throws when a capacity or count is outside its valid range.</summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowArgumentOutOfRange(string paramName) =>
+        throw new ArgumentOutOfRangeException(paramName);
 }
