@@ -195,6 +195,22 @@ export const buttonFeedbackController: WidgetController<
 		const props = typed.props as ButtonFeedbackProps;
 		const previous = previousProps as ButtonFeedbackProps;
 
+		// Removing the authored image must end the sprite surface; otherwise the
+		// suppressed fill leaves an invisible button and the cached base source
+		// would resurrect the deleted image on the next interaction.
+		if (
+			typed.state.originalSource !== null &&
+			typed.runtime.getWidgetImageInput(typed.widget as WidgetId) === null
+		) {
+			typed.state.originalSource = null;
+			typed.state.face = syncImageFace(
+				typed.runtime,
+				typed.widget as WidgetId,
+				typed.state.face,
+				false
+			);
+		}
+
 		if (
 			props.states !== previous.states ||
 			props.transition !== previous.transition ||
