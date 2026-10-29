@@ -67,6 +67,18 @@ describe('image bleed', () => {
         runtime.dispose();
     });
 
+    it('bleeds sliced images across the border box', () => {
+        const runtime = createRuntime({ fit: 'fill', bleed: true, border: 8 });
+
+        const [command] = imageCommands(runtime);
+        expect(command).toBeDefined();
+        expect(command!.width).toBeCloseTo(200);
+        expect(command!.height).toBeCloseTo(100);
+        expect(command!.border).toEqual({ top: 8, right: 8, bottom: 8, left: 8 });
+
+        runtime.dispose();
+    });
+
     it('keeps bleed false when it is not authored', () => {
         const runtime = createRuntime({ fit: 'fill' });
         const [command] = imageCommands(runtime);
