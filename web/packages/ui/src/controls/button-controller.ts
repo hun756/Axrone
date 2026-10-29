@@ -2,6 +2,7 @@ import type { UIRuntime } from '../runtime';
 import type { UIInputEvent, UIImageSource, WidgetId, WidgetImageInput } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { asString, asStringOrNull, asRecord, isPointInside, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
+import { IDLE_IMAGE_FACE, primeImageFace, syncImageFace, type ImageFaceState } from './image-face';
 
 /**
  * Declarative button-feedback controller for `.ui.json` authored buttons.
@@ -12,8 +13,13 @@ import { asString, asStringOrNull, asRecord, isPointInside, isValidImageSource, 
  *   'color'   — swaps `style.background` per state (default, backward-compatible).
  *   'opacity' — adjusts `style.opacity` per state.
  *   'tint'    — patches `image.tint` per state (requires widget.image).
- *   'sprite'  — swaps `image.source` per state (requires widget.image).
+ *   'sprite'  — swaps `image.source` per state; the sprite becomes the button
+ *               surface (fill suppressed, image bled across the border box).
  *   'none'    — no visual feedback.
+ *
+ * In `'sprite'` mode the sprite is the button surface: the background border is
+ * suppressed and the image is drawn across the full border box (`image.bleed`).
+ * Leaving sprite mode restores the authored fill, border, and image inset.
  *
  * Props contract:
  *
@@ -47,6 +53,8 @@ interface ButtonFeedbackState {
 	pressed: boolean;
 	hovered: boolean;
 	originalSource: UIImageSource | null;
+	/** Sprite-as-surface lifecycle; the authored fill is captured at mount. */
+	face: ImageFaceState;
 }
 
 /** Opacity applied per state when the transition mode is `opacity`. */
@@ -91,10 +99,12 @@ const applyFeedback = (context: ButtonContext): void => {
 	const transition: ButtonTransitionMode = props.transition ?? 'color';
 
 	if (transition === 'none') {
+		state.face = syncImageFace(context.runtime, widget, state.face, false);
 		return;
 	}
 
 	if (transition === 'tint') {
+		state.face = syncImageFace(context.runtime, widget, state.face, false);
 		const tints = asRecord(props.tints);
 		const tintValue = asStringOrNull(tints[visualState]);
 		context.runtime.updateWidget(widget, {
@@ -113,11 +123,15 @@ const applyFeedback = (context: ButtonContext): void => {
 		const stateEntry = sprites[visualState] as Record<string, unknown> | undefined;
 		const sourceInput = stateEntry ? extractSourceInput(stateEntry) : null;
 		const source = sourceInput ? toImageSource(sourceInput) : state.originalSource;
-		if (isValidImageSource(source)) {
+		const isFace = isValidImageSource(source);
+		if (isFace) {
 			context.runtime.updateWidget(widget, {
 				image: { source } as Partial<WidgetImageInput>,
 			});
 		}
+		// The sprite is the button surface: suppress the fill quad and let the
+		// image span the full border box so state art defines the shape.
+		state.face = syncImageFace(context.runtime, widget, state.face, isFace);
 		if (disabled) {
 			context.runtime.updateWidget(widget, {
 				style: { opacity: BUTTON_STATE_OPACITY.disabled },
@@ -126,6 +140,7 @@ const applyFeedback = (context: ButtonContext): void => {
 		return;
 	}
 
+	state.face = syncImageFace(context.runtime, widget, state.face, false);
 	const states = asRecord(props.states);
 	const stylePatch: Record<string, unknown> = {};
 	if (transition === 'opacity') {
@@ -166,11 +181,13 @@ export const buttonFeedbackController: WidgetController<
 	unknown
 > = {
 	type: BUTTON_FEEDBACK_CONTROLLER_TYPE,
-	createState: () => ({ pressed: false, hovered: false, originalSource: null }),
+	createState: () => ({ pressed: false, hovered: false, originalSource: null, face: IDLE_IMAGE_FACE }),
 	mount: (context) => {
 		const typed = context as ButtonContext;
-		const imageInput = typed.runtime.getWidgetImageInput(typed.widget as WidgetId);
+		const widget = typed.widget as WidgetId;
+		const imageInput = typed.runtime.getWidgetImageInput(widget);
 		typed.state.originalSource = imageInput?.source ?? null;
+		typed.state.face = primeImageFace(typed.runtime, widget, typed.state.face);
 		applyFeedback(typed);
 	},
 	update: (context, previousProps) => {

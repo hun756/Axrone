@@ -3,6 +3,7 @@ import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImage
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 import { asString, asNumber, asBoolean, asRecord, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
+import { IDLE_IMAGE_FACE, primeImageFace, syncImageFace, type ImageFaceState } from './image-face';
 import { defaultUIControlTheme } from './theme';
 
 /**
@@ -83,6 +84,9 @@ export interface CheckboxControllerState {
     originalMarkSource: UIImageSource | null;
     boxAnimation: UIAnimationHandle | null;
     previousBoxColor: string;
+    /** Sprite-as-surface state for the box and mark children. */
+    boxFace: ImageFaceState;
+    markFace: ImageFaceState;
 }
 
 type CheckboxContext = WidgetControllerContext<
@@ -155,6 +159,7 @@ const applyTintToChild = (
  * Swaps `image.source` from the state-specific sprite map, falling back to
  * the original source captured at mount time.
  * No-op when the child has no image configured and no original source.
+ * Returns true when a sprite is actually being shown.
  */
 const applySpriteToChild = (
     runtime: UIRuntime,
@@ -162,7 +167,7 @@ const applySpriteToChild = (
     visualState: CheckboxVisualState,
     sprites: Record<string, unknown>,
     originalSource: UIImageSource | null,
-): void => {
+): boolean => {
     const stateEntry = sprites[visualState] as Record<string, unknown> | undefined;
     const sourceInput = stateEntry ? extractSourceInput(stateEntry) : null;
     const source = sourceInput ? toImageSource(sourceInput) : originalSource;
@@ -170,7 +175,9 @@ const applySpriteToChild = (
         runtime.updateWidget(childId, {
             image: { source } as Partial<WidgetImageInput>,
         });
+        return true;
     }
+    return false;
 };
 
 /**
@@ -251,12 +258,15 @@ const applyBoxVisuals = (context: CheckboxContext): boolean => {
     }
 
     if (transition === 'tint') {
+        state.boxFace = syncImageFace(runtime, box, state.boxFace, false);
         const boxTints = asRecord(props.boxTints);
         applyTintToChild(runtime, box, visualState, boxTints);
     } else if (transition === 'sprite') {
         const boxSprites = asRecord(props.boxSprites);
-        applySpriteToChild(runtime, box, visualState, boxSprites, state.originalBoxSource);
+        const isFace = applySpriteToChild(runtime, box, visualState, boxSprites, state.originalBoxSource);
+        state.boxFace = syncImageFace(runtime, box, state.boxFace, isFace);
     } else {
+        state.boxFace = syncImageFace(runtime, box, state.boxFace, false);
         const states = asRecord(props.states);
         const isActive = state.checked || state.indeterminate;
         const bg = isActive
@@ -347,6 +357,7 @@ const applyMarkVisuals = (context: CheckboxContext): boolean => {
     const markSize = asNumber(props.markSize, NaN);
 
     if (transition === 'tint') {
+        state.markFace = syncImageFace(runtime, mark, state.markFace, false);
         const markTints = asRecord(props.markTints);
         if (markVisible) {
             applyTintToChild(runtime, mark, visualState, markTints);
@@ -356,13 +367,11 @@ const applyMarkVisuals = (context: CheckboxContext): boolean => {
         }
     } else if (transition === 'sprite') {
         const markSprites = asRecord(props.markSprites);
-        if (markVisible) {
-            applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
-            runtime.updateWidget(mark, { style: { visible: true }, enabled: true });
-        } else {
-            runtime.updateWidget(mark, { style: { visible: false }, enabled: false });
-        }
+        const isFace = markVisible && applySpriteToChild(runtime, mark, visualState, markSprites, state.originalMarkSource);
+        state.markFace = syncImageFace(runtime, mark, state.markFace, isFace);
+        runtime.updateWidget(mark, { style: { visible: markVisible }, enabled: markVisible });
     } else {
+        state.markFace = syncImageFace(runtime, mark, state.markFace, false);
         // Color transition mode: use strokes for mark styles (check/cross/dash)
         // or background fill for dot style. A base image authored on the mark
         // child replaces the default tick outright, so the procedural mark is
@@ -497,6 +506,8 @@ export const checkboxToggleController: WidgetController<
             originalMarkSource: null,
             boxAnimation: null,
             previousBoxColor: '',
+            boxFace: IDLE_IMAGE_FACE,
+            markFace: IDLE_IMAGE_FACE,
         };
     },
     mount: (context) => {
@@ -507,10 +518,18 @@ export const checkboxToggleController: WidgetController<
         const boxKey = asString(props.boxKey);
         if (boxKey) {
             typed.state.originalBoxSource = captureOriginalSource(runtime, boxKey);
+            const box = runtime.getBoundWidget(boxKey);
+            if (box !== null) {
+                typed.state.boxFace = primeImageFace(runtime, box, typed.state.boxFace);
+            }
         }
         const markKey = asString(props.markKey);
         if (markKey) {
             typed.state.originalMarkSource = captureOriginalSource(runtime, markKey);
+            const mark = runtime.getBoundWidget(markKey);
+            if (mark !== null) {
+                typed.state.markFace = primeImageFace(runtime, mark, typed.state.markFace);
+            }
         }
 
         applyVisuals(typed);
