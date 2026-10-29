@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-12T01:41:50.465Z",
+  "generatedAt": "2026-10-28T22:30:20.790Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -2847,29 +2847,51 @@
         "BufferUtils",
         "BufferView",
         "ByteBuffer",
+        "ByteChunk",
+        "ByteChunkLease",
+        "ByteChunkPool",
+        "ByteChunkPoolSet",
+        "ByteCursor",
+        "ByteLength",
+        "ByteOffset",
         "ByteOrder",
+        "CHUNK_MASK",
+        "CHUNK_SHIFT",
+        "CHUNK_SIZE",
+        "ChunkId",
+        "ChunkPool",
+        "ChunkedStackIterator",
         "CircularBuffer",
         "CircularBufferError",
         "EmptyQueueError",
         "Endianness",
+        "HYSTERESIS_THRESHOLD",
         "HeapComparatorError",
         "HeapError",
         "HeapIndexError",
         "HeapSerializationError",
-        "ImmutableStack",
+        "IntrusiveQueue",
         "InvalidCapacityError",
         "InvalidMarkError",
+        "LIFECYCLE_ACTIVE",
+        "LIFECYCLE_DISPOSED",
         "LazyAsyncImpl",
         "LazyFactoryImpl",
         "LazyImpl",
+        "LifecycleState",
         "LruHandle",
         "LruMap",
+        "MAX_POOLED_CHUNKS",
+        "MemoryErrorCode",
         "MemoryPool",
         "MemoryPoolError",
         "MemoryPoolErrorCode",
+        "MonomorphicNoOpMetricsSink",
+        "NULL_METRICS",
         "Nullable",
         "ObjectPool",
-        "OptimizedArrayStack",
+        "ObjectPoolChunkAllocator",
+        "OverflowStrategy",
         "PERFORMANCE_DEFAULTS",
         "POOL_DEFAULTS",
         "PriorityQueue",
@@ -2879,19 +2901,30 @@
         "PriorityQueuePriorityError",
         "PriorityQueueSerializationError",
         "Queue",
+        "QueueAbortError",
+        "QueueBuilder",
+        "QueueClosedError",
+        "QueueDomainError",
+        "QueueEmptyError",
         "QueueError",
+        "QueueFullError",
+        "QueueInvalidCapacityError",
+        "QueueIterator",
+        "QueueUnderflowError",
         "ReadOnlyBufferError",
         "STRING_DEFAULTS",
         "SeekOrigin",
-        "StackCapacityError",
-        "StackIntegrityError",
-        "StackIterator",
-        "StackMemoryError",
-        "StackMemoryPool",
+        "Stack",
+        "StackAbortError",
+        "StackChunkPoolAdapter",
+        "StackDisposedError",
+        "StackOverflowError",
+        "StackUnderflowError",
         "TypedArray",
         "TypedArrayPool",
         "TypedArrayPools",
         "TypedArrayType",
+        "UNBOUNDED_CAPACITY",
         "__async_brand",
         "__factory_brand",
         "__lazy_brand",
@@ -2899,6 +2932,8 @@
         "__value_brand",
         "all",
         "allSettled",
+        "assertStackCapacity",
+        "assertStackId",
         "asyncSingletonToLazyAsync",
         "combine",
         "combineAsync",
@@ -2910,11 +2945,8 @@
         "createCircularBuffer",
         "createFactory",
         "createHeapIndex",
-        "createNodeId",
         "createPriorityQueue",
         "createQueueSize",
-        "createStackCapacity",
-        "createStackSize",
         "defaultComparator",
         "defaultPrimitiveComparator",
         "delay",
@@ -2923,17 +2955,21 @@
         "emptyAsync",
         "fromPromise",
         "fromValue",
+        "generateStackId",
         "getLeftChildIndex",
         "getParentIndex",
         "getRightChildIndex",
         "hasLeftChild",
         "hasParent",
         "hasRightChild",
+        "isBatch",
         "isBinaryHeap",
         "isLazy",
         "isLazyAsync",
         "isLazyFactory",
         "isPriorityQueue",
+        "isValidQueueCapacity",
+        "isValidQueueSize",
         "lazyAsyncToAsyncSingleton",
         "lazyToSingleton",
         "memoize",
@@ -2945,6 +2981,8 @@
         "sequence",
         "sequenceAsync",
         "singletonToLazy",
+        "toQueueCapacity",
+        "toQueueSize",
         "traverseAsync",
         "traverseSync",
         "tryAsync",
@@ -2955,41 +2993,49 @@
         "withTimeout"
       ],
       "typeExports": [
-        "AlignedStackNode",
-        "AllocatorId",
-        "ArrayWithLength",
         "AsyncAll",
         "AsyncMemoryPoolOperations",
+        "Batch",
         "BinaryHeapOptions",
         "BucketStats",
         "BufferPoolOptions",
         "BufferPoolStats",
+        "ByteChunkPoolOptions",
+        "ByteChunkPoolSetOptions",
         "Capacity",
+        "ChunkPoolOptions",
         "CircularBufferOptions",
         "Comparator",
         "CompareSign",
-        "EmptyArray",
         "Equality",
-        "ExtractError",
         "ExtractLazyAsyncType",
         "ExtractLazyType",
-        "ExtractSuccess",
         "FilterLazyTypes",
         "HeapIndex",
         "HeapLike",
         "HeapOrder",
         "HeapPrimitive",
         "HeapSerialized",
+        "IAsyncQueueSink",
+        "IAsyncQueueSource",
         "IByteBuffer",
+        "IChunkAllocator",
+        "IChunkPoolRecycler",
         "ILazy",
         "ILazyAsync",
         "ILazyAsyncMetadata",
         "ILazyFactory",
         "ILazyFactoryMetadata",
         "ILazyMetadata",
+        "ILinkedListNode",
+        "IQueue",
+        "IQueueLifecycle",
+        "IQueueMetrics",
+        "IQueueSink",
+        "IQueueSource",
         "IReadableBuffer",
+        "IStackMetricsSink",
         "IWritableBuffer",
-        "ImmutableStackInterface",
         "IsAsyncType",
         "IsLazyType",
         "LazyAll",
@@ -2999,22 +3045,20 @@
         "LazyFactoryCore",
         "LazyMap",
         "LazyState",
+        "Lifecycle",
         "LruEntryView",
         "LruOptions",
         "LruOrder",
-        "MemoryAddress",
+        "MemoryError",
         "MemoryPoolOperations",
         "MemoryPoolOptions",
-        "MutableStackInterface",
-        "NodeId",
         "Nominal",
-        "NonEmptyArray",
+        "ObjectPoolChunkAllocatorOptions",
         "ObjectPoolOptions",
         "OverflowPolicy",
         "PoolAllocationStrategy",
         "PoolEvictionPolicy",
         "PoolExpansionStrategy",
-        "PoolIndex",
         "PoolObjectStatus",
         "PoolPerformanceMetrics",
         "PoolableObject",
@@ -3029,25 +3073,26 @@
         "PriorityQueueSerialized",
         "PriorityQueueSnapshotEntry",
         "PrioritySelector",
+        "QueueCapacity",
+        "QueueErrorCode",
         "QueueLike",
-        "QueueOptions",
         "QueueSize",
         "ReadonlyBinaryHeap",
         "ReadonlyCircularBuffer",
         "ReadonlyPriorityQueue",
-        "ReadonlyStackInterface",
         "SerializedCircularBuffer",
         "StackCapacity",
-        "StackConfiguration",
-        "StackErrorUnion",
-        "StackNode",
-        "StackResult",
+        "StackError",
+        "StackId",
         "StackSize",
         "TypedArrayConstructor",
         "TypedArrayConstructorMap",
         "TypedArrayMap",
         "TypedArrayPoolOptions",
         "TypedArrayPoolStats",
+        "TypestateBounded",
+        "TypestateConfigured",
+        "TypestateUnconfigured",
         "UnwrapAll",
         "UnwrapLazyDeep"
       ],
@@ -5762,6 +5807,7 @@
         "SCENE_3D_RUNTIME_PROFILE_ID",
         "SCENE_ANIMATION_BUILT_IN_MANIFEST",
         "SCENE_CORE_BUILT_IN_MANIFEST",
+        "SCENE_MIXED_RUNTIME_PROFILE_ID",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "Scene2D",
@@ -5803,6 +5849,7 @@
         "SceneMorphTargetDefinition",
         "SceneMorphTargetSemantic",
         "SceneOptions",
+        "ScenePhysicsBridgeSelection",
         "ScenePrefabActorField",
         "ScenePrefabActorFieldValue",
         "ScenePrefabComponentId",
@@ -5921,6 +5968,7 @@
         "getCoreSceneRuntimeProfile",
         "getDefaultSceneBuiltInRegistry",
         "getDefaultSceneRuntimeProfile",
+        "getMixedSceneRuntimeProfile",
         "getSceneUIWidgetRefResolver",
         "getSpriteAnimationClip",
         "getSpriteAtlasFrame",
@@ -5937,6 +5985,7 @@
         "parseAssetVersionedReferenceToken",
         "requireRegisteredComponent",
         "resolveAssetMessage",
+        "resolvePhysicsBridgesForProfile",
         "resolveSceneAmbientLight",
         "resolveSceneBuiltInComponents",
         "resolveSceneClearColor",
@@ -6265,6 +6314,7 @@
         "SCENE_ANIMATION_BUILT_IN_MANIFEST",
         "SCENE_ATTRIBUTE_LOCATIONS",
         "SCENE_CORE_BUILT_IN_MANIFEST",
+        "SCENE_MIXED_RUNTIME_PROFILE_ID",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "Scene",
@@ -6328,6 +6378,7 @@
         "SceneMorphTargetSemantic",
         "SceneOptions",
         "SceneParticleBatchRuntime",
+        "ScenePhysicsBridgeSelection",
         "ScenePrefabActorField",
         "ScenePrefabActorFieldValue",
         "ScenePrefabComponentId",
@@ -6475,6 +6526,7 @@
         "getDefaultSceneBuiltInRegistry",
         "getDefaultSceneRuntimeProfile",
         "getGLConstants",
+        "getMixedSceneRuntimeProfile",
         "getOrCreateGLContext",
         "getSceneComponentTypeName",
         "getSceneUIWidgetRefResolver",
@@ -6488,6 +6540,7 @@
         "resolveContextGL",
         "resolveContextNullable",
         "resolveGL",
+        "resolvePhysicsBridgesForProfile",
         "resolveRawGL",
         "resolveSceneAmbientLight",
         "resolveSceneBuiltInComponents",
@@ -7068,6 +7121,7 @@
         "SCENE_ANIMATION_BUILT_IN_MANIFEST",
         "SCENE_ATTRIBUTE_LOCATIONS",
         "SCENE_CORE_BUILT_IN_MANIFEST",
+        "SCENE_MIXED_RUNTIME_PROFILE_ID",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "SCENE_UI_BUILT_IN_MANIFEST",
@@ -7130,6 +7184,7 @@
         "SceneMorphTargetSemantic",
         "SceneOptions",
         "SceneParticleBatchRuntime",
+        "ScenePhysicsBridgeSelection",
         "ScenePrefabActorField",
         "ScenePrefabActorFieldValue",
         "ScenePrefabComponentId",
@@ -7236,6 +7291,7 @@
         "createFetchAnimationStreamingResolver",
         "createLazySceneUIWidgetRef",
         "createParticleShaderDefinition",
+        "createRenderCacheCameraKey",
         "createSceneBuiltInManifest",
         "createSceneLoopSystems",
         "createSceneManifestRuntimeProfile",
@@ -7258,10 +7314,12 @@
         "getCoreSceneRuntimeProfile",
         "getDefaultSceneBuiltInRegistry",
         "getDefaultSceneRuntimeProfile",
+        "getMixedSceneRuntimeProfile",
         "getSceneComponentTypeName",
         "getSceneUIWidgetRefResolver",
         "normalizeSceneTextureBinding",
         "requireRegisteredComponent",
+        "resolvePhysicsBridgesForProfile",
         "resolveSceneAmbientLight",
         "resolveSceneBuiltInComponents",
         "resolveSceneClearColor",
@@ -7327,6 +7385,7 @@
         "ReflectionProbeRefreshMode",
         "ReflectionProbeShape",
         "ReflectionProbeTimeSlicingMode",
+        "RenderCacheViewport",
         "ResolvedAnimationStreamingChunk",
         "ResolvedSceneSurface",
         "SceneActorFactory",
@@ -7410,6 +7469,7 @@
         "SceneParticleBatchRuntimeOptions",
         "SceneParticleBatchRuntimeRenderParams",
         "SceneParticleBatchRuntimeRenderStats",
+        "ScenePhysicsBridgeSelection",
         "SceneRegistry",
         "SceneRegistryBuilderOptions",
         "SceneRegistryForBuiltIns",
@@ -7631,10 +7691,12 @@
             "bindAnimationStreamingBridge",
             "cloneSceneRenderPassDefinition",
             "createFetchAnimationStreamingResolver",
+            "createRenderCacheCameraKey",
             "requireRegisteredComponent",
             "resolveSceneFogState"
           ],
           "typeExports": [
+            "RenderCacheViewport",
             "SceneLodEvaluateParams",
             "SceneLodEvaluateStats",
             "SceneSpriteBatchRuntimeOptions",
@@ -8060,9 +8122,12 @@
         {
           "path": "@axrone/scene-runtime/scene-profile",
           "exports": [
+            "resolvePhysicsBridgesForProfile",
             "resolveSceneRegistryFromProfile"
           ],
-          "typeExports": []
+          "typeExports": [
+            "ScenePhysicsBridgeSelection"
+          ]
         },
         {
           "path": "@axrone/scene-runtime/scene-profile-contract",
@@ -9809,6 +9874,7 @@
             "SCENE_3D_RUNTIME_PROFILE_ID",
             "SCENE_ANIMATION_BUILT_IN_MANIFEST",
             "SCENE_CORE_BUILT_IN_MANIFEST",
+            "SCENE_MIXED_RUNTIME_PROFILE_ID",
             "SceneActorSnapshot",
             "SceneBuiltInComponentName",
             "SceneBuiltInManifest",
@@ -9842,6 +9908,7 @@
             "SceneMorphTargetDefinition",
             "SceneMorphTargetSemantic",
             "SceneOptions",
+            "ScenePhysicsBridgeSelection",
             "ScenePrefabActorField",
             "ScenePrefabActorFieldValue",
             "ScenePrefabComponentId",
@@ -9923,9 +9990,11 @@
             "getCoreSceneRuntimeProfile",
             "getDefaultSceneBuiltInRegistry",
             "getDefaultSceneRuntimeProfile",
+            "getMixedSceneRuntimeProfile",
             "getUIHostBinding",
             "getUIHostRuntime",
             "requireRegisteredComponent",
+            "resolvePhysicsBridgesForProfile",
             "resolveSceneBuiltInComponents",
             "resolveSceneRegistryFromProfile",
             "resolveUIWidgetRef"
@@ -10674,11 +10743,6 @@
       "kind": "unknown"
     },
     {
-      "name": "AlignedStackNode",
-      "package": "@axrone/memory",
-      "kind": "interface"
-    },
-    {
       "name": "AlignMode",
       "package": "@axrone/ui",
       "kind": "type"
@@ -10702,11 +10766,6 @@
       "name": "all",
       "package": "@axrone/utility",
       "kind": "function"
-    },
-    {
-      "name": "AllocatorId",
-      "package": "@axrone/memory",
-      "kind": "type"
     },
     {
       "name": "allSettled",
@@ -11799,11 +11858,6 @@
       "kind": "class"
     },
     {
-      "name": "ArrayWithLength",
-      "package": "@axrone/memory",
-      "kind": "type"
-    },
-    {
       "name": "asAssetFingerprint",
       "package": "@axrone/asset-2d",
       "kind": "unknown"
@@ -12121,6 +12175,16 @@
     {
       "name": "assertSafeKey",
       "package": "@axrone/utility",
+      "kind": "function"
+    },
+    {
+      "name": "assertStackCapacity",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
+      "name": "assertStackId",
+      "package": "@axrone/memory",
       "kind": "function"
     },
     {
@@ -14689,6 +14753,11 @@
       "kind": "class"
     },
     {
+      "name": "Batch",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
       "name": "batchBuild",
       "package": "@axrone/utility",
       "kind": "function"
@@ -15389,6 +15458,51 @@
       "kind": "class"
     },
     {
+      "name": "ByteChunk",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ByteChunkLease",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ByteChunkPool",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ByteChunkPoolOptions",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "ByteChunkPoolSet",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ByteChunkPoolSetOptions",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "ByteCursor",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ByteLength",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
+      "name": "ByteOffset",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
       "name": "ByteOrder",
       "package": "@axrone/memory",
       "kind": "unknown"
@@ -15697,6 +15811,41 @@
       "name": "ChromaticAberrationSettings",
       "package": "@axrone/render-core",
       "kind": "unknown"
+    },
+    {
+      "name": "CHUNK_MASK",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
+      "name": "CHUNK_SHIFT",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
+      "name": "CHUNK_SIZE",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
+      "name": "ChunkedStackIterator",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ChunkId",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
+      "name": "ChunkPool",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ChunkPoolOptions",
+      "package": "@axrone/memory",
+      "kind": "interface"
     },
     {
       "name": "CircleCollider2D",
@@ -17574,11 +17723,6 @@
       "kind": "unknown"
     },
     {
-      "name": "createNodeId",
-      "package": "@axrone/memory",
-      "kind": "const"
-    },
-    {
       "name": "createNoise",
       "package": "@axrone/numeric",
       "kind": "const"
@@ -17787,6 +17931,11 @@
       "name": "createRegistry",
       "package": "@axrone/observer",
       "kind": "const"
+    },
+    {
+      "name": "createRenderCacheCameraKey",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "createRenderPassGraph",
@@ -18164,19 +18313,9 @@
       "kind": "unknown"
     },
     {
-      "name": "createStackCapacity",
-      "package": "@axrone/memory",
-      "kind": "const"
-    },
-    {
       "name": "createStackLayout",
       "package": "@axrone/ui",
       "kind": "unknown"
-    },
-    {
-      "name": "createStackSize",
-      "package": "@axrone/memory",
-      "kind": "const"
     },
     {
       "name": "createStateCache",
@@ -19564,11 +19703,6 @@
       "kind": "const"
     },
     {
-      "name": "EmptyArray",
-      "package": "@axrone/memory",
-      "kind": "type"
-    },
-    {
       "name": "emptyAsync",
       "package": "@axrone/memory",
       "kind": "const"
@@ -19999,11 +20133,6 @@
       "kind": "unknown"
     },
     {
-      "name": "ExtractError",
-      "package": "@axrone/memory",
-      "kind": "type"
-    },
-    {
       "name": "ExtractEventData",
       "package": "@axrone/event",
       "kind": "type"
@@ -20036,11 +20165,6 @@
     {
       "name": "ExtractSingletonType",
       "package": "@axrone/utility",
-      "kind": "type"
-    },
-    {
-      "name": "ExtractSuccess",
-      "package": "@axrone/memory",
       "kind": "type"
     },
     {
@@ -20984,6 +21108,11 @@
       "kind": "unknown"
     },
     {
+      "name": "generateStackId",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
       "name": "generateVariantKey",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -21221,6 +21350,21 @@
     {
       "name": "getListViewStartIndex",
       "package": "@axrone/ui",
+      "kind": "unknown"
+    },
+    {
+      "name": "getMixedSceneRuntimeProfile",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "getMixedSceneRuntimeProfile",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "getMixedSceneRuntimeProfile",
+      "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
     {
@@ -22759,6 +22903,11 @@
       "kind": "unknown"
     },
     {
+      "name": "HYSTERESIS_THRESHOLD",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
       "name": "IAABB",
       "package": "@axrone/geometry",
       "kind": "interface"
@@ -22801,6 +22950,16 @@
     {
       "name": "IAsyncBuilder",
       "package": "@axrone/utility",
+      "kind": "interface"
+    },
+    {
+      "name": "IAsyncQueueSink",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IAsyncQueueSource",
+      "package": "@axrone/memory",
       "kind": "interface"
     },
     {
@@ -23001,6 +23160,16 @@
     {
       "name": "ICharacterControllerConfig",
       "package": "@axrone/physics-3d",
+      "kind": "interface"
+    },
+    {
+      "name": "IChunkAllocator",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IChunkPoolRecycler",
+      "package": "@axrone/memory",
       "kind": "interface"
     },
     {
@@ -23629,6 +23798,11 @@
       "kind": "interface"
     },
     {
+      "name": "ILinkedListNode",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
       "name": "ImageRenderCommand",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -23731,16 +23905,6 @@
     {
       "name": "ImmutableColor",
       "package": "@axrone/particle-system",
-      "kind": "interface"
-    },
-    {
-      "name": "ImmutableStack",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
-      "name": "ImmutableStackInterface",
-      "package": "@axrone/memory",
       "kind": "interface"
     },
     {
@@ -24509,6 +24673,11 @@
       "kind": "function"
     },
     {
+      "name": "IntrusiveQueue",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
       "name": "INV_PI",
       "package": "@axrone/numeric",
       "kind": "const"
@@ -24969,6 +25138,31 @@
       "kind": "interface"
     },
     {
+      "name": "IQueue",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IQueueLifecycle",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IQueueMetrics",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IQueueSink",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
+      "name": "IQueueSource",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
       "name": "IRandomAPI",
       "package": "@axrone/random",
       "kind": "interface"
@@ -25361,6 +25555,11 @@
     {
       "name": "isBase64",
       "package": "@axrone/utility",
+      "kind": "function"
+    },
+    {
+      "name": "isBatch",
+      "package": "@axrone/memory",
       "kind": "function"
     },
     {
@@ -26124,6 +26323,11 @@
       "kind": "const"
     },
     {
+      "name": "IStackMetricsSink",
+      "package": "@axrone/memory",
+      "kind": "interface"
+    },
+    {
       "name": "isTerrainFoliageDensityPayload",
       "package": "@axrone/terrain",
       "kind": "const"
@@ -26211,6 +26415,16 @@
     {
       "name": "isValidPriority",
       "package": "@axrone/observer",
+      "kind": "function"
+    },
+    {
+      "name": "isValidQueueCapacity",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
+      "name": "isValidQueueSize",
+      "package": "@axrone/memory",
       "kind": "function"
     },
     {
@@ -26864,6 +27078,26 @@
       "kind": "const"
     },
     {
+      "name": "Lifecycle",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
+      "name": "LIFECYCLE_ACTIVE",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
+      "name": "LIFECYCLE_DISPOSED",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
+      "name": "LifecycleState",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
       "name": "LightAttenuationMode",
       "package": "@axrone/particle-system",
       "kind": "enum"
@@ -27504,6 +27738,11 @@
       "kind": "unknown"
     },
     {
+      "name": "MAX_POOLED_CHUNKS",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
       "name": "MAX_SPRING_DT",
       "package": "@axrone/tween",
       "kind": "const"
@@ -27549,9 +27788,14 @@
       "kind": "const"
     },
     {
-      "name": "MemoryAddress",
+      "name": "MemoryError",
       "package": "@axrone/memory",
-      "kind": "type"
+      "kind": "interface"
+    },
+    {
+      "name": "MemoryErrorCode",
+      "package": "@axrone/memory",
+      "kind": "const"
     },
     {
       "name": "MemoryManager",
@@ -27819,6 +28063,11 @@
       "kind": "type"
     },
     {
+      "name": "MonomorphicNoOpMetricsSink",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
       "name": "MonotonicClock",
       "package": "@axrone/profiler",
       "kind": "unknown"
@@ -27914,11 +28163,6 @@
       "kind": "unknown"
     },
     {
-      "name": "MutableStackInterface",
-      "package": "@axrone/memory",
-      "kind": "interface"
-    },
-    {
       "name": "NamespacedEventMap",
       "package": "@axrone/event",
       "kind": "type"
@@ -27984,11 +28228,6 @@
       "kind": "function"
     },
     {
-      "name": "NodeId",
-      "package": "@axrone/memory",
-      "kind": "type"
-    },
-    {
       "name": "NoiseConfig",
       "package": "@axrone/numeric",
       "kind": "interface"
@@ -28036,11 +28275,6 @@
     {
       "name": "Nominal",
       "package": "@axrone/utility",
-      "kind": "type"
-    },
-    {
-      "name": "NonEmptyArray",
-      "package": "@axrone/memory",
       "kind": "type"
     },
     {
@@ -28224,6 +28458,11 @@
       "kind": "type"
     },
     {
+      "name": "NULL_METRICS",
+      "package": "@axrone/memory",
+      "kind": "const"
+    },
+    {
       "name": "Nullable",
       "package": "@axrone/memory",
       "kind": "unknown"
@@ -28272,6 +28511,16 @@
       "name": "ObjectPool",
       "package": "@axrone/memory",
       "kind": "class"
+    },
+    {
+      "name": "ObjectPoolChunkAllocator",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "ObjectPoolChunkAllocatorOptions",
+      "package": "@axrone/memory",
+      "kind": "type"
     },
     {
       "name": "ObjectPoolOptions",
@@ -28439,11 +28688,6 @@
       "kind": "const"
     },
     {
-      "name": "OptimizedArrayStack",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
       "name": "OptimizedQueryCache",
       "package": "@axrone/ecs-runtime",
       "kind": "class"
@@ -28507,6 +28751,11 @@
       "name": "OverflowStrategy",
       "package": "@axrone/geometry",
       "kind": "type"
+    },
+    {
+      "name": "OverflowStrategy",
+      "package": "@axrone/memory",
+      "kind": "const"
     },
     {
       "name": "PackedRender2DColor",
@@ -29194,11 +29443,6 @@
       "kind": "type"
     },
     {
-      "name": "PoolIndex",
-      "package": "@axrone/memory",
-      "kind": "type"
-    },
-    {
       "name": "PoolObjectStatus",
       "package": "@axrone/memory",
       "kind": "type"
@@ -29599,12 +29843,62 @@
       "kind": "class"
     },
     {
+      "name": "QueueAbortError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueBuilder",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueCapacity",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
+      "name": "QueueClosedError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
       "name": "QueuedEvent",
       "package": "@axrone/event",
       "kind": "interface"
     },
     {
+      "name": "QueueDomainError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueEmptyError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
       "name": "QueueError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueErrorCode",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
+      "name": "QueueFullError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueInvalidCapacityError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "QueueIterator",
       "package": "@axrone/memory",
       "kind": "class"
     },
@@ -29614,14 +29908,14 @@
       "kind": "type"
     },
     {
-      "name": "QueueOptions",
-      "package": "@axrone/memory",
-      "kind": "interface"
-    },
-    {
       "name": "QueueSize",
       "package": "@axrone/memory",
       "kind": "type"
+    },
+    {
+      "name": "QueueUnderflowError",
+      "package": "@axrone/memory",
+      "kind": "class"
     },
     {
       "name": "race",
@@ -30072,11 +30366,6 @@
       "name": "ReadonlyRenderResourceRegistry",
       "package": "@axrone/render-core",
       "kind": "unknown"
-    },
-    {
-      "name": "ReadonlyStackInterface",
-      "package": "@axrone/memory",
-      "kind": "interface"
     },
     {
       "name": "ReadonlyTuple2",
@@ -30586,6 +30875,11 @@
     {
       "name": "RenderbufferOptions",
       "package": "@axrone/render-webgl2",
+      "kind": "unknown"
+    },
+    {
+      "name": "RenderCacheViewport",
+      "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
     {
@@ -31649,6 +31943,21 @@
       "kind": "unknown"
     },
     {
+      "name": "resolvePhysicsBridgesForProfile",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolvePhysicsBridgesForProfile",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolvePhysicsBridgesForProfile",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "resolveRawGL",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -32280,6 +32589,21 @@
     },
     {
       "name": "SCENE_CORE_BUILT_IN_MANIFEST",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SCENE_MIXED_RUNTIME_PROFILE_ID",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SCENE_MIXED_RUNTIME_PROFILE_ID",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SCENE_MIXED_RUNTIME_PROFILE_ID",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
@@ -33610,6 +33934,21 @@
     },
     {
       "name": "SceneParticleBatchRuntimeRenderStats",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "ScenePhysicsBridgeSelection",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "ScenePhysicsBridgeSelection",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "ScenePhysicsBridgeSelection",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
@@ -37194,14 +37533,19 @@
       "kind": "unknown"
     },
     {
+      "name": "Stack",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "StackAbortError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
       "name": "StackCapacity",
       "package": "@axrone/memory",
       "kind": "type"
-    },
-    {
-      "name": "StackCapacityError",
-      "package": "@axrone/memory",
-      "kind": "class"
     },
     {
       "name": "StackCaptureEngine",
@@ -37209,12 +37553,17 @@
       "kind": "class"
     },
     {
-      "name": "StackConfiguration",
+      "name": "StackChunkPoolAdapter",
       "package": "@axrone/memory",
-      "kind": "interface"
+      "kind": "class"
     },
     {
-      "name": "StackErrorUnion",
+      "name": "StackDisposedError",
+      "package": "@axrone/memory",
+      "kind": "class"
+    },
+    {
+      "name": "StackError",
       "package": "@axrone/memory",
       "kind": "type"
     },
@@ -37224,39 +37573,24 @@
       "kind": "interface"
     },
     {
-      "name": "StackIntegrityError",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
-      "name": "StackIterator",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
-      "name": "StackMemoryError",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
-      "name": "StackMemoryPool",
-      "package": "@axrone/memory",
-      "kind": "class"
-    },
-    {
-      "name": "StackNode",
-      "package": "@axrone/memory",
-      "kind": "interface"
-    },
-    {
-      "name": "StackResult",
+      "name": "StackId",
       "package": "@axrone/memory",
       "kind": "type"
+    },
+    {
+      "name": "StackOverflowError",
+      "package": "@axrone/memory",
+      "kind": "class"
     },
     {
       "name": "StackSize",
       "package": "@axrone/memory",
       "kind": "type"
+    },
+    {
+      "name": "StackUnderflowError",
+      "package": "@axrone/memory",
+      "kind": "class"
     },
     {
       "name": "StateNode",
@@ -38109,6 +38443,16 @@
       "kind": "unknown"
     },
     {
+      "name": "toQueueCapacity",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
+      "name": "toQueueSize",
+      "package": "@axrone/memory",
+      "kind": "function"
+    },
+    {
       "name": "Torque",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -38562,6 +38906,21 @@
       "name": "TypeInfo",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
+    },
+    {
+      "name": "TypestateBounded",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
+      "name": "TypestateConfigured",
+      "package": "@axrone/memory",
+      "kind": "type"
+    },
+    {
+      "name": "TypestateUnconfigured",
+      "package": "@axrone/memory",
+      "kind": "type"
     },
     {
       "name": "u32ToHex",
@@ -39062,6 +39421,11 @@
       "name": "unblendWeight",
       "package": "@axrone/animation",
       "kind": "unknown"
+    },
+    {
+      "name": "UNBOUNDED_CAPACITY",
+      "package": "@axrone/memory",
+      "kind": "const"
     },
     {
       "name": "UnexpectedError",
@@ -40236,7 +40600,7 @@
     {
       "name": "Actor",
       "kind": "class",
-      "code": "declare class Actor<TWorld extends World<any> = World<any>, TComponents extends readonly ComponentType[] = readonly ComponentType[]> { constructor(world: TWorld, config?: ActorConfig); get name(): string; set name(value: string); get active(): boolean; set active(value: boolean); get layer(): Actor…",
+      "code": "declare class Actor<TWorld extends World<any> = World<any>, TComponents extends readonly ComponentType[] = readonly ComponentType[]> { constructor(world: TWorld, config?: ActorConfig); get revision(): number; get name(): string; set name(value: string); get active(): boolean; set active(value: bool…",
       "package": "@axrone/ecs-runtime"
     },
     {
@@ -40864,6 +41228,18 @@
       "package": "@axrone/utility"
     },
     {
+      "name": "assertStackCapacity",
+      "kind": "function",
+      "code": "declare function assertStackCapacity(value: number): asserts value is StackCapacity;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "assertStackId",
+      "kind": "function",
+      "code": "declare function assertStackId(value: string): asserts value is StackId;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "assertTimerId",
       "kind": "function",
       "code": "declare function assertTimerId(timerId: unknown): asserts timerId is number;",
@@ -41262,7 +41638,7 @@
     {
       "name": "BinaryMinHeap",
       "kind": "class",
-      "code": "declare class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> { constructor(comparator: Comparator<T>); get size(): QueueSize; get isEmpty(): boolean; insert(item: T): void; extract(): T; peek(): T; clear(): void; contains(item: T): boolean; toArray(): T[]; … }",
+      "code": "declare class BinaryMinHeap<T> implements BinaryHeapOperations<T>, Iterable<T> { constructor(comparator: Comparator<T>); get size(): QueueSize$1; get isEmpty(): boolean; insert(item: T): void; extract(): T; peek(): T; clear(): void; contains(item: T): boolean; toArray(): T[]; … }",
       "package": "@axrone/memory"
     },
     {
@@ -41662,6 +42038,48 @@
       "package": "@axrone/memory"
     },
     {
+      "name": "ByteChunk",
+      "kind": "class",
+      "code": "declare class ByteChunk<M extends Mutability = 'MUT', O extends Ownership = 'OWNED'> implements Disposable, AsyncDisposable { constructor(id: ChunkId, buffer: ArrayBuffer, byteOffset: ByteOffset, byteLength: ByteLength, mutability: M, parent: ByteChunk<Mutability, Ownership> | null, metrics: IMetri…",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteChunkLease",
+      "kind": "class",
+      "code": "declare class ByteChunkLease<out M extends Mutability, out O extends Ownership> implements IChunkLease<ByteChunk<M, O>> { constructor(chunk: ByteChunk<M, O>, disposer: () => void); get chunk(): ByteChunk<M, O>; … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteChunkPool",
+      "kind": "class",
+      "code": "declare class ByteChunkPool implements IChunkPoolRecycler { constructor(options?: ByteChunkPoolOptions); acquire(): ByteChunk<'MUT', 'OWNED'>; tryAcquire(): ByteChunk<'MUT', 'OWNED'> | null; release(chunk: ByteChunk<any, any>): void; recycle(chunk: ByteChunk<any, any>): void; getAvailableCount(): n…",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteChunkPoolSet",
+      "kind": "class",
+      "code": "declare class ByteChunkPoolSet implements Disposable { constructor(options?: ByteChunkPoolSetOptions); acquireChunk(requestedSize: number): ByteChunk<'MUT', 'OWNED'>; allocate(requestedSize: number): ArrayBuffer; tryAllocate(requestedSize: number): ArrayBuffer | null; release(buffer: ArrayBuffer): …",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteCursor",
+      "kind": "class",
+      "code": "declare class ByteCursor implements Disposable { constructor(chunk: ByteChunk<any, any>, initialOffset?: ByteOffset); get position(): ByteOffset; get remaining(): number; seek(offset: ByteOffset): void; readUint8(): number; writeUint8(value: number): void; readUint32(le?: boolean): number; writeUin…",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteLength",
+      "kind": "function",
+      "code": "declare function ByteLength(n: number): ByteLength;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ByteOffset",
+      "kind": "function",
+      "code": "declare function ByteOffset(n: number): ByteOffset;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "bytesToBase64",
       "kind": "function",
       "code": "declare function bytesToBase64(bytes: Uint8Array): string;",
@@ -41798,6 +42216,42 @@
       "kind": "const",
       "code": "declare const checkboxToggleController: WidgetController<typeof CHECKBOX_TOGGLE_CONTROLLER_TYPE, Record<string, unknown>, CheckboxControllerState, UIRuntime, unknown>;",
       "package": "@axrone/ui"
+    },
+    {
+      "name": "CHUNK_MASK",
+      "kind": "const",
+      "code": "declare const CHUNK_MASK: 63;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "CHUNK_SHIFT",
+      "kind": "const",
+      "code": "declare const CHUNK_SHIFT: 6;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "CHUNK_SIZE",
+      "kind": "const",
+      "code": "declare const CHUNK_SIZE: 64;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ChunkedStackIterator",
+      "kind": "class",
+      "code": "declare class ChunkedStackIterator<T> implements Iterator<T> { constructor(chunks: readonly (readonly (T | undefined)[])[], size: number); next(): IteratorResult<T>; … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ChunkId",
+      "kind": "function",
+      "code": "declare function ChunkId(id: string): ChunkId;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ChunkPool",
+      "kind": "class",
+      "code": "declare class ChunkPool<T> { constructor(options?: ChunkPoolOptions<T>); acquire(): (T | undefined)[]; release(chunk: (T | undefined)[]): void; clear(): void; get available(): number; get allocated(): number; get total(): number; … }",
+      "package": "@axrone/memory"
     },
     {
       "name": "CircleCollider2D",
@@ -43036,12 +43490,6 @@
       "package": "@axrone/render-webgl2"
     },
     {
-      "name": "createNodeId",
-      "kind": "const",
-      "code": "declare const createNodeId: () => NodeId;",
-      "package": "@axrone/memory"
-    },
-    {
       "name": "createNoise",
       "kind": "const",
       "code": "declare const createNoise: (config?: NoiseConfig) => NoiseGenerator;",
@@ -43206,7 +43654,7 @@
     {
       "name": "createQueueSize",
       "kind": "const",
-      "code": "declare const createQueueSize: (value: number) => QueueSize;",
+      "code": "declare const createQueueSize: (value: number) => QueueSize$1;",
       "package": "@axrone/memory"
     },
     {
@@ -43262,6 +43710,12 @@
       "kind": "const",
       "code": "declare const createRegistry: (options?: Parameters<ObservableFactory[\"createRegistry\"]>[0]) => IObserverRegistry;",
       "package": "@axrone/observer"
+    },
+    {
+      "name": "createRenderCacheCameraKey",
+      "kind": "const",
+      "code": "declare const createRenderCacheCameraKey: (cameraFrame: SceneCameraFrameState, viewport: RenderCacheViewport) => string;",
+      "package": "@axrone/scene-runtime"
     },
     {
       "name": "createRenderPassGraph",
@@ -43540,22 +43994,10 @@
       "package": "@axrone/asset-2d"
     },
     {
-      "name": "createStackCapacity",
-      "kind": "const",
-      "code": "declare const createStackCapacity: (value: number) => StackCapacity;",
-      "package": "@axrone/memory"
-    },
-    {
       "name": "createStackLayout",
       "kind": "const",
       "code": "declare const createStackLayout: (direction?: \"row\" | \"column\", gap?: number, overrides?: WidgetLayoutInput) => WidgetLayoutInput;",
       "package": "@axrone/ui"
-    },
-    {
-      "name": "createStackSize",
-      "kind": "const",
-      "code": "declare const createStackSize: (value: number) => StackSize;",
-      "package": "@axrone/memory"
     },
     {
       "name": "createStateCache",
@@ -45292,6 +45734,12 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "generateStackId",
+      "kind": "function",
+      "code": "declare function generateStackId(): StackId;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "generateVariantKey",
       "kind": "const",
       "code": "declare const generateVariantKey: (shaderName: string, keywords: readonly string[], defines: Record<string, any>) => string;",
@@ -46164,7 +46612,7 @@
     {
       "name": "hasLeftChild",
       "kind": "const",
-      "code": "declare const hasLeftChild: (index: HeapIndex, size: QueueSize) => boolean;",
+      "code": "declare const hasLeftChild: (index: HeapIndex, size: QueueSize$1) => boolean;",
       "package": "@axrone/memory"
     },
     {
@@ -46176,7 +46624,7 @@
     {
       "name": "hasRightChild",
       "kind": "const",
-      "code": "declare const hasRightChild: (index: HeapIndex, size: QueueSize) => boolean;",
+      "code": "declare const hasRightChild: (index: HeapIndex, size: QueueSize$1) => boolean;",
       "package": "@axrone/memory"
     },
     {
@@ -46264,16 +46712,16 @@
       "package": "@axrone/shapes-2d"
     },
     {
+      "name": "HYSTERESIS_THRESHOLD",
+      "kind": "const",
+      "code": "declare const HYSTERESIS_THRESHOLD: 2;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "IK_CONVERGENCE_EPSILON",
       "kind": "const",
       "code": "declare const IK_CONVERGENCE_EPSILON = 1e-8;",
       "package": "@axrone/animation"
-    },
-    {
-      "name": "ImmutableStack",
-      "kind": "class",
-      "code": "declare class ImmutableStack<T> extends AbstractStack<T> implements ImmutableStackInterface<T> { pop(): readonly [T | undefined, ImmutableStack<T>]; popMany(count: number): readonly [readonly T[], ImmutableStack<T>]; … }",
-      "package": "@axrone/memory"
     },
     {
       "name": "inferTextureFormatFromKtx2",
@@ -46376,6 +46824,12 @@
       "kind": "function",
       "code": "declare function intersectRayWithUIQuad(ray: UIWorldRay, modelMatrix: Float32Array, width: number, height: number): UIWorldHit | null;",
       "package": "@axrone/ui-webgl2"
+    },
+    {
+      "name": "IntrusiveQueue",
+      "kind": "class",
+      "code": "declare class IntrusiveQueue<N extends ILinkedListNode<N>> { head: N | null; tail: N | null; length: number; append(node: N): void; remove(node: N): void; shift(): N | null; … }",
+      "package": "@axrone/memory"
     },
     {
       "name": "INV_PI",
@@ -46610,6 +47064,12 @@
       "kind": "function",
       "code": "declare function isBase64<A extends Base64Alphabet = 'standard'>(input: string, options?: ValidationOptions<A>): input is Base64String<A>;",
       "package": "@axrone/utility"
+    },
+    {
+      "name": "isBatch",
+      "kind": "function",
+      "code": "declare function isBatch<T, N extends number>(items: readonly T[], count: N): items is Batch<T, N>;",
+      "package": "@axrone/memory"
     },
     {
       "name": "isBinaryHeap",
@@ -47128,6 +47588,18 @@
       "package": "@axrone/observer"
     },
     {
+      "name": "isValidQueueCapacity",
+      "kind": "function",
+      "code": "declare function isValidQueueCapacity(value: number): value is QueueCapacity;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "isValidQueueSize",
+      "kind": "function",
+      "code": "declare function isValidQueueSize(value: number): value is QueueSize;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "isValidShaderVariableName",
       "kind": "const",
       "code": "declare const isValidShaderVariableName: (name: string) => boolean;",
@@ -47258,6 +47730,24 @@
       "kind": "const",
       "code": "declare const library: (id: string, code: string) => ShaderLibraryEntry;",
       "package": "@axrone/asset-shader"
+    },
+    {
+      "name": "LIFECYCLE_ACTIVE",
+      "kind": "const",
+      "code": "declare const LIFECYCLE_ACTIVE: 0;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "LIFECYCLE_DISPOSED",
+      "kind": "const",
+      "code": "declare const LIFECYCLE_DISPOSED: 1;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "LifecycleState",
+      "kind": "const",
+      "code": "declare const LifecycleState: { /** Accepts reads and writes. */ readonly Active: \"ACTIVE\"; /** Close called with buffered items; reads drain, writes rejected. */ readonly Closing: \"CLOSING\"; /** Buffer empty after close; readers released. */ readonly Drained: \"DRAINED\"; /** Resources released by d…",
+      "package": "@axrone/memory"
     },
     {
       "name": "LightAttenuationMode",
@@ -47572,6 +48062,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "MAX_POOLED_CHUNKS",
+      "kind": "const",
+      "code": "declare const MAX_POOLED_CHUNKS: 4;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "MAX_SPRING_DT",
       "kind": "const",
       "code": "declare const MAX_SPRING_DT = 0.064;",
@@ -47617,6 +48113,12 @@
       "name": "memoizeAsync",
       "kind": "const",
       "code": "declare const memoizeAsync: <TArgs extends readonly unknown[], TResult>(fn: (...args: TArgs) => Promise<TResult>, keySelector?: (...args: TArgs) => string, maxCacheSize?: number) => ((...args: TArgs) => Promise<TResult>);",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "MemoryErrorCode",
+      "kind": "const",
+      "code": "declare const MemoryErrorCode: { readonly OUT_OF_BOUNDS: 1; readonly ACCESS_VIOLATION: 2; readonly DISPOSED: 3; readonly ALLOCATION_FAILED: 4; readonly ACTIVE_LEASES: 5; readonly ABORTED: 6; readonly ALIGNMENT_FAULT: 7; readonly BUFFER_OVERFLOW: 8; }",
       "package": "@axrone/memory"
     },
     {
@@ -47762,6 +48264,12 @@
       "kind": "enum",
       "code": "declare enum ModuleFlags { StartLifetime = 1, StartSpeed = 2, StartSize = 4, StartRotation = 8, StartColor = 16, GravityModifier = 32, SimulationSpace = 64, SimulationSpeed = 128, ScalingMode = 256, PlayOnAwake = 512, MaxParticles = 1024, All = 2047 }",
       "package": "@axrone/particle-system"
+    },
+    {
+      "name": "MonomorphicNoOpMetricsSink",
+      "kind": "const",
+      "code": "declare const MonomorphicNoOpMetricsSink: Readonly<IStackMetricsSink>;",
+      "package": "@axrone/memory"
     },
     {
       "name": "MOTION_MATCH_FACING_MISSING_PENALTY",
@@ -47986,6 +48494,12 @@
       "package": "@axrone/utility"
     },
     {
+      "name": "NULL_METRICS",
+      "kind": "const",
+      "code": "declare const NULL_METRICS: IQueueMetrics;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "NumberComparer",
       "kind": "class",
       "code": "declare class NumberComparer implements Comparer<number> { constructor(options?: Readonly<Pick<ComparerOptions$1, 'precision'>>); compare(a: number, b: number): CompareResult; … }",
@@ -48013,6 +48527,12 @@
       "name": "ObjectPool",
       "kind": "class",
       "code": "declare class ObjectPool<T extends {",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "ObjectPoolChunkAllocator",
+      "kind": "class",
+      "code": "declare class ObjectPoolChunkAllocator<T> implements IChunkAllocator<T> { constructor(options?: ObjectPoolChunkAllocatorOptions); acquire(): MemoryChunk<T>; release(chunk: MemoryChunk<T>): void; clear(): void; get availableCount(): number; get allocatedCount(): number; get totalCount(): number; get…",
       "package": "@axrone/memory"
     },
     {
@@ -48136,12 +48656,6 @@
       "package": "@axrone/animation"
     },
     {
-      "name": "OptimizedArrayStack",
-      "kind": "class",
-      "code": "declare class OptimizedArrayStack<T> extends AbstractStack<T> implements MutableStackInterface<T> { push(value: T): this; pushUnsafe(value: T): this; pushMany(values: readonly T[]): this; pop(): T | undefined; popUnsafe(): T | undefined; popMany(count: number): readonly T[]; swap(): this; duplicate…",
-      "package": "@axrone/memory"
-    },
-    {
       "name": "OptimizedQueryCache",
       "kind": "class",
       "code": "declare class OptimizedQueryCache<TArchetypeId extends string = string> implements WorldQueryCache<TArchetypeId> { invalidate(): void; getQuery(key: string): readonly TArchetypeId[] | undefined; setQuery(key: string, archetypes: readonly TArchetypeId[]): void; getBitQuery(mask: bigint): readonly TA…",
@@ -48170,6 +48684,12 @@
       "kind": "function",
       "code": "declare function orientQuadTowardCamera(model: Float32Array, cameraWorld: Float32Array): Float32Array;",
       "package": "@axrone/ui-webgl2"
+    },
+    {
+      "name": "OverflowStrategy",
+      "kind": "const",
+      "code": "declare const OverflowStrategy: { /** Reject the write and return QueueFullError. */ readonly Reject: \"REJECT\"; /** Drop the oldest buffered item to make room. */ readonly DropHead: \"DROP_HEAD\"; /** Discard the incoming item when full. */ readonly DropTail: \"DROP_TAIL\"; /** Suspend the producer unt…",
+      "package": "@axrone/memory"
     },
     {
       "name": "PAGE_CONTROLLER_TYPE",
@@ -48612,13 +49132,67 @@
     {
       "name": "Queue",
       "kind": "class",
-      "code": "declare class Queue<T> implements Iterable<T> { constructor(options?: QueueOptions); get size(): QueueSize; get isEmpty(): boolean; get capacity(): Capacity; enqueue(value: T): void; enqueueRange(values: ReadonlyArray<T> | Iterable<T>): void; dequeue(): T; tryDequeue(): T | undefined; peek(): T; … }",
+      "code": "declare class Queue<T> implements IQueue<T> { constructor(capacity?: QueueCapacity, strategy?: OverflowStrategy, metrics?: IQueueMetrics, allocator?: IChunkAllocator<T>); get size(): QueueSize; get capacity(): QueueCapacity; get isEmpty(): boolean; get isFull(): boolean; get isClosed(): boolean; ge…",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueAbortError",
+      "kind": "class",
+      "code": "declare class QueueAbortError extends QueueDomainError { constructor(reason?: unknown); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueBuilder",
+      "kind": "class",
+      "code": "declare class QueueBuilder<T, S extends {",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueClosedError",
+      "kind": "class",
+      "code": "declare class QueueClosedError extends QueueDomainError { constructor(message?: string); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueDomainError",
+      "kind": "class",
+      "code": "declare abstract class QueueDomainError extends Error { constructor(message: string); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueEmptyError",
+      "kind": "class",
+      "code": "declare class QueueEmptyError extends QueueDomainError { constructor(message?: string); … }",
       "package": "@axrone/memory"
     },
     {
       "name": "QueueError",
       "kind": "class",
       "code": "declare abstract class QueueError extends Error { constructor(message: string); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueFullError",
+      "kind": "class",
+      "code": "declare class QueueFullError extends QueueDomainError { constructor(message?: string); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueInvalidCapacityError",
+      "kind": "class",
+      "code": "declare class QueueInvalidCapacityError extends QueueDomainError { constructor(value: number); … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueIterator",
+      "kind": "class",
+      "code": "declare class QueueIterator<T> implements Iterator<T> { constructor(head: MemoryChunk<T>, size: number); next(): IteratorResult<T>; … }",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "QueueUnderflowError",
+      "kind": "class",
+      "code": "declare class QueueUnderflowError extends QueueDomainError { constructor(requested: number, actual: number); … }",
       "package": "@axrone/memory"
     },
     {
@@ -49360,6 +49934,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "resolvePhysicsBridgesForProfile",
+      "kind": "const",
+      "code": "declare const resolvePhysicsBridgesForProfile: (profileId: string | undefined) => ScenePhysicsBridgeSelection;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "resolveRawGL",
       "kind": "function",
       "code": "declare function resolveRawGL(source: ContextSource): WebGL2RenderingContext;",
@@ -49878,7 +50458,7 @@
     {
       "name": "SceneDrawExecutor",
       "kind": "class",
-      "code": "declare class SceneDrawExecutor { constructor(_dependencies: SceneDrawExecutorDependencies); execute(item: SceneRenderItem, context: SceneDrawExecutorContext, frameState: SceneRenderFrameState): void; … }",
+      "code": "declare class SceneDrawExecutor { constructor(_dependencies: SceneDrawExecutorDependencies); resetState(): void; execute(item: SceneRenderItem, context: SceneDrawExecutorContext, frameState: SceneRenderFrameState): void; … }",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -49962,7 +50542,7 @@
     {
       "name": "SceneMaterialRegistry",
       "kind": "class",
-      "code": "declare class SceneMaterialRegistry { constructor(options?: {; get size(): number; create(definition: SceneMaterialDefinition): SceneMaterialHandle; get(id: string): SceneMaterialResource | undefined; getHandle(id: string): SceneMaterialHandle | null; setUniform(id: string, name: string, value: Sce…",
+      "code": "declare class SceneMaterialRegistry { constructor(options?: {; get size(): number; get revision(): number; create(definition: SceneMaterialDefinition): SceneMaterialHandle; get(id: string): SceneMaterialResource | undefined; getHandle(id: string): SceneMaterialHandle | null; setUniform(id: string, …",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -49986,13 +50566,13 @@
     {
       "name": "SceneMeshRegistry",
       "kind": "class",
-      "code": "declare class SceneMeshRegistry { get size(): number; register(definition: SceneMeshDefinition, resource: SceneMeshResource): SceneMeshRegistrationResult; get(id: string): SceneMeshResource | undefined; getHandle(id: string): SceneMeshHandle | null; getDefinition(id: string): SceneMeshDefinition | …",
+      "code": "declare class SceneMeshRegistry { get size(): number; get revision(): number; register(definition: SceneMeshDefinition, resource: SceneMeshResource): SceneMeshRegistrationResult; get(id: string): SceneMeshResource | undefined; getHandle(id: string): SceneMeshHandle | null; getDefinition(id: string)…",
       "package": "@axrone/scene-runtime"
     },
     {
       "name": "SceneMorphMeshRuntime",
       "kind": "class",
-      "code": "declare class SceneMorphMeshRuntime { constructor(_options: SceneMorphMeshRuntimeOptions); resolve(renderer: Pick<MeshRenderer, 'id' | 'meshId' | 'morphWeightVersion' | 'getMorphWeightArray'>, meshes: SceneMorphMeshRegistry): SceneMeshResource | null; releaseBaseMesh(meshId: string): void; prune(ac…",
+      "code": "declare class SceneMorphMeshRuntime { constructor(_options: SceneMorphMeshRuntimeOptions); get hasCachedMeshes(): boolean; resolve(renderer: Pick<MeshRenderer, 'id' | 'meshId' | 'morphWeightVersion' | 'getMorphWeightArray'>, meshes: SceneMorphMeshRegistry): SceneMeshResource | null; releaseBaseMesh…",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -50034,7 +50614,7 @@
     {
       "name": "SceneRenderFrameState",
       "kind": "class",
-      "code": "declare class SceneRenderFrameState { begin(frame: number): this; markActiveRenderer(rendererId: string): void; recordDraw(mesh: Pick<SceneMeshResource, 'topology' | 'indexCount' | 'vertexCount'>): void; recordTriangles(triangleCount: number, drawCalls?: number): void; get frame(): number; get draw…",
+      "code": "declare class SceneRenderFrameState { begin(frame: number): this; setTrackActiveRenderers(value: boolean): this; markActiveRenderer(rendererId: string): void; recordDraw(mesh: Pick<SceneMeshResource, 'topology' | 'indexCount' | 'vertexCount'>): void; recordTriangles(triangleCount: number, drawCalls…",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -50118,7 +50698,7 @@
     {
       "name": "SceneShaderRegistry",
       "kind": "class",
-      "code": "declare class SceneShaderRegistry { get size(): number; get variantCount(): number; register(definition: SceneShaderDefinition, resource: SceneShaderResource): SceneShaderRegistrationResult; registerVariant(shaderId: string, variantKey: string, resource: SceneShaderResource): boolean; get(id: strin…",
+      "code": "declare class SceneShaderRegistry { get size(): number; get revision(): number; get variantCount(): number; register(definition: SceneShaderDefinition, resource: SceneShaderResource): SceneShaderRegistrationResult; registerVariant(shaderId: string, variantKey: string, resource: SceneShaderResource)…",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -50848,9 +51428,15 @@
       "package": "@axrone/numeric"
     },
     {
-      "name": "StackCapacityError",
+      "name": "Stack",
       "kind": "class",
-      "code": "declare class StackCapacityError extends StackError { constructor(current: StackSize, capacity: StackCapacity, operation: string); … }",
+      "code": "declare class Stack<T> { constructor(id: StackId, maxCapacity: StackCapacity, metrics: IStackMetricsSink); get size(): number; get isEmpty(): boolean; get isDisposed(): boolean; push(item: T): void; tryPush(item: T): Result<void, StackOverflowError | StackDisposedError>; pop(): T; tryPop(): Result<…",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "StackAbortError",
+      "kind": "class",
+      "code": "declare class StackAbortError extends Error { constructor(reason: unknown); … }",
       "package": "@axrone/memory"
     },
     {
@@ -50860,27 +51446,27 @@
       "package": "@axrone/profiler"
     },
     {
-      "name": "StackIntegrityError",
+      "name": "StackChunkPoolAdapter",
       "kind": "class",
-      "code": "declare class StackIntegrityError extends StackError { constructor(details: string, context?: Record<string, unknown> | undefined); … }",
+      "code": "declare class StackChunkPoolAdapter<T> { constructor(maxPooledChunks?: number, options?: ChunkPoolOptions<T>); acquireChunk(): (T | undefined)[]; releaseChunk(chunk: (T | undefined)[]): void; clear(): void; … }",
       "package": "@axrone/memory"
     },
     {
-      "name": "StackIterator",
+      "name": "StackDisposedError",
       "kind": "class",
-      "code": "declare class StackIterator<T> implements IterableIterator<T> { constructor(head: StackNode<T> | null, checksum: number); next(): IteratorResult<T>; … }",
+      "code": "declare class StackDisposedError extends Error { constructor(id: StackId, cause?: Error | undefined); … }",
       "package": "@axrone/memory"
     },
     {
-      "name": "StackMemoryError",
+      "name": "StackOverflowError",
       "kind": "class",
-      "code": "declare class StackMemoryError extends StackError { constructor(requested: number, available: number); … }",
+      "code": "declare class StackOverflowError extends Error { constructor(limit: number); … }",
       "package": "@axrone/memory"
     },
     {
-      "name": "StackMemoryPool",
+      "name": "StackUnderflowError",
       "kind": "class",
-      "code": "declare class StackMemoryPool { constructor(options?: Partial<MemoryPoolOptions<PoolNode<any>>>); clear(): void; getStats(): {; totalAllocated: number; totalDeallocated: number; poolSizes: {; sizeKey: string; poolSize: number; fragmentation: number; … }",
+      "code": "declare class StackUnderflowError extends Error { constructor(); … }",
       "package": "@axrone/memory"
     },
     {
@@ -51274,6 +51860,18 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "toQueueCapacity",
+      "kind": "function",
+      "code": "declare function toQueueCapacity(value: number): QueueCapacity;",
+      "package": "@axrone/memory"
+    },
+    {
+      "name": "toQueueSize",
+      "kind": "function",
+      "code": "declare function toQueueSize(value: number): QueueSize;",
+      "package": "@axrone/memory"
+    },
+    {
       "name": "toShaderEffectSource",
       "kind": "const",
       "code": "declare const toShaderEffectSource: (effect: RenderShaderEffectDefinition, uri?: string) => AssetCustomSource<RenderShaderEffectDefinition>;",
@@ -51566,6 +52164,12 @@
       "kind": "const",
       "code": "declare const unblendWeight: (weight: BlendWeight) => number;",
       "package": "@axrone/animation"
+    },
+    {
+      "name": "UNBOUNDED_CAPACITY",
+      "kind": "const",
+      "code": "declare const UNBOUNDED_CAPACITY: QueueCapacity;",
+      "package": "@axrone/memory"
     },
     {
       "name": "UnexpectedError",
