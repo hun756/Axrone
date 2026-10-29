@@ -733,3 +733,93 @@ describe('checkbox-toggle controller — real asset integration', () => {
 		expect(markStrokes.length).toBe(0);
 	});
 });
+
+describe('checkbox-toggle controller — sprite mode surface', () => {
+	const snapshotStyle = (runtime: UIRuntime, childIndex: number): Record<string, unknown> => {
+		const box = runtime.snapshot().root.children[0]?.children[childIndex];
+		return (box?.style ?? {}) as Record<string, unknown>;
+	};
+	const boxImage = {
+		source: { kind: 'texture', resourceId: 'box_normal.png', width: 20, height: 20 },
+	};
+	const markImage = {
+		source: { kind: 'texture', resourceId: 'mark_normal.png', width: 12, height: 12 },
+	};
+
+	it('suppresses the box fill and bleeds the box sprite', () => {
+		const runtime = createRuntime(
+			{
+				boxKey: 'checkbox-box',
+				markKey: 'checkbox-mark',
+				labelKey: 'checkbox-label',
+				transition: 'sprite',
+				boxSprites: {
+					normal: { kind: 'texture', resourceId: 'box_normal.png', width: 20, height: 20 },
+				},
+			},
+			boxImage,
+		);
+
+		expect(snapshotStyle(runtime, 0).background).toBe('#00000000');
+		expect(runtime.getWidgetImageInput(boxWidget(runtime))?.bleed).toBe(true);
+	});
+
+	it('restores the authored box fill when leaving sprite mode', () => {
+		const runtime = createRuntime(
+			{
+				boxKey: 'checkbox-box',
+				markKey: 'checkbox-mark',
+				labelKey: 'checkbox-label',
+				transition: 'sprite',
+				boxSprites: {
+					normal: { kind: 'texture', resourceId: 'box_normal.png', width: 20, height: 20 },
+				},
+			},
+			boxImage,
+		);
+
+		runtime.updateWidget(checkboxWidget(runtime), { props: { transition: 'tint' } });
+		runtime.commit();
+
+		expect(snapshotStyle(runtime, 0).background).toBe('#334155ff');
+		expect(runtime.getWidgetImageInput(boxWidget(runtime))?.bleed).toBe(false);
+	});
+
+	it('keeps the authored box fill when no box sprite is available', () => {
+		const runtime = createRuntime({
+			boxKey: 'checkbox-box',
+			markKey: 'checkbox-mark',
+			labelKey: 'checkbox-label',
+			transition: 'sprite',
+		});
+
+		expect(snapshotStyle(runtime, 0).background).toBe('#334155ff');
+		expect(runtime.getWidgetImageInput(boxWidget(runtime))).toBeNull();
+	});
+
+	it('bleeds the mark sprite when checked without touching the box fill', () => {
+		const runtime = createRuntime(
+			{
+				boxKey: 'checkbox-box',
+				markKey: 'checkbox-mark',
+				labelKey: 'checkbox-label',
+				transition: 'sprite',
+				markSprites: {
+					checked: { kind: 'texture', resourceId: 'mark_checked.png', width: 12, height: 12 },
+				},
+			},
+			undefined,
+			markImage,
+		);
+
+		clickCheckbox(runtime);
+		runtime.commit();
+
+		expect(runtime.getWidgetImageInput(markWidget(runtime))?.bleed).toBe(true);
+		expect(
+			(runtime.getWidgetImageInput(markWidget(runtime))?.source as { resourceId?: string })
+				?.resourceId,
+		).toBe('mark_checked.png');
+		expect(snapshotStyle(runtime, 0).background).toBe('#334155ff');
+	});
+});
