@@ -607,6 +607,7 @@ const renderWithExtractedModules = (
             }
             if (command.kind === 'image') {
                 if (hasPendingText) {
+                    quads.flush(frame.viewportHeight, host);
                     texts.flush(frame.viewportHeight, host);
                     hasPendingText = false;
                 }
@@ -680,8 +681,8 @@ describe('extracted ui-webgl2 renderer modules', () => {
         expect(moduleResult.statistics).toEqual(rendererResult.statistics);
         expect(rendererResult.calls.length).toBeGreaterThan(80);
         expect(rendererResult.statistics.drawCalls).toBeGreaterThan(4);
-        expect(hashCallSequence(rendererResult.calls)).toBe('266:de3565cb');
-        expect(hashCallSequence(moduleResult.calls)).toBe('266:de3565cb');
+        expect(hashCallSequence(rendererResult.calls)).toBe('266:6c1b178b');
+        expect(hashCallSequence(moduleResult.calls)).toBe('266:6c1b178b');
     });
 
     it('reproduces the renderer GL call log when rendering into an offscreen framebuffer', () => {

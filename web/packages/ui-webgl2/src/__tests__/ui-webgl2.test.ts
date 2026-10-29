@@ -2603,6 +2603,90 @@ describe('flush order: text draws after quads (label-on-fill regression)', () =>
         renderer.dispose();
     });
 
+    it('flushes pending quads before text when an image command follows', () => {
+        const gl = createMockWebGL2Context();
+        const mockTexture = gl.createTexture();
+        const renderer = new WebGL2UIRenderer({
+            gl,
+            resolveImageResource: () => ({
+                kind: 'texture' as const,
+                texture: mockTexture!,
+                sampler: null,
+            }),
+        });
+        const entry = createGlyphEntry();
+
+        const programFor = (uniformName: string): WebGLProgram | null => {
+            const call = (gl.getUniformLocation as ReturnType<typeof vi.fn>).mock.calls.find(
+                (args) => args[1] === uniformName,
+            );
+            return (call?.[0] as WebGLProgram) ?? null;
+        };
+        const quadProgram = programFor('u_Viewport');
+        const textProgram = programFor('u_Atlas');
+        const imageProgram = programFor('u_Image');
+        expect(quadProgram).not.toBeNull();
+        expect(textProgram).not.toBeNull();
+        expect(imageProgram).not.toBeNull();
+
+        // Frame: button fill quad → label text → icon image (as in an
+        // authored button with an image and a label child).
+        const frame: UIFrame<never> = {
+            viewportWidth: 160,
+            viewportHeight: 120,
+            metrics: { ...createMetrics(), renderCount: 1, textCommandCount: 1, glyphCount: 1, customCommandCount: 0 },
+            commands: [
+                {
+                    kind: 'quad',
+                    widget: 1 as WidgetId,
+                    x: 0, y: 0, width: 100, height: 30, zIndex: 0,
+                    color: { r: 0.1, g: 0.5, b: 0.9, a: 1 },
+                    borderColor: { r: 0, g: 0, b: 0, a: 0 },
+                    borderWidth: 0,
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    opacity: 1, clip: null,
+                },
+                {
+                    kind: 'text',
+                    widget: 2 as WidgetId,
+                    x: 10, y: 5, zIndex: 1,
+                    color: { r: 1, g: 1, b: 1, a: 1 },
+                    outlineColor: { r: 0, g: 0, b: 0, a: 0 },
+                    outlineWidth: 0, edgeSoftness: 0, opacity: 1, clip: null,
+                    layout: createTextLayout(entry),
+                },
+                {
+                    kind: 'image',
+                    widget: 3 as WidgetId,
+                    x: 0, y: 40, width: 32, height: 32, zIndex: 0,
+                    source: { width: 32, height: 32 },
+                    uvRect: { x: 0, y: 0, width: 1, height: 1 },
+                    tint: { r: 1, g: 1, b: 1, a: 1 },
+                    radius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+                    opacity: 1, clip: null,
+                },
+            ],
+        };
+
+        renderer.render(frame);
+
+        const drawOrder = (gl.drawArraysInstanced as ReturnType<typeof vi.fn>).mock.invocationCallOrder;
+        const useProgramOrder = (gl.useProgram as ReturnType<typeof vi.fn>).mock.invocationCallOrder;
+        const useProgramArgs = (gl.useProgram as ReturnType<typeof vi.fn>).mock.calls;
+        const programAtDraw = drawOrder.map((order) => {
+            let last = -1;
+            for (let i = 0; i < useProgramOrder.length; i += 1) {
+                if (useProgramOrder[i] < order) last = i;
+            }
+            return last >= 0 ? useProgramArgs[last][0] : null;
+        });
+
+        // The fill must draw before the label; the image draws last.
+        expect(programAtDraw).toEqual([quadProgram, textProgram, imageProgram]);
+
+        renderer.dispose();
+    });
+
     it('flushes text when image command follows (shared texture unit)', () => {
         const gl = createMockWebGL2Context();
         // Mock resolveImageResource to return a texture for image commands

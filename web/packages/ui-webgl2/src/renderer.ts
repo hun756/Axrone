@@ -198,6 +198,12 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                 }
                 if (command.kind === 'image') {
                     if (hasPendingText) {
+                        // Text and images share the texture unit, so pending
+                        // glyphs must flush before the image binds. Flush the
+                        // quad/stroke batch first: fills accumulated so far are
+                        // backgrounds for those glyphs, and flushing text alone
+                        // would let them overdraw labels at frame end.
+                        this.quadBatch.flush(frame.viewportHeight, this.renderHost);
                         this.textBatch.flush(frame.viewportHeight, this.renderHost);
                         hasPendingText = false;
                     }
