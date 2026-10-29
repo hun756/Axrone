@@ -1941,6 +1941,75 @@ describe('world-space UIHost binding', () => {
         expect(() => handle!.dispose()).not.toThrow();
     });
 
+    it('resolves UI images through the scene texture registry in world space', () => {
+        const scene = createSceneTarget();
+        const texture = scene.gl.createTexture();
+        const getTextureResource = vi.fn(() => ({
+            nativeTexture: texture!,
+            nativeSampler: null,
+        }));
+        const getMaterialTextureBinding = vi.fn(() => null);
+        Object.assign(scene, { getTextureResource, getMaterialTextureBinding });
+
+        const asset: UIAsset = {
+            id: 'ui.image',
+            name: 'image',
+            version: 1,
+            canvas: {
+                referenceWidth: 320,
+                referenceHeight: 180,
+                scaleMode: 'fill',
+                matchBias: 0.5,
+            },
+            bindings: { root: 'root', image: 'image' },
+            root: {
+                role: 'root',
+                key: 'root',
+                enabled: true,
+                interactive: false,
+                layout: { display: 'overlay', width: '100%', height: '100%' },
+                children: [
+                    {
+                        role: 'custom:image',
+                        key: 'image',
+                        enabled: true,
+                        interactive: false,
+                        layout: { width: 64, height: 64 },
+                        image: {
+                            source: {
+                                kind: 'texture',
+                                resourceId: 'ui:texture',
+                                width: 64,
+                                height: 64,
+                            },
+                        },
+                        children: [],
+                    },
+                ],
+            },
+        } as unknown as UIAsset;
+
+        const host = new UIHost({
+            assetId: 'ui.image',
+            renderMode: 'world-space',
+            worldWidth: 1,
+            worldHeight: 1,
+        });
+        const handle = bindUIHostToWorld({
+            scene,
+            host,
+            resolveAsset: () => asset,
+            world: worldSources(),
+        });
+        expect(handle).not.toBeNull();
+
+        handle!.render(0, 0);
+
+        expect(getTextureResource).toHaveBeenCalledWith('ui:texture');
+
+        handle!.dispose();
+    });
+
     it('routes hosts by render mode and skips world hosts without matrix sources', () => {
         const scene = createSceneTarget();
         const screenHost = new UIHost({ assetId: 'ui.hud', renderMode: 'screen-overlay' });
