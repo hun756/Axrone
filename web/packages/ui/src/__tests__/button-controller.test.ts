@@ -385,6 +385,34 @@ describe('button-feedback controller — sprite mode', () => {
 		expect(getImageInput(runtime, widget)?.bleed).toBe(false);
 	});
 
+	it('ends the sprite surface when the authored image is removed', () => {
+		const runtime = createRuntime({
+			controller: BUTTON_FEEDBACK_CONTROLLER_TYPE,
+			style: { background: '#0a74daff' },
+			image: {
+				source: { kind: 'texture', resourceId: 'btn_normal.png', width: 120, height: 40 },
+			},
+			props: {
+				transition: 'sprite',
+				sprites: {
+					normal: { kind: 'texture', resourceId: 'btn_normal.png', width: 120, height: 40 },
+				},
+			},
+		});
+		const widget = buttonWidget(runtime);
+		expect(getStyleInput(runtime, widget).background).toBe('#00000000');
+
+		runtime.updateWidget(widget, { image: null });
+		runtime.commit();
+
+		expect(getStyleInput(runtime, widget).background).toBe('#0a74daff');
+
+		// A later pointer interaction must not resurrect the deleted image.
+		hoverSequence(runtime);
+		runtime.commit();
+		expect(getImageInput(runtime, widget)).toBeNull();
+	});
+
 	it('keeps the authored fill when sprite mode has no usable source', () => {
 		const runtime = createRuntime({
 			controller: BUTTON_FEEDBACK_CONTROLLER_TYPE,
