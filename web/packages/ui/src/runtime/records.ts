@@ -227,6 +227,7 @@ export const compileWidgetImage = (input: WidgetImageInput | null): ResolvedWidg
         uvRect: normalizeUvRect(input.uvRect),
         border,
         fillCenter: input.fillCenter ?? true,
+        bleed: input.bleed === true,
     };
 };
 
