@@ -32,6 +32,10 @@ import type { SceneParticleBatchRuntime } from './particle-batch-runtime';
 import type { SceneLineBatchRuntime } from './line-batch-runtime';
 import type { SceneBillboardBatchRuntime } from './billboard-batch-runtime';
 import type {
+    SceneRenderCapabilities,
+} from '../scene-render-capabilities';
+import { SCENE_RENDER_CAPABILITIES_ALL } from '../scene-render-capabilities';
+import type {
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
     SceneRenderPipelineSettings,
@@ -83,6 +87,14 @@ const DEFAULT_SCENE_RENDER_PLANNING_STATS: SceneRenderPlanningStats = Object.fre
     skippedSpriteCount: 0,
     warnings: Object.freeze([]) as readonly string[],
 });
+
+/**
+ * Empty submission inputs shared by mesh-free / light-free scenes. They are
+ * module constants so the hot path never allocates a throwaway array.
+ */
+const EMPTY_PRIMITIVES: readonly RenderPrimitiveInstance[] = Object.freeze([]);
+const EMPTY_PRIMITIVE_LOOKUP: ReadonlyMap<string, SceneRenderItem> = new Map();
+const EMPTY_RENDER_LIGHTS: readonly RenderLight[] = Object.freeze([]);
 
 const clampCosine = (value: number): number => Math.min(1, Math.max(-1, value));
 
@@ -321,6 +333,12 @@ interface SceneRenderPipelineOptions {
     readonly billboardBatchRuntime?: SceneBillboardBatchRenderer;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
+    /**
+     * Render families the scene registry can produce. When a family is absent
+     * its collector/batch runtime is skipped for the frame instead of scanning
+     * every actor and finding nothing.
+     */
+    readonly capabilities?: SceneRenderCapabilities;
 }
 
 interface ActiveExecutionState {
@@ -347,12 +365,14 @@ interface MutablePrimitiveMatrices {
 export class SceneRenderPipeline {
     private readonly _primitiveCache = new ScenePrimitiveCache();
     private readonly _options: SceneRenderPipelineOptions;
+    private readonly _capabilities: SceneRenderCapabilities;
     private _activeExecution: ActiveExecutionState | null = null;
     private _backend: ManagedWebGL2RenderPassLibrary;
     private _pipeline: RenderPipeline<WebGL2RenderResourceHandle>;
 
     constructor(options: SceneRenderPipelineOptions) {
         this._options = options;
+        this._capabilities = options.capabilities ?? SCENE_RENDER_CAPABILITIES_ALL;
         this._backend = this._createBackend();
         this._pipeline = this._createPipeline();
     }
@@ -446,15 +466,28 @@ export class SceneRenderPipeline {
         this._options.drawExecutor.resetState?.();
         const clearState = resolveRenderClearState(params.cameraFrame, params.renderPass);
         const camera = toRenderCameraState(params.cameraFrame, clearState);
-        const lights = toRenderLights(params.lighting);
+        // No registered light component can contribute a render light; the
+        // per-frame conversion allocates arrays/objects for nothing.
+        const lights = this._capabilities.lights
+            ? toRenderLights(params.lighting)
+            : EMPTY_RENDER_LIGHTS;
 
         const cacheEnabled =
             params.materialRevision !== undefined && params.meshRevision !== undefined;
+        const meshesEnabled = this._capabilities.meshRenderers;
         let primitives: readonly RenderPrimitiveInstance[];
         let primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
         let primitiveCacheHit = false;
 
-        if (cacheEnabled) {
+        if (!meshesEnabled) {
+            // A registry without mesh renderers cannot produce a render item
+            // (the collector looks the class up directly), so the primitive
+            // cache/build path is skipped entirely. The empty list is cached
+            // and submitted, which is what the pass would have produced.
+            primitives = EMPTY_PRIMITIVES;
+            primitiveLookup = EMPTY_PRIMITIVE_LOOKUP;
+            primitiveCacheHit = cacheEnabled;
+        } else if (cacheEnabled) {
             const cached = this._primitiveCache.resolve({
                 rendererPassId: params.renderPass.rendererPassId,
                 renderPass: params.renderPass,
@@ -503,7 +536,7 @@ export class SceneRenderPipeline {
             const meshTransparentCount = result.statistics.transparentCount;
             const warnings = [...result.warnings];
             const spriteStats =
-                this._options.spriteBatchRuntime && params.actors
+                this._capabilities.sprites && this._options.spriteBatchRuntime && params.actors
                     ? this._options.spriteBatchRuntime.render({
                           actors: params.actors,
                           cameraFrame: params.cameraFrame,
@@ -530,7 +563,7 @@ export class SceneRenderPipeline {
                 pushUniqueWarnings(warnings, spriteStats.warnings);
             }
 
-            if (this._options.particleBatchRuntime && params.actors) {
+            if (this._capabilities.particles && this._options.particleBatchRuntime && params.actors) {
                 this._options.particleBatchRuntime.render({
                     actors: params.actors,
                     cameraFrame: params.cameraFrame,
@@ -540,7 +573,7 @@ export class SceneRenderPipeline {
                 });
             }
 
-            if (this._options.lineBatchRuntime && params.actors) {
+            if (this._capabilities.lines && this._options.lineBatchRuntime && params.actors) {
                 this._options.lineBatchRuntime.render({
                     actors: params.actors,
                     cameraFrame: params.cameraFrame,
@@ -548,7 +581,7 @@ export class SceneRenderPipeline {
                 });
             }
 
-            if (this._options.billboardBatchRuntime && params.actors) {
+            if (this._capabilities.billboards && this._options.billboardBatchRuntime && params.actors) {
                 this._options.billboardBatchRuntime.render({
                     actors: params.actors,
                     cameraFrame: params.cameraFrame,

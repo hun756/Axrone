@@ -1,5 +1,6 @@
 import type { IGLStateCache } from '@axrone/render-webgl2';
 import { createLightingUniformValueMap } from '@axrone/lighting';
+import type { LightingUniformValueMap } from '@axrone/lighting';
 import { Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, Transform } from '@axrone/ecs-runtime';
 import { selectSceneCamera } from '../camera-selector';
@@ -10,6 +11,7 @@ import { SceneFrameUniformBinder } from '../frame-uniform-binder';
 import { SceneFogUniformBinder } from '../fog-uniform-binder';
 import { DEFAULT_SCENE_FOG_STATE, type SceneFogState } from '../fog-state';
 import { SceneLightingCollector } from '../lighting-collector';
+import type { SceneLightingState } from '../lighting-collector';
 import { SceneLightingUniformBinder } from '../lighting-uniform-binder';
 import { resolveSceneMaterialPass } from '../material-registry';
 import { SceneMaterialTextureBinder } from '../material-texture-binder';
@@ -17,10 +19,15 @@ import { SceneMorphMeshRuntime } from '../morph-mesh-runtime';
 import { SceneRenderFrameState } from './render-frame-state';
 import { SceneRenderListCache } from './render-cache';
 import { SceneRenderItemCollector } from './render-item-collector';
+import type { SceneRenderItem } from './render-item-collector';
 import { SceneRenderPipeline } from './scene-render-pipeline';
 import { SceneRenderPassPreparer } from './render-pass-preparer';
 import { SceneRenderStateApplier } from './render-state-applier';
 import type { SceneResourceRuntime } from '../scene-resource-runtime';
+import {
+    SCENE_RENDER_CAPABILITIES_ALL,
+    type SceneRenderCapabilities,
+} from '../scene-render-capabilities';
 import { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
 import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
 import { SceneParticleBatchRuntime } from './particle-batch-runtime';
@@ -37,6 +44,9 @@ import type {
 } from '../types';
 import { SceneUniformWriter } from '../uniform-writer';
 
+const EMPTY_ACTORS: readonly Actor[] = Object.freeze([]);
+const EMPTY_RENDER_ITEMS: readonly SceneRenderItem[] = Object.freeze([]);
+
 export interface SceneRenderRuntimeOptions {
     readonly gl: WebGL2RenderingContext;
     readonly resources: SceneResourceRuntime;
@@ -50,6 +60,11 @@ export interface SceneRenderRuntimeOptions {
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
+    /**
+     * Render families the scene registry can produce. Defaults to "all" so a
+     * directly constructed runtime keeps the full pre-gating behaviour.
+     */
+    readonly capabilities?: SceneRenderCapabilities;
     /** Optional GL state cache — when provided, texture unbinds and raw-GL guards stay in sync. */
     readonly stateCache?: IGLStateCache;
     /** Initial fog state; updated at runtime via `setFogState`. */
@@ -93,6 +108,18 @@ export class SceneRenderRuntime {
     private readonly _morphMeshRuntime: SceneMorphMeshRuntime;
     private readonly _drawExecutor: SceneDrawExecutor;
     private readonly _renderPipeline: SceneRenderPipeline;
+    private readonly _capabilities: SceneRenderCapabilities;
+    /**
+     * Environment-only lighting resolved once for scenes whose registry has no
+     * light components; re-collecting it per frame would scan every actor.
+     */
+    private _staticLighting: SceneLightingState | null = null;
+    /**
+     * Lighting uniform map for mesh-free scenes. Mesh draws are the only
+     * consumer of `lightingValues`, so it is built once and then reused; no
+     * draw path reads it while `meshRenderers` is false.
+     */
+    private _meshFreeLightingValues: LightingUniformValueMap | null = null;
     private _fogState: SceneFogState;
     private _planningStats: SceneRenderPlanningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
     private readonly _textureUniformSetter = (
@@ -104,6 +131,7 @@ export class SceneRenderRuntime {
     };
 
     constructor(private readonly _options: SceneRenderRuntimeOptions) {
+        this._capabilities = _options.capabilities ?? SCENE_RENDER_CAPABILITIES_ALL;
         this._lightingCollector = new SceneLightingCollector(4);
         this._materialTextureBinder = new SceneMaterialTextureBinder(
             _options.gl,
@@ -175,6 +203,7 @@ export class SceneRenderRuntime {
             billboardBatchRuntime,
             planning: _options.planning,
             pipeline: _options.pipeline,
+            capabilities: this._capabilities,
         });
     }
 
@@ -213,6 +242,44 @@ export class SceneRenderRuntime {
         return this._renderStateApplier.resolveBlendEnabled(shader, renderPass, materialPass);
     }
 
+    private _resolveLightingValues(lighting: SceneLightingState): LightingUniformValueMap {
+        if (this._capabilities.meshRenderers) {
+            return createLightingUniformValueMap(lighting);
+        }
+
+        if (!this._meshFreeLightingValues) {
+            this._meshFreeLightingValues = createLightingUniformValueMap(lighting);
+        }
+        return this._meshFreeLightingValues;
+    }
+
+    private _resolveLighting(
+        actors: readonly Actor[],
+        cameraPosition: Readonly<Vec3> | undefined
+    ): SceneLightingState {
+        if (this._capabilities.lights) {
+            return this._lightingCollector.collect(
+                actors,
+                this._options.ambientLight,
+                this._options.skyLight,
+                this._options.groundLight,
+                cameraPosition
+            );
+        }
+
+        // No light component is registered, so the actor scan can never find
+        // one. Resolve the environment-only state once and reuse it.
+        if (!this._staticLighting) {
+            this._staticLighting = this._lightingCollector.collect(
+                EMPTY_ACTORS,
+                this._options.ambientLight,
+                this._options.skyLight,
+                this._options.groundLight
+            );
+        }
+        return this._staticLighting;
+    }
+
     render(params: SceneRenderRuntimeParams): void {
         const renderFrame = this._renderFrameState.begin(params.frame);
         renderFrame.setTrackActiveRenderers(this._morphMeshRuntime.hasCachedMeshes);
@@ -224,16 +291,12 @@ export class SceneRenderRuntime {
             params.viewportWidth,
             params.viewportHeight
         );
-        const lighting = this._lightingCollector.collect(
-            actors,
-            this._options.ambientLight,
-            this._options.skyLight,
-            this._options.groundLight,
-            cameraFrame?.position
-        );
+        const lighting = this._resolveLighting(actors, cameraFrame?.position);
         // Derive the lighting uniform map once per frame — every mesh draw
         // in every pass below shares it instead of rebuilding it per draw.
-        const lightingValues = createLightingUniformValueMap(lighting);
+        // Sprite / particle / line / billboard passes do not read it, so mesh-
+        // free scenes skip building it entirely.
+        const lightingValues = this._resolveLightingValues(lighting);
         const renderPasses = this._options.resources.renderPasses.getEnabledResources();
 
         if (renderPasses.length === 0) {
@@ -279,31 +342,38 @@ export class SceneRenderRuntime {
             const shaderRevision = this._options.resources.shaders.revision;
 
             // Reuses the previous sorted item list when nothing render-relevant
-            // changed; otherwise runs the full collect/cull/sort path.
-            const renderListResult = this._renderListCache.resolve({
-                rendererPassId: renderPass.rendererPassId,
-                renderPass,
-                actors,
-                cameraFrame,
-                viewportWidth: params.viewportWidth,
-                viewportHeight: params.viewportHeight,
-                materialRevision,
-                meshRevision,
-                shaderRevision,
-                collect: () =>
-                    this._renderItemCollector.collect(actors, renderPass.rendererPassId, {
-                        cameraPosition: cameraFrame.position,
-                        cameraFrustum: cameraFrame.camera3D.frustum,
-                        resolveBounds: (renderer) => {
-                            const meshId = renderer.meshId;
-                            return meshId
-                                ? this._options.resources.meshes.getDefinition(meshId)?.bounds
-                                : undefined;
-                        },
-                        isBlended: (renderer) => this._isBlendedRenderer(renderer, renderPass),
-                    }),
-            });
-            const renderItems = renderListResult.items;
+            // changed; otherwise runs the full collect/cull/sort path. A
+            // registry without mesh renderers cannot produce any item, so the
+            // collect path (two component probes per actor) is skipped.
+            let renderItems: readonly SceneRenderItem[] = EMPTY_RENDER_ITEMS;
+            let renderListCacheHit = true;
+            if (this._capabilities.meshRenderers) {
+                const renderListResult = this._renderListCache.resolve({
+                    rendererPassId: renderPass.rendererPassId,
+                    renderPass,
+                    actors,
+                    cameraFrame,
+                    viewportWidth: params.viewportWidth,
+                    viewportHeight: params.viewportHeight,
+                    materialRevision,
+                    meshRevision,
+                    shaderRevision,
+                    collect: () =>
+                        this._renderItemCollector.collect(actors, renderPass.rendererPassId, {
+                            cameraPosition: cameraFrame.position,
+                            cameraFrustum: cameraFrame.camera3D.frustum,
+                            resolveBounds: (renderer) => {
+                                const meshId = renderer.meshId;
+                                return meshId
+                                    ? this._options.resources.meshes.getDefinition(meshId)?.bounds
+                                    : undefined;
+                            },
+                            isBlended: (renderer) => this._isBlendedRenderer(renderer, renderPass),
+                        }),
+                });
+                renderItems = renderListResult.items;
+                renderListCacheHit = renderListResult.hit;
+            }
 
             const meshPlanning = this._renderPipeline.render({
                 frame: params.frame,
@@ -348,7 +418,7 @@ export class SceneRenderRuntime {
             });
 
             planningCachedPassCount += 1;
-            planningRenderListCacheHit = planningRenderListCacheHit && renderListResult.hit;
+            planningRenderListCacheHit = planningRenderListCacheHit && renderListCacheHit;
             planningPrimitiveCacheHit =
                 planningPrimitiveCacheHit && (meshPlanning.primitiveCacheHit ?? false);
 

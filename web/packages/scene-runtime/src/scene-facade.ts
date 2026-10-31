@@ -4,7 +4,15 @@ export { SceneAssetFacade } from './scene-asset-facade';
 export { SceneLifecycleFacade } from './scene-lifecycle-facade';
 export type { SceneLifecycleRuntimeOptions } from './scene-lifecycle-runtime';
 export { SceneLifecycleRuntime } from './scene-lifecycle-runtime';
-export type { SceneRuntimeKernelOptions } from './scene-runtime-kernel';
+export type {
+    SceneRuntimeComposition,
+    SceneRuntimeKernelOptions,
+    SceneRuntimePhysicsBridge,
+    SceneRuntimePhysicsBridgeInput,
+    SceneRuntimePhysicsBridgeSelection,
+    SceneRuntimePhysicsProfilerStats,
+    SceneRuntimePhysicsWorldView,
+} from './scene-runtime-kernel';
 export { SceneRuntimeKernel } from './scene-runtime-kernel';
 export { SceneRuntimeFacade } from './scene-runtime-facade';
 export { SceneSnapshotFacade } from './scene-snapshot-facade';
@@ -46,6 +54,9 @@ export {
     getSceneUIWidgetRefResolver,
     setSceneUIWidgetRefResolver,
 } from './ui-widget-ref';
+
+export type { SceneShaderDefinitionFromEffectOptions } from './shader-effect';
+export { createSceneShaderDefinitionFromEffect } from './shader-effect';
 
 export type { SceneCapabilityGuardHost } from './scene-capability-guard';
 export { requireRegisteredComponent } from './scene-capability-guard';

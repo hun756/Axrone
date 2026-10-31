@@ -64,6 +64,11 @@
             "import": "./dist/scene-full-profile.mjs",
             "require": "./dist/scene-full-profile.js"
         },
+        "./default-composition": {
+            "types": "./dist/default-composition.d.ts",
+            "import": "./dist/default-composition.mjs",
+            "require": "./dist/default-composition.js"
+        },
         "./scene-facade": {
             "types": "./dist/scene-facade.d.ts",
             "import": "./dist/scene-facade.mjs",

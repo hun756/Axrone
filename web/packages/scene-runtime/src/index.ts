@@ -54,8 +54,24 @@ export {
 	resolveSceneRegistryFromProfile,
 } from './scene-profile';
 
+export type {
+	SceneRuntimeComposition,
+	SceneRuntimePhysicsBridge,
+	SceneRuntimePhysicsBridgeInput,
+	SceneRuntimePhysicsBridgeSelection,
+	SceneRuntimePhysicsProfilerStats,
+	SceneRuntimePhysicsWorldView,
+} from './scene-runtime-kernel';
+export { getDefaultSceneRuntimeComposition } from './default-composition';
+
 /** @deprecated Use `CORE_SCENE_RUNTIME_PROFILE_ID` instead. */
 export { CORE_SCENE_RUNTIME_PROFILE_ID as CORE_SCENE_PROFILE_ID } from './scene-profile';
+
+export type { SceneRenderCapabilities } from './scene-render-capabilities';
+export {
+	SCENE_RENDER_CAPABILITIES_ALL,
+	resolveSceneRenderCapabilities,
+} from './scene-render-capabilities';
 
 export type { SceneActorRuntimeOptions } from './scene-actor-runtime';
 export { SceneActorRuntime } from './scene-actor-runtime';

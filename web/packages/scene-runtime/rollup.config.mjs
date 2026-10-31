@@ -18,6 +18,7 @@ export default createMultiEntryConfig({
         'scene-2d-profile': 'src/scene-2d-profile.ts',
         'scene-3d-profile': 'src/scene-3d-profile.ts',
         'scene-full-profile': 'src/scene-full-profile.ts',
+        'default-composition': 'src/default-composition.ts',
         'scene-facade': 'src/scene-facade.ts',
         prefab: 'src/prefab.ts',
         'scene-3d-support': 'src/scene-3d-support.ts',

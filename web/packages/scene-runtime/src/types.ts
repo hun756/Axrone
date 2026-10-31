@@ -26,6 +26,7 @@ import type { Hierarchy } from '@axrone/ecs-runtime';
 import type { Transform } from '@axrone/ecs-runtime';
 import type { ColorSpace, FilterMode, TextureFormat, WrapMode } from '@axrone/render-webgl2';
 import type { SceneRuntimeProfile } from './scene-profile';
+import type { SceneRuntimeComposition } from './scene-runtime-kernel';
 import type { SceneRuntimeProfilerOptions } from './runtime-profiler';
 
 export type SceneMeshSemantic =
@@ -452,6 +453,13 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     extends SceneCanvasOptions {
     readonly registry?: R;
     readonly profile?: SceneRuntimeProfile<R>;
+    /**
+     * Optional runtime composition (default-registry fallback and physics
+     * bridge factories). The root scene entries install the full composition;
+     * lean entries omit it to keep physics and the full manifest chain out of
+     * their module graph.
+     */
+    readonly composition?: SceneRuntimeComposition<R>;
     readonly renderPlanning?: SceneRenderPlanningOptions;
     readonly renderPipeline?: SceneRenderPipelineSettings;
     readonly profiler?: boolean | SceneRuntimeProfilerOptions;

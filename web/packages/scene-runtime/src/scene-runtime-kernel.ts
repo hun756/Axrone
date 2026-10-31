@@ -12,7 +12,15 @@ import type { SceneLoopState, SceneOptions, SceneRegistry } from './types';
 import { SceneActorRuntime } from './scene-actor-runtime';
 import { SceneAssetRuntime } from './scene-asset-runtime';
 import { SceneLifecycleRuntime } from './scene-lifecycle-runtime';
-import { resolveSceneRegistryFromProfile } from './scene-profile';
+import { getCoreSceneRuntimeProfile } from './scene-core-profile';
+import {
+    resolveSceneRegistryFromProfileWithFallback,
+    type SceneRuntimeProfile,
+} from './scene-profile-contract';
+import {
+    resolveSceneRenderCapabilities,
+    type SceneRenderCapabilities,
+} from './scene-render-capabilities';
 import {
     SceneRuntimeProfiler,
     type SceneRuntimeProfilerOptions,
@@ -28,11 +36,78 @@ import {
     resolveSceneSkyLight,
 } from './scene-runtime-defaults';
 import { SceneSnapshotRuntime } from './scene-snapshot-runtime';
-import { PhysicsBridge3D, type PhysicsBridge3DOptions } from './components/physics-bridge-3d';
-import { PhysicsBridge2D, type PhysicsBridge2DOptions } from './components/physics-bridge-2d';
-import { resolvePhysicsBridgesForProfile } from './scene-profile';
+import type { PhysicsBridge3DOptions } from './components/physics-bridge-3d';
+import type { PhysicsBridge2DOptions } from './components/physics-bridge-2d';
 
 type RuntimeRegistry<R extends ComponentRegistry> = SceneRegistry<R>;
+
+/**
+ * Physics bridge profiler surface the kernel forwards to `SceneRuntimeProfiler`.
+ * Structural so the kernel never imports a physics engine package.
+ */
+export interface SceneRuntimePhysicsProfilerStats {
+    readonly stepTime: number;
+    readonly collisionTime: number;
+    readonly solveTime: number;
+}
+
+export interface SceneRuntimePhysicsWorldView {
+    getProfiler?(): SceneRuntimePhysicsProfilerStats | null;
+}
+
+/**
+ * Minimal game-loop-system surface the kernel drives for a physics bridge.
+ * Root scenes inject concrete `PhysicsBridge3D` / `PhysicsBridge2D` instances;
+ * lean scenes inject nothing and therefore keep the physics engine out of the
+ * module graph entirely.
+ */
+export interface SceneRuntimePhysicsBridge {
+    readonly id: string;
+    readonly physicsWorld?: SceneRuntimePhysicsWorldView;
+    beforeUpdate?(context: unknown): void;
+    fixedUpdate?(context: unknown): void;
+    dispose?(): void;
+}
+
+export interface SceneRuntimePhysicsBridgeSelection {
+    readonly bridge3D: SceneRuntimePhysicsBridge | null;
+    readonly bridge2D: SceneRuntimePhysicsBridge | null;
+}
+
+export interface SceneRuntimePhysicsBridgeInput {
+    readonly world: World<any>;
+    /** Id of the profile resolved for the scene, if the caller supplied one. */
+    readonly profileId: string | undefined;
+    readonly enableProfiler: boolean;
+    readonly physicsBridgeOptions?: PhysicsBridge3DOptions;
+    readonly physicsBridge2DOptions?: PhysicsBridge2DOptions;
+}
+
+/**
+ * Optional runtime composition injected by the scene facade.
+ *
+ * Both fields are additive: omitting a composition leaves the kernel with the
+ * lightweight core registry and no physics bridges, which is what lean scene
+ * entries rely on. Full scene entries inject `getDefaultSceneRuntimeComposition`.
+ */
+export interface SceneRuntimeComposition<
+    R extends ComponentRegistry = Record<string, never>,
+> {
+    /** Registry profile used when `SceneOptions.profile` is omitted. */
+    readonly defaultProfile?: SceneRuntimeProfile<R>;
+    /**
+     * Builds the physics bridges the resolved profile needs. The kernel calls
+     * this once after the ECS world exists and never imports a physics package.
+     */
+    readonly createPhysicsBridges?: (
+        input: SceneRuntimePhysicsBridgeInput
+    ) => SceneRuntimePhysicsBridgeSelection;
+}
+
+const EMPTY_PHYSICS_BRIDGES: SceneRuntimePhysicsBridgeSelection = Object.freeze({
+    bridge3D: null,
+    bridge2D: null,
+});
 
 const resolveProfilerPhase = (
     phase: SystemPhase
@@ -72,9 +147,15 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
     readonly renderRuntime: SceneRenderRuntime;
     readonly snapshots: SceneSnapshotRuntime;
     readonly lifecycle: SceneLifecycleRuntime;
-    readonly physicsBridge3D: PhysicsBridge3D | null;
-    readonly physicsBridge2D: PhysicsBridge2D | null;
+    readonly physicsBridge3D: SceneRuntimePhysicsBridge | null;
+    readonly physicsBridge2D: SceneRuntimePhysicsBridge | null;
     readonly profiler: SceneRuntimeProfiler;
+    /**
+     * Render families the resolved registry can produce. Computed once here so
+     * the render runtime can skip collectors that are provably empty (a 2D
+     * registry has no mesh renderers, lights, particles, lines or billboards).
+     */
+    readonly renderCapabilities: SceneRenderCapabilities;
 
     private readonly _executePhaseCallback: (phase: SystemPhase, delta: number) => void;
     private readonly _fixedUpdateActorsCallback: (delta: number) => void;
@@ -101,10 +182,15 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
         const ambientLight = resolveSceneAmbientLight(sceneOptions.ambientLight);
         const skyLight = resolveSceneSkyLight(sceneOptions.skyLight);
         const groundLight = resolveSceneGroundLight(sceneOptions.groundLight);
-        const registry = resolveSceneRegistryFromProfile(sceneOptions.profile, {
-            registry: sceneOptions.registry ?? ({} as R),
-        }) as RuntimeRegistry<R>;
+        const registry = resolveSceneRegistryFromProfileWithFallback(
+            sceneOptions.profile,
+            sceneOptions.composition?.defaultProfile ?? getCoreSceneRuntimeProfile<R>(),
+            {
+                registry: sceneOptions.registry ?? ({} as R),
+            }
+        ) as RuntimeRegistry<R>;
         const componentCatalog = new SceneComponentCatalog(registry);
+        this.renderCapabilities = resolveSceneRenderCapabilities(registry);
 
         const ctx = getOrCreateGLContext(this.gl, this.canvas);
 
@@ -139,6 +225,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             defaultClearColor,
             planning: sceneOptions.renderPlanning,
             pipeline: sceneOptions.renderPipeline,
+            capabilities: this.renderCapabilities,
             stateCache: ctx.state,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
@@ -160,40 +247,20 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             sceneOptions.profiler === true ||
             (typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null);
 
-        // Determine which physics bridge(s) to create based on the scene profile.
-        // 2D profile → 2D bridge only, mixed profile → both bridges,
-        // everything else (3D / full / core) → 3D bridge only.
-        const bridgeSelection = resolvePhysicsBridgesForProfile(sceneOptions.profile?.id);
+        // Physics bridges are supplied by the injected composition. Full scene
+        // entries install today's profile-selected 3D/2D bridges; lean entries
+        // inject nothing, so no physics package reaches their module graph.
+        const physicsBridges =
+            sceneOptions.composition?.createPhysicsBridges?.({
+                world: this.world,
+                profileId: sceneOptions.profile?.id,
+                enableProfiler: profilerRequested,
+                physicsBridgeOptions: options.physicsBridge,
+                physicsBridge2DOptions: options.physicsBridge2D,
+            }) ?? EMPTY_PHYSICS_BRIDGES;
 
-        this.physicsBridge3D = bridgeSelection.bridge3D
-            ? new PhysicsBridge3D(
-                  this.world,
-                  profilerRequested
-                      ? {
-                            ...options.physicsBridge,
-                            worldConfig: {
-                                ...options.physicsBridge?.worldConfig,
-                                enableProfiler: true,
-                            },
-                        }
-                      : options.physicsBridge
-              )
-            : null;
-
-        this.physicsBridge2D = bridgeSelection.bridge2D
-            ? new PhysicsBridge2D(
-                  this.world,
-                  profilerRequested
-                      ? {
-                            ...options.physicsBridge2D,
-                            worldConfig: {
-                                ...options.physicsBridge2D?.worldConfig,
-                                enableProfiler: true,
-                            },
-                        }
-                      : options.physicsBridge2D
-              )
-            : null;
+        this.physicsBridge3D = physicsBridges.bridge3D;
+        this.physicsBridge2D = physicsBridges.bridge2D;
 
         const profilerOptions: SceneRuntimeProfilerOptions =
             typeof sceneOptions.profiler === 'object' && sceneOptions.profiler !== null
@@ -270,7 +337,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                     // Attach physics profiler stats from whichever bridge is active
                     const activeBridge3D = this.physicsBridge3D;
                     if (activeBridge3D) {
-                        const physicsProfiler = activeBridge3D.physicsWorld.getProfiler();
+                        const physicsProfiler = activeBridge3D.physicsWorld?.getProfiler?.();
                         if (physicsProfiler) {
                             this.profiler.attachPhysicsStats({
                                 stepMs: physicsProfiler.stepTime,
@@ -281,7 +348,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                     }
                     const activeBridge2D = this.physicsBridge2D;
                     if (activeBridge2D) {
-                        const physicsProfiler = activeBridge2D.physicsWorld.getProfiler();
+                        const physicsProfiler = activeBridge2D.physicsWorld?.getProfiler?.();
                         if (physicsProfiler) {
                             this.profiler.attachPhysicsStats({
                                 stepMs: physicsProfiler.stepTime,
@@ -294,25 +361,29 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
                 },
             },
             ...baseLoopSystems,
-            // 3D physics bridge (active for 3D and full profiles)
+            // 3D physics bridge (injected by the full composition)
             ...(this.physicsBridge3D
                 ? [
                       {
                           id: this.physicsBridge3D.id,
-                          beforeUpdate: (ctx: any) => this.physicsBridge3D!.beforeUpdate(ctx),
-                          fixedUpdate: (ctx: any) => this.physicsBridge3D!.fixedUpdate(ctx),
-                          dispose: () => this.physicsBridge3D!.dispose(),
+                          beforeUpdate: (ctx: any) =>
+                              this.physicsBridge3D?.beforeUpdate?.(ctx),
+                          fixedUpdate: (ctx: any) =>
+                              this.physicsBridge3D?.fixedUpdate?.(ctx),
+                          dispose: () => this.physicsBridge3D?.dispose?.(),
                       },
                   ]
                 : []),
-            // 2D physics bridge (active for 2D profile)
+            // 2D physics bridge (injected by the full composition)
             ...(this.physicsBridge2D
                 ? [
                       {
                           id: this.physicsBridge2D.id,
-                          beforeUpdate: (ctx: any) => this.physicsBridge2D!.beforeUpdate(ctx),
-                          fixedUpdate: (ctx: any) => this.physicsBridge2D!.fixedUpdate(ctx),
-                          dispose: () => this.physicsBridge2D!.dispose(),
+                          beforeUpdate: (ctx: any) =>
+                              this.physicsBridge2D?.beforeUpdate?.(ctx),
+                          fixedUpdate: (ctx: any) =>
+                              this.physicsBridge2D?.fixedUpdate?.(ctx),
+                          dispose: () => this.physicsBridge2D?.dispose?.(),
                       },
                   ]
                 : []),
