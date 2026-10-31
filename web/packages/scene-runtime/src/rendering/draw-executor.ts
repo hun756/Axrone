@@ -1,4 +1,5 @@
 import type { LightingUniformValueMap } from '@axrone/lighting';
+import { Mat4 } from '@axrone/numeric';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneFogState } from '../fog-state';
 import type { SceneLightingState } from '../lighting-collector';
@@ -94,8 +95,57 @@ interface SceneDrawStateCache {
     readonly fogEnabled: boolean;
 }
 
+/**
+ * Per-shader uniform bookkeeping for the current frame.
+ *
+ * Frame, lighting, fog and "no skinning" uniform values only change once per
+ * frame (per renderer lighting flag for `u_ReceiveLighting`). Without this
+ * cache every draw re-wrote the same ~40 uniform groups, which dominates
+ * submission cost for large scenes that share one material and shader.
+ *
+ * The declared-uniform flags are static per shader program and let the
+ * executor skip binders whose target uniforms the program never samples.
+ */
+interface SceneShaderUniformState {
+    frame: number;
+    cameraFrame: SceneCameraFrameState | null;
+    lightingValues: LightingUniformValueMap | undefined;
+    fog: SceneDrawExecutorContext['fog'] | null;
+    /**
+     * Last lighting variant written to the current program this frame:
+     * 0 = none, 1 = `receiveLighting: true`, 2 = `receiveLighting: false`.
+     * Only the most recent write is tracked because GL uniforms hold one
+     * value per program; alternating renderers must rewrite on every switch.
+     */
+    lightingWrittenFlag: number;
+    frameUniformsWritten: boolean;
+    fogWritten: boolean;
+    declaresMvp: boolean;
+    declaresSkinning: boolean;
+}
+
+const createShaderUniformState = (shader: SceneShaderResource): SceneShaderUniformState => ({
+    frame: -1,
+    cameraFrame: null,
+    lightingValues: undefined,
+    fog: null,
+    lightingWrittenFlag: 0,
+    frameUniformsWritten: false,
+    fogWritten: false,
+    declaresMvp: shader.uniformLocations.has('u_MVP'),
+    declaresSkinning:
+        shader.uniformLocations.has('u_Skinning') ||
+        shader.uniformLocations.has('u_SkinJointCount') ||
+        shader.uniformLocations.has('u_JointMatrices'),
+});
+
 export class SceneDrawExecutor {
     private _lastDrawState: SceneDrawStateCache | null = null;
+    private readonly _shaderUniformStates = new WeakMap<
+        SceneShaderResource,
+        SceneShaderUniformState
+    >();
+    private readonly _mvpScratch = new Mat4();
 
     constructor(private readonly _dependencies: SceneDrawExecutorDependencies) {}
 
@@ -166,33 +216,38 @@ export class SceneDrawExecutor {
             };
         }
 
-        this._dependencies.frameUniformBinder.apply(shader, {
-            modelMatrix: item.transform.worldMatrix,
-            viewMatrix: context.cameraFrame.viewMatrix,
-            projectionMatrix: context.cameraFrame.projectionMatrix,
-            viewProjectionMatrix: context.cameraFrame.viewProjectionMatrix,
-            cameraPosition: context.cameraFrame.position,
-            elapsedSeconds: context.elapsedSeconds,
-            deltaSeconds: context.deltaSeconds,
-            frame: context.frame,
-            viewportWidth: context.viewportWidth,
-            viewportHeight: context.viewportHeight,
-        });
-        this._dependencies.lightingUniformBinder.apply(
-            shader,
-            item.renderer,
-            context.lighting,
-            context.lightingValues
-        );
-        this._dependencies.fogUniformBinder.apply(shader, context.fog);
-        this._dependencies.skinningUniformBinder.apply(shader, item.renderer);
+        const uniformState = this._prepareUniformState(shader, context);
+        this._applyFrameUniforms(shader, item, context, uniformState);
 
-        this._dependencies.materialTextureBinder.bind(
-            shader,
-            material,
-            this._dependencies.resources,
-            this._dependencies.textureUniformSetter
-        );
+        const lightingFlag = item.renderer.receiveLighting ? 1 : 2;
+        if (uniformState.lightingWrittenFlag !== lightingFlag) {
+            this._dependencies.lightingUniformBinder.apply(
+                shader,
+                item.renderer,
+                context.lighting,
+                context.lightingValues
+            );
+            uniformState.lightingWrittenFlag = lightingFlag;
+        }
+
+        if (!uniformState.fogWritten) {
+            this._dependencies.fogUniformBinder.apply(shader, context.fog);
+            uniformState.fogWritten = true;
+        }
+
+        if (uniformState.declaresSkinning) {
+            this._dependencies.skinningUniformBinder.apply(shader, item.renderer);
+        }
+
+        const textured = this._materialHasTextures(material);
+        if (textured) {
+            this._dependencies.materialTextureBinder.bind(
+                shader,
+                material,
+                this._dependencies.resources,
+                this._dependencies.textureUniformSetter
+            );
+        }
 
         for (const [name, value] of material.uniforms) {
             this._dependencies.uniformWriter.write(shader, name, value);
@@ -225,7 +280,93 @@ export class SceneDrawExecutor {
             indexCount: mesh.indexCount,
             vertexCount: mesh.vertexCount,
         });
-        this._dependencies.materialTextureBinder.unbind();
+        if (textured) {
+            this._dependencies.materialTextureBinder.unbind();
+        }
+    }
+
+    private _prepareUniformState(
+        shader: SceneShaderResource,
+        context: SceneDrawExecutorContext
+    ): SceneShaderUniformState {
+        let state = this._shaderUniformStates.get(shader);
+        if (!state) {
+            state = createShaderUniformState(shader);
+            this._shaderUniformStates.set(shader, state);
+        }
+
+        // Frame-scoped uniforms are only valid while the camera, lighting and
+        // fog inputs are unchanged. A new camera frame object (or explicit
+        // frame change) resets every group.
+        if (
+            state.frame !== context.frame ||
+            state.cameraFrame !== context.cameraFrame ||
+            state.lightingValues !== context.lightingValues ||
+            state.fog !== context.fog
+        ) {
+            state.frame = context.frame;
+            state.cameraFrame = context.cameraFrame;
+            state.lightingValues = context.lightingValues;
+            state.fog = context.fog;
+            state.lightingWrittenFlag = 0;
+            state.frameUniformsWritten = false;
+            state.fogWritten = false;
+        }
+
+        return state;
+    }
+
+    /**
+     * Writes frame uniforms. Only the first draw of a shader in a frame pays
+     * for the full update; subsequent draws only refresh the model matrix
+     * (and MVP when the program declares it) because every other frame
+     * uniform is identical across draws.
+     */
+    private _applyFrameUniforms(
+        shader: SceneShaderResource,
+        item: SceneRenderItem,
+        context: SceneDrawExecutorContext,
+        state: SceneShaderUniformState
+    ): void {
+        const modelMatrix = item.transform.worldMatrix;
+
+        if (!state.frameUniformsWritten) {
+            this._dependencies.frameUniformBinder.apply(shader, {
+                modelMatrix,
+                viewMatrix: context.cameraFrame.viewMatrix,
+                projectionMatrix: context.cameraFrame.projectionMatrix,
+                viewProjectionMatrix: context.cameraFrame.viewProjectionMatrix,
+                cameraPosition: context.cameraFrame.position,
+                elapsedSeconds: context.elapsedSeconds,
+                deltaSeconds: context.deltaSeconds,
+                frame: context.frame,
+                viewportWidth: context.viewportWidth,
+                viewportHeight: context.viewportHeight,
+            });
+            state.frameUniformsWritten = true;
+            return;
+        }
+
+        this._dependencies.uniformWriter.write(shader, 'u_Model', modelMatrix);
+
+        if (state.declaresMvp) {
+            Mat4.multiply(
+                context.cameraFrame.viewProjectionMatrix,
+                modelMatrix,
+                this._mvpScratch
+            );
+            this._dependencies.uniformWriter.write(shader, 'u_MVP', this._mvpScratch);
+        }
+    }
+
+    /**
+     * `bind`/`unbind` are only meaningful when the material has texture
+     * bindings. Reading the live map size keeps this correct even when a
+     * material's textures are mutated in place (setTexture/removeTexture)
+     * without replacing the resource object.
+     */
+    private _materialHasTextures(material: SceneMaterialResource): boolean {
+        return material.textureBindings.size > 0;
     }
 
     private _resolveShader(
