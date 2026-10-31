@@ -168,6 +168,12 @@ const toBorder = (
     priority: 100,
     executeInEditMode: true,
     singleton: false,
+    // Sprites are the highest-cardinality component in 2D scenes. The base
+    // Component tracks every instance in a global WeakRef set with an O(n)
+    // sweep every 100 registrations, which made 50k-sprite construction
+    // quadratic. Transform/Hierarchy already opt out; sprite renderers carry
+    // no debug-tooling contract, so they opt out too.
+    trackInstances: false,
 })
 export class SpriteRenderer extends Component {
     private _textureId: string | null;
