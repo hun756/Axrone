@@ -1,8 +1,6 @@
-import {
-    createSceneShaderDefinitionFromEffect,
-    type RenderShaderEffectDefinition,
-    type SceneShaderDefinition,
-} from '@axrone/scene-runtime';
+import { createSceneShaderDefinitionFromEffect } from '@axrone/scene-runtime/scene-facade';
+import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
+import type { SceneShaderDefinition } from '@axrone/scene-runtime/types';
 
 const UNLIT_COLOR_SHADER_EFFECT = {
     format: 'axrone.shader/effect',

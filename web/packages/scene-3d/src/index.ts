@@ -41,4 +41,4 @@ export {
 	WrapMode,
 } from '@axrone/render-webgl2';
 export { createUnlitColorShaderDefinition } from './scene-default-shaders';
-export { Scene } from './scene';
+export { Scene } from './scene-full';

@@ -11,7 +11,6 @@ import {
     type CameraConfig,
 } from '@axrone/scene-runtime/scene-facade';
 import { type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
-import { getDefaultSceneRuntimeProfile } from './profile';
 import {
     Scene3DActorRuntime,
     type SceneProfilerProbe,
@@ -19,14 +18,19 @@ import {
     type SceneRenderableActorInstance,
 } from './scene-3d-actor-runtime';
 
+/**
+ * Base 3D scene facade.
+ *
+ * The base class installs no default profile and no runtime composition, so it
+ * stays free of physics packages and the full built-in manifest chain. The
+ * root entry exports the full-composition subclass from `./scene-full`; the
+ * lean entry exports the lean-profile subclass from `./scene-lean`.
+ */
 export class Scene<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> {
     private readonly _actors3d: Scene3DActorRuntime<R>;
 
     constructor(options: SceneOptions<R> = {}) {
-        super({
-            ...options,
-            profile: options.profile ?? getDefaultSceneRuntimeProfile<R>(),
-        });
+        super(options);
         this._actors3d = new Scene3DActorRuntime({
             actors: this._kernel.actors,
         });
