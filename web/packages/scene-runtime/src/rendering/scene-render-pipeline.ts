@@ -329,6 +329,21 @@ interface ActiveExecutionState {
     readonly primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
 }
 
+/**
+ * Internal link from a built primitive back to its render item so the draw
+ * pass can skip the per-primitive string-keyed lookup. Falls back to the
+ * lookup map for primitives that were not produced by this pipeline.
+ */
+const PRIMITIVE_RENDER_ITEM: unique symbol = Symbol('axrone.scenePrimitiveRenderItem');
+
+type ScenePrimitiveWithItem = RenderPrimitiveInstance & {
+    [PRIMITIVE_RENDER_ITEM]?: SceneRenderItem;
+};
+
+interface MutablePrimitiveMatrices {
+    worldMatrix: RenderPrimitiveInstance['worldMatrix'];
+}
+
 export class SceneRenderPipeline {
     private readonly _primitiveCache = new ScenePrimitiveCache();
     private readonly _options: SceneRenderPipelineOptions;
@@ -407,14 +422,18 @@ export class SceneRenderPipeline {
 
         const drawCallsBefore = this._activeExecution.frameState.drawCalls;
         const primitiveLookup = this._activeExecution.primitiveLookup;
-        for (const primitive of pass.items?.toArray() ?? []) {
-            const item = primitiveLookup.get(primitive.id);
-            if (item) {
-                this._options.drawExecutor.execute(
-                    item,
-                    this._activeExecution.drawContext,
-                    this._activeExecution.frameState
-                );
+        const passItems = pass.items;
+        if (passItems) {
+            for (let index = 0; index < passItems.length; index += 1) {
+                const primitive = passItems.at(index) as ScenePrimitiveWithItem;
+                const item = primitive[PRIMITIVE_RENDER_ITEM] ?? primitiveLookup.get(primitive.id);
+                if (item) {
+                    this._options.drawExecutor.execute(
+                        item,
+                        this._activeExecution.drawContext,
+                        this._activeExecution.frameState
+                    );
+                }
             }
         }
 
@@ -446,6 +465,8 @@ export class SceneRenderPipeline {
                 meshRevision: params.meshRevision!,
                 shaderRevision: params.shaderRevision ?? 0,
                 build: (out, lookup) => this._buildPrimitives(params, out, lookup),
+                update: (primitives, renderItems) =>
+                    this._refreshPrimitiveMatrices(primitives, renderItems),
             });
             primitives = cached.primitives;
             primitiveLookup = cached.lookup;
@@ -564,7 +585,7 @@ export class SceneRenderPipeline {
             const primitiveId = `scene-primitive:${item.renderer.id}`;
             const material = createMaterialSnapshot(item, params.resolveMaterial(item.renderer));
 
-            primitives.push({
+            const primitive: ScenePrimitiveWithItem = {
                 id: primitiveId,
                 meshId: item.renderer.meshId ?? `scene-mesh:${item.renderer.id}`,
                 material,
@@ -573,8 +594,29 @@ export class SceneRenderPipeline {
                 sortBias: item.renderer.renderOrder,
                 visible: item.renderer.visible,
                 receivesLighting: item.renderer.receiveLighting,
-            });
+            };
+            primitive[PRIMITIVE_RENDER_ITEM] = item;
+            primitives.push(primitive);
             lookup.set(primitiveId, item);
+        }
+    }
+
+    /**
+     * Refreshes only the world-matrix references of retained primitives.
+     *
+     * The transform keeps the same matrix instance across updates, but forcing
+     * the getter also recomputes it if the transform moved this frame so the
+     * primitive never holds stale data. Everything else (ids, material
+     * snapshots, bounds, flags) is unchanged by a transform-only update.
+     */
+    private _refreshPrimitiveMatrices(
+        primitives: readonly RenderPrimitiveInstance[],
+        renderItems: readonly SceneRenderItem[]
+    ): void {
+        const count = Math.min(primitives.length, renderItems.length);
+        for (let index = 0; index < count; index += 1) {
+            (primitives[index] as MutablePrimitiveMatrices).worldMatrix =
+                renderItems[index]!.transform.worldMatrix;
         }
     }
 

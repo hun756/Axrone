@@ -1,4 +1,4 @@
-import { Mat4 } from '@axrone/numeric';
+import { Mat4, Vec3 } from '@axrone/numeric';
 import { describe, expect, it, vi } from 'vitest';
 import { Transform } from '@axrone/ecs-runtime';
 import { MeshRenderer } from '../components/mesh-renderer';
@@ -486,6 +486,102 @@ describe('SceneRenderPipeline', () => {
         const fifth = renderFrame(2, 1);
         expect(fifth.primitiveCacheHit).toBe(false);
         expect(resolveMaterial).toHaveBeenCalledTimes(4);
+
+        pipeline.dispose();
+    });
+
+    it('refreshes retained primitives for transform-only frames without re-resolving materials', () => {
+        const gl = createMockGL();
+        const execute = vi.fn();
+        const pipeline = new SceneRenderPipeline({
+            gl,
+            drawExecutor: {
+                execute,
+            },
+        });
+
+        const transform = new Transform();
+        const renderer = new MeshRenderer({
+            meshId: 'mesh:cube',
+            materialId: 'material:cube',
+            passId: 'main',
+        });
+        const renderItems = [{ transform, renderer }];
+        const renderPass = {
+            id: 'main',
+            rendererPassId: 'main',
+            clearFlags: ['color', 'depth'],
+            clearColor: null,
+            clearDepth: null,
+        } as any;
+        const cameraFrame = {
+            camera: {
+                id: 'camera:main',
+                clearFlags: ['color', 'depth'],
+                clearColor: [0.1, 0.2, 0.3, 1],
+                clearDepth: 1,
+                near: 0.1,
+                far: 100,
+            },
+            viewMatrix: new Mat4(),
+            projectionMatrix: new Mat4(),
+            viewProjectionMatrix: new Mat4(),
+            camera3D: {
+                frustum: {},
+            },
+            position: [0, 0, 5],
+        } as any;
+        const lighting = {
+            stats: {
+                selectedDirectionalCount: 0,
+                selectedPointCount: 0,
+                selectedSpotCount: 0,
+            },
+        } as any;
+        const resolveMaterial = vi.fn(() => ({
+            materialId: 'material:cube',
+            shadingModel: 'pbr' as const,
+            alphaMode: 'opaque' as const,
+            transparent: false,
+        }));
+
+        const renderFrame = () =>
+            pipeline.render({
+                actors: [{} as any],
+                frame: 1,
+                deltaSeconds: 1 / 60,
+                viewportWidth: 640,
+                viewportHeight: 360,
+                cameraFrame,
+                lighting,
+                renderPass,
+                drawContext: {} as any,
+                frameState: new SceneRenderFrameState().begin(1),
+                renderItems,
+                materialRevision: 1,
+                meshRevision: 1,
+                shaderRevision: 0,
+                resolveBounds: () => null,
+                resolveMaterial,
+            });
+
+        renderFrame();
+        expect(resolveMaterial).toHaveBeenCalledTimes(1);
+
+        // Dynamic frame: only the transform revision changes.
+        transform.position = new Vec3(3, 0, 0);
+        const dynamic = renderFrame();
+
+        expect(dynamic.primitiveCacheHit).toBe(false);
+        // No rebuild: material snapshot/ids are retained.
+        expect(resolveMaterial).toHaveBeenCalledTimes(1);
+        expect(execute).toHaveBeenCalledTimes(2);
+
+        // The sequence continues to render after the incremental update.
+        transform.position = new Vec3(4, 0, 0);
+        renderFrame();
+        expect(resolveMaterial).toHaveBeenCalledTimes(1);
+        expect(execute).toHaveBeenCalledTimes(3);
 
         pipeline.dispose();
     });

@@ -233,6 +233,17 @@ export interface ScenePrimitiveCacheParams {
         primitives: RenderPrimitiveInstance[],
         lookup: Map<string, SceneRenderItem>
     ) => void;
+    /**
+     * Cheap refresh for the common "only transforms changed" case. When item
+     * identities, pass, viewport and registry revisions are unchanged and no
+     * renderer revision was bumped, primitives keep their ids, material
+     * snapshots and bounds; only the world-matrix references need refreshing.
+     * Providing it avoids string/object churn on every dynamic frame.
+     */
+    readonly update?: (
+        primitives: readonly RenderPrimitiveInstance[],
+        renderItems: readonly SceneRenderItem[]
+    ) => void;
 }
 
 export interface ScenePrimitiveCacheResult {
@@ -295,6 +306,16 @@ export class ScenePrimitiveCache {
             return entry;
         }
 
+        if (params.update && this._canUpdateInPlace(entry, params)) {
+            // Structure, pass, viewport and registry revisions are unchanged
+            // and no renderer was bumped — only transforms moved. Refresh the
+            // retained primitives instead of rebuilding ids/snapshots/bounds.
+            params.update(entry.primitives, params.renderItems);
+            this._snapshotItems(entry, params.renderItems);
+            entry.hit = false;
+            return entry;
+        }
+
         entry.primitives.length = 0;
         entry.lookup.clear();
         params.build(entry.primitives, entry.lookup);
@@ -339,6 +360,42 @@ export class ScenePrimitiveCache {
                 entry.transforms[index] !== item.transform ||
                 entry.renderers[index] !== item.renderer
             ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private _canUpdateInPlace(
+        entry: ScenePrimitiveCacheEntry,
+        params: ScenePrimitiveCacheParams
+    ): boolean {
+        if (
+            entry.renderPassRef !== params.renderPass ||
+            entry.viewportWidth !== params.viewportWidth ||
+            entry.viewportHeight !== params.viewportHeight ||
+            entry.materialRevision !== params.materialRevision ||
+            entry.meshRevision !== params.meshRevision ||
+            entry.shaderRevision !== params.shaderRevision ||
+            entry.itemCount !== params.renderItems.length ||
+            entry.primitives.length !== params.renderItems.length
+        ) {
+            return false;
+        }
+
+        for (let index = 0; index < params.renderItems.length; index += 1) {
+            const item = params.renderItems[index]!;
+            if (
+                entry.transforms[index] !== item.transform ||
+                entry.renderers[index] !== item.renderer
+            ) {
+                return false;
+            }
+            // Renderer revisions drive mesh/material/visibility/sort changes,
+            // which require a rebuild. Transform revisions only affect the
+            // world matrix, which the update callback refreshes.
+            if (entry.rendererRevisions[index] !== item.renderer.revision) {
                 return false;
             }
         }
