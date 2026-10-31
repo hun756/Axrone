@@ -29,9 +29,21 @@ import type { SceneShaderResource } from '../shader-registry';
 import { createSprite2DShaderDefinition } from '../sprite-2d-shader';
 import { SceneSpriteRenderItemCollector } from './sprite-render-item-collector';
 import { SpriteInstancedRenderer } from './sprite-instanced-renderer';
+import { SpriteInstanceBufferRenderer } from './sprite-instance-buffer-renderer';
+import { SceneSpriteInstanceRegistry } from './sprite-instance-registry';
 import type { SceneUniformWriteTarget } from '../uniform-writer';
 
 const MIN_CLIP_W = 1e-6;
+
+/**
+ * The general sprite batch builder splits at 2048 quads per batch. Below that
+ * actor count the cached batch path is already a single draw, so the derived
+ * instance registry only engages once a pass would otherwise split batches or
+ * where per-frame submission churn dominates. Small scenes keep their existing
+ * behaviour (and draw statistics) untouched.
+ */
+const DIRECT_INSTANCE_MIN_ACTORS = 2048;
+const EMPTY_WARNINGS: readonly string[] = Object.freeze([]);
 
 const projectWorldPoint = (
     matrix: ArrayLike<number>,
@@ -184,6 +196,9 @@ export class SceneSpriteBatchRuntime {
     private readonly _missStreak = new Map<string, number>();
     private _instancedRenderer: SpriteInstancedRenderer | null = null;
     private _instancedUnavailable = false;
+    private _instanceBufferRenderer: SpriteInstanceBufferRenderer | null = null;
+    private _directInstanceUnavailable = false;
+    private readonly _instanceRegistries = new Map<string, SceneSpriteInstanceRegistry>();
     private readonly _replayWarnings: string[] = [];
     private readonly _cacheEnabled: boolean;
     private readonly _worldPointScratch = new Float32Array(3);
@@ -217,6 +232,15 @@ export class SceneSpriteBatchRuntime {
         }
 
         const passId = params.renderPass.rendererPassId;
+
+        // Derived fast path: homogeneous passes with a stable actor/component
+        // graph stream straight into persistent instance buffers and skip the
+        // per-frame collect/sort/submission work entirely.
+        const direct = this._tryRenderDirectInstances(params, passId);
+        if (direct) {
+            return direct;
+        }
+
         let cameraKey = '';
         let budgetTotal = -1;
         let budgetRemaining = -1;
@@ -469,6 +493,11 @@ export class SceneSpriteBatchRuntime {
         this._instancedRenderer?.clear();
         this._instancedRenderer = null;
         this._instancedUnavailable = false;
+
+        this._instanceBufferRenderer?.clear();
+        this._instanceBufferRenderer = null;
+        this._directInstanceUnavailable = false;
+        this._instanceRegistries.clear();
 
         if (this._defaultShader) {
             this._shaderFactory.delete(this._defaultShader);
@@ -890,6 +919,133 @@ export class SceneSpriteBatchRuntime {
         }
 
         return null;
+    }
+
+    /**
+     * Direct homogeneous instance path. Returns `null` when the pass is not
+     * eligible so the caller can fall back to the general collect/build path.
+     */
+    private _tryRenderDirectInstances(
+        params: SceneSpriteBatchRuntimeRenderParams,
+        passId: string
+    ): SceneSpriteBatchRuntimeRenderStats | null {
+        if (this._directInstanceUnavailable) {
+            return null;
+        }
+
+        const actors = params.actors;
+        if (actors.length < DIRECT_INSTANCE_MIN_ACTORS) {
+            return null;
+        }
+
+        let renderer = this._instanceBufferRenderer;
+        if (!renderer) {
+            try {
+                renderer = new SpriteInstanceBufferRenderer({
+                    gl: this._options.gl,
+                    resources: this._options.resources,
+                    renderStateApplier: this._options.renderStateApplier,
+                    stateCache: this._options.stateCache,
+                });
+                this._instanceBufferRenderer = renderer;
+            } catch {
+                this._directInstanceUnavailable = true;
+                return null;
+            }
+        }
+
+        let registry = this._instanceRegistries.get(passId);
+        if (!registry) {
+            registry = new SceneSpriteInstanceRegistry();
+            this._instanceRegistries.set(passId, registry);
+        }
+
+        let status = registry.sync(actors, passId);
+        if (status === 'ineligible') {
+            return null;
+        }
+        if (status === 'empty') {
+            registry.commit();
+            return this._createEmptyDirectStats();
+        }
+
+        if (!registry.refresh(params.cameraFrame)) {
+            // A component set changed between the structural snapshot and this
+            // frame; rebuild once and retry. If it still cannot settle, fall
+            // back to the general path for this frame.
+            status = registry.sync(actors, passId);
+            if (status === 'ineligible') {
+                return null;
+            }
+            if (status === 'empty') {
+                registry.commit();
+                return this._createEmptyDirectStats();
+            }
+            if (!registry.refresh(params.cameraFrame)) {
+                return null;
+            }
+        }
+
+        if (registry.rebuiltThisFrame) {
+            this._dropCacheEntry(passId);
+        }
+
+        const textureId = registry.textureId;
+        if (!textureId) {
+            return null;
+        }
+
+        let drawCount = registry.drawCount;
+        if (
+            params.transparentBudget &&
+            drawCount > params.transparentBudget.remaining
+        ) {
+            drawCount = Math.max(0, Math.floor(params.transparentBudget.remaining));
+        }
+        if (drawCount <= 0) {
+            registry.commit();
+            return this._createEmptyDirectStats();
+        }
+
+        if (!registry.cacheHit) {
+            // Upload the whole draw-ordered stream so a later frame with a
+            // larger transparent budget can draw the tail without re-uploading.
+            renderer.upload(
+                registry.transformData,
+                registry.staticData,
+                registry.drawCount,
+                registry.staticsDirty
+            );
+        }
+        const cacheHit = registry.cacheHit;
+        registry.commit();
+
+        if (params.frameState.tracksActiveRenderers) {
+            registry.markActive(params.frameState);
+        }
+
+        const drawn = renderer.draw(textureId, drawCount, params);
+        if (drawn <= 0) {
+            return null;
+        }
+
+        return Object.freeze({
+            drawnSpriteCount: drawn,
+            spriteBatchCount: 1,
+            skippedSpriteCount: 0,
+            warnings: EMPTY_WARNINGS,
+            cacheHit,
+        });
+    }
+
+    private _createEmptyDirectStats(): SceneSpriteBatchRuntimeRenderStats {
+        return Object.freeze({
+            drawnSpriteCount: 0,
+            spriteBatchCount: 0,
+            skippedSpriteCount: 0,
+            warnings: EMPTY_WARNINGS,
+            cacheHit: true,
+        });
     }
 
     private _tryDrawInstanced(
@@ -1411,7 +1567,7 @@ export class SceneSpriteBatchRuntime {
             return;
         }
 
-        if (Rect.equals(this._activeClipRect, clampedClipRect)) {
+        if (this._activeClipRect && Rect.equals(this._activeClipRect, clampedClipRect)) {
             return;
         }
 
