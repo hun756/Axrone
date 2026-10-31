@@ -11,7 +11,7 @@ const FLOATS_PER_INSTANCE = 18;
 const INSTANCE_STRIDE = FLOATS_PER_INSTANCE * 4;
 const INSTANCE_INDEX_COUNT = 6;
 
-const VERTEX_SOURCE = `#version 300 es
+export const SPRITE_INSTANCED_VERTEX_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_Corner;
 layout(location = 1) in vec4 a_Affine;
 layout(location = 2) in vec2 a_Translation;
@@ -36,7 +36,7 @@ void main() {
 }
 `;
 
-const FRAGMENT_SOURCE = `#version 300 es
+export const SPRITE_INSTANCED_FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
 
 uniform sampler2D u_MainTex;
@@ -49,6 +49,51 @@ void main() {
     o_Color = texture(u_MainTex, v_UV) * v_Color;
 }
 `;
+
+/**
+ * Compiles the shared instanced-sprite program. Both the legacy
+ * submission-driven renderer and the registry-backed buffer renderer use it so
+ * the vertex layout stays a single contract.
+ */
+export const compileSpriteInstancedProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
+    const compile = (type: number, source: string): WebGLShader => {
+        const shader = gl.createShader(type);
+        if (!shader) {
+            throw new Error('Failed to create instanced sprite shader');
+        }
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            const info = gl.getShaderInfoLog(shader) ?? 'unknown compile error';
+            gl.deleteShader(shader);
+            throw new Error(`Instanced sprite shader compile failed: ${info}`);
+        }
+        return shader;
+    };
+
+    const vertex = compile(gl.VERTEX_SHADER, SPRITE_INSTANCED_VERTEX_SOURCE);
+    const fragment = compile(gl.FRAGMENT_SHADER, SPRITE_INSTANCED_FRAGMENT_SOURCE);
+    const program = gl.createProgram();
+    if (!program) {
+        gl.deleteShader(vertex);
+        gl.deleteShader(fragment);
+        throw new Error('Failed to create instanced sprite program');
+    }
+
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const info = gl.getProgramInfoLog(program) ?? 'unknown link error';
+        gl.deleteProgram(program);
+        throw new Error(`Instanced sprite program link failed: ${info}`);
+    }
+
+    return program;
+};
 
 export interface SpriteInstancedDrawParams {
     readonly renderPass: SceneRenderPassResource;
@@ -95,7 +140,7 @@ export class SpriteInstancedRenderer {
         this._resources = options.resources;
         this._renderStateApplier = options.renderStateApplier;
         this._stateCache = options.stateCache;
-        this._program = this._compileProgram(VERTEX_SOURCE, FRAGMENT_SOURCE);
+        this._program = compileSpriteInstancedProgram(gl);
 
         this._viewProjectionLocation = gl.getUniformLocation(this._program, 'u_ViewProjection');
         this._mainTextureLocation = gl.getUniformLocation(this._program, 'u_MainTex');
@@ -270,7 +315,7 @@ export class SpriteInstancedRenderer {
             data[offset + 14] = submission.color.r;
             data[offset + 15] = submission.color.g;
             data[offset + 16] = submission.color.b;
-            data[offset + 17] = submission.color.a;
+            data[offset + 17] = submission.color.a ?? 1;
         }
 
         const gl = this._gl;
@@ -292,46 +337,5 @@ export class SpriteInstancedRenderer {
         const gl = this._gl;
         gl.bindBuffer(gl.ARRAY_BUFFER, this._instanceBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, this._instanceData.byteLength, gl.DYNAMIC_DRAW);
-    }
-
-    private _compileProgram(vertexSource: string, fragmentSource: string): WebGLProgram {
-        const gl = this._gl;
-        const compile = (type: number, source: string): WebGLShader => {
-            const shader = gl.createShader(type);
-            if (!shader) {
-                throw new Error('Failed to create instanced sprite shader');
-            }
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                const info = gl.getShaderInfoLog(shader) ?? 'unknown compile error';
-                gl.deleteShader(shader);
-                throw new Error(`Instanced sprite shader compile failed: ${info}`);
-            }
-            return shader;
-        };
-
-        const vertex = compile(gl.VERTEX_SHADER, vertexSource);
-        const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
-        const program = gl.createProgram();
-        if (!program) {
-            gl.deleteShader(vertex);
-            gl.deleteShader(fragment);
-            throw new Error('Failed to create instanced sprite program');
-        }
-
-        gl.attachShader(program, vertex);
-        gl.attachShader(program, fragment);
-        gl.linkProgram(program);
-        gl.deleteShader(vertex);
-        gl.deleteShader(fragment);
-
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            const info = gl.getProgramInfoLog(program) ?? 'unknown link error';
-            gl.deleteProgram(program);
-            throw new Error(`Instanced sprite program link failed: ${info}`);
-        }
-
-        return program;
     }
 }
