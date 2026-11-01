@@ -81,6 +81,31 @@ const readTranslation = (registry: SceneSpriteInstanceRegistry, slot: number): [
     return [data[offset + 4]!, data[offset + 5]!];
 };
 
+const readTextureSlot = (registry: SceneSpriteInstanceRegistry, slot: number): number => {
+    const offset = slot * SPRITE_STATIC_FLOATS_PER_INSTANCE + 12;
+    return registry.staticData[offset]!;
+};
+
+const groupSlices = (registry: SceneSpriteInstanceRegistry): Array<{
+    start: number;
+    count: number;
+    ids: string[];
+}> => {
+    const slices: Array<{ start: number; count: number; ids: string[] }> = [];
+    for (let group = 0; group < registry.groupCount; group += 1) {
+        const start = registry.groupRanges[group * 2]!;
+        const count = registry.groupRanges[group * 2 + 1]!;
+        const idStart = registry.groupTextureOffsets[group]!;
+        const idEnd = registry.groupTextureOffsets[group + 1]!;
+        slices.push({
+            start,
+            count,
+            ids: registry.groupTextureIds.slice(idStart, idEnd) as string[],
+        });
+    }
+    return slices;
+};
+
 describe('SceneSpriteInstanceRegistry', () => {
     it('builds a homogeneous root pass and replays it untouched', () => {
         const frame = createCameraFrame(createOrthoCamera());
@@ -295,11 +320,8 @@ describe('SceneSpriteInstanceRegistry', () => {
         });
         const materialRegistry = new SceneSpriteInstanceRegistry();
         expect(materialRegistry.sync([materialActor], 'main')).toBe('ineligible');
-
-        const multiA = createSprite(0, 0, 'tex-a');
-        const multiB = createSprite(0, 0, 'tex-b');
-        const multiRegistry = new SceneSpriteInstanceRegistry();
-        expect(multiRegistry.sync([multiA.actor, multiB.actor], 'main')).toBe('ineligible');
+        // Ineligibility is cached for the same actor set/pass.
+        expect(materialRegistry.sync([materialActor], 'main')).toBe('ineligible');
 
         const masked = createSprite(0, 0);
         const mask = new SpriteMask({ size: [4, 4], shape: 'circle' });
@@ -321,8 +343,124 @@ describe('SceneSpriteInstanceRegistry', () => {
         });
         const sliceRegistry = new SceneSpriteInstanceRegistry();
         expect(sliceRegistry.sync([slicedActor], 'main')).toBe('ineligible');
+    });
 
-        // Ineligibility is cached for the same actor set/pass.
-        expect(multiRegistry.sync([multiA.actor, multiB.actor], 'main')).toBe('ineligible');
+    describe('multi-texture grouping', () => {
+        it('keeps a multi-texture pass eligible and batches it into one group', () => {
+            const frame = createCameraFrame(createOrthoCamera());
+            const sprites = [
+                createSprite(-2, 0, 'tex-a'),
+                createSprite(-1, 0, 'tex-b'),
+                createSprite(0, 0, 'tex-a'),
+                createSprite(1, 0, 'tex-c'),
+            ];
+            const registry = new SceneSpriteInstanceRegistry(16);
+            const actors = sprites.map((sprite) => sprite.actor);
+
+            expect(registry.sync(actors, 'main')).toBe('ready');
+            expect(registry.refresh(frame)).toBe(true);
+            expect(registry.drawCount).toBe(4);
+            expect(registry.groupCount).toBe(1);
+            expect(registry.textureId).toBeNull();
+            expect(groupSlices(registry)).toEqual([
+                { start: 0, count: 4, ids: ['tex-a', 'tex-b', 'tex-c'] },
+            ]);
+            // Slot ids are per-group assignment order, written to the stream.
+            expect(readTextureSlot(registry, 0)).toBe(0);
+            expect(readTextureSlot(registry, 1)).toBe(1);
+            expect(readTextureSlot(registry, 2)).toBe(0);
+            expect(readTextureSlot(registry, 3)).toBe(2);
+        });
+
+        it('splits into contiguous groups when the slot budget overflows', () => {
+            const frame = createCameraFrame(createOrthoCamera());
+            const sprites = [
+                createSprite(-3, 0, 'a'),
+                createSprite(-2, 0, 'b'),
+                createSprite(-1, 0, 'c'),
+                createSprite(0, 0, 'a'),
+                createSprite(1, 0, 'b'),
+            ];
+            const registry = new SceneSpriteInstanceRegistry(2);
+            const actors = sprites.map((sprite) => sprite.actor);
+
+            expect(registry.sync(actors, 'main')).toBe('ready');
+            registry.refresh(frame);
+            expect(groupSlices(registry)).toEqual([
+                { start: 0, count: 2, ids: ['a', 'b'] },
+                { start: 2, count: 2, ids: ['c', 'a'] },
+                { start: 4, count: 1, ids: ['b'] },
+            ]);
+        });
+
+        it('preserves the ordered stream across groups (contiguous, gapless)', () => {
+            const frame = createCameraFrame(createOrthoCamera());
+            const sprites: Array<{ actor: Actor }> = [];
+            const palette = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'];
+            for (let index = 0; index < 40; index += 1) {
+                sprites.push(createSprite(-19 + index, 0, palette[index % palette.length]!));
+            }
+            const registry = new SceneSpriteInstanceRegistry(3);
+            registry.sync(
+                sprites.map((sprite) => sprite.actor),
+                'main'
+            );
+            registry.refresh(frame);
+
+            expect(registry.groupCount).toBeGreaterThan(1);
+            let cursor = 0;
+            for (const group of groupSlices(registry)) {
+                // Contiguous ranges: groups replay the stream in order.
+                expect(group.start).toBe(cursor);
+                expect(group.ids.length).toBeLessThanOrEqual(3);
+                cursor += group.count;
+            }
+            expect(cursor).toBe(registry.drawCount);
+        });
+
+        it('re-slots in place when a sprite swaps texture, without a rebuild', () => {
+            const frame = createCameraFrame(createOrthoCamera());
+            const first = createSprite(0, 0, 'a');
+            const second = createSprite(1, 0, 'b');
+            const registry = new SceneSpriteInstanceRegistry(16);
+            const actors = [first.actor, second.actor];
+
+            expect(registry.sync(actors, 'main')).toBe('ready');
+            registry.refresh(frame);
+            registry.commit();
+            expect(registry.groupCount).toBe(1);
+            expect(registry.textureId).toBeNull();
+
+            second.renderer.textureId = 'a';
+            expect(registry.refresh(frame)).toBe(true);
+            expect(registry.staticsDirty).toBe(true);
+            expect(registry.groupCount).toBe(1);
+            expect(registry.textureId).toBe('a');
+            expect(groupSlices(registry)).toEqual([{ start: 0, count: 2, ids: ['a'] }]);
+            expect(readTextureSlot(registry, 1)).toBe(0);
+
+            registry.commit();
+            expect(registry.refresh(frame)).toBe(true);
+            expect(registry.cacheHit).toBe(true);
+        });
+
+        it('keeps masks, materials and nine-slice on the ineligible path for mixed passes', () => {
+            const frame = createCameraFrame(createOrthoCamera());
+            const mixed = [createSprite(-2, 0, 'a'), createSprite(-1, 0, 'b')];
+            const mask = new SpriteMask({ size: [4, 4], shape: 'rect' });
+            const maskedActor = createMockActor({
+                transform: createSprite(0, 0, 'a').transform,
+                renderer: new SpriteRenderer({ textureId: 'a', size: [1, 1] }),
+                mask,
+            });
+            const registry = new SceneSpriteInstanceRegistry(16);
+            expect(
+                registry.sync(
+                    [...mixed.map((sprite) => sprite.actor), maskedActor],
+                    'main'
+                )
+            ).toBe('ineligible');
+            void frame;
+        });
     });
 });

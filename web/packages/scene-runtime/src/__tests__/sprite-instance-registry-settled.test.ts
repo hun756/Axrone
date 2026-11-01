@@ -172,7 +172,7 @@ describe('SceneSpriteInstanceRegistry settled-frame skip', () => {
         void far;
     });
 
-    it('rebuilds when the pass texture changes and settles again afterwards', () => {
+    it('adopts a pass-wide texture change without a rebuild and settles again', () => {
         const sprite = spawn(0);
         spawn(1);
         const frame = createCameraFrame(createOrthoCamera());
@@ -183,9 +183,10 @@ describe('SceneSpriteInstanceRegistry settled-frame skip', () => {
         for (const actor of actors) {
             actor.requireComponent(SpriteRenderer).textureId = 'atlas-b';
         }
-        expect(registry.refresh(frame)).toBe(false);
-        expect(registry.sync(actors, 'main')).toBe('ready');
+        // Texture swaps are reclassified in place now: the sweep settles in
+        // one refresh and the group layout collapses to the new texture.
         expect(registry.refresh(frame)).toBe(true);
+        expect(registry.staticsDirty).toBe(true);
         expect(registry.textureId).toBe('atlas-b');
 
         registry.commit();

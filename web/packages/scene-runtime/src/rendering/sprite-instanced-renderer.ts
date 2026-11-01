@@ -55,29 +55,42 @@ void main() {
  * submission-driven renderer and the registry-backed buffer renderer use it so
  * the vertex layout stays a single contract.
  */
-export const compileSpriteInstancedProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
+export const compileSpriteInstancedProgram = (gl: WebGL2RenderingContext): WebGLProgram =>
+    compileSpriteProgram(
+        gl,
+        SPRITE_INSTANCED_VERTEX_SOURCE,
+        SPRITE_INSTANCED_FRAGMENT_SOURCE,
+        'instanced sprite'
+    );
+
+const compileSpriteProgram = (
+    gl: WebGL2RenderingContext,
+    vertexSource: string,
+    fragmentSource: string,
+    label: string
+): WebGLProgram => {
     const compile = (type: number, source: string): WebGLShader => {
         const shader = gl.createShader(type);
         if (!shader) {
-            throw new Error('Failed to create instanced sprite shader');
+            throw new Error(`Failed to create ${label} shader`);
         }
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             const info = gl.getShaderInfoLog(shader) ?? 'unknown compile error';
             gl.deleteShader(shader);
-            throw new Error(`Instanced sprite shader compile failed: ${info}`);
+            throw new Error(`${label} shader compile failed: ${info}`);
         }
         return shader;
     };
 
-    const vertex = compile(gl.VERTEX_SHADER, SPRITE_INSTANCED_VERTEX_SOURCE);
-    const fragment = compile(gl.FRAGMENT_SHADER, SPRITE_INSTANCED_FRAGMENT_SOURCE);
+    const vertex = compile(gl.VERTEX_SHADER, vertexSource);
+    const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
     const program = gl.createProgram();
     if (!program) {
         gl.deleteShader(vertex);
         gl.deleteShader(fragment);
-        throw new Error('Failed to create instanced sprite program');
+        throw new Error(`Failed to create ${label} program`);
     }
 
     gl.attachShader(program, vertex);
@@ -89,10 +102,89 @@ export const compileSpriteInstancedProgram = (gl: WebGL2RenderingContext): WebGL
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         const info = gl.getProgramInfoLog(program) ?? 'unknown link error';
         gl.deleteProgram(program);
-        throw new Error(`Instanced sprite program link failed: ${info}`);
+        throw new Error(`${label} program link failed: ${info}`);
     }
 
     return program;
+};
+
+/**
+ * Multi-texture instanced sprite program. Identical to the single-texture
+ * program except that each instance carries a texture-slot index
+ * (`a_TextureSlot`, the 13th float of the static stream) and the fragment
+ * shader selects from that slot's sampler instead of `u_MainTex`.
+ *
+ * ANGLE only accepts constant-index-expression sampler access (WebGL's
+ * sampler-indexing rule is stricter than raw GLSL ES 3.00), so the selection
+ * is compiled as a fixed ladder of constant-indexed samples — the same
+ * approach PixiJS v8's batcher uses. The ladder length is a compile-time
+ * `SPRITE_TEXTURE_SLOTS` macro matched to the runtime sampler budget, so a
+ * device that only guarantees 16 fragment units never pays for 32 branches.
+ * The slot is passed as a `flat` int because it varies per-instance, never
+ * per-fragment.
+ */
+export const compileSpriteMultiTextureProgram = (
+    gl: WebGL2RenderingContext,
+    slotCount: number
+): WebGLProgram => {
+    const slots = Math.max(1, Math.min(32, Math.floor(slotCount)));
+    const vertexSource = `#version 300 es
+layout(location = 0) in vec2 a_Corner;
+layout(location = 1) in vec4 a_Affine;
+layout(location = 2) in vec2 a_Translation;
+layout(location = 3) in vec4 a_Geometry;
+layout(location = 4) in vec4 a_UvRect;
+layout(location = 5) in vec4 a_Color;
+layout(location = 6) in float a_TextureSlot;
+
+uniform mat4 u_ViewProjection;
+
+out vec2 v_UV;
+out vec4 v_Color;
+flat out int v_TextureSlot;
+
+void main() {
+    vec2 local = (a_Corner - a_Geometry.zw) * a_Geometry.xy;
+    vec2 world = vec2(
+        a_Affine.x * local.x + a_Affine.y * local.y + a_Translation.x,
+        a_Affine.z * local.x + a_Affine.w * local.y + a_Translation.y
+    );
+    v_UV = a_UvRect.xy + a_Corner * a_UvRect.zw;
+    v_Color = a_Color;
+    v_TextureSlot = int(a_TextureSlot + 0.5);
+    gl_Position = u_ViewProjection * vec4(world, 0.0, 1.0);
+}
+`;
+    const ladder: string[] = [
+        `#version 300 es
+precision highp float;
+#define SPRITE_TEXTURE_SLOTS ${String(slots)}
+
+uniform sampler2D u_Textures[SPRITE_TEXTURE_SLOTS];
+
+in vec2 v_UV;
+in vec4 v_Color;
+flat in int v_TextureSlot;
+out vec4 o_Color;
+
+void main() {
+    vec4 sampled = vec4(0.0);`,
+    ];
+    for (let slot = 0; slot < slots; slot += 1) {
+        const keyword = slot === 0 ? 'if' : 'else if';
+        ladder.push(
+            `    ${keyword} (v_TextureSlot == ${String(slot)}) { sampled = texture(u_Textures[${String(slot)}], v_UV); }`
+        );
+    }
+    ladder.push(`    o_Color = sampled * v_Color;
+}
+`);
+    return compileSpriteProgram(
+        gl,
+        vertexSource,
+        ladder.join('\n'),
+        `sprite multi-texture program (${String(slots)} slots)`
+    );
 };
 
 export interface SpriteInstancedDrawParams {

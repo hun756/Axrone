@@ -4,12 +4,15 @@ import type { SceneCameraFrameState } from '../camera-frame-state';
 import { SpriteMask } from '../components/sprite-mask';
 import { SpriteRenderer } from '../components/sprite-renderer';
 import type { SceneRenderFrameState } from './render-frame-state';
+import type { SceneSpriteInstanceDrawView } from './sprite-instance-buffer-renderer';
 import {
     SPRITE_STATIC_FLOATS_PER_INSTANCE,
     SPRITE_TRANSFORM_FLOATS_PER_INSTANCE,
 } from './sprite-instance-buffer-renderer';
 
 const QUAT_LENGTH_EPSILON = 1e-8;
+/** Default fragment sampler budget; WebGL 2 guarantees at least 16. */
+const DEFAULT_TEXTURE_SLOT_BUDGET = 16;
 
 /**
  * Per-actor render cache entry. Holds direct component references so the
@@ -33,6 +36,7 @@ interface SceneSpriteInstanceEntry {
     culled: boolean;
     slot: number;
     sequence: number;
+    textureSlot: number;
     sortingLayer: number;
     renderOrder: number;
     z: number;
@@ -68,7 +72,7 @@ interface SceneSpriteInstanceExcludedEntry {
 }
 
 export type SceneSpriteInstanceSyncStatus = 'ready' | 'empty' | 'ineligible';
-type SceneSpriteInstanceReclassify = 'ok' | 'ineligible' | 'rebuild';
+type SceneSpriteInstanceReclassify = 'ok' | 'ineligible';
 
 const createEntry = (): SceneSpriteInstanceEntry => ({
     actor: null as unknown as Actor,
@@ -86,6 +90,7 @@ const createEntry = (): SceneSpriteInstanceEntry => ({
     culled: false,
     slot: 0,
     sequence: 0,
+    textureSlot: 0,
     sortingLayer: 0,
     renderOrder: 0,
     z: Number.NaN,
@@ -113,11 +118,15 @@ const createEntry = (): SceneSpriteInstanceEntry => ({
  * persistent instance stream directly instead of collecting render items,
  * sorting them and allocating one submission object per sprite every frame.
  *
- * Fallback contract: any pass that needs masks, clipping, nine-slice or more
- * than one texture reports `ineligible`, and the caller keeps using the
- * general batch path for it.
+ * Fallback contract: any pass that needs masks, clipping, nine-slice or
+ * material-driven sprites reports `ineligible`, and the caller keeps using the
+ * general batch path for it. Multi-texture passes ARE eligible: the ordered
+ * stream is cut into contiguous groups of at most `textureSlotBudget` distinct
+ * textures, slot-assigned per group. Because groups never reorder or overlap
+ * the stream, painter order is preserved exactly — no alpha-mode or overlap
+ * gating is required for texture grouping.
  */
-export class SceneSpriteInstanceRegistry {
+export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView {
     private readonly _entries: SceneSpriteInstanceEntry[] = [];
     private readonly _excluded: SceneSpriteInstanceExcludedEntry[] = [];
     private _excludedCount = 0;
@@ -126,6 +135,14 @@ export class SceneSpriteInstanceRegistry {
     private _staticData = new Float32Array(0);
     private _capacity = 0;
     private _textureId: string | null = null;
+    private readonly _textureSlotBudget: number;
+    /** Scratch id→slot assignment, rebuilt per grouping pass. */
+    private readonly _slotMap = new Map<string, number>();
+    private _groupRanges = new Int32Array(0);
+    private _groupTextureOffsets = new Int32Array(0);
+    private readonly _groupTextureIds: string[] = [];
+    private _groupCount = 0;
+    private _groupCapacity = 0;
     private _passId = '';
     private _actorsRef: readonly Actor[] | null = null;
     private _actorCount = -1;
@@ -182,12 +199,35 @@ export class SceneSpriteInstanceRegistry {
         return a.sequence - b.sequence;
     };
 
+    constructor(textureSlotBudget: number = DEFAULT_TEXTURE_SLOT_BUDGET) {
+        this._textureSlotBudget = Math.max(1, Math.min(32, Math.floor(textureSlotBudget)));
+    }
+
     get drawCount(): number {
         return this._drawnCount;
     }
 
     get textureId(): string | null {
         return this._textureId;
+    }
+
+    /** `[start, count]` pairs over the draw-ordered stream, per texture group. */
+    get groupRanges(): Int32Array {
+        return this._groupRanges;
+    }
+
+    /** `groupCount + 1` slice bounds into `groupTextureIds`. */
+    get groupTextureOffsets(): Int32Array {
+        return this._groupTextureOffsets;
+    }
+
+    /** Slot-ordered texture ids, one contiguous slice per group. */
+    get groupTextureIds(): readonly string[] {
+        return this._groupTextureIds;
+    }
+
+    get groupCount(): number {
+        return this._groupCount;
     }
 
     get transformData(): Float32Array {
@@ -326,14 +366,9 @@ export class SceneSpriteInstanceRegistry {
                     this._markIneligible();
                     return false;
                 }
-                if (result === 'rebuild') {
-                    this._needsRebuild = true;
-                    return false;
-                }
                 staticsDirty = true;
                 orderDirty = true;
             }
-
             if (entry.hidden) {
                 continue;
             }
@@ -418,6 +453,7 @@ export class SceneSpriteInstanceRegistry {
 
         if (orderDirty || grew) {
             this._rebuildOrder();
+            this._rebuildGroups();
             this._writeAll(transforms, statics);
             transformDirty = true;
             staticsDirty = true;
@@ -471,6 +507,9 @@ export class SceneSpriteInstanceRegistry {
         this._ineligiblePassId = '';
         this._ineligible = false;
         this._drawnCount = 0;
+        this._groupCount = 0;
+        this._groupTextureIds.length = 0;
+        this._slotMap.clear();
         this._transformDirty = false;
         this._staticsDirty = false;
         this._hasCameraMatrix = false;
@@ -490,7 +529,6 @@ export class SceneSpriteInstanceRegistry {
         const entries = this._entries;
         let count = 0;
         let excludedCount = 0;
-        let textureId: string | null = null;
         const hierarchyType = resolveHierarchyType(actors[0]);
 
         for (let index = 0; index < actors.length; index += 1) {
@@ -525,12 +563,6 @@ export class SceneSpriteInstanceRegistry {
             const hierarchy = hierarchyType ? actor.getComponent(hierarchyType) ?? null : null;
             const chain = this._resolveMaskChain(actor);
             if (!chain) {
-                return this._markIneligible();
-            }
-
-            if (textureId === null) {
-                textureId = renderer.textureId;
-            } else if (textureId !== renderer.textureId) {
                 return this._markIneligible();
             }
 
@@ -570,7 +602,6 @@ export class SceneSpriteInstanceRegistry {
 
         entries.length = count;
         this._excludedCount = excludedCount;
-        this._textureId = textureId;
 
         // Snapshot the clock after the build so a mutation that landed while
         // the entries were being created still forces a refresh next frame.
@@ -580,6 +611,9 @@ export class SceneSpriteInstanceRegistry {
             this._empty = true;
             this._order.length = 0;
             this._drawnCount = 0;
+            this._groupCount = 0;
+            this._groupTextureIds.length = 0;
+            this._textureId = null;
             this._transformDirty = false;
             this._staticsDirty = false;
             return 'empty';
@@ -588,6 +622,7 @@ export class SceneSpriteInstanceRegistry {
         this._ensureCapacity(count);
         this._rebuiltThisFrame = true;
         this._rebuildOrder();
+        this._rebuildGroups();
         this._writeAll(this._transformData, this._staticData);
         this._transformDirty = true;
         this._staticsDirty = true;
@@ -604,6 +639,9 @@ export class SceneSpriteInstanceRegistry {
         this._excludedCount = 0;
         this._order.length = 0;
         this._drawnCount = 0;
+        this._groupCount = 0;
+        this._groupTextureIds.length = 0;
+        this._slotMap.clear();
         this._empty = false;
         this._textureId = null;
         return 'ineligible';
@@ -725,9 +763,9 @@ export class SceneSpriteInstanceRegistry {
         if (entry.actor.getComponent(SpriteMask)) {
             return 'ineligible';
         }
-        if (renderer.textureId !== this._textureId) {
-            return 'rebuild';
-        }
+        // A texture swap no longer rebuilds the pass: the entry adopts the new
+        // id and the group/slot layout is recomputed with the order stream.
+        entry.textureId = renderer.textureId;
 
         if (entry.hidden) {
             entry.hidden = false;
@@ -804,6 +842,75 @@ export class SceneSpriteInstanceRegistry {
     }
 
     /**
+     * Cuts the draw-ordered stream into contiguous texture groups. Each group
+     * keeps at most `textureSlotBudget` distinct textures bound as sampler
+     * slots; a sprite whose texture is already slotted extends the current
+     * group without cost, so texture reuse collapses batches. Groups are
+     * consecutive ranges of the order stream — painter order is preserved
+     * exactly across group boundaries, and within a group the instance order
+     * inside the single draw call matches it too.
+     */
+    private _rebuildGroups(): void {
+        const count = this._drawnCount;
+        const order = this._order;
+        const entries = this._entries;
+        this._ensureGroupCapacity(count);
+        const ranges = this._groupRanges;
+        const offsets = this._groupTextureOffsets;
+        const ids = this._groupTextureIds;
+        const slotMap = this._slotMap;
+        const budget = this._textureSlotBudget;
+
+        ids.length = 0;
+        slotMap.clear();
+        offsets[0] = 0;
+        let groupCount = 0;
+        let groupStart = 0;
+
+        for (let slot = 0; slot < count; slot += 1) {
+            const entry = entries[order[slot]!]!;
+            let textureSlot = slotMap.get(entry.textureId);
+            if (textureSlot === undefined) {
+                if (slotMap.size >= budget) {
+                    ranges[groupCount * 2] = groupStart;
+                    ranges[groupCount * 2 + 1] = slot - groupStart;
+                    groupCount += 1;
+                    offsets[groupCount] = ids.length;
+                    groupStart = slot;
+                    slotMap.clear();
+                }
+                textureSlot = slotMap.size;
+                slotMap.set(entry.textureId, textureSlot);
+                ids.push(entry.textureId);
+            }
+            entry.textureSlot = textureSlot;
+        }
+
+        if (count > 0) {
+            ranges[groupCount * 2] = groupStart;
+            ranges[groupCount * 2 + 1] = count - groupStart;
+            groupCount += 1;
+            offsets[groupCount] = ids.length;
+        }
+
+        this._groupCount = groupCount;
+        this._textureId = groupCount === 1 && ids.length === 1 ? ids[0]! : null;
+    }
+
+    private _ensureGroupCapacity(count: number): void {
+        if (this._groupCapacity >= count) {
+            return;
+        }
+        let capacity = Math.max(64, this._groupCapacity);
+        while (capacity < count) {
+            capacity *= 2;
+        }
+        this._groupCapacity = capacity;
+        this._groupRanges = new Int32Array(capacity * 2);
+        this._groupTextureOffsets = new Int32Array(capacity + 1);
+    }
+
+    /**
      * Rewrites the full instance streams in draw order. Only runs when the
      * entry set or draw order changed, never on a settled static frame.
      */
@@ -833,6 +940,7 @@ export class SceneSpriteInstanceRegistry {
         statics[offset + 9] = entry.g;
         statics[offset + 10] = entry.b;
         statics[offset + 11] = entry.a;
+        statics[offset + 12] = entry.textureSlot;
     }
 
     /**

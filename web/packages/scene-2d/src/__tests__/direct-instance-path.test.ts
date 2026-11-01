@@ -85,7 +85,7 @@ describe('Scene2D direct sprite instance path', () => {
         }
     });
 
-    it('falls back to the batch path when the pass has more than one texture', async () => {
+    it('batches a multi-texture pass into ordered groups without falling back', async () => {
         const canvas = document.createElement('canvas');
         const scene = new Scene2D(createSceneOptions(scheduler, canvas));
         const gl = scene.gl as any;
@@ -104,15 +104,22 @@ describe('Scene2D direct sprite instance path', () => {
             }))
         );
 
+        // Report a 16-unit sampler budget so both textures share one group;
+        // the default mock answer of 1 keeps the degenerate fallback path.
+        gl.getParameter.mockImplementation(() => 16);
+
         try {
             scene.renderNow();
-            scene.renderNow();
-            gl.drawElementsInstanced.mockClear();
-            gl.drawElements.mockClear();
-            scene.renderNow();
+            expect(scene.renderStats.planning.spriteBatchCount).toBe(1);
+            expect(gl.drawElementsInstanced).toHaveBeenCalledTimes(1);
+            expect(gl.drawElements).not.toHaveBeenCalled();
 
-            expect(gl.drawElementsInstanced).not.toHaveBeenCalled();
-            expect(gl.drawElements).toHaveBeenCalled();
+            // A settled multi-texture frame replays without re-uploading.
+            const uploadsAfterFirstFrame = gl.bufferSubData.mock.calls.length;
+            scene.renderNow();
+            expect(scene.renderStats.planning.spriteBatchCacheHit).toBe(true);
+            expect(gl.bufferSubData.mock.calls.length).toBe(uploadsAfterFirstFrame);
+            expect(gl.drawElementsInstanced).toHaveBeenCalledTimes(2);
         } finally {
             scene.dispose();
         }

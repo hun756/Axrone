@@ -198,6 +198,7 @@ export class SceneSpriteBatchRuntime {
     private _instancedUnavailable = false;
     private _instanceBufferRenderer: SpriteInstanceBufferRenderer | null = null;
     private _directInstanceUnavailable = false;
+    private _textureSlotBudget = -1;
     private readonly _instanceRegistries = new Map<string, SceneSpriteInstanceRegistry>();
     private readonly _replayWarnings: string[] = [];
     private readonly _cacheEnabled: boolean;
@@ -938,6 +939,8 @@ export class SceneSpriteBatchRuntime {
             return null;
         }
 
+        const slotBudget = this._resolveTextureSlotBudget();
+
         let renderer = this._instanceBufferRenderer;
         if (!renderer) {
             try {
@@ -946,6 +949,7 @@ export class SceneSpriteBatchRuntime {
                     resources: this._options.resources,
                     renderStateApplier: this._options.renderStateApplier,
                     stateCache: this._options.stateCache,
+                    textureSlotBudget: slotBudget,
                 });
                 this._instanceBufferRenderer = renderer;
             } catch {
@@ -956,7 +960,7 @@ export class SceneSpriteBatchRuntime {
 
         let registry = this._instanceRegistries.get(passId);
         if (!registry) {
-            registry = new SceneSpriteInstanceRegistry();
+            registry = new SceneSpriteInstanceRegistry(slotBudget);
             this._instanceRegistries.set(passId, registry);
         }
 
@@ -990,12 +994,13 @@ export class SceneSpriteBatchRuntime {
             this._dropCacheEntry(passId);
         }
 
-        const textureId = registry.textureId;
-        if (!textureId) {
-            return null;
+        const streamCount = registry.drawCount;
+        if (streamCount <= 0 || registry.groupCount <= 0) {
+            registry.commit();
+            return this._createEmptyDirectStats();
         }
 
-        let drawCount = registry.drawCount;
+        let drawCount = streamCount;
         if (
             params.transparentBudget &&
             drawCount > params.transparentBudget.remaining
@@ -1024,18 +1029,61 @@ export class SceneSpriteBatchRuntime {
             registry.markActive(params.frameState);
         }
 
-        const drawn = renderer.draw(textureId, drawCount, params);
+        const drawn = renderer.draw(registry, drawCount, params);
         if (drawn <= 0) {
             return null;
         }
 
+        const spriteBatchCount =
+            drawCount === streamCount
+                ? registry.groupCount
+                : this._countDrawnGroups(registry, drawCount);
+
         return Object.freeze({
             drawnSpriteCount: drawn,
-            spriteBatchCount: 1,
+            spriteBatchCount,
             skippedSpriteCount: 0,
             warnings: EMPTY_WARNINGS,
             cacheHit,
         });
+    }
+
+    /** Number of texture groups the first `limit` ordered instances fall in. */
+    private _countDrawnGroups(
+        registry: SceneSpriteInstanceRegistry,
+        limit: number
+    ): number {
+        const ranges = registry.groupRanges;
+        let groups = 0;
+        for (let group = 0; group < registry.groupCount; group += 1) {
+            if (ranges[group * 2]! >= limit) {
+                break;
+            }
+            groups += 1;
+        }
+        return groups;
+    }
+
+    /**
+     * Fragment sampler units available for multi-texture sprite batches.
+     * Clamped to [1, 32]; a context that cannot answer `getParameter` keeps
+     * the degenerate one-texture-per-group budget (previous behaviour).
+     */
+    private _resolveTextureSlotBudget(): number {
+        if (this._textureSlotBudget >= 0) {
+            return this._textureSlotBudget;
+        }
+        let budget = 1;
+        try {
+            const units = this._options.gl.getParameter(this._options.gl.MAX_TEXTURE_IMAGE_UNITS);
+            if (typeof units === 'number' && Number.isFinite(units)) {
+                budget = Math.max(1, Math.min(32, Math.floor(units)));
+            }
+        } catch {
+            budget = 1;
+        }
+        this._textureSlotBudget = budget;
+        return budget;
     }
 
     private _createEmptyDirectStats(): SceneSpriteBatchRuntimeRenderStats {
