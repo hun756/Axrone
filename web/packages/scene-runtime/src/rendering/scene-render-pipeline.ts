@@ -32,10 +32,15 @@ import type { SceneParticleBatchRuntime } from './particle-batch-runtime';
 import type { SceneLineBatchRuntime } from './line-batch-runtime';
 import type { SceneBillboardBatchRuntime } from './billboard-batch-runtime';
 import type {
+    SceneInstancedMeshRuntime,
+    SceneInstancedPassPlan,
+} from './scene-instanced-mesh-runtime';
+import type {
     SceneRenderCapabilities,
 } from '../scene-render-capabilities';
 import { SCENE_RENDER_CAPABILITIES_ALL } from '../scene-render-capabilities';
 import type {
+    SceneInstancingMode,
     SceneMaterialAlphaMode,
     SceneRenderPlanningOptions,
     SceneRenderPipelineSettings,
@@ -70,6 +75,12 @@ export interface SceneRenderPipelineParams {
     readonly meshRevision?: number;
     /** Current shader-registry revision; see {@link materialRevision}. */
     readonly shaderRevision?: number;
+    /**
+     * True when the scene's render-item list cache reported a hit for this
+     * pass: the item set, transforms, camera and registry revisions are
+     * unchanged, so an instanced plan may be replayed without rebuilding.
+     */
+    readonly renderListCacheHit?: boolean;
 }
 
 type SceneSpriteBatchRenderer = Pick<SceneSpriteBatchRuntime, 'render' | 'clear'>;
@@ -326,6 +337,7 @@ interface SceneRenderPipelineOptions {
     readonly gl: WebGL2RenderingContext;
     readonly drawExecutor: Pick<SceneDrawExecutor, 'execute'> & {
         readonly resetState?: () => void;
+        readonly flushTextureBindings?: () => void;
     };
     readonly spriteBatchRuntime?: SceneSpriteBatchRenderer;
     readonly particleBatchRuntime?: SceneParticleBatchRenderer;
@@ -333,6 +345,14 @@ interface SceneRenderPipelineOptions {
     readonly billboardBatchRuntime?: SceneBillboardBatchRenderer;
     readonly planning?: SceneRenderPlanningOptions;
     readonly pipeline?: SceneRenderPipelineSettings;
+    /**
+     * Opt-in derived instanced draw path. `off` (default) keeps the individual
+     * per-actor draw path byte-for-byte; `auto` groups homogeneous opaque
+     * `MeshRenderer`s into one instanced draw per mesh/material/render-state.
+     */
+    readonly instancing?: SceneInstancingMode;
+    /** Required when {@link instancing} is `auto`. */
+    readonly instancedMeshRuntime?: Pick<SceneInstancedMeshRuntime, 'build' | 'draw'>;
     /**
      * Render families the scene registry can produce. When a family is absent
      * its collector/batch runtime is skipped for the frame instead of scanning
@@ -345,6 +365,9 @@ interface ActiveExecutionState {
     readonly drawContext: SceneDrawExecutorContext;
     readonly frameState: SceneRenderFrameState;
     readonly primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
+    readonly instancedPlan: SceneInstancedPassPlan | null;
+    readonly instancedDrawParams: Parameters<SceneInstancedMeshRuntime['draw']>[1] | null;
+    instancedDrawCalls: number;
 }
 
 /**
@@ -442,6 +465,23 @@ export class SceneRenderPipeline {
 
         const drawCallsBefore = this._activeExecution.frameState.drawCalls;
         const primitiveLookup = this._activeExecution.primitiveLookup;
+        const instancedPlan = this._activeExecution.instancedPlan;
+        const instancedDrawParams = this._activeExecution.instancedDrawParams;
+
+        // Instance groups only carry opaque state (depth-tested, unblended), so
+        // they belong to the opaque pass. Drawing them first preserves the
+        // pipeline's per-pass ordering guarantees: opaque draws are order
+        // independent, transparent draws never take this path.
+        if (pass.kind === 'opaque' && instancedPlan && instancedDrawParams) {
+            const instancedRuntime = this._options.instancedMeshRuntime;
+            if (instancedRuntime) {
+                this._activeExecution.instancedDrawCalls = instancedRuntime.draw(
+                    instancedPlan,
+                    instancedDrawParams
+                );
+            }
+        }
+
         const passItems = pass.items;
         if (passItems) {
             for (let index = 0; index < passItems.length; index += 1) {
@@ -456,6 +496,10 @@ export class SceneRenderPipeline {
                 }
             }
         }
+
+        // Release texture units kept bound by the draw executor's binding
+        // cache; the next pass or render family starts from clean units.
+        this._options.drawExecutor.flushTextureBindings?.();
 
         return {
             drawCalls: this._activeExecution.frameState.drawCalls - drawCallsBefore,
@@ -475,31 +519,75 @@ export class SceneRenderPipeline {
         const cacheEnabled =
             params.materialRevision !== undefined && params.meshRevision !== undefined;
         const meshesEnabled = this._capabilities.meshRenderers;
+        const instancedRuntime =
+            this._options.instancing === 'auto' && meshesEnabled
+                ? (this._options.instancedMeshRuntime ?? null)
+                : null;
+
+        // When every render item in this pass is instanced the derived plan
+        // owns the draws; otherwise the remaining items keep the individual
+        // path. Building the plan first also lets the primitive cache and the
+        // render-core classifier skip work for instanced actors.
+        let instancedPlan: SceneInstancedPassPlan | null = null;
+        let instancedDrawParams: Parameters<SceneInstancedMeshRuntime['draw']>[1] | null = null;
+        let renderItems = params.renderItems;
+        if (instancedRuntime) {
+            instancedPlan = instancedRuntime.build({
+                renderPass: params.renderPass,
+                renderItems: params.renderItems,
+                cameraFrame: params.cameraFrame,
+                lighting: params.lighting,
+                lightingValues: params.drawContext.lightingValues,
+                fog: params.drawContext.fog,
+                frame: params.frame,
+                elapsedSeconds: params.drawContext.elapsedSeconds,
+                deltaSeconds: params.deltaSeconds,
+                viewportWidth: params.viewportWidth,
+                viewportHeight: params.viewportHeight,
+                frameState: params.frameState,
+                stable: params.renderListCacheHit === true,
+                materialRevision: params.materialRevision ?? -1,
+                meshRevision: params.meshRevision ?? -1,
+                shaderRevision: params.shaderRevision ?? -1,
+            });
+            renderItems = instancedPlan.individualItems;
+            instancedDrawParams = {
+                renderPass: params.renderPass,
+                cameraFrame: params.cameraFrame,
+                lighting: params.lighting,
+                lightingValues: params.drawContext.lightingValues,
+                fog: params.drawContext.fog,
+                frame: params.frame,
+                elapsedSeconds: params.drawContext.elapsedSeconds,
+                deltaSeconds: params.deltaSeconds,
+                viewportWidth: params.viewportWidth,
+                viewportHeight: params.viewportHeight,
+                frameState: params.frameState,
+            };
+        }
+
         let primitives: readonly RenderPrimitiveInstance[];
         let primitiveLookup: ReadonlyMap<string, SceneRenderItem>;
         let primitiveCacheHit = false;
 
-        if (!meshesEnabled) {
-            // A registry without mesh renderers cannot produce a render item
-            // (the collector looks the class up directly), so the primitive
-            // cache/build path is skipped entirely. The empty list is cached
-            // and submitted, which is what the pass would have produced.
+        if (!meshesEnabled || renderItems.length === 0) {
+            // A registry without mesh renderers (or a pass whose items are all
+            // claimed by the instanced plan) has nothing to submit here.
+            primitiveCacheHit = instancedPlan === null ? cacheEnabled : false;
             primitives = EMPTY_PRIMITIVES;
             primitiveLookup = EMPTY_PRIMITIVE_LOOKUP;
-            primitiveCacheHit = cacheEnabled;
         } else if (cacheEnabled) {
             const cached = this._primitiveCache.resolve({
                 rendererPassId: params.renderPass.rendererPassId,
                 renderPass: params.renderPass,
-                renderItems: params.renderItems,
+                renderItems,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
                 materialRevision: params.materialRevision!,
                 meshRevision: params.meshRevision!,
                 shaderRevision: params.shaderRevision ?? 0,
-                build: (out, lookup) => this._buildPrimitives(params, out, lookup),
-                update: (primitives, renderItems) =>
-                    this._refreshPrimitiveMatrices(primitives, renderItems),
+                build: (out, lookup) => this._buildPrimitives(params, renderItems, out, lookup),
+                update: (primitives, items) => this._refreshPrimitiveMatrices(primitives, items),
             });
             primitives = cached.primitives;
             primitiveLookup = cached.lookup;
@@ -509,16 +597,20 @@ export class SceneRenderPipeline {
             // rebuild exactly as before.
             const built: RenderPrimitiveInstance[] = [];
             const lookup = new Map<string, SceneRenderItem>();
-            this._buildPrimitives(params, built, lookup);
+            this._buildPrimitives(params, renderItems, built, lookup);
             primitives = built;
             primitiveLookup = lookup;
         }
 
-        this._activeExecution = {
+        const activeExecution: ActiveExecutionState = {
             drawContext: params.drawContext,
             frameState: params.frameState,
             primitiveLookup,
+            instancedPlan,
+            instancedDrawParams,
+            instancedDrawCalls: 0,
         };
+        this._activeExecution = activeExecution;
 
         try {
             const result = this._pipeline.renderImmediate({
@@ -591,13 +683,22 @@ export class SceneRenderPipeline {
 
             return Object.freeze({
                 passCount: result.statistics.passCount,
-                opaqueCount: result.statistics.opaqueCount,
+                opaqueCount: result.statistics.opaqueCount + (instancedPlan?.instanceCount ?? 0),
                 transparentCount: meshTransparentCount + (spriteStats?.drawnSpriteCount ?? 0),
                 meshTransparentCount,
                 spriteTransparentCount: spriteStats?.drawnSpriteCount ?? 0,
                 spriteBatchCount: spriteStats?.spriteBatchCount ?? 0,
                 skippedSpriteCount: spriteStats?.skippedSpriteCount ?? 0,
                 ...(cacheEnabled ? { primitiveCacheHit } : {}),
+                ...(instancedPlan !== null
+                    ? {
+                          instancing: 'auto' as const,
+                          instancedGroupCount: instancedPlan.groupCount,
+                          instancedInstanceCount: instancedPlan.instanceCount,
+                          instancedDrawCalls: activeExecution.instancedDrawCalls,
+                          instancedPlanReused: instancedPlan.reused,
+                      }
+                    : {}),
                 ...(spriteStats ? { spriteBatchCacheHit: spriteStats.cacheHit === true } : {}),
                 warnings: Object.freeze(warnings),
             });
@@ -610,11 +711,12 @@ export class SceneRenderPipeline {
 
     private _buildPrimitives(
         params: SceneRenderPipelineParams,
+        renderItems: readonly SceneRenderItem[],
         primitives: RenderPrimitiveInstance[],
         lookup: Map<string, SceneRenderItem>
     ): void {
-        for (let index = 0; index < params.renderItems.length; index += 1) {
-            const item = params.renderItems[index]!;
+        for (let index = 0; index < renderItems.length; index += 1) {
+            const item = renderItems[index]!;
             const primitiveId = `scene-primitive:${item.renderer.id}`;
             const material = createMaterialSnapshot(item, params.resolveMaterial(item.renderer));
 

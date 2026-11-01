@@ -29,12 +29,11 @@ import {
     type SceneRenderCapabilities,
 } from '../scene-render-capabilities';
 import { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
-import { SceneSpriteBatchRuntime } from './sprite-batch-runtime';
-import { SceneParticleBatchRuntime } from './particle-batch-runtime';
-import { SceneLineBatchRuntime } from './line-batch-runtime';
-import { SceneBillboardBatchRuntime } from './billboard-batch-runtime';
+import type { SceneBatchRuntimeFactory } from './batch-runtime-contract';
+import { SceneInstancedMeshRuntime } from './scene-instanced-mesh-runtime';
 import type { SceneMeshResource } from '../mesh-registry';
 import type {
+    SceneInstancingMode,
     SceneMeshDefinition,
     SceneRenderPlanningOptions,
     SceneRenderPipelineSettings,
@@ -69,6 +68,18 @@ export interface SceneRenderRuntimeOptions {
     readonly stateCache?: IGLStateCache;
     /** Initial fog state; updated at runtime via `setFogState`. */
     readonly fog?: SceneFogState;
+    /** Opt-in derived instanced draw path; defaults to `off`. */
+    readonly instancing?: SceneInstancingMode;
+    /**
+     * Optional render batch families (sprite/particle/line/billboard).
+     *
+     * The factory is supplied by the scene runtime composition: root scene
+     * entries inject the full set, lean entries inject only the families
+     * their registry exposes (or none). Omitting it keeps the four batch
+     * families out of the module graph; the pipeline already skips a family
+     * whose runtime is absent. Mesh and instanced-mesh draws are unaffected.
+     */
+    readonly batchRuntimes?: SceneBatchRuntimeFactory;
 }
 
 export interface SceneRenderRuntimeParams {
@@ -108,6 +119,8 @@ export class SceneRenderRuntime {
     private readonly _morphMeshRuntime: SceneMorphMeshRuntime;
     private readonly _drawExecutor: SceneDrawExecutor;
     private readonly _renderPipeline: SceneRenderPipeline;
+    private readonly _instancedMeshRuntime: SceneInstancedMeshRuntime | null;
+    private readonly _instancing: SceneInstancingMode;
     private readonly _capabilities: SceneRenderCapabilities;
     /**
      * Environment-only lighting resolved once for scenes whose registry has no
@@ -129,6 +142,29 @@ export class SceneRenderRuntime {
     ): void => {
         this._uniformWriter.write(shader, name, value);
     };
+    /**
+     * Memoized per-renderer blend resolution.
+     *
+     * The scene collector asks every actor's renderer whether it is blended on
+     * every collection pass (which dynamic scenes run every frame). The answer
+     * only depends on the material/shader resources and the pass, so caching
+     * it keyed by those identities removes three registry lookups plus a
+     * material-pass resolution per actor per frame.
+     */
+    private readonly _blendedCache = new WeakMap<
+        import('../components/mesh-renderer').MeshRenderer,
+        {
+            readonly renderPass: import('./render-pass-registry').SceneRenderPassResource;
+            readonly materialId: string | null;
+            readonly material: unknown;
+            readonly shader: unknown;
+            readonly materialRevision: number;
+            readonly shaderRevision: number;
+            readonly value: boolean;
+        }
+    >();
+    private _frameMaterialRevision = -1;
+    private _frameShaderRevision = -1;
 
     constructor(private readonly _options: SceneRenderRuntimeOptions) {
         this._capabilities = _options.capabilities ?? SCENE_RENDER_CAPABILITIES_ALL;
@@ -167,33 +203,39 @@ export class SceneRenderRuntime {
             textureUniformSetter: this._textureUniformSetter,
             applyMissingVertexAttributeDefaults: _options.applyMissingVertexAttributeDefaults,
         });
-        const spriteBatchRuntime = new SceneSpriteBatchRuntime({
-            gl: _options.gl,
-            resources: _options.resources,
-            renderStateApplier: this._renderStateApplier,
-            uniformWriter: this._uniformWriter,
-            materialTextureBinder: this._materialTextureBinder,
-            textureUniformSetter: this._textureUniformSetter,
-            stateCache: _options.stateCache,
-        });
-        const particleBatchRuntime = new SceneParticleBatchRuntime({
-            gl: _options.gl,
-            uniformWriter: this._uniformWriter,
-            renderStateApplier: this._renderStateApplier,
-            stateCache: _options.stateCache,
-        });
-        const lineBatchRuntime = new SceneLineBatchRuntime({
-            gl: _options.gl,
-            uniformWriter: this._uniformWriter,
-            renderStateApplier: this._renderStateApplier,
-            stateCache: _options.stateCache,
-        });
-        const billboardBatchRuntime = new SceneBillboardBatchRuntime({
-            gl: _options.gl,
-            uniformWriter: this._uniformWriter,
-            renderStateApplier: this._renderStateApplier,
-            stateCache: _options.stateCache,
-        });
+        const batchRuntimes =
+            _options.batchRuntimes?.({
+                gl: _options.gl,
+                resources: _options.resources,
+                renderStateApplier: this._renderStateApplier,
+                uniformWriter: this._uniformWriter,
+                materialTextureBinder: this._materialTextureBinder,
+                textureUniformSetter: this._textureUniformSetter,
+                stateCache: _options.stateCache,
+            }) ?? {};
+        const spriteBatchRuntime = batchRuntimes.sprite ?? undefined;
+        const particleBatchRuntime = batchRuntimes.particle ?? undefined;
+        const lineBatchRuntime = batchRuntimes.line ?? undefined;
+        const billboardBatchRuntime = batchRuntimes.billboard ?? undefined;
+        this._instancing = _options.instancing ?? 'off';
+        this._instancedMeshRuntime =
+            this._instancing === 'auto'
+                ? new SceneInstancedMeshRuntime({
+                      gl: _options.gl,
+                      resources: _options.resources,
+                      renderStateApplier: this._renderStateApplier,
+                      uniformWriter: this._uniformWriter,
+                      lightingUniformBinder: this._lightingUniformBinder,
+                      fogUniformBinder: this._fogUniformBinder,
+                      materialTextureBinder: this._materialTextureBinder,
+                      textureUniformSetter: this._textureUniformSetter,
+                      // The instanced path binds its own group textures; the
+                      // individual draw executor's texture cache must not trust
+                      // its signature afterwards.
+                      invalidateTextureBindings: () =>
+                          this._drawExecutor.invalidateTextureBindings(),
+                  })
+                : null;
         this._renderPipeline = new SceneRenderPipeline({
             gl: _options.gl,
             drawExecutor: this._drawExecutor,
@@ -204,6 +246,12 @@ export class SceneRenderRuntime {
             planning: _options.planning,
             pipeline: _options.pipeline,
             capabilities: this._capabilities,
+            ...(this._instancedMeshRuntime
+                ? {
+                      instancing: this._instancing,
+                      instancedMeshRuntime: this._instancedMeshRuntime,
+                  }
+                : {}),
         });
     }
 
@@ -220,22 +268,52 @@ export class SceneRenderRuntime {
         renderer: import('../components/mesh-renderer').MeshRenderer,
         renderPass: import('./render-pass-registry').SceneRenderPassResource
     ): boolean {
-        if (renderer.materialId === null) {
-            return false;
+        // Fast path: the renderer revision, pass identity and per-frame
+        // registry revisions fully determine the answer — the resource lookups
+        // below would only re-confirm what the cache already knows.
+        const cached = this._blendedCache.get(renderer);
+        if (
+            cached &&
+            cached.renderPass === renderPass &&
+            cached.materialId === renderer.materialId &&
+            cached.materialRevision === this._frameMaterialRevision &&
+            cached.shaderRevision === this._frameShaderRevision
+        ) {
+            return cached.value;
         }
 
-        const material = this._options.resources.materials.get(renderer.materialId);
-        if (!material) {
+        const materialId = renderer.materialId;
+        const material =
+            materialId !== null ? this._options.resources.materials.get(materialId) : undefined;
+        const shader = material
+            ? this._options.resources.shaders.get(material.shaderId)
+            : undefined;
+
+        const value = this._computeBlendedRenderer(renderer, renderPass, material, shader);
+        this._blendedCache.set(renderer, {
+            renderPass,
+            materialId,
+            material: material ?? null,
+            shader: shader ?? null,
+            materialRevision: this._frameMaterialRevision,
+            shaderRevision: this._frameShaderRevision,
+            value,
+        });
+        return value;
+    }
+
+    private _computeBlendedRenderer(
+        renderer: import('../components/mesh-renderer').MeshRenderer,
+        renderPass: import('./render-pass-registry').SceneRenderPassResource,
+        material: import('../material-registry').SceneMaterialResource | undefined,
+        shader: import('../shader-registry').SceneShaderResource | undefined
+    ): boolean {
+        if (renderer.materialId === null || !material || !shader) {
             return false;
         }
 
         const materialPass = resolveSceneMaterialPass(material, renderPass.materialPassId);
         if (renderPass.materialPassId !== null && !materialPass) {
-            return false;
-        }
-
-        const shader = this._options.resources.shaders.get(material.shaderId);
-        if (!shader) {
             return false;
         }
 
@@ -284,6 +362,8 @@ export class SceneRenderRuntime {
         const renderFrame = this._renderFrameState.begin(params.frame);
         renderFrame.setTrackActiveRenderers(this._morphMeshRuntime.hasCachedMeshes);
         this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
+        this._frameMaterialRevision = this._options.resources.materials.revision;
+        this._frameShaderRevision = this._options.resources.shaders.revision;
         const actors = this._options.getActors();
         const camera = selectSceneCamera(actors);
         const cameraFrame = this._cameraFrameCollector.collect(
@@ -315,6 +395,11 @@ export class SceneRenderRuntime {
         let planningSpriteBatchCacheHit = true;
         let planningRenderListCacheHit = true;
         let planningPrimitiveCacheHit = true;
+        let planningInstanced = false;
+        let planningInstancedGroupCount = 0;
+        let planningInstancedInstanceCount = 0;
+        let planningInstancedDrawCalls = 0;
+        let planningInstancedPlanReused = true;
         let planningCachedPassCount = 0;
         const planningWarnings: string[] = [];
 
@@ -390,6 +475,7 @@ export class SceneRenderRuntime {
                 materialRevision,
                 meshRevision,
                 shaderRevision,
+                renderListCacheHit,
                 resolveBounds: (renderer) => {
                     const meshId = renderer.meshId;
                     return meshId
@@ -435,6 +521,14 @@ export class SceneRenderRuntime {
             planningSpriteTransparentCount += meshPlanning.spriteTransparentCount;
             planningSpriteBatchCount += meshPlanning.spriteBatchCount;
             planningSkippedSpriteCount += meshPlanning.skippedSpriteCount;
+            if (meshPlanning.instancing !== undefined) {
+                planningInstanced = true;
+                planningInstancedGroupCount += meshPlanning.instancedGroupCount ?? 0;
+                planningInstancedInstanceCount += meshPlanning.instancedInstanceCount ?? 0;
+                planningInstancedDrawCalls += meshPlanning.instancedDrawCalls ?? 0;
+                planningInstancedPlanReused =
+                    planningInstancedPlanReused && meshPlanning.instancedPlanReused === true;
+            }
             if (meshPlanning.spriteBatchCacheHit !== undefined) {
                 planningSpriteBatchPassCount += 1;
                 planningSpriteBatchCacheHit =
@@ -457,6 +551,15 @@ export class SceneRenderRuntime {
                 ? {
                       renderListCacheHit: planningRenderListCacheHit,
                       primitiveCacheHit: planningPrimitiveCacheHit,
+                  }
+                : {}),
+            ...(planningInstanced
+                ? {
+                      instancing: 'auto' as const,
+                      instancedGroupCount: planningInstancedGroupCount,
+                      instancedInstanceCount: planningInstancedInstanceCount,
+                      instancedDrawCalls: planningInstancedDrawCalls,
+                      instancedPlanReused: planningInstancedPlanReused,
                   }
                 : {}),
             warnings: Object.freeze(planningWarnings),
@@ -490,6 +593,7 @@ export class SceneRenderRuntime {
         this._renderListCache.clear();
         this._renderPassPreparer.reset();
         this._renderPipeline.reset();
+        this._instancedMeshRuntime?.clear();
         this._morphMeshRuntime.clear();
     }
 
@@ -502,6 +606,7 @@ export class SceneRenderRuntime {
         this._planningStats = SceneRenderRuntime._EMPTY_PLANNING_STATS;
         this._renderPassPreparer.reset();
         this._renderPipeline.invalidateContextResources();
+        this._instancedMeshRuntime?.invalidateContextResources();
         this._morphMeshRuntime.clear();
     }
 }

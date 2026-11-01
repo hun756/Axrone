@@ -6,11 +6,9 @@ import {
     type SceneOptions,
     type SceneRegistry,
 } from '@axrone/scene-runtime';
-import {
-    SceneAssetFacade,
-    type CameraConfig,
-} from '@axrone/scene-runtime/scene-facade';
-import { type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
+import { SceneAssetFacade } from '@axrone/scene-runtime/scene-asset-facade';
+import type { CameraConfig } from '@axrone/scene-runtime/scene-camera';
+import type { MeshRendererConfig } from '@axrone/scene-runtime/scene-mesh-renderer';
 import {
     Scene3DActorRuntime,
     type SceneProfilerProbe,

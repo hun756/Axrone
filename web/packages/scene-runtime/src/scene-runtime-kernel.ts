@@ -6,6 +6,7 @@ import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { SceneActorLifecycleRunner } from './actor-lifecycle-runner';
 import { SceneComponentCatalog } from './component-catalog';
 import { createSceneLoopSystems } from './loop-bridge';
+import type { SceneBatchRuntimeFactory } from './rendering/batch-runtime-contract';
 import { SceneRenderRuntime } from './rendering/scene-render-runtime';
 import { resolveSceneSurface } from './scene-surface-resolver';
 import type { SceneLoopState, SceneOptions, SceneRegistry } from './types';
@@ -95,6 +96,15 @@ export interface SceneRuntimeComposition<
 > {
     /** Registry profile used when `SceneOptions.profile` is omitted. */
     readonly defaultProfile?: SceneRuntimeProfile<R>;
+    /**
+     * Optional render batch composition (sprite/particle/line/billboard).
+     *
+     * The kernel forwards it to `SceneRenderRuntime` without importing any
+     * batch runtime itself. Root scene entries inject the full set; lean
+     * entries inject only the families their registry exposes (or none), so
+     * batch component chains stay out of their module graphs.
+     */
+    readonly createRenderBatchRuntimes?: SceneBatchRuntimeFactory;
     /**
      * Builds the physics bridges the resolved profile needs. The kernel calls
      * this once after the ECS world exists and never imports a physics package.
@@ -227,6 +237,8 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             pipeline: sceneOptions.renderPipeline,
             capabilities: this.renderCapabilities,
             stateCache: ctx.state,
+            instancing: sceneOptions.instancing,
+            batchRuntimes: sceneOptions.composition?.createRenderBatchRuntimes,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
             disposeMesh: (mesh) => this.assets.disposeMesh(mesh),

@@ -146,12 +146,53 @@ export class SceneDrawExecutor {
         SceneShaderUniformState
     >();
     private readonly _mvpScratch = new Mat4();
+    /**
+     * Texture binding state for the current draw pass.
+     *
+     * Consecutive draws that share a material binding the same texture/sampler
+     * to the same unit are common (one shared material across thousands of
+     * actors). Re-binding and re-writing the sampler uniform for each of them
+     * costs a handful of GL calls per draw, so the executor keeps the binding
+     * alive and skips the whole bind path while the signature is unchanged.
+     * The binding is released at the end of each draw pass
+     * ({@link flushTextureBindings}) so later render families start clean.
+     */
+    private _textureMaterial: SceneMaterialResource | null = null;
+    private _textureBindingsSize = -1;
+    private _textureSlotCount = -1;
+    private readonly _textureSlotUniforms: string[] = [];
+    private readonly _textureSlotTextureIds: string[] = [];
+    private readonly _textureSlotSamplerIds: (string | null)[] = [];
+    private readonly _textureSlotUnits: number[] = [];
+    private readonly _boundTextureUnits: number[] = [];
 
     constructor(private readonly _dependencies: SceneDrawExecutorDependencies) {}
 
-    /** Clears the consecutive-draw binding cache at a pass boundary. */
+    /**
+     * Clears the consecutive-draw binding cache at a pass boundary. Any
+     * texture left bound by the previous pass is released here.
+     */
     resetState(): void {
         this._lastDrawState = null;
+        this._releaseTextureBindings();
+    }
+
+    /**
+     * Releases textures kept bound by the texture state cache. Called at the
+     * end of a draw pass so sprite/particle/line passes and the next frame
+     * start from a clean unit state.
+     */
+    flushTextureBindings(): void {
+        this._releaseTextureBindings();
+    }
+
+    /**
+     * Marks the cached texture signature stale when another renderer bound or
+     * unbound texture units behind this executor's back (the instanced mesh
+     * path binds its own group textures).
+     */
+    invalidateTextureBindings(): void {
+        this._invalidateTextureSignature();
     }
 
     execute(
@@ -241,12 +282,11 @@ export class SceneDrawExecutor {
 
         const textured = this._materialHasTextures(material);
         if (textured) {
-            this._dependencies.materialTextureBinder.bind(
-                shader,
-                material,
-                this._dependencies.resources,
-                this._dependencies.textureUniformSetter
-            );
+            this._bindMaterialTextures(shader, material);
+        } else if (this._boundTextureUnits.length > 0) {
+            // Preserve the individual path's unit hygiene: a draw without
+            // textures must not sample whatever the previous draw left bound.
+            this._releaseTextureBindings();
         }
 
         for (const [name, value] of material.uniforms) {
@@ -280,9 +320,92 @@ export class SceneDrawExecutor {
             indexCount: mesh.indexCount,
             vertexCount: mesh.vertexCount,
         });
-        if (textured) {
-            this._dependencies.materialTextureBinder.unbind();
+        // Textures stay bound: the next draw reuses them when its material
+        // signature matches and the pass flushes them at the end.
+    }
+
+    /**
+     * Binds a material's texture slots unless the exact same signature is
+     * already bound. The signature covers the material resource, the live
+     * binding map size and every slot's uniform/texture/sampler/unit, so
+     * in-place `setTexture` mutation and slot rebuilds still force a rebind.
+     */
+    private _bindMaterialTextures(
+        shader: SceneShaderResource,
+        material: SceneMaterialResource
+    ): void {
+        const slots = this._dependencies.resources.materials.getTextureSlots(material.id);
+        const bindingsSize = material.textureBindings.size;
+
+        if (
+            this._textureMaterial === material &&
+            this._textureBindingsSize === bindingsSize &&
+            this._textureSlotCount === slots.length
+        ) {
+            let same = true;
+            for (let index = 0; index < slots.length; index += 1) {
+                const slot = slots[index]!;
+                if (
+                    this._textureSlotUniforms[index] !== slot.uniformName ||
+                    this._textureSlotTextureIds[index] !== slot.binding.textureId ||
+                    this._textureSlotSamplerIds[index] !== slot.binding.samplerId ||
+                    this._textureSlotUnits[index] !== slot.resolvedUnit
+                ) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same) {
+                return;
+            }
         }
+
+        this._releaseTextureBindings();
+
+        const boundUnits = this._dependencies.materialTextureBinder.bind(
+            shader,
+            material,
+            this._dependencies.resources,
+            this._dependencies.textureUniformSetter
+        );
+
+        this._textureMaterial = material;
+        this._textureBindingsSize = bindingsSize;
+        this._textureSlotCount = slots.length;
+        this._textureSlotUniforms.length = slots.length;
+        this._textureSlotTextureIds.length = slots.length;
+        this._textureSlotSamplerIds.length = slots.length;
+        this._textureSlotUnits.length = slots.length;
+        for (let index = 0; index < slots.length; index += 1) {
+            const slot = slots[index]!;
+            this._textureSlotUniforms[index] = slot.uniformName;
+            this._textureSlotTextureIds[index] = slot.binding.textureId;
+            this._textureSlotSamplerIds[index] = slot.binding.samplerId;
+            this._textureSlotUnits[index] = slot.resolvedUnit;
+        }
+
+        this._boundTextureUnits.length = boundUnits.length;
+        for (let index = 0; index < boundUnits.length; index += 1) {
+            this._boundTextureUnits[index] = boundUnits[index]!;
+        }
+    }
+
+    private _releaseTextureBindings(): void {
+        if (this._boundTextureUnits.length > 0) {
+            this._dependencies.materialTextureBinder.unbind();
+            this._boundTextureUnits.length = 0;
+        }
+        this._invalidateTextureSignature();
+    }
+
+    private _invalidateTextureSignature(): void {
+        this._textureMaterial = null;
+        this._textureBindingsSize = -1;
+        this._textureSlotCount = -1;
+        this._textureSlotUniforms.length = 0;
+        this._textureSlotTextureIds.length = 0;
+        this._textureSlotSamplerIds.length = 0;
+        this._textureSlotUnits.length = 0;
     }
 
     private _prepareUniformState(

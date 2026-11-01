@@ -1,4 +1,4 @@
-import { createSceneShaderDefinitionFromEffect } from '@axrone/scene-runtime/scene-facade';
+import { createSceneShaderDefinitionFromEffect } from '@axrone/scene-runtime/scene-shader-effect';
 import type { RenderShaderEffectDefinition } from '@axrone/render-core/shader-effect';
 import type { SceneShaderDefinition } from '@axrone/scene-runtime/types';
 

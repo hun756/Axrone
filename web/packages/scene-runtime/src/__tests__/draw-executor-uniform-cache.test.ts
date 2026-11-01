@@ -131,7 +131,7 @@ const createHarness = (options: {
     const lightingApply = vi.fn();
     const fogApply = vi.fn();
     const skinningApply = vi.fn();
-    const bindTextures = vi.fn(() => []);
+    const bindTextures = vi.fn(() => (options.textured ? [0] : []));
     const unbindTextures = vi.fn();
 
     const executor = new SceneDrawExecutor({
@@ -276,7 +276,7 @@ describe('SceneDrawExecutor uniform caching', () => {
         expect(harness.unbindTextures).not.toHaveBeenCalled();
     });
 
-    it('binds and unbinds textures for textured materials every draw', () => {
+    it('keeps a texture binding across repeated draws and releases it on flush', () => {
         const harness = createHarness({ textured: true });
         const frameState = new SceneRenderFrameState().begin(1);
         const context = createContext(1);
@@ -285,12 +285,22 @@ describe('SceneDrawExecutor uniform caching', () => {
         harness.executor.execute(createItem(renderer), context, frameState);
         harness.executor.execute(createItem(renderer), context, frameState);
 
+        // The second draw reuses the same material/texture/unit signature, so
+        // the bind path is skipped entirely instead of rebinding per draw.
+        expect(harness.bindTextures).toHaveBeenCalledTimes(1);
+        expect(harness.unbindTextures).not.toHaveBeenCalled();
+
+        harness.executor.flushTextureBindings();
+        expect(harness.unbindTextures).toHaveBeenCalledTimes(1);
+
+        // After a flush the next draw binds again.
+        harness.executor.execute(createItem(renderer), context, frameState);
         expect(harness.bindTextures).toHaveBeenCalledTimes(2);
-        expect(harness.unbindTextures).toHaveBeenCalledTimes(2);
     });
 
     it('picks up texture bindings added to the material in place', () => {
-        const harness = createHarness({});
+        const harness = createHarness({ textured: true });
+        harness.material.textureBindings.clear();
         const frameState = new SceneRenderFrameState().begin(1);
         const context = createContext(1);
         const renderer = createRenderer(true);
@@ -307,6 +317,9 @@ describe('SceneDrawExecutor uniform caching', () => {
 
         harness.executor.execute(createItem(renderer), context, frameState);
         expect(harness.bindTextures).toHaveBeenCalledTimes(1);
+        // The binding is retained until the pass flushes it.
+        expect(harness.unbindTextures).not.toHaveBeenCalled();
+        harness.executor.flushTextureBindings();
         expect(harness.unbindTextures).toHaveBeenCalledTimes(1);
     });
 

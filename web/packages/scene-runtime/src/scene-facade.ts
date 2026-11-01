@@ -14,6 +14,11 @@ export type {
     SceneRuntimePhysicsWorldView,
 } from './scene-runtime-kernel';
 export { SceneRuntimeKernel } from './scene-runtime-kernel';
+export type {
+    SceneBatchRuntimeFactory,
+    SceneBatchRuntimeFactoryContext,
+    SceneBatchRuntimeSet,
+} from './rendering/batch-runtime-contract';
 export { SceneRuntimeFacade } from './scene-runtime-facade';
 export { SceneSnapshotFacade } from './scene-snapshot-facade';
 export type { SceneFogState, SceneFogMode } from './fog-state';

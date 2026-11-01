@@ -16,9 +16,11 @@ describe('SceneDrawExecutor', () => {
         const shader = {
             id: 'shader',
             program: {} as WebGLProgram,
-            uniformLocations: new Map(),
+            // The executor only invokes the skinning binder when the program
+            // declares a skinning uniform.
+            uniformLocations: new Map([['u_Skinning', {} as WebGLUniformLocation]]),
             uniformTypes: new Map(),
-            uniformNames: [],
+            uniformNames: ['u_Skinning'],
             attributeNames: {},
             depthTest: true,
             cull: true,
@@ -40,8 +42,15 @@ describe('SceneDrawExecutor', () => {
             id: 'material',
             shaderId: 'shader',
             uniforms: new Map([['u_Base', 1]]),
-            textureBindings: new Map(),
+            textureBindings: new Map([['u_Texture', 'texture']]),
         };
+        const textureSlots = [
+            {
+                uniformName: 'u_Texture',
+                binding: { textureId: 'texture', samplerId: null },
+                resolvedUnit: 0,
+            },
+        ];
 
         const renderStateApplier = { apply: vi.fn() };
         const frameUniformBinder = { apply: vi.fn() };
@@ -49,7 +58,9 @@ describe('SceneDrawExecutor', () => {
         const fogUniformBinder = { apply: vi.fn() };
         const skinningUniformBinder = { apply: vi.fn() };
         const materialTextureBinder = {
-            bind: vi.fn(),
+            // The cached path stores the units the real binder returned so it
+            // knows whether an unbind is owed at the pass boundary.
+            bind: vi.fn(() => [0]),
             unbind: vi.fn(),
         };
         const uniformWriter = { write: vi.fn() };
@@ -61,7 +72,7 @@ describe('SceneDrawExecutor', () => {
             resources: {
                 materials: {
                     get: (id: string) => (id === 'material' ? (material as any) : undefined),
-                    getTextureSlots: () => [],
+                    getTextureSlots: () => textureSlots,
                 },
                 meshes: {
                     get: (id: string) => (id === 'mesh' ? (mesh as any) : undefined),
@@ -134,7 +145,8 @@ describe('SceneDrawExecutor', () => {
         expect(fogUniformBinder.apply).toHaveBeenCalledWith(shader, {});
         expect(skinningUniformBinder.apply).toHaveBeenCalledTimes(1);
         expect(materialTextureBinder.bind).toHaveBeenCalledTimes(1);
-        expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(1);
+        // The binding stays cached until the pass boundary owns the unbind.
+        expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(0);
         expect(uniformWriter.write).toHaveBeenNthCalledWith(1, shader, 'u_Base', 1);
         expect(uniformWriter.write).toHaveBeenNthCalledWith(
             2,
@@ -153,11 +165,20 @@ describe('SceneDrawExecutor', () => {
         expect(gl.bindVertexArray).toHaveBeenCalledTimes(1);
         expect(applyMissingVertexAttributeDefaults).toHaveBeenCalledTimes(1);
         expect(gl.drawElements).toHaveBeenCalledTimes(2);
+        // Same material/signature: the second draw reuses the bound texture.
+        expect(materialTextureBinder.bind).toHaveBeenCalledTimes(1);
+        expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(0);
+
+        executor.flushTextureBindings();
+        expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(1);
 
         executor.resetState();
         executor.execute(item, context, frameState);
         expect(renderStateApplier.apply).toHaveBeenCalledTimes(2);
         expect(gl.useProgram).toHaveBeenCalledTimes(2);
         expect(gl.drawElements).toHaveBeenCalledTimes(3);
+        expect(materialTextureBinder.bind).toHaveBeenCalledTimes(2);
+        executor.flushTextureBindings();
+        expect(materialTextureBinder.unbind).toHaveBeenCalledTimes(2);
     });
 });

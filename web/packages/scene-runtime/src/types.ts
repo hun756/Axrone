@@ -462,6 +462,15 @@ export interface SceneOptions<R extends ComponentRegistry = Record<string, never
     readonly composition?: SceneRuntimeComposition<R>;
     readonly renderPlanning?: SceneRenderPlanningOptions;
     readonly renderPipeline?: SceneRenderPipelineSettings;
+    /**
+     * Opt-in derived instanced draw path for homogeneous opaque `MeshRenderer`
+     * scenes. Default `off` keeps one draw call per actor; `auto` groups
+     * eligible actors by mesh/material/render state into one instanced draw
+     * per group while leaving the ECS/actor model, culling and per-component
+     * API untouched. Ineligible actors (morph, skin, transparency, per-object
+     * uniforms, unsupported shader shapes) keep the individual draw path.
+     */
+    readonly instancing?: SceneInstancingMode;
     readonly profiler?: boolean | SceneRuntimeProfilerOptions;
     readonly worldConfig?: {
         readonly maxEntities?: number;
@@ -585,6 +594,13 @@ export interface SceneRenderPlanningOptions {
     readonly maxTransparentPrimitives?: number;
 }
 
+/**
+ * Scene-level render mode for homogeneous `MeshRenderer` batching.
+ * `off` (default) submits one draw per actor; `auto` derives instanced groups
+ * for eligible opaque actors and falls back per actor otherwise.
+ */
+export type SceneInstancingMode = 'off' | 'auto';
+
 export interface SceneRenderPipelineSettings {
     readonly hdr?: boolean | Partial<RenderHdrSettings>;
     readonly tonemapping?: Partial<RenderTonemappingSettings>;
@@ -606,6 +622,16 @@ export interface SceneRenderPlanningStats {
     readonly renderListCacheHit?: boolean;
     /** Optional diagnostics: the 3D primitive list/material snapshots were reused. */
     readonly primitiveCacheHit?: boolean;
+    /** Present when the opt-in instanced path is active for this pass. */
+    readonly instancing?: SceneInstancingMode;
+    /** Number of derived instance groups drawn (one draw call each). */
+    readonly instancedGroupCount?: number;
+    /** Number of actors submitted through the instanced path. */
+    readonly instancedInstanceCount?: number;
+    /** Draw calls issued by the instanced path this frame. */
+    readonly instancedDrawCalls?: number;
+    /** Optional diagnostics: the retained instance plan was replayed unchanged. */
+    readonly instancedPlanReused?: boolean;
     readonly warnings: readonly string[];
 }
 

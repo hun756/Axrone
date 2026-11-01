@@ -62,7 +62,16 @@ export type {
 	SceneRuntimePhysicsProfilerStats,
 	SceneRuntimePhysicsWorldView,
 } from './scene-runtime-kernel';
-export { getDefaultSceneRuntimeComposition } from './default-composition';
+export {
+	getDefaultSceneRuntimeComposition,
+	resolveSceneRuntimeComposition,
+} from './default-composition';
+export type {
+	SceneBatchRuntimeFactory,
+	SceneBatchRuntimeFactoryContext,
+	SceneBatchRuntimeSet,
+} from './scene-batch-runtimes';
+export { createFullSceneBatchRuntimes } from './scene-batch-runtimes';
 
 /** @deprecated Use `CORE_SCENE_RUNTIME_PROFILE_ID` instead. */
 export { CORE_SCENE_RUNTIME_PROFILE_ID as CORE_SCENE_PROFILE_ID } from './scene-profile';
@@ -173,6 +182,7 @@ export type {
 	SceneMorphTargetSemantic,
 	SceneMeshSemantic,
 	SceneMeshTopology,
+	SceneInstancingMode,
 	SceneOptions,
 	ScenePrefabActorField,
 	ScenePrefabActorFieldValue,

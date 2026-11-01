@@ -7,12 +7,9 @@ import {
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { type SceneRegistry } from '@axrone/scene-runtime';
-import {
-    Camera,
-    type CameraConfig,
-    requireRegisteredComponent,
-} from '@axrone/scene-runtime/scene-facade';
-import { MeshRenderer, type MeshRendererConfig } from '@axrone/scene-runtime/scene-3d-support';
+import { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-camera';
+import { requireRegisteredComponent } from '@axrone/scene-runtime/scene-capability-guard';
+import { MeshRenderer, type MeshRendererConfig } from '@axrone/scene-runtime/scene-mesh-renderer';
 
 export interface SceneProfilerProbe {
     resolveHotRefsMs?: number;

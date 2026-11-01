@@ -21,12 +21,12 @@ export {
     type SceneRenderableActorCreateOptions,
     type SceneRenderableActorInstance,
 } from './scene-3d-actor-runtime';
+export { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-camera';
 export {
     MeshRenderer,
-    SceneGeometryMeshBuilder,
     type MeshRendererConfig,
-} from '@axrone/scene-runtime/scene-3d-support';
-export { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
+} from '@axrone/scene-runtime/scene-mesh-renderer';
+export { SceneGeometryMeshBuilder } from '@axrone/scene-runtime/scene-geometry-mesh-builder';
 export { createUnlitColorShaderDefinition } from './scene-default-shaders';
 
 export type {
@@ -34,6 +34,7 @@ export type {
     SceneMaterialDefinition,
     SceneMaterialHandle,
     SceneMaterialSurfaceDefinition,
+    SceneInstancingMode,
     SceneMeshDefinition,
     SceneMeshHandle,
     SceneOptions,

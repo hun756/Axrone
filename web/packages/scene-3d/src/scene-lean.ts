@@ -4,8 +4,8 @@ import {
     createSceneRuntimeProfile,
     type SceneRuntimeProfile,
 } from '@axrone/scene-runtime/scene-profile-contract';
-import { Camera } from '@axrone/scene-runtime/scene-facade';
-import { MeshRenderer } from '@axrone/scene-runtime/scene-3d-support';
+import { Camera } from '@axrone/scene-runtime/scene-camera';
+import { MeshRenderer } from '@axrone/scene-runtime/scene-mesh-renderer';
 import type { SceneOptions, SceneRegistry } from '@axrone/scene-runtime/types';
 import { Scene as SceneBase } from './scene';
 

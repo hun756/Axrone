@@ -119,4 +119,24 @@ describe('SceneRuntimeKernel composition', () => {
             kernel.lifecycle.dispose();
         }
     });
+
+    it('forwards the injected render batch factory to the render runtime', () => {
+        const createRenderBatchRuntimes = vi.fn(() => ({}));
+
+        const kernel = createKernel({
+            composition: { createRenderBatchRuntimes },
+        });
+
+        try {
+            expect(createRenderBatchRuntimes).toHaveBeenCalledTimes(1);
+            expect(createRenderBatchRuntimes).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    gl: expect.anything(),
+                    resources: expect.anything(),
+                })
+            );
+        } finally {
+            kernel.lifecycle.dispose();
+        }
+    });
 });

@@ -21,20 +21,37 @@ import { Scene2D } from '@axrone/scene-2d/lean';
 The identity test (`src/__tests__/lean-entry.test.ts`) proves every lean value
 is the same reference as the root export.
 
-## Measurement
+## Composition model
 
-| Entry | min | gzip |
-| --- | --- | --- |
-| `benchmark-web/src/adapters/axrone2d` baseline (snapshot) | 1429.1 KB | 350.4 KB |
-| same entry re-measured today | 1433.5 KB | 351.7 KB |
-| same entry with `@axrone/scene-2d/lean` | 1433.3 KB | 351.4 KB |
+A lean 2D registry exposes `Camera` + `SpriteRenderer`; it can never produce
+particles, lines, billboards or meshes. The lean `Scene2D` injects
+`createLean2DSceneBatchRuntimes` (sprite family only) as its runtime
+composition, so the sprite drawing path is preserved while
+particle/line/billboard chunks — and the `particle-system` component chain —
+stay out of the graph. A caller-supplied composition with its own
+`createRenderBatchRuntimes` is kept untouched.
 
-Adoption alone is neutral. The graph is dominated by `SceneRuntimeKernel`
-(static physics-2d + physics-3d bridges, full default registry) and by
-`scene-2d-actor-runtime.ts`, which statically imports `SpriteAnimator` and
-`SpriteMask` and therefore pulls `animation` (76 KB min) into every sprite-only
-consumer.
+Imports use the fine-grained scene-runtime entries (`scene-asset-facade`,
+`scene-camera`, `scene-sprite-renderer`, `scene-capability-guard`,
+`scene-2d-lean-composition`) instead of the coarse `scene-facade` /
+`scene-2d-support` barrels.
 
-See `../../scene-3d/docs/lean-entry.md` for the full module-graph analysis,
-the isolated-copy ceiling (2D: 351.7 → 280.3 KB gzip, −20.3 %) and the
-required runtime-owner follow-up.
+## Measured footprint (2026-11-01)
+
+Method: `benchmark-web/scripts/measure-lean-footprint.mjs` (source) and
+`LEAN_MEASURE_DIST=1` (built `dist`), esbuild 0.25.12, browser ESM, minify,
+tree-shaken, gzip level 9.
+
+| Graph | Before | After | Delta |
+| --- | --- | --- | --- |
+| source 2D | 1059.5 KB min / 265.5 KB gzip | 880.4 KB min / 222.7 KB gzip | −42.8 KB gzip (−16.1 %) |
+| published dist 2D | 1291.4 KB min / 316.5 KB gzip | 1093.1 KB min / 269.6 KB gzip | −46.9 KB gzip (−14.8 %) |
+
+Chunks that leave the lean 2D dist graph: `scene-facade` (22.5 KB min),
+the `scene-runtime` particle component chunk (77.6 KB),
+`@axrone/particle-system` (106.6 KB) and the line/billboard runtime code inside
+the render chunk. `sprite-batch-runtime` + `render-2d` remain by design.
+
+See `../../scene-3d/docs/lean-entry.md` for the chunk-graph analysis, the
+composition contract and the shared residuals (UIHost via the prefab runtime,
+lights/mesh draw path, direct runtime/kernel construction caveat).

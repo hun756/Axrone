@@ -14,11 +14,11 @@
 
 export { Scene2D } from './scene-2d-lean';
 export type { Scene2DBulkSpriteConfig } from './scene-2d-actor-runtime';
-export { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-facade';
+export { Camera, type CameraConfig } from '@axrone/scene-runtime/scene-camera';
 export {
     SpriteRenderer,
     type SpriteRendererConfig,
-} from '@axrone/scene-runtime/scene-2d-support';
+} from '@axrone/scene-runtime/scene-sprite-renderer';
 export { Color } from '@axrone/numeric';
 
 export type {
