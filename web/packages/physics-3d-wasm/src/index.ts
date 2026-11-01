@@ -1,5 +1,7 @@
 export { WasmPhysicsWorld3D } from "./world";
 export { WasmPhysicsWorld3DCompat } from "./compat";
+export { WASM_PHYSICS_CAPABILITIES } from "./capabilities";
+export type { WasmPhysicsCapabilities } from "./capabilities";
 export { decodeBase64, instantiateWasm, loadEmbeddedWasm } from "./loader";
 export type {
     CompatBodyDef,
