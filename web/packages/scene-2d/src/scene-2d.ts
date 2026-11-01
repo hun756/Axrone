@@ -1,8 +1,8 @@
 import type { ComponentRegistry } from '@axrone/ecs-runtime';
 import { type ActorConfig } from '@axrone/ecs-runtime';
 import type { SceneActorRuntime, SceneOptions } from '@axrone/scene-runtime';
-import { SceneAssetFacade } from '@axrone/scene-runtime/scene-facade';
-import { type CameraConfig } from '@axrone/scene-runtime/scene-facade';
+import { SceneAssetFacade } from '@axrone/scene-runtime/scene-asset-facade';
+import type { CameraConfig } from '@axrone/scene-runtime/scene-camera';
 import {
     type SpriteAnimatorConfig,
     type SpriteMaskConfig,
@@ -40,6 +40,8 @@ export class Scene2D<R extends ComponentRegistry = Record<string, never>> extend
         const actors = this._kernel.actors;
         this._actors2d = new Scene2DActorRuntime({
             actors,
+            // The bulk sprite path resolves one archetype for the whole batch.
+            world: this._kernel.world,
             animation: actorsComposition.createAnimation?.(actors),
         });
     }
