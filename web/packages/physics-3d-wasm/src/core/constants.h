@@ -1,0 +1,34 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace axp {
+
+constexpr float kDefaultFriction = 0.6f;
+constexpr float kPositionSlop = 0.005f;
+constexpr float kPositionPercent = 0.2f;
+constexpr float kMaxPositionCorrection = 0.2f;
+constexpr float kFaceEdgeBias = 0.001f;
+constexpr float kQuatEps = 1e-12f;
+constexpr float kEps = 1e-9f;
+constexpr float kCrossEps = 1e-8f;
+constexpr float kTangentThreshold = 0.57735026f;
+constexpr float kSphereVolume = 4.1887902047863905f;
+constexpr float kSphereInertia = 0.4f;
+constexpr float kBoxVolume = 8.0f;
+constexpr float kMaxDt = 0.1f;
+constexpr int32_t kMaxIterations = 64;
+constexpr int32_t kMaxBodies = 262144;
+constexpr int32_t kMaxContacts = 262144;
+constexpr float kBig = 1e30f;
+constexpr float kRestitutionThreshold = 1.0f;
+
+constexpr int32_t kKindSphereSphere = 1;
+constexpr int32_t kKindSphereBox = 2;
+constexpr int32_t kKindBoxFace = 3;
+constexpr int32_t kKindBoxEdge = 4;
+
+constexpr int32_t kBodyTypeStatic = 0;
+constexpr int32_t kBodyTypeDynamic = 1;
+
+}
