@@ -6,6 +6,7 @@ import { Component, getComponentMetadata } from './component';
 import { Hierarchy } from '../components/hierarchy';
 import { Transform } from '../components/transform';
 import type { RenderMutationClock } from './render-mutation-clock';
+import { getCreationTimestamp } from './creation-clock';
 
 const getComponentTypeName = (componentType: ComponentType): string =>
     getComponentMetadata(componentType)?.scriptName ?? componentType.name;
@@ -76,6 +77,23 @@ export interface ActorComponentEntry {
 
 type ActorPreloadedComponentEntry = ActorComponentEntry;
 
+const FINALIZE_FLAG_AWAKE = 1;
+const FINALIZE_FLAG_START = 2;
+const FINALIZE_FLAG_ENABLE = 4;
+const FINALIZE_FLAG_EMIT = 8;
+
+/**
+ * Scratch arrays for the preloaded-components finalize pass. Creating one
+ * record object per attached component meant ~150k short-lived objects for a
+ * 50k-actor bulk build; parallel scratch arrays reused across actors collapse
+ * that to zero. Lifecycle hooks can attach components re-entrantly, so the
+ * scratch is guarded and a nested call falls back to its own arrays.
+ */
+const finalizeComponentsScratch: Component[] = [];
+const finalizeFlagsScratch: number[] = [];
+const finalizeNamesScratch: string[] = [];
+let finalizeScratchInUse = false;
+
 interface ActorInternalConfig extends ActorConfig {
     readonly entity?: Entity;
     readonly skipCoreComponents?: boolean;
@@ -91,8 +109,26 @@ export class Actor<
 
     public readonly entity: Entity;
     public readonly world: TWorld;
-    public readonly id: ActorId;
     public readonly creationTime: number;
+
+    /**
+     * Actor id is materialized on first read. Bulk creation assigns the global
+     * sequence eagerly (uniqueness) but skips the template string unless
+     * someone asks — 50k-sprite scenes that never read actor ids during setup
+     * allocate nothing. The value is identical either way.
+     */
+    private _idValue: ActorId | null = null;
+    private readonly _idSequence: number;
+    private readonly _nameAtCreation: string;
+
+    get id(): ActorId {
+        if (this._idValue === null) {
+            this._idValue = `${this._nameAtCreation}_${String(this.entity)}_${String(
+                this._idSequence
+            )}` as ActorId;
+        }
+        return this._idValue;
+    }
 
     private _state: ActorState = 'initializing';
     private _name: string;
@@ -103,15 +139,21 @@ export class Actor<
     private _pooled: boolean;
 
     private readonly _components = new Map<ComponentType, Component>();
-    private readonly _componentDependencies = new Map<ComponentType, Set<ComponentType>>();
+    /**
+     * Dependency bookkeeping is lazily allocated: scenes that declare no
+     * component dependencies never pay a Map per actor.
+     */
+    private _componentDependencies: Map<ComponentType, Set<ComponentType>> | null = null;
     private readonly _componentPriorities = new Map<ComponentType, number>();
     private readonly _maxComponents: number;
     /**
-     * Priority-ordered component list reused by every lifecycle phase. The
-     * component set changes rarely, so rebuilding this on each `start` /
-     * `update` / `destroy` was pure allocation churn.
+     * Priority-ordered component lists reused by every lifecycle phase, kept
+     * as two parallel arrays so revalidating the order allocates no pair
+     * tuples. The component set changes rarely, so rebuilding these on each
+     * `start` / `update` / `destroy` would be pure allocation churn.
      */
-    private _sortedComponents: Array<[ComponentType, Component]> | null = null;
+    private _sortedComponentTypes: ComponentType[] | null = null;
+    private _sortedComponentList: Component[] | null = null;
 
     private _started = false;
     private _destroyed = false;
@@ -125,12 +167,12 @@ export class Actor<
     private readonly _renderClock: RenderMutationClock | null;
 
     private readonly _eventBus: EventBus | null;
-    private readonly _eventSubscriptions = new Set<() => void>();
+    private _eventSubscriptions: Set<() => void> | null = null;
     private _indexChangeHandler:
         | ((kind: 'tag' | 'layer', oldValue: string | number, newValue: string | number) => void)
         | null = null;
 
-    private readonly _cleanupTasks = new Set<() => void>();
+    private _cleanupTasks: Set<() => void> | null = null;
     private _updateFrame = 0;
 
     constructor(world: TWorld, config: ActorConfig = {}) {
@@ -145,10 +187,11 @@ export class Actor<
             (world as unknown as { renderMutationClock?: RenderMutationClock })
                 .renderMutationClock ?? null;
         this.entity = internalConfig.entity ?? world.createEntity();
-        this.creationTime = performance.now();
+        this.creationTime = getCreationTimestamp();
 
         this._name = config.name ?? 'Actor';
-        this.id = `${this._name}_${this.entity}_${Actor._nextActorId++}` as ActorId;
+        this._nameAtCreation = this._name;
+        this._idSequence = Actor._nextActorId++;
         this._active = config.active ?? true;
         this._layer = (config.layer ?? 0) as ActorLayer;
         this._tag = (config.tag ?? 'Default') as ActorTag;
@@ -250,31 +293,44 @@ export class Actor<
             return [];
         }
 
-        const componentMaps = new Array<Record<string, Component>>(count);
-        const componentNames = new Array<string[]>(count);
-        for (let index = 0; index < count; index += 1) {
-            const entries = componentsPerActor[index]!;
-            const map: Record<string, Component> = {};
-            const names = new Array<string>(entries.length);
-            for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
-                const entry = entries[entryIndex]!;
-                const name = entry.componentName ?? getComponentTypeName(entry.componentType);
-                map[name] = entry.component;
-                names[entryIndex] = name;
-            }
-            componentMaps[index] = map;
-            componentNames[index] = names;
-        }
-
         // Announce component attachment only when someone observes the events;
-        // otherwise the whole batch stays free of per-actor payload work.
-        const firstNames = componentNames[0]!;
+        // otherwise the whole batch stays free of per-actor payload work and
+        // free of a names array per actor (50k arrays in a bulk sprite build).
+        const resolveName = (entry: ActorComponentEntry): string =>
+            entry.componentName ?? getComponentTypeName(entry.componentType);
+
+        const firstEntries = componentsPerActor[0]!;
         let announceComponents = false;
-        for (let index = 0; index < firstNames.length; index += 1) {
-            if (world.hasEventSubscribers(`${firstNames[index]}Added`)) {
+        for (let index = 0; index < firstEntries.length; index += 1) {
+            if (world.hasEventSubscribers(`${resolveName(firstEntries[index]!)}Added`)) {
                 announceComponents = true;
                 break;
             }
+        }
+
+        const componentMaps = new Array<Record<string, Component>>(count);
+        const componentNames: string[][] | null = announceComponents
+            ? new Array<string[]>(count)
+            : null;
+        for (let index = 0; index < count; index += 1) {
+            const entries = componentsPerActor[index]!;
+            const map: Record<string, Component> = {};
+            if (componentNames !== null) {
+                const names = new Array<string>(entries.length);
+                for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+                    const entry = entries[entryIndex]!;
+                    const name = resolveName(entry);
+                    map[name] = entry.component;
+                    names[entryIndex] = name;
+                }
+                componentNames[index] = names;
+            } else {
+                for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+                    const entry = entries[entryIndex]!;
+                    map[resolveName(entry)] = entry.component;
+                }
+            }
+            componentMaps[index] = map;
         }
 
         const entities = world.createEntitiesWithComponentsBulk(componentMaps);
@@ -294,7 +350,7 @@ export class Actor<
                 world.notifyComponentsAttached(
                     entities[index]!,
                     actor,
-                    componentNames[index]!,
+                    componentNames![index]!,
                     entries
                 );
             }
@@ -358,9 +414,12 @@ export class Actor<
 
         if (wasActive !== value) {
             try {
-                const sortedComponents = this._getSortedComponents();
+                const sortedTypes = this._resolveSortedComponents();
+                const sortedComponents = this._sortedComponentList!;
 
-                for (const [componentType, component] of sortedComponents) {
+                for (let componentIndex = 0; componentIndex < sortedTypes.length; componentIndex += 1) {
+                    const componentType = sortedTypes[componentIndex]!;
+                    const component = sortedComponents[componentIndex]!;
                     try {
                         if (value && component.onEnable) {
                             component.onEnable();
@@ -534,7 +593,7 @@ export class Actor<
 
             this._components.set(componentType, component);
             this._componentPriorities.set(componentType, metadata?.priority ?? 0);
-            this._sortedComponents = null;
+            this._invalidateSortedComponents();
             this._touchRevision();
 
             this.world.addComponent(this.entity, componentName as any, component);
@@ -584,9 +643,9 @@ export class Actor<
 
             this._components.delete(componentType);
             this._componentPriorities.delete(componentType);
-            this._componentDependencies.delete(componentType);
+            this._componentDependencies?.delete(componentType);
             component.setRenderMutationClock(null);
-            this._sortedComponents = null;
+            this._invalidateSortedComponents();
             this._touchRevision();
 
             this.world.removeComponent(this.entity, getComponentTypeName(componentType) as any);
@@ -639,11 +698,13 @@ export class Actor<
         try {
             this._started = true;
 
-            const sortedComponents = this._getSortedComponents();
+            const sortedTypes = this._resolveSortedComponents();
+            const sortedComponents = this._sortedComponentList!;
 
-            for (const [componentType, component] of sortedComponents) {
+            for (let componentIndex = 0; componentIndex < sortedTypes.length; componentIndex += 1) {
+                const componentType = sortedTypes[componentIndex]!;
                 try {
-                    this._executeComponentLifecycle(component, 'start');
+                    this._executeComponentLifecycle(sortedComponents[componentIndex]!, 'start');
                 } catch (error) {
                     console.error(
                         new ComponentError(
@@ -676,10 +737,16 @@ export class Actor<
         try {
             this._updateFrame++;
 
-            const sortedComponents = this._getSortedComponents();
+            const sortedTypes = this._resolveSortedComponents();
+            const sortedComponents = this._sortedComponentList!;
 
-            for (const [componentType, component] of sortedComponents) {
-                this._executeComponentPhase(componentType, component, 'update', deltaTime);
+            for (let componentIndex = 0; componentIndex < sortedTypes.length; componentIndex += 1) {
+                this._executeComponentPhase(
+                    sortedTypes[componentIndex]!,
+                    sortedComponents[componentIndex]!,
+                    'update',
+                    deltaTime
+                );
             }
         } catch (error) {
             console.error(
@@ -699,12 +766,13 @@ export class Actor<
         }
 
         try {
-            const sortedComponents = this._getSortedComponents();
+            const sortedTypes = this._resolveSortedComponents();
+            const sortedComponents = this._sortedComponentList!;
 
-            for (const [componentType, component] of sortedComponents) {
+            for (let componentIndex = 0; componentIndex < sortedTypes.length; componentIndex += 1) {
                 this._executeComponentPhase(
-                    componentType,
-                    component,
+                    sortedTypes[componentIndex]!,
+                    sortedComponents[componentIndex]!,
                     'fixedUpdate',
                     fixedDeltaTime
                 );
@@ -727,10 +795,16 @@ export class Actor<
         }
 
         try {
-            const sortedComponents = this._getSortedComponents();
+            const sortedTypes = this._resolveSortedComponents();
+            const sortedComponents = this._sortedComponentList!;
 
-            for (const [componentType, component] of sortedComponents) {
-                this._executeComponentPhase(componentType, component, 'lateUpdate', deltaTime);
+            for (let componentIndex = 0; componentIndex < sortedTypes.length; componentIndex += 1) {
+                this._executeComponentPhase(
+                    sortedTypes[componentIndex]!,
+                    sortedComponents[componentIndex]!,
+                    'lateUpdate',
+                    deltaTime
+                );
             }
         } catch (error) {
             console.error(
@@ -755,11 +829,13 @@ export class Actor<
 
             this._emitEvent('actor:destroying', { actor: this, immediate });
 
-            const sortedComponents = this._getSortedComponents();
+            const sortedTypes = this._resolveSortedComponents();
+            const sortedComponentList = this._sortedComponentList!;
 
             // Reverse destruction order without mutating the shared cache.
-            for (let index = sortedComponents.length - 1; index >= 0; index -= 1) {
-                const [componentType, component] = sortedComponents[index]!;
+            for (let index = sortedTypes.length - 1; index >= 0; index -= 1) {
+                const componentType = sortedTypes[index]!;
+                const component = sortedComponentList[index]!;
                 try {
                     if (this._active && component.onDisable) {
                         component.onDisable();
@@ -780,28 +856,32 @@ export class Actor<
                 }
             }
 
-            for (const cleanup of this._cleanupTasks) {
-                try {
-                    cleanup();
-                } catch (error) {
-                    console.error('Cleanup task failed:', error);
+            if (this._cleanupTasks !== null) {
+                for (const cleanup of this._cleanupTasks) {
+                    try {
+                        cleanup();
+                    } catch (error) {
+                        console.error('Cleanup task failed:', error);
+                    }
                 }
             }
 
-            for (const unsubscribe of this._eventSubscriptions) {
-                try {
-                    unsubscribe();
-                } catch (error) {
-                    console.error('Event unsubscribe failed:', error);
+            if (this._eventSubscriptions !== null) {
+                for (const unsubscribe of this._eventSubscriptions) {
+                    try {
+                        unsubscribe();
+                    } catch (error) {
+                        console.error('Event unsubscribe failed:', error);
+                    }
                 }
             }
 
             this._components.clear();
-            this._componentDependencies.clear();
+            this._componentDependencies = null;
             this._componentPriorities.clear();
-            this._sortedComponents = null;
-            this._cleanupTasks.clear();
-            this._eventSubscriptions.clear();
+            this._invalidateSortedComponents();
+            this._cleanupTasks = null;
+            this._eventSubscriptions = null;
 
             this.world.unregisterActor(this.entity);
             this.world.destroyEntity(this.entity);
@@ -852,78 +932,97 @@ export class Actor<
     }
 
     private _initializePreloadedComponents(entries: readonly ActorPreloadedComponentEntry[]): void {
-        const finalizeEntries: Array<{
-            readonly component: Component;
-            readonly componentName: string;
-            readonly runAwake: boolean;
-            readonly runStart: boolean;
-            readonly runEnable: boolean;
-        }> = [];
         const emitComponentAdded = !!(this._eventBus && typeof this._eventBus.emit === 'function');
-
-        for (const entry of entries) {
-            const metadata = entry.metadata ?? this._getComponentMetadata(entry.componentType);
-            const componentName = entry.componentName ?? getComponentTypeName(entry.componentType);
-
-            if (metadata?.dependencies && metadata.dependencies.length > 0) {
-                throw new ComponentError(
-                    'Preloaded component fast path does not support dependencies',
-                    this.id,
-                    componentName
-                );
-            }
-
-            if (this._components.has(entry.componentType)) {
-                throw new ComponentError(
-                    'Component already exists and is not singleton',
-                    this.id,
-                    componentName
-                );
-            }
-
-            (entry.component as any).entity = this.entity;
-            (entry.component as any).actor = this;
-            (entry.component as any).world = this.world;
-            entry.component.setRenderMutationClock(this._renderClock);
-
-            this._components.set(entry.componentType, entry.component);
-            this._componentPriorities.set(entry.componentType, metadata?.priority ?? 0);
-
-            const runAwake = typeof entry.component.awake === 'function';
-            const runStart = this._started && typeof entry.component.start === 'function';
-            const runEnable = this._active && typeof entry.component.onEnable === 'function';
-
-            if (runAwake || runStart || runEnable || emitComponentAdded) {
-                finalizeEntries.push({
-                    component: entry.component,
-                    componentName,
-                    runAwake,
-                    runStart,
-                    runEnable,
-                });
-            }
+        const usingScratch = !finalizeScratchInUse;
+        let finalizeComponents = finalizeComponentsScratch;
+        let finalizeFlags = finalizeFlagsScratch;
+        let finalizeNames = finalizeNamesScratch;
+        if (usingScratch) {
+            finalizeScratchInUse = true;
+        } else {
+            finalizeComponents = [];
+            finalizeFlags = [];
+            finalizeNames = [];
         }
 
-        this._sortedComponents = null;
+        try {
+            for (const entry of entries) {
+                const metadata = entry.metadata ?? this._getComponentMetadata(entry.componentType);
+                const componentName =
+                    entry.componentName ?? getComponentTypeName(entry.componentType);
 
-        for (const entry of finalizeEntries) {
-            if (entry.runAwake) {
-                this._executeComponentLifecycle(entry.component, 'awake');
+                if (metadata?.dependencies && metadata.dependencies.length > 0) {
+                    throw new ComponentError(
+                        'Preloaded component fast path does not support dependencies',
+                        this.id,
+                        componentName
+                    );
+                }
+
+                if (this._components.has(entry.componentType)) {
+                    throw new ComponentError(
+                        'Component already exists and is not singleton',
+                        this.id,
+                        componentName
+                    );
+                }
+
+                (entry.component as any).entity = this.entity;
+                (entry.component as any).actor = this;
+                (entry.component as any).world = this.world;
+                entry.component.setRenderMutationClock(this._renderClock);
+
+                this._components.set(entry.componentType, entry.component);
+                this._componentPriorities.set(entry.componentType, metadata?.priority ?? 0);
+
+                const flags =
+                    (typeof entry.component.awake === 'function' ? FINALIZE_FLAG_AWAKE : 0) |
+                    (this._started && typeof entry.component.start === 'function'
+                        ? FINALIZE_FLAG_START
+                        : 0) |
+                    (this._active && typeof entry.component.onEnable === 'function'
+                        ? FINALIZE_FLAG_ENABLE
+                        : 0) |
+                    (emitComponentAdded ? FINALIZE_FLAG_EMIT : 0);
+
+                if (flags !== 0) {
+                    finalizeComponents.push(entry.component);
+                    finalizeFlags.push(flags);
+                    finalizeNames.push(componentName);
+                }
             }
 
-            if (entry.runStart) {
-                this._executeComponentLifecycle(entry.component, 'start');
-            }
+            this._invalidateSortedComponents();
 
-            if (entry.runEnable) {
-                this._executeComponentLifecycle(entry.component, 'onEnable');
-            }
+            for (let index = 0; index < finalizeComponents.length; index += 1) {
+                const component = finalizeComponents[index]!;
+                const flags = finalizeFlags[index]!;
 
-            if (emitComponentAdded) {
-                this._emitEvent('actor:componentAdded', {
-                    componentType: entry.componentName,
-                    component: entry.component,
-                });
+                if ((flags & FINALIZE_FLAG_AWAKE) !== 0) {
+                    this._executeComponentLifecycle(component, 'awake');
+                }
+
+                if ((flags & FINALIZE_FLAG_START) !== 0) {
+                    this._executeComponentLifecycle(component, 'start');
+                }
+
+                if ((flags & FINALIZE_FLAG_ENABLE) !== 0) {
+                    this._executeComponentLifecycle(component, 'onEnable');
+                }
+
+                if ((flags & FINALIZE_FLAG_EMIT) !== 0) {
+                    this._emitEvent('actor:componentAdded', {
+                        componentType: finalizeNames[index]!,
+                        component,
+                    });
+                }
+            }
+        } finally {
+            if (usingScratch) {
+                finalizeComponents.length = 0;
+                finalizeFlags.length = 0;
+                finalizeNames.length = 0;
+                finalizeScratchInUse = false;
             }
         }
     }
@@ -975,20 +1074,60 @@ export class Actor<
         return registryComponent;
     }
 
-    private _getSortedComponents(): Array<[ComponentType, Component]> {
-        const cached = this._sortedComponents;
+    /**
+     * Resolves (and caches) the priority-ordered component lists as two
+     * parallel arrays. The overwhelmingly common case — all priorities equal,
+     * insertion order already canonical — is a single allocation-free pass
+     * over the component Map; destructuring iteration avoids materializing
+     * entry tuples and the ordering check replaces a comparator sort per
+     * actor.
+     */
+    private _resolveSortedComponents(): ComponentType[] {
+        const cached = this._sortedComponentTypes;
         if (cached !== null) {
             return cached;
         }
 
-        const sorted = Array.from(this._components.entries()).sort(([typeA], [typeB]) => {
-            const priorityA = this._componentPriorities.get(typeA) ?? 0;
-            const priorityB = this._componentPriorities.get(typeB) ?? 0;
-            return priorityB - priorityA;
-        });
+        const types: ComponentType[] = [];
+        const components: Component[] = [];
+        let ordered = true;
+        let previousPriority = Number.POSITIVE_INFINITY;
+        for (const [componentType, component] of this._components) {
+            const priority = this._componentPriorities.get(componentType) ?? 0;
+            if (priority > previousPriority) {
+                ordered = false;
+            }
+            previousPriority = priority;
+            types.push(componentType);
+            components.push(component);
+        }
 
-        this._sortedComponents = sorted;
-        return sorted;
+        if (!ordered && types.length > 1) {
+            const indices = types.map((_, index) => index);
+            indices.sort((left, right) => {
+                const leftPriority = this._componentPriorities.get(types[right]!) ?? 0;
+                const rightPriority = this._componentPriorities.get(types[left]!) ?? 0;
+                return leftPriority - rightPriority;
+            });
+            const orderedTypes: ComponentType[] = [];
+            const orderedComponents: Component[] = [];
+            for (const index of indices) {
+                orderedTypes.push(types[index]!);
+                orderedComponents.push(components[index]!);
+            }
+            this._sortedComponentTypes = orderedTypes;
+            this._sortedComponentList = orderedComponents;
+            return orderedTypes;
+        }
+
+        this._sortedComponentTypes = types;
+        this._sortedComponentList = components;
+        return types;
+    }
+
+    private _invalidateSortedComponents(): void {
+        this._sortedComponentTypes = null;
+        this._sortedComponentList = null;
     }
 
     /**
@@ -996,7 +1135,7 @@ export class Actor<
      * set or a component priority changes.
      */
     invalidateComponentOrder(): void {
-        this._sortedComponents = null;
+        this._invalidateSortedComponents();
     }
 
     private _resolveDependencies(
@@ -1040,10 +1179,14 @@ export class Actor<
 
         resolve(componentType, dependencies);
 
-        this._componentDependencies.set(componentType, new Set(dependencies));
+        const dependenciesByType = (this._componentDependencies ??= new Map());
+        dependenciesByType.set(componentType, new Set(dependencies));
     }
 
     private _checkComponentDependents(componentType: ComponentType): void {
+        if (this._componentDependencies === null) {
+            return;
+        }
         for (const [type, dependencies] of this._componentDependencies) {
             if (dependencies.has(componentType) && this._components.has(type)) {
                 throw new ComponentError(
@@ -1115,7 +1258,8 @@ export class Actor<
 
     addCleanupTask(cleanup: () => void): void {
         if (typeof cleanup === 'function') {
-            this._cleanupTasks.add(cleanup);
+            const tasks = (this._cleanupTasks ??= new Set());
+            tasks.add(cleanup);
         }
     }
 
@@ -1126,11 +1270,12 @@ export class Actor<
         }
 
         const unsubscribe = this._eventBus.on(eventType, handler);
-        this._eventSubscriptions.add(unsubscribe);
+        const subscriptions = (this._eventSubscriptions ??= new Set());
+        subscriptions.add(unsubscribe);
 
         return () => {
             unsubscribe();
-            this._eventSubscriptions.delete(unsubscribe);
+            this._eventSubscriptions?.delete(unsubscribe);
         };
     }
 

@@ -4,6 +4,7 @@ import type { World } from './world';
 import type { Actor } from './actor';
 import type { Transform } from '../components/transform';
 import { getComponentMetadata } from '../decorators/script';
+import { getCreationTimestamp } from './creation-clock';
 import type { RenderMutationClock } from './render-mutation-clock';
 
 const getComponentTypeName = (componentType: ComponentType): string =>
@@ -117,12 +118,56 @@ export abstract class Component<
     >();
     private static _nextComponentId = 1;
 
+    /**
+     * Per-constructor caches for the values the constructor hot path reads:
+     * the display name (prototype-chain `.name` getter) and the decorator
+     * `trackInstances` default. Constructors re-resolve them per instance
+     * otherwise, which is 150k lookups for a bulk sprite scene. A re-decorated
+     * or hot-reloaded class is a new constructor object, so the WeakMap keys
+     * invalidate naturally.
+     */
+    private static readonly _typeNames = new WeakMap<ComponentType, string>();
+    private static readonly _trackInstancesDefaults = new WeakMap<ComponentType, boolean>();
+
+    private static _typeName(componentType: ComponentType): string {
+        let name = Component._typeNames.get(componentType);
+        if (name === undefined) {
+            name = componentType.name;
+            Component._typeNames.set(componentType, name);
+        }
+        return name;
+    }
+
+    private static _resolveTrackInstances(componentType: ComponentType): boolean {
+        let tracked = Component._trackInstancesDefaults.get(componentType);
+        if (tracked === undefined) {
+            tracked = getComponentMetadata(componentType)?.trackInstances ?? true;
+            Component._trackInstancesDefaults.set(componentType, tracked);
+        }
+        return tracked;
+    }
+
     protected entity?: Entity;
     protected actor?: Actor;
     protected world?: World<any>;
 
     private _state: ComponentState = 'uninitialized';
-    private _id: ComponentId;
+    /**
+     * Component id is materialized on first read: bulk creation assigns a
+     * global sequence number eagerly (uniqueness is eager) but skips the
+     * `${name}_${sequence}` string unless someone actually asks for it. The
+     * value is identical either way.
+     */
+    private _idValue: ComponentId | null;
+    private _idSequence: number;
+    private get _id(): ComponentId {
+        if (this._idValue === null) {
+            this._idValue = `${Component._typeName(
+                this.constructor as ComponentType
+            )}_${String(this._idSequence)}` as ComponentId;
+        }
+        return this._idValue;
+    }
     private _priority: ComponentPriority;
     private _enabled: boolean;
     private _persistent: boolean;
@@ -140,7 +185,21 @@ export abstract class Component<
     private readonly _validateOnUpdate: boolean;
     private readonly _autoSerialize: boolean;
 
-    private readonly _cache: ComponentCache;
+    /**
+     * Cache block is created on first access: components that never use the
+     * transform/component/actor caches (the bulk of freshly created sprites in
+     * a static scene) pay no object per instance.
+     */
+    private _cacheInstance: ComponentCache | null = null;
+    private get _cache(): ComponentCache {
+        if (this._cacheInstance === null) {
+            this._cacheInstance = {
+                transformCache: null,
+                lastCacheUpdate: 0,
+            };
+        }
+        return this._cacheInstance;
+    }
     private readonly _cacheTimeout: number = 1000;
 
     private _eventSubscriptions?: Set<() => void>;
@@ -157,9 +216,9 @@ export abstract class Component<
     private _renderClock: RenderMutationClock | null = null;
 
     constructor(config: TConfig = {} as TConfig) {
-        this._creationTime = performance.now();
-        this._id = (config.id ??
-            `${this.constructor.name}_${Component._nextComponentId++}`) as ComponentId;
+        this._creationTime = getCreationTimestamp();
+        this._idSequence = Component._nextComponentId++;
+        this._idValue = config.id ?? null;
         this._priority = (config.priority ?? 0) as ComponentPriority;
         this._enabled = config.enabled ?? true;
         this._persistent = config.persistent ?? false;
@@ -168,15 +227,9 @@ export abstract class Component<
         this._enableCaching = config.enableCaching ?? true;
         this._trackInstances =
             config.trackInstances ??
-            getComponentMetadata(this.constructor as ComponentType)?.trackInstances ??
-            true;
+            Component._resolveTrackInstances(this.constructor as ComponentType);
         this._validateOnUpdate = config.validateOnUpdate ?? false;
         this._autoSerialize = config.autoSerialize ?? false;
-
-        this._cache = {
-            transformCache: null,
-            lastCacheUpdate: 0,
-        };
 
         if (this._trackInstances) {
             this._registerInstance();

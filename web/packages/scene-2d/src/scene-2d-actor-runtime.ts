@@ -2,6 +2,7 @@ import {
     Actor as EcsActor,
     Hierarchy,
     Transform,
+    runWithinCreationBatch,
     type Actor,
     type ActorComponentEntry,
     type ActorConfig,
@@ -265,39 +266,44 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         const actorConfigs = new Array<ActorConfig>(configs.length);
         const componentsPerActor = new Array<readonly ActorComponentEntry[]>(configs.length);
 
-        for (let index = 0; index < configs.length; index += 1) {
-            const config = configs[index]!;
-            const transform = new transformCtor();
-            applyInitialTransform(transform, config);
+        // One creation-batch window: every Component/Actor stamped inside
+        // reads one shared clock value instead of 200k `performance.now()`
+        // calls, and all actors of the batch genuinely share one instant.
+        return runWithinCreationBatch(() => {
+            for (let index = 0; index < configs.length; index += 1) {
+                const config = configs[index]!;
+                const transform = new transformCtor();
+                applyInitialTransform(transform, config);
 
-            // Explicit registry names keep the archetype signature identical
-            // to the profile's keys even when a scene registers subclasses.
-            const entries: ActorComponentEntry[] = [
-                {
-                    componentType: hierarchyType,
-                    componentName: 'Hierarchy',
-                    component: new hierarchyCtor(),
-                },
-                {
-                    componentType: transformType,
-                    componentName: 'Transform',
-                    component: transform,
-                },
-                {
-                    componentType: spriteType,
-                    componentName: 'SpriteRenderer',
-                    component: new spriteType(config.spriteConfig ?? {}),
-                },
-            ];
-            componentsPerActor[index] = entries;
-            actorConfigs[index] = config.actorConfig ?? {};
-        }
+                // Explicit registry names keep the archetype signature identical
+                // to the profile's keys even when a scene registers subclasses.
+                const entries: ActorComponentEntry[] = [
+                    {
+                        componentType: hierarchyType,
+                        componentName: 'Hierarchy',
+                        component: new hierarchyCtor(),
+                    },
+                    {
+                        componentType: transformType,
+                        componentName: 'Transform',
+                        component: transform,
+                    },
+                    {
+                        componentType: spriteType,
+                        componentName: 'SpriteRenderer',
+                        component: new spriteType(config.spriteConfig ?? {}),
+                    },
+                ];
+                componentsPerActor[index] = entries;
+                actorConfigs[index] = config.actorConfig ?? {};
+            }
 
-        // One structure-batch window: the query cache invalidates once for the
-        // whole batch instead of per created archetype.
-        return world.batchStructureChanges(() =>
-            EcsActor.createManyWithComponents(world, actorConfigs, componentsPerActor)
-        );
+            // One structure-batch window: the query cache invalidates once for
+            // the whole batch instead of per created archetype.
+            return world.batchStructureChanges(() =>
+                EcsActor.createManyWithComponents(world, actorConfigs, componentsPerActor)
+            );
+        });
     }
 
     private _createSpriteActorsIncremental(

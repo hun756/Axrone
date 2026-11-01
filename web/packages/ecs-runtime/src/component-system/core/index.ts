@@ -23,3 +23,8 @@ export {
 	bumpRenderMutationClock,
 } from './render-mutation-clock';
 export type { RenderMutationClock } from './render-mutation-clock';
+export {
+	getCreationTimestamp,
+	isCreationBatchOpen,
+	runWithinCreationBatch,
+} from './creation-clock';

@@ -56,6 +56,11 @@ export {
     bumpRenderMutationClock,
 } from './component-system/core/render-mutation-clock';
 export type { RenderMutationClock } from './component-system/core/render-mutation-clock';
+export {
+    getCreationTimestamp,
+    isCreationBatchOpen,
+    runWithinCreationBatch,
+} from './component-system/core/creation-clock';
 
 export { WorldActorRegistry } from './component-system/core/world-actor-registry';
 export { WorldDiagnostics } from './component-system/core/world-diagnostics';
