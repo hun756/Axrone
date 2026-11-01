@@ -7,14 +7,14 @@ extern "C" {
 #endif
 
 enum {
-    AXP_BODY_STATIC = 0,
-    AXP_BODY_DYNAMIC = 1
+    AXRONE_PHYSICS_BODY_STATIC = 0,
+    AXRONE_PHYSICS_BODY_DYNAMIC = 1
 };
 
 enum {
-    AXP_SHAPE_NONE = 0,
-    AXP_SHAPE_SPHERE = 1,
-    AXP_SHAPE_BOX = 2
+    AXRONE_PHYSICS_SHAPE_NONE = 0,
+    AXRONE_PHYSICS_SHAPE_SPHERE = 1,
+    AXRONE_PHYSICS_SHAPE_BOX = 2
 };
 
 int32_t worldInit(int32_t maxBodies, int32_t maxContacts, float gx, float gy, float gz);

@@ -48,7 +48,7 @@ size_t Arena::capacity() const {
 }
 
 bool Arena::growTo(size_t requiredBytes) {
-#if AXP_WASM
+#if AXRONE_PHYSICS_TARGET_WASM
     const uintptr_t base = reinterpret_cast<uintptr_t>(base_);
     const size_t currentBytes = __builtin_wasm_memory_size(0) * 65536;
     const size_t currentCapacity = currentBytes > base ? currentBytes - base : 0;

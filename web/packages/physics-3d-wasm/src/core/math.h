@@ -12,40 +12,40 @@ struct alignas(16) Vec3 {
     float z;
     float pad;
 
-    AXP_INLINE Vec3() : x(0.0f), y(0.0f), z(0.0f), pad(0.0f) {}
-    AXP_INLINE Vec3(float xv, float yv, float zv) : x(xv), y(yv), z(zv), pad(0.0f) {}
+    AXRONE_PHYSICS_INLINE Vec3() : x(0.0f), y(0.0f), z(0.0f), pad(0.0f) {}
+    AXRONE_PHYSICS_INLINE Vec3(float xv, float yv, float zv) : x(xv), y(yv), z(zv), pad(0.0f) {}
 
-    AXP_INLINE Vec3 operator+(const Vec3& other) const {
+    AXRONE_PHYSICS_INLINE Vec3 operator+(const Vec3& other) const {
         return Vec3(x + other.x, y + other.y, z + other.z);
     }
 
-    AXP_INLINE Vec3 operator-(const Vec3& other) const {
+    AXRONE_PHYSICS_INLINE Vec3 operator-(const Vec3& other) const {
         return Vec3(x - other.x, y - other.y, z - other.z);
     }
 
-    AXP_INLINE Vec3 operator*(float scale) const {
+    AXRONE_PHYSICS_INLINE Vec3 operator*(float scale) const {
         return Vec3(x * scale, y * scale, z * scale);
     }
 
-    AXP_INLINE Vec3 operator-() const {
+    AXRONE_PHYSICS_INLINE Vec3 operator-() const {
         return Vec3(-x, -y, -z);
     }
 
-    AXP_INLINE Vec3& operator+=(const Vec3& other) {
+    AXRONE_PHYSICS_INLINE Vec3& operator+=(const Vec3& other) {
         x += other.x;
         y += other.y;
         z += other.z;
         return *this;
     }
 
-    AXP_INLINE Vec3& operator-=(const Vec3& other) {
+    AXRONE_PHYSICS_INLINE Vec3& operator-=(const Vec3& other) {
         x -= other.x;
         y -= other.y;
         z -= other.z;
         return *this;
     }
 
-    AXP_INLINE Vec3& operator*=(float scale) {
+    AXRONE_PHYSICS_INLINE Vec3& operator*=(float scale) {
         x *= scale;
         y *= scale;
         z *= scale;
@@ -53,11 +53,11 @@ struct alignas(16) Vec3 {
     }
 };
 
-AXP_INLINE float dot(const Vec3& left, const Vec3& right) {
+AXRONE_PHYSICS_INLINE float dot(const Vec3& left, const Vec3& right) {
     return left.x * right.x + left.y * right.y + left.z * right.z;
 }
 
-AXP_INLINE Vec3 cross(const Vec3& left, const Vec3& right) {
+AXRONE_PHYSICS_INLINE Vec3 cross(const Vec3& left, const Vec3& right) {
     return Vec3(
         left.y * right.z - left.z * right.y,
         left.z * right.x - left.x * right.z,
@@ -65,15 +65,15 @@ AXP_INLINE Vec3 cross(const Vec3& left, const Vec3& right) {
     );
 }
 
-AXP_INLINE float lengthSq(const Vec3& value) {
+AXRONE_PHYSICS_INLINE float lengthSq(const Vec3& value) {
     return dot(value, value);
 }
 
-AXP_INLINE float length(const Vec3& value) {
+AXRONE_PHYSICS_INLINE float length(const Vec3& value) {
     return sqrtf(lengthSq(value));
 }
 
-AXP_INLINE Vec3 normalize(const Vec3& value) {
+AXRONE_PHYSICS_INLINE Vec3 normalize(const Vec3& value) {
     const float len = length(value);
     if (len > kEps) {
         return value * (1.0f / len);
@@ -84,13 +84,13 @@ AXP_INLINE Vec3 normalize(const Vec3& value) {
 struct Mat3 {
     float m[9];
 
-    AXP_INLINE void setIdentity() {
+    AXRONE_PHYSICS_INLINE void setIdentity() {
         m[0] = 1.0f; m[1] = 0.0f; m[2] = 0.0f;
         m[3] = 0.0f; m[4] = 1.0f; m[5] = 0.0f;
         m[6] = 0.0f; m[7] = 0.0f; m[8] = 1.0f;
     }
 
-    AXP_INLINE void fromQuaternion(float qx, float qy, float qz, float qw) {
+    AXRONE_PHYSICS_INLINE void fromQuaternion(float qx, float qy, float qz, float qw) {
         const float xx = qx * qx;
         const float yy = qy * qy;
         const float zz = qz * qz;
@@ -114,7 +114,7 @@ struct Mat3 {
         m[8] = 1.0f - 2.0f * (xx + yy);
     }
 
-    AXP_INLINE Vec3 transform(const Vec3& value) const {
+    AXRONE_PHYSICS_INLINE Vec3 transform(const Vec3& value) const {
         return Vec3(
             m[0] * value.x + m[1] * value.y + m[2] * value.z,
             m[3] * value.x + m[4] * value.y + m[5] * value.z,
@@ -122,7 +122,7 @@ struct Mat3 {
         );
     }
 
-    AXP_INLINE Vec3 transposeTransform(const Vec3& value) const {
+    AXRONE_PHYSICS_INLINE Vec3 transposeTransform(const Vec3& value) const {
         return Vec3(
             m[0] * value.x + m[3] * value.y + m[6] * value.z,
             m[1] * value.x + m[4] * value.y + m[7] * value.z,
@@ -150,11 +150,11 @@ struct AABB {
     float maxZ;
 };
 
-AXP_INLINE Vec3 transformPosition(const Transform& transform) {
+AXRONE_PHYSICS_INLINE Vec3 transformPosition(const Transform& transform) {
     return Vec3(transform.px, transform.py, transform.pz);
 }
 
-AXP_INLINE void normalizeQuaternion(Transform& transform) {
+AXRONE_PHYSICS_INLINE void normalizeQuaternion(Transform& transform) {
     const float len2 = transform.qx * transform.qx + transform.qy * transform.qy +
                        transform.qz * transform.qz + transform.qw * transform.qw;
     if (len2 < kQuatEps) {
@@ -171,7 +171,7 @@ AXP_INLINE void normalizeQuaternion(Transform& transform) {
     transform.qw *= inv;
 }
 
-AXP_INLINE void integrateRotation(Transform& transform, const Vec3& angularVelocity, float dt) {
+AXRONE_PHYSICS_INLINE void integrateRotation(Transform& transform, const Vec3& angularVelocity, float dt) {
     const float factor = 0.5f * dt;
     const float nx = transform.qx + factor * (transform.qw * angularVelocity.x + angularVelocity.y * transform.qz - angularVelocity.z * transform.qy);
     const float ny = transform.qy + factor * (transform.qw * angularVelocity.y + angularVelocity.z * transform.qx - angularVelocity.x * transform.qz);
