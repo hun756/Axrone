@@ -24,11 +24,14 @@ void* Arena::alloc(size_t size, size_t alignment) {
 
     const uintptr_t base = reinterpret_cast<uintptr_t>(base_);
     const uintptr_t start = base + offset_;
-    const uintptr_t aligned = (start + (alignment - 1)) & ~(static_cast<uintptr_t>(alignment) - 1);
-    const uintptr_t end = aligned + size;
-    if (end < aligned) {
+    if (start > static_cast<uintptr_t>(-1) - (alignment - 1)) {
         return nullptr;
     }
+    const uintptr_t aligned = (start + (alignment - 1)) & ~(static_cast<uintptr_t>(alignment) - 1);
+    if (size > static_cast<uintptr_t>(-1) - aligned) {
+        return nullptr;
+    }
+    const uintptr_t end = aligned + size;
 
     const size_t endOffset = static_cast<size_t>(end - base);
     if (endOffset > capacity_ && !growTo(endOffset)) {
