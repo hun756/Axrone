@@ -4,12 +4,12 @@
 #include "platform/wasm.h"
 #include "runtime/arena.h"
 
-using axp::Vec3;
-using axp::World;
+using axrone::physics::Vec3;
+using axrone::physics::World;
 
 namespace {
 
-axp::Arena g_arena;
+axrone::physics::Arena g_arena;
 World g_world;
 
 #if !AXP_WASM
@@ -209,25 +209,25 @@ AXP_EXPORT(world_memory_bytes) uintptr_t world_memory_bytes(void) {
 
 AXP_EXPORT(get_transforms_view) uint64_t get_transforms_view(void) {
     return g_world.initialized
-        ? packView(reinterpret_cast<uintptr_t>(g_world.transforms), sizeof(axp::Transform) * static_cast<size_t>(g_world.highWater))
+        ? packView(reinterpret_cast<uintptr_t>(g_world.transforms), sizeof(axrone::physics::Transform) * static_cast<size_t>(g_world.highWater))
         : 0;
 }
 
 AXP_EXPORT(get_velocities_view) uint64_t get_velocities_view(void) {
     return g_world.initialized
-        ? packView(reinterpret_cast<uintptr_t>(g_world.velocities), sizeof(axp::Vec3) * static_cast<size_t>(g_world.highWater))
+        ? packView(reinterpret_cast<uintptr_t>(g_world.velocities), sizeof(axrone::physics::Vec3) * static_cast<size_t>(g_world.highWater))
         : 0;
 }
 
 AXP_EXPORT(get_angular_velocities_view) uint64_t get_angular_velocities_view(void) {
     return g_world.initialized
-        ? packView(reinterpret_cast<uintptr_t>(g_world.angularVelocities), sizeof(axp::Vec3) * static_cast<size_t>(g_world.highWater))
+        ? packView(reinterpret_cast<uintptr_t>(g_world.angularVelocities), sizeof(axrone::physics::Vec3) * static_cast<size_t>(g_world.highWater))
         : 0;
 }
 
 AXP_EXPORT(get_contacts_view) uint64_t get_contacts_view(void) {
     return g_world.initialized
-        ? packView(reinterpret_cast<uintptr_t>(g_world.packedContacts), sizeof(axp::PackedContact) * static_cast<size_t>(g_world.contactCount))
+        ? packView(reinterpret_cast<uintptr_t>(g_world.packedContacts), sizeof(axrone::physics::PackedContact) * static_cast<size_t>(g_world.contactCount))
         : 0;
 }
 

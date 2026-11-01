@@ -4,7 +4,7 @@
 
 #include "core/world.h"
 
-namespace axp {
+namespace axrone::physics {
 
 void updateBounds(World& world);
 int32_t buildSweep(World& world);

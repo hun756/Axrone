@@ -2,7 +2,7 @@
 
 #include "platform/wasm.h"
 
-namespace axp {
+namespace axrone::physics {
 
 constexpr float kFloatMax = 3.402823466e38f;
 

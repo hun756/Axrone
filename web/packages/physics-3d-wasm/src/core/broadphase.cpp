@@ -3,7 +3,7 @@
 #include "core/narrowphase.h"
 #include "platform/math.h"
 
-namespace axp {
+namespace axrone::physics {
 
 namespace {
 

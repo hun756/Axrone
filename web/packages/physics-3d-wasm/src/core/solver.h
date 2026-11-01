@@ -4,7 +4,7 @@
 
 #include "core/world.h"
 
-namespace axp {
+namespace axrone::physics {
 
 void prepareContacts(World& world);
 void solveVelocities(World& world, int32_t iterations);

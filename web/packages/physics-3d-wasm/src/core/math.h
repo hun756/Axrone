@@ -4,7 +4,7 @@
 #include "platform/math.h"
 #include "platform/wasm.h"
 
-namespace axp {
+namespace axrone::physics {
 
 struct alignas(16) Vec3 {
     float x;

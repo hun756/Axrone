@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace axp {
+namespace axrone::physics {
 
 class Arena {
 public:

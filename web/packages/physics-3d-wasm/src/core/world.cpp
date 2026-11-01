@@ -6,7 +6,7 @@
 #include "platform/memory.h"
 #include "runtime/arena.h"
 
-namespace axp {
+namespace axrone::physics {
 
 namespace {
 

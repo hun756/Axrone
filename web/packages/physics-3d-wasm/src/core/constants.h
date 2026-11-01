@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-namespace axp {
+namespace axrone::physics {
 
 constexpr float kDefaultFriction = 0.6f;
 constexpr float kPositionSlop = 0.005f;

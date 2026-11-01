@@ -2,7 +2,7 @@
 
 #include "core/math.h"
 
-namespace axp {
+namespace axrone::physics {
 
 enum BodyState : int32_t {
     kBodyFree = 0,

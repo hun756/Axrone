@@ -4,7 +4,7 @@
 
 #include "core/world.h"
 
-namespace axp {
+namespace axrone::physics {
 
 constexpr int32_t kStandardBoxCount = 256;
 constexpr int32_t kStandardSteps = 240;

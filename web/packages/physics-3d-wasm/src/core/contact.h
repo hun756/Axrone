@@ -2,7 +2,7 @@
 
 #include "core/math.h"
 
-namespace axp {
+namespace axrone::physics {
 
 struct alignas(16) Contact {
     int32_t a;

@@ -4,7 +4,7 @@
 #include "runtime/arena.h"
 #include "scenario.h"
 
-using namespace axp;
+using namespace axrone::physics;
 
 namespace {
 

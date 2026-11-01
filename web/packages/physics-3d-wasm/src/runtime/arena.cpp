@@ -2,7 +2,7 @@
 
 #include "platform/wasm.h"
 
-namespace axp {
+namespace axrone::physics {
 
 void Arena::init(unsigned char* base, size_t capacity) {
     base_ = base;

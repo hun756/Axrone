@@ -6,7 +6,7 @@
 #include "core/contact.h"
 #include "core/math.h"
 
-namespace axp {
+namespace axrone::physics {
 
 class Arena;
 
