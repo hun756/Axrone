@@ -150,6 +150,21 @@ describe('SpriteRenderer revision', () => {
         expect(renderer.revision).toBe(before);
     });
 
+    it('does not bump when the same frame is re-applied with preserved size/anchor', () => {
+        const renderer = new SpriteRenderer({
+            textureId: 'hero-atlas',
+            size: [4, 4],
+            anchor: [0.5, 0.25],
+        });
+        const options = { preserveSize: true, preserveAnchor: true } as const;
+
+        renderer.applyFrame(frame, options);
+        const before = renderer.revision;
+        renderer.applyFrame(frame, options);
+
+        expect(renderer.revision).toBe(before);
+    });
+
     it('tracks in-place mutations of live value getters', () => {
         const renderer = new SpriteRenderer({
             textureId: 'hero',

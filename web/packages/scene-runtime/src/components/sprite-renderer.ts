@@ -584,6 +584,45 @@ export class SpriteRenderer extends Component {
     }
 
     applyFrame(frame: SpriteAtlasFrame, options: SpriteRendererFrameApplyOptions = {}): this {
+        // An animation loop commonly re-applies the current frame on every
+        // render frame while the clip advances at a much lower rate. The
+        // individual setters are no-ops when values are unchanged, but calling
+        // all of them still costs five comparisons per sprite per frame. Skip
+        // the whole apply when this frame would write nothing.
+        const preserveSize = options.preserveSize === true;
+        const preserveSourceSize = options.preserveSourceSize === true;
+        const preserveAnchor = options.preserveAnchor === true;
+        const preserveSliceBorder = options.preserveSliceBorder === true;
+        const sameSize =
+            preserveSize ||
+            (this._rawSize.x === frame.sourceSize.width &&
+                this._rawSize.y === frame.sourceSize.height);
+        const sameSourceSize =
+            preserveSourceSize ||
+            (this._rawSourceSize.x === frame.sourceSize.width &&
+                this._rawSourceSize.y === frame.sourceSize.height);
+        const sameAnchor =
+            preserveAnchor ||
+            (this._rawAnchor.x === frame.pivot.x && this._rawAnchor.y === frame.pivot.y);
+        const sameSliceBorder =
+            preserveSliceBorder ||
+            (frame.sliceBorder === null
+                ? this._rawSliceBorder === null
+                : bordersEqual(this._rawSliceBorder, toBorder(frame.sliceBorder)));
+        if (
+            this._textureId === frame.textureId &&
+            this._rawUvRect.x === frame.uvRect.x &&
+            this._rawUvRect.y === frame.uvRect.y &&
+            this._rawUvRect.width === frame.uvRect.width &&
+            this._rawUvRect.height === frame.uvRect.height &&
+            sameSize &&
+            sameSourceSize &&
+            sameAnchor &&
+            sameSliceBorder
+        ) {
+            return this;
+        }
+
         if (this._textureId !== frame.textureId) {
             this._textureId = frame.textureId;
             this.touch();
