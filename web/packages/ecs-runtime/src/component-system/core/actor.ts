@@ -5,6 +5,7 @@ import type { World } from './world';
 import { Component, getComponentMetadata } from './component';
 import { Hierarchy } from '../components/hierarchy';
 import { Transform } from '../components/transform';
+import type { RenderMutationClock } from './render-mutation-clock';
 
 const getComponentTypeName = (componentType: ComponentType): string =>
     getComponentMetadata(componentType)?.scriptName ?? componentType.name;
@@ -62,12 +63,18 @@ export interface ActorConfig {
     readonly autoStart?: boolean;
 }
 
-interface ActorPreloadedComponentEntry {
+/**
+ * A fully constructed component plus its registry name, for the preloaded
+ * component paths (`createWithComponents`, `createManyWithComponents`).
+ */
+export interface ActorComponentEntry {
     readonly componentType: ComponentType<Component>;
     readonly component: Component;
     readonly componentName?: string;
     readonly metadata?: ComponentMetadata;
 }
+
+type ActorPreloadedComponentEntry = ActorComponentEntry;
 
 interface ActorInternalConfig extends ActorConfig {
     readonly entity?: Entity;
@@ -99,11 +106,23 @@ export class Actor<
     private readonly _componentDependencies = new Map<ComponentType, Set<ComponentType>>();
     private readonly _componentPriorities = new Map<ComponentType, number>();
     private readonly _maxComponents: number;
+    /**
+     * Priority-ordered component list reused by every lifecycle phase. The
+     * component set changes rarely, so rebuilding this on each `start` /
+     * `update` / `destroy` was pure allocation churn.
+     */
+    private _sortedComponents: Array<[ComponentType, Component]> | null = null;
 
     private _started = false;
     private _destroyed = false;
     /** Monotonic revision for render-cache invalidation; not serialized. */
     private _revision = 0;
+    /**
+     * The world's render-mutation clock. Cached per actor so attaching a
+     * component and bumping on actor-level changes cost one field access
+     * instead of a world lookup.
+     */
+    private readonly _renderClock: RenderMutationClock | null;
 
     private readonly _eventBus: EventBus | null;
     private readonly _eventSubscriptions = new Set<() => void>();
@@ -122,6 +141,9 @@ export class Actor<
         const internalConfig = config as ActorInternalConfig;
 
         this.world = world;
+        this._renderClock =
+            (world as unknown as { renderMutationClock?: RenderMutationClock })
+                .renderMutationClock ?? null;
         this.entity = internalConfig.entity ?? world.createEntity();
         this.creationTime = performance.now();
 
@@ -199,6 +221,89 @@ export class Actor<
     }
 
     /**
+     * Creates many actors whose component sets share one signature, resolving
+     * that signature's archetype once for the whole batch.
+     *
+     * Semantics match creating each actor with `createWithComponents`: the
+     * components are the caller's own instances (so lifecycle, identity and
+     * per-actor configuration are preserved), `EntityCreated` fires per actor,
+     * and the `…Added` events that `addComponent` would emit are emitted
+     * afterwards for components that have subscribers.
+     *
+     * All sets must use the same component names; a mismatch throws before any
+     * entity is created.
+     */
+    static createManyWithComponents<TWorld extends World<any> = World<any>>(
+        world: TWorld,
+        configs: readonly ActorConfig[],
+        componentsPerActor: readonly (readonly ActorComponentEntry[])[]
+    ): Actor<TWorld>[] {
+        const count = configs.length;
+        if (componentsPerActor.length !== count) {
+            throw new ActorError(
+                'Bulk actor creation requires one component set per actor config',
+                '' as ActorId,
+                'createManyWithComponents'
+            );
+        }
+        if (count === 0) {
+            return [];
+        }
+
+        const componentMaps = new Array<Record<string, Component>>(count);
+        const componentNames = new Array<string[]>(count);
+        for (let index = 0; index < count; index += 1) {
+            const entries = componentsPerActor[index]!;
+            const map: Record<string, Component> = {};
+            const names = new Array<string>(entries.length);
+            for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+                const entry = entries[entryIndex]!;
+                const name = entry.componentName ?? getComponentTypeName(entry.componentType);
+                map[name] = entry.component;
+                names[entryIndex] = name;
+            }
+            componentMaps[index] = map;
+            componentNames[index] = names;
+        }
+
+        // Announce component attachment only when someone observes the events;
+        // otherwise the whole batch stays free of per-actor payload work.
+        const firstNames = componentNames[0]!;
+        let announceComponents = false;
+        for (let index = 0; index < firstNames.length; index += 1) {
+            if (world.hasEventSubscribers(`${firstNames[index]}Added`)) {
+                announceComponents = true;
+                break;
+            }
+        }
+
+        const entities = world.createEntitiesWithComponentsBulk(componentMaps);
+        const actors = new Array<Actor<TWorld>>(count);
+
+        for (let index = 0; index < count; index += 1) {
+            const entries = componentsPerActor[index]!;
+            const actor = new Actor(world, {
+                ...configs[index],
+                entity: entities[index],
+                skipCoreComponents: true,
+                preloadedComponents: entries,
+            } as ActorConfig) as Actor<TWorld>;
+            actors[index] = actor;
+
+            if (announceComponents) {
+                world.notifyComponentsAttached(
+                    entities[index]!,
+                    actor,
+                    componentNames[index]!,
+                    entries
+                );
+            }
+        }
+
+        return actors;
+    }
+
+    /**
      * Monotonic render-relevant revision. Incremented when the actor or its
      * component set changes in a way that can affect rendering.
      */
@@ -208,6 +313,11 @@ export class Actor<
 
     private _touchRevision(): void {
         this._revision = (this._revision + 1) >>> 0;
+
+        const clock = this._renderClock;
+        if (clock !== null) {
+            clock.value = (clock.value + 1) >>> 0;
+        }
     }
 
     get name(): string {
@@ -411,7 +521,7 @@ export class Actor<
 
         try {
             const metadata = this._getComponentMetadata(componentType);
-            if (metadata?.dependencies) {
+            if (metadata?.dependencies && metadata.dependencies.length > 0) {
                 this._resolveDependencies(componentType, metadata.dependencies as ComponentType[]);
             }
 
@@ -420,9 +530,11 @@ export class Actor<
             (component as any).entity = this.entity;
             (component as any).actor = this;
             (component as any).world = this.world;
+            component.setRenderMutationClock(this._renderClock);
 
             this._components.set(componentType, component);
             this._componentPriorities.set(componentType, metadata?.priority ?? 0);
+            this._sortedComponents = null;
             this._touchRevision();
 
             this.world.addComponent(this.entity, componentName as any, component);
@@ -473,6 +585,8 @@ export class Actor<
             this._components.delete(componentType);
             this._componentPriorities.delete(componentType);
             this._componentDependencies.delete(componentType);
+            component.setRenderMutationClock(null);
+            this._sortedComponents = null;
             this._touchRevision();
 
             this.world.removeComponent(this.entity, getComponentTypeName(componentType) as any);
@@ -641,9 +755,11 @@ export class Actor<
 
             this._emitEvent('actor:destroying', { actor: this, immediate });
 
-            const sortedComponents = this._getSortedComponents().reverse();
+            const sortedComponents = this._getSortedComponents();
 
-            for (const [componentType, component] of sortedComponents) {
+            // Reverse destruction order without mutating the shared cache.
+            for (let index = sortedComponents.length - 1; index >= 0; index -= 1) {
+                const [componentType, component] = sortedComponents[index]!;
                 try {
                     if (this._active && component.onDisable) {
                         component.onDisable();
@@ -683,6 +799,7 @@ export class Actor<
             this._components.clear();
             this._componentDependencies.clear();
             this._componentPriorities.clear();
+            this._sortedComponents = null;
             this._cleanupTasks.clear();
             this._eventSubscriptions.clear();
 
@@ -767,6 +884,7 @@ export class Actor<
             (entry.component as any).entity = this.entity;
             (entry.component as any).actor = this;
             (entry.component as any).world = this.world;
+            entry.component.setRenderMutationClock(this._renderClock);
 
             this._components.set(entry.componentType, entry.component);
             this._componentPriorities.set(entry.componentType, metadata?.priority ?? 0);
@@ -785,6 +903,8 @@ export class Actor<
                 });
             }
         }
+
+        this._sortedComponents = null;
 
         for (const entry of finalizeEntries) {
             if (entry.runAwake) {
@@ -856,11 +976,27 @@ export class Actor<
     }
 
     private _getSortedComponents(): Array<[ComponentType, Component]> {
-        return Array.from(this._components.entries()).sort(([typeA], [typeB]) => {
+        const cached = this._sortedComponents;
+        if (cached !== null) {
+            return cached;
+        }
+
+        const sorted = Array.from(this._components.entries()).sort(([typeA], [typeB]) => {
             const priorityA = this._componentPriorities.get(typeA) ?? 0;
             const priorityB = this._componentPriorities.get(typeB) ?? 0;
             return priorityB - priorityA;
         });
+
+        this._sortedComponents = sorted;
+        return sorted;
+    }
+
+    /**
+     * @internal Drops the cached lifecycle order. Called when the component
+     * set or a component priority changes.
+     */
+    invalidateComponentOrder(): void {
+        this._sortedComponents = null;
     }
 
     private _resolveDependencies(
@@ -869,6 +1005,13 @@ export class Actor<
     ): void {
         const visited = new Set<ComponentType>();
         const resolving = new Set<ComponentType>();
+
+        if (dependencies.length === 0) {
+            // The decorator defaults `dependencies` to an empty array for every
+            // component, so this is the overwhelmingly common path: there is
+            // nothing to resolve and nothing to record.
+            return;
+        }
 
         const resolve = (type: ComponentType, deps: ComponentType[]): void => {
             if (resolving.has(type)) {

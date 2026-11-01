@@ -4,6 +4,7 @@ import type { World } from './world';
 import type { Actor } from './actor';
 import type { Transform } from '../components/transform';
 import { getComponentMetadata } from '../decorators/script';
+import type { RenderMutationClock } from './render-mutation-clock';
 
 const getComponentTypeName = (componentType: ComponentType): string =>
     getComponentMetadata(componentType)?.scriptName ?? componentType.name;
@@ -148,6 +149,13 @@ export abstract class Component<
     private _dependencies?: Map<ComponentType, Component>;
     private _dependents?: Set<WeakRef<Component>>;
 
+    /**
+     * World render-mutation clock, assigned while the component is attached to
+     * an actor. `touch()` advances it so render caches can skip their whole
+     * per-object sweep on frames where no component changed.
+     */
+    private _renderClock: RenderMutationClock | null = null;
+
     constructor(config: TConfig = {} as TConfig) {
         this._creationTime = performance.now();
         this._id = (config.id ??
@@ -197,6 +205,19 @@ export abstract class Component<
     /** @internal — marks render-relevant state as changed. */
     protected touch(): void {
         this._revision = (this._revision + 1) >>> 0;
+
+        const clock = this._renderClock;
+        if (clock !== null) {
+            clock.value = (clock.value + 1) >>> 0;
+        }
+    }
+
+    /**
+     * @internal Binds the owning world's render-mutation clock. Called by the
+     * actor when the component is attached; `null` detaches it.
+     */
+    setRenderMutationClock(clock: RenderMutationClock | null): void {
+        this._renderClock = clock;
     }
 
     get priority(): ComponentPriority {
@@ -216,6 +237,8 @@ export abstract class Component<
         this._priority = value as ComponentPriority;
 
         if (this.actor && oldPriority !== this._priority) {
+            // Priority decides lifecycle order; the actor caches it.
+            this.actor.invalidateComponentOrder();
             this._emitEvent('component:priorityChanged', {
                 oldPriority,
                 newPriority: this._priority,
@@ -1040,6 +1063,7 @@ export abstract class Component<
         this.entity = undefined;
         this.actor = undefined;
         this.world = undefined;
+        this._renderClock = null;
 
         this._state = 'uninitialized';
     }

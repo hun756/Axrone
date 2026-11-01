@@ -38,6 +38,7 @@ export type {
 
 export { Actor, ActorError } from './component-system/core/actor';
 export type {
+    ActorComponentEntry,
     ActorConfig,
     ActorLayer,
     ActorState,
@@ -50,6 +51,11 @@ export type {
     EntityId,
     WorldState,
 } from './component-system/core/world';
+export {
+    createRenderMutationClock,
+    bumpRenderMutationClock,
+} from './component-system/core/render-mutation-clock';
+export type { RenderMutationClock } from './component-system/core/render-mutation-clock';
 
 export { WorldActorRegistry } from './component-system/core/world-actor-registry';
 export { WorldDiagnostics } from './component-system/core/world-diagnostics';

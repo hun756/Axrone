@@ -506,10 +506,12 @@ export class Transform extends Component {
     }
 
     override onDestroy(): void {
-        const detachedChildren = [...this._detachedChildren];
+        if (this._detachedChildren.size > 0) {
+            const detachedChildren = [...this._detachedChildren];
 
-        for (const child of detachedChildren) {
-            child.parent = undefined;
+            for (const child of detachedChildren) {
+                child.parent = undefined;
+            }
         }
 
         if (this._detachedParent) {
