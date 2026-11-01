@@ -1,4 +1,4 @@
-import { Hierarchy, Transform, type Actor } from '@axrone/ecs-runtime';
+import { Hierarchy, Transform, type Actor, type RenderMutationClock } from '@axrone/ecs-runtime';
 import { Mat4, Vec3 } from '@axrone/numeric';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { SpriteMask } from '../components/sprite-mask';
@@ -50,6 +50,21 @@ interface SceneSpriteInstanceEntry {
     a: number;
     /** Distance from the transform origin to the farthest quad point, unscaled. */
     cullRadius: number;
+}
+
+/**
+ * An actor that was in the pass but produced no entry — inactive, missing
+ * components, or a renderer that was disabled/invisible/sourceless at build
+ * time. Revisions are snapshotted so a later revalidation can tell, without
+ * component lookups, whether any of them became renderable again.
+ */
+interface SceneSpriteInstanceExcludedEntry {
+    actor: Actor;
+    transform: Transform | null;
+    renderer: SpriteRenderer | null;
+    actorRevision: number;
+    transformRevision: number;
+    rendererRevision: number;
 }
 
 export type SceneSpriteInstanceSyncStatus = 'ready' | 'empty' | 'ineligible';
@@ -104,6 +119,8 @@ const createEntry = (): SceneSpriteInstanceEntry => ({
  */
 export class SceneSpriteInstanceRegistry {
     private readonly _entries: SceneSpriteInstanceEntry[] = [];
+    private readonly _excluded: SceneSpriteInstanceExcludedEntry[] = [];
+    private _excludedCount = 0;
     private readonly _order: number[] = [];
     private _transformData = new Float32Array(0);
     private _staticData = new Float32Array(0);
@@ -115,6 +132,14 @@ export class SceneSpriteInstanceRegistry {
     private _empty = false;
     private _needsRebuild = true;
     private _rebuiltThisFrame = false;
+    /**
+     * World render-mutation clock captured from the pass's actors. `null` when
+     * the actor set has no world (mocked or detached actors), in which case
+     * every refresh runs the full per-entry sweep.
+     */
+    private _worldClock: RenderMutationClock | null = null;
+    /** Clock value at the end of the last completed refresh. */
+    private _worldRevision = -1;
     private _ineligibleActorsRef: readonly Actor[] | null = null;
     private _ineligibleActorCount = -1;
     private _ineligiblePassId = '';
@@ -122,6 +147,8 @@ export class SceneSpriteInstanceRegistry {
     private _drawnCount = 0;
     private _transformDirty = false;
     private _staticsDirty = false;
+    /** Entries visited by the most recent `refresh`; 0 on a settled frame. */
+    private _lastRefreshScanCount = 0;
     private _cameraMatrix = new Float64Array(16);
     private _hasCameraMatrix = false;
     private readonly _inverseViewProjection = new Mat4();
@@ -183,6 +210,16 @@ export class SceneSpriteInstanceRegistry {
         return !this._transformDirty && !this._staticsDirty;
     }
 
+    /**
+     * Number of registry entries the most recent `refresh` revalidated.
+     * Zero on a settled frame — the world clock proved nothing changed — and
+     * the full entry count whenever the sweep had to run. Exposed for tests
+     * and profiling; the render path never reads it.
+     */
+    get lastRefreshScanCount(): number {
+        return this._lastRefreshScanCount;
+    }
+
     /** True once right after the registry rebuilds its entry list. */
     get rebuiltThisFrame(): boolean {
         return this._rebuiltThisFrame;
@@ -221,10 +258,39 @@ export class SceneSpriteInstanceRegistry {
      * component set changed or the pass became ineligible mid-frame).
      */
     refresh(cameraFrame: SceneCameraFrameState): boolean {
+        const cameraChanged = this._updateCamera(cameraFrame);
+        const clock = this._worldClock;
+
+        // Settled frame: no component in this pass has mutated since the last
+        // completed refresh and the camera has not moved, so the instance
+        // streams, cull flags and draw order are still exact. The per-entry
+        // revision sweep exists only to discover such mutations, so it is
+        // skipped entirely — a static pass costs one clock comparison.
+        if (
+            !cameraChanged &&
+            !this._needsRebuild &&
+            clock !== null &&
+            clock.value === this._worldRevision
+        ) {
+            this._lastRefreshScanCount = 0;
+            return true;
+        }
+
+        // An actor that was not renderable when the entries were built can
+        // become renderable again (activated, enabled, given a texture or a
+        // `SpriteRenderer`) without any of the existing entries changing, and
+        // it is not represented in the sweep below. Revisions are compared
+        // instead of components so this stays allocation-free; scenes with no
+        // excluded actors pay nothing.
+        if (this._excludedChanged()) {
+            this._needsRebuild = true;
+            return false;
+        }
+
         const entries = this._entries;
         const count = entries.length;
+        this._lastRefreshScanCount = count;
         const frustum = cameraFrame.camera3D.frustum;
-        const cameraChanged = this._updateCamera(cameraFrame);
         const grew = this._ensureCapacity(count);
         const transforms = this._transformData;
         const statics = this._staticData;
@@ -359,6 +425,11 @@ export class SceneSpriteInstanceRegistry {
 
         this._transformDirty = transformDirty;
         this._staticsDirty = staticsDirty;
+        // Read the clock after the sweep so a mutation that landed while the
+        // sweep ran is still detected on the next frame.
+        if (clock !== null) {
+            this._worldRevision = clock.value;
+        }
         return true;
     }
 
@@ -380,6 +451,8 @@ export class SceneSpriteInstanceRegistry {
 
     reset(): void {
         this._entries.length = 0;
+        this._excluded.length = 0;
+        this._excludedCount = 0;
         this._order.length = 0;
         this._transformData = new Float32Array(0);
         this._staticData = new Float32Array(0);
@@ -391,6 +464,8 @@ export class SceneSpriteInstanceRegistry {
         this._empty = false;
         this._needsRebuild = true;
         this._rebuiltThisFrame = false;
+        this._worldClock = null;
+        this._worldRevision = -1;
         this._ineligibleActorsRef = null;
         this._ineligibleActorCount = -1;
         this._ineligiblePassId = '';
@@ -410,21 +485,25 @@ export class SceneSpriteInstanceRegistry {
         this._ineligible = false;
         this._textureId = null;
         this._drawnCount = 0;
+        this._worldClock = resolveRenderMutationClock(actors[0]);
 
         const entries = this._entries;
         let count = 0;
+        let excludedCount = 0;
         let textureId: string | null = null;
         const hierarchyType = resolveHierarchyType(actors[0]);
 
         for (let index = 0; index < actors.length; index += 1) {
             const actor = actors[index]!;
             if (!actor.active) {
+                excludedCount = this._recordExcluded(excludedCount, actor, null, null);
                 continue;
             }
 
             const transform = actor.getComponent(Transform);
             const renderer = actor.getComponent(SpriteRenderer);
             if (!transform || !renderer) {
+                excludedCount = this._recordExcluded(excludedCount, actor, transform ?? null, renderer ?? null);
                 continue;
             }
             if (
@@ -433,6 +512,7 @@ export class SceneSpriteInstanceRegistry {
                 !renderer.hasRenderableSource ||
                 renderer.passId !== passId
             ) {
+                excludedCount = this._recordExcluded(excludedCount, actor, transform, renderer);
                 continue;
             }
             if (renderer.materialId !== null || renderer.textureId === null) {
@@ -489,7 +569,12 @@ export class SceneSpriteInstanceRegistry {
         }
 
         entries.length = count;
+        this._excludedCount = excludedCount;
         this._textureId = textureId;
+
+        // Snapshot the clock after the build so a mutation that landed while
+        // the entries were being created still forces a refresh next frame.
+        this._worldRevision = this._worldClock?.value ?? -1;
 
         if (count === 0) {
             this._empty = true;
@@ -515,6 +600,8 @@ export class SceneSpriteInstanceRegistry {
         this._ineligibleActorCount = this._actorCount;
         this._ineligiblePassId = this._passId;
         this._entries.length = 0;
+        this._excluded.length = 0;
+        this._excludedCount = 0;
         this._order.length = 0;
         this._drawnCount = 0;
         this._empty = false;
@@ -553,6 +640,55 @@ export class SceneSpriteInstanceRegistry {
         }
 
         return { isRoot: false, ancestors };
+    }
+
+    private _recordExcluded(
+        count: number,
+        actor: Actor,
+        transform: Transform | null,
+        renderer: SpriteRenderer | null
+    ): number {
+        const excluded = this._excluded;
+        let entry = excluded[count];
+        if (!entry) {
+            entry = {
+                actor: null as unknown as Actor,
+                transform: null,
+                renderer: null,
+                actorRevision: -1,
+                transformRevision: -1,
+                rendererRevision: -1,
+            };
+            excluded[count] = entry;
+        }
+
+        entry.actor = actor;
+        entry.transform = transform;
+        entry.renderer = renderer;
+        entry.actorRevision = actor.revision;
+        entry.transformRevision = transform ? transform.revision : -1;
+        entry.rendererRevision = renderer ? renderer.revision : -1;
+        return count + 1;
+    }
+
+    /**
+     * True when an excluded actor gained something that can make it
+     * renderable again. Transform revisions are deliberately ignored: moving a
+     * deactivated/pooled sprite cannot change why it was excluded, and
+     * checking it would force a rebuild on every frame a sprite pool idles.
+     */
+    private _excludedChanged(): boolean {
+        const excluded = this._excluded;
+        for (let index = 0; index < this._excludedCount; index += 1) {
+            const entry = excluded[index]!;
+            if (entry.actor.revision !== entry.actorRevision) {
+                return true;
+            }
+            if (entry.renderer !== null && entry.renderer.revision !== entry.rendererRevision) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private _ancestorsChanged(entry: SceneSpriteInstanceEntry): boolean {
@@ -889,6 +1025,22 @@ export class SceneSpriteInstanceRegistry {
         this._aabbValid = true;
     }
 }
+
+/**
+ * Resolves the world render-mutation clock from an actor. Detached or mocked
+ * actors have no world clock; the registry then keeps the conservative
+ * full-sweep behaviour instead of skipping work it cannot prove unnecessary.
+ */
+const resolveRenderMutationClock = (actor: Actor | undefined): RenderMutationClock | null => {
+    if (!actor) {
+        return null;
+    }
+
+    const world = (
+        actor as unknown as { world?: { renderMutationClock?: RenderMutationClock } }
+    ).world;
+    return world?.renderMutationClock ?? null;
+};
 
 /** Resolves the world-registered Hierarchy type (falls back to the core class). */
 const resolveHierarchyType = (actor: Actor | undefined): typeof Hierarchy | null => {

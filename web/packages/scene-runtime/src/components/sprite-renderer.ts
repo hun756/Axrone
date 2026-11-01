@@ -190,12 +190,18 @@ export class SpriteRenderer extends Component {
     private readonly _rawColor: Color;
     private readonly _rawUvRect: SpriteRendererRectState;
     private _rawSliceBorder: SpriteRendererBorderState | null;
-    private readonly _size: Vec2;
-    private readonly _sourceSize: Vec2;
-    private readonly _anchor: Vec2;
-    private readonly _color: Color;
-    private readonly _uvRect: SpriteRendererRectState;
-    private _sliceBorder: SpriteRendererBorderState | null;
+    /**
+     * Mutation-tracked public views. They are created on first access because
+     * each one is a Proxy plus a closure, and a 50k-sprite scene would
+     * otherwise allocate 300k proxies that the render path never reads (it
+     * uses the raw accessors below).
+     */
+    private _sizeView: Vec2 | null = null;
+    private _sourceSizeView: Vec2 | null = null;
+    private _anchorView: Vec2 | null = null;
+    private _colorView: Color | null = null;
+    private _uvRectView: SpriteRendererRectState | null = null;
+    private _sliceBorderView: SpriteRendererBorderState | null = null;
     private _flipX: boolean;
     private _flipY: boolean;
 
@@ -218,16 +224,6 @@ export class SpriteRenderer extends Component {
         this._rawUvRect = toRect(config.uvRect);
         this._rawSliceBorder = toBorder(config.sliceBorder);
 
-        this._size = trackLiveMutations(this._rawSize, VEC2_MUTATION_KEYS, () => this.touch());
-        this._sourceSize = trackLiveMutations(this._rawSourceSize, VEC2_MUTATION_KEYS, () =>
-            this.touch()
-        );
-        this._anchor = trackLiveMutations(this._rawAnchor, VEC2_MUTATION_KEYS, () => this.touch());
-        this._color = trackLiveMutations(this._rawColor, COLOR_MUTATION_KEYS, () => this.touch());
-        this._uvRect = trackLiveMutations(this._rawUvRect, RECT_MUTATION_KEYS, () => this.touch());
-        this._sliceBorder = this._rawSliceBorder
-            ? trackLiveMutations(this._rawSliceBorder, BORDER_MUTATION_KEYS, () => this.touch())
-            : null;
         this._flipX = config.flipX ?? false;
         this._flipY = config.flipY ?? false;
 
@@ -315,7 +311,9 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get size(): Vec2 {
-        return this._size;
+        return (this._sizeView ??= trackLiveMutations(this._rawSize, VEC2_MUTATION_KEYS, () =>
+            this.touch()
+        ));
     }
 
     set size(value: SpriteRendererSizeInput) {
@@ -330,7 +328,11 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get sourceSize(): Vec2 {
-        return this._sourceSize;
+        return (this._sourceSizeView ??= trackLiveMutations(
+            this._rawSourceSize,
+            VEC2_MUTATION_KEYS,
+            () => this.touch()
+        ));
     }
 
     set sourceSize(value: SpriteRendererSizeInput) {
@@ -345,7 +347,9 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get anchor(): Vec2 {
-        return this._anchor;
+        return (this._anchorView ??= trackLiveMutations(this._rawAnchor, VEC2_MUTATION_KEYS, () =>
+            this.touch()
+        ));
     }
 
     set anchor(value: SpriteRendererVec2Input) {
@@ -360,7 +364,9 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get color(): Color {
-        return this._color;
+        return (this._colorView ??= trackLiveMutations(this._rawColor, COLOR_MUTATION_KEYS, () =>
+            this.touch()
+        ));
     }
 
     set color(value: SpriteRendererColorInput) {
@@ -382,7 +388,11 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get uvRect(): SpriteRendererRectState {
-        return this._uvRect;
+        return (this._uvRectView ??= trackLiveMutations(
+            this._rawUvRect,
+            RECT_MUTATION_KEYS,
+            () => this.touch()
+        ));
     }
 
     set uvRect(value: SpriteRendererRectInput) {
@@ -404,7 +414,14 @@ export class SpriteRenderer extends Component {
 
     /** Live internal state — read-only view. Mutating it bypasses setter normalization; assign via the setter. */
     get sliceBorder(): SpriteRendererBorderState | null {
-        return this._sliceBorder;
+        const raw = this._rawSliceBorder;
+        if (raw === null) {
+            return null;
+        }
+
+        return (this._sliceBorderView ??= trackLiveMutations(raw, BORDER_MUTATION_KEYS, () =>
+            this.touch()
+        ));
     }
 
     set sliceBorder(value: SpriteRendererBorderInput) {
@@ -413,9 +430,8 @@ export class SpriteRenderer extends Component {
             return;
         }
         this._rawSliceBorder = next;
-        this._sliceBorder = next
-            ? trackLiveMutations(next, BORDER_MUTATION_KEYS, () => this.touch())
-            : null;
+        // The view wraps a specific backing object; replace it lazily.
+        this._sliceBorderView = null;
         this.touch();
     }
 
@@ -552,7 +568,7 @@ export class SpriteRenderer extends Component {
             return this;
         }
         this._rawSliceBorder = next;
-        this._sliceBorder = trackLiveMutations(next, BORDER_MUTATION_KEYS, () => this.touch());
+        this._sliceBorderView = null;
         this.touch();
         return this;
     }
@@ -562,7 +578,7 @@ export class SpriteRenderer extends Component {
             return this;
         }
         this._rawSliceBorder = null;
-        this._sliceBorder = null;
+        this._sliceBorderView = null;
         this.touch();
         return this;
     }
@@ -602,17 +618,22 @@ export class SpriteRenderer extends Component {
             renderOrder: this._renderOrder,
             sortingLayer: this._sortingLayer,
             passId: this._passId,
-            size: [this._size.x, this._size.y],
-            sourceSize: [this._sourceSize.x, this._sourceSize.y],
-            anchor: [this._anchor.x, this._anchor.y],
-            color: [this._color.r, this._color.g, this._color.b, this._color.a],
-            uvRect: [this._uvRect.x, this._uvRect.y, this._uvRect.width, this._uvRect.height],
-            sliceBorder: this._sliceBorder
+            size: [this._rawSize.x, this._rawSize.y],
+            sourceSize: [this._rawSourceSize.x, this._rawSourceSize.y],
+            anchor: [this._rawAnchor.x, this._rawAnchor.y],
+            color: [this._rawColor.r, this._rawColor.g, this._rawColor.b, this._rawColor.a],
+            uvRect: [
+                this._rawUvRect.x,
+                this._rawUvRect.y,
+                this._rawUvRect.width,
+                this._rawUvRect.height,
+            ],
+            sliceBorder: this._rawSliceBorder
                 ? [
-                      this._sliceBorder.left,
-                      this._sliceBorder.right,
-                      this._sliceBorder.top,
-                      this._sliceBorder.bottom,
+                      this._rawSliceBorder.left,
+                      this._rawSliceBorder.right,
+                      this._rawSliceBorder.top,
+                      this._rawSliceBorder.bottom,
                   ]
                 : null,
             flipX: this._flipX,
