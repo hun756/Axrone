@@ -13,6 +13,7 @@ import {
     SHAPE_TYPE_TRIANGLE_MESH,
     type IAabb3D,
     type IShapeDescriptor3D,
+    type IShapeFrame3D,
     isBoxDef,
     isCapsuleDef,
     isConeDef,
@@ -26,6 +27,8 @@ import {
     midpointVec3,
 } from './physics-world-3d-shared';
 import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
+import { resolveShapeFrame } from './physics-world-3d-shape-geometry';
+import { PhysicsError3D } from './physics-managers-3d';
 
 export interface INarrowphaseHost {
     readonly bodyManager: {
@@ -34,6 +37,12 @@ export interface INarrowphaseHost {
         getBodyType(bodyId: BodyId3D): number;
     };
     readonly getShapeWorldCenter: (descriptor: IShapeDescriptor3D) => IVec3Like;
+    /**
+     * Token of the step currently being solved. A shape frame is only trusted
+     * while its own generation matches, so a frame can never be read after the
+     * body has moved.
+     */
+    readonly getFrameGeneration: () => number;
 }
 
 export interface ICollisionResult {
@@ -44,6 +53,16 @@ export interface ICollisionResult {
 
 export class PhysicsWorld3DNarrowphase {
     constructor(private readonly _host: INarrowphaseHost) {}
+
+    /**
+     * Returns this shape's transform frame for the current step, refreshing it if
+     * the broadphase pass has not produced one yet (for example when a pair is
+     * tested outside the normal collection order). Returns null for shape kinds
+     * that carry no frame.
+     */
+    private _frameFor(descriptor: IShapeDescriptor3D): IShapeFrame3D | null {
+        return resolveShapeFrame(descriptor, this._host.bodyManager, this._host.getFrameGeneration());
+    }
 
     detectCollision(
         dA: IShapeDescriptor3D,
@@ -252,23 +271,34 @@ export class PhysicsWorld3DNarrowphase {
     private boxBox(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D): ICollisionResult | null {
         if (!isBoxDef(dA.def) || !isBoxDef(dB.def)) return null;
         const bDA = dA.def, bDB = dB.def;
-        const cA = transformPoint3D(bDA.center, this._host.bodyManager.getPosition(dA.bodyId), this._host.bodyManager.getRotation(dA.bodyId));
-        const cB = transformPoint3D(bDB.center, this._host.bodyManager.getPosition(dB.bodyId), this._host.bodyManager.getRotation(dB.bodyId));
-        const rA = Quat.multiply(this._host.bodyManager.getRotation(dA.bodyId), bDA.rotation ?? IDENTITY_ROTATION);
-        const rB = Quat.multiply(this._host.bodyManager.getRotation(dB.bodyId), bDB.rotation ?? IDENTITY_ROTATION);
-        const xA = Quat.rotateVector(rA, { x: 1, y: 0, z: 0 }), yA = Quat.rotateVector(rA, { x: 0, y: 1, z: 0 }), zA = Quat.rotateVector(rA, { x: 0, y: 0, z: 1 });
-        const xB = Quat.rotateVector(rB, { x: 1, y: 0, z: 0 }), yB = Quat.rotateVector(rB, { x: 0, y: 1, z: 0 }), zB = Quat.rotateVector(rB, { x: 0, y: 0, z: 1 });
-        const axes = [xA, yA, zA, xB, yB, zB];
+        const frameA = this._frameFor(dA);
+        const frameB = this._frameFor(dB);
+        if (!frameA || !frameB) {
+            // Unreachable: isBoxDef() above guarantees refreshShapeFrame() yields a frame.
+            throw new PhysicsError3D('Box narrowphase requires a box shape frame', 'INVALID_STATE');
+        }
+        const cA = frameA.center, cB = frameB.center;
+        const axesA = frameA.axes, axesB = frameB.axes;
+        const xA = axesA[0], yA = axesA[1], zA = axesA[2];
+        const xB = axesB[0], yB = axesB[1], zB = axesB[2];
         const hA = bDA.halfExtents, hB = bDB.halfExtents;
         const delta = Vec3.subtract(cB, cA);
         let minP = Infinity; let bestN: IVec3Like = { x: 0, y: 1, z: 0 };
-        for (const ax of axes) {
+        // Same six-axis order as the previous `[xA, yA, zA, xB, yB, zB]` array,
+        // without allocating it, but the winning axis is copied because the
+        // frame objects are reused next step.
+        for (let axisIndex = 0; axisIndex < 6; axisIndex++) {
+            const ax = axisIndex < 3 ? axesA[axisIndex] : axesB[axisIndex - 3];
             const pA = hA.x * Math.abs(Vec3.dot(xA, ax)) + hA.y * Math.abs(Vec3.dot(yA, ax)) + hA.z * Math.abs(Vec3.dot(zA, ax));
             const pB = hB.x * Math.abs(Vec3.dot(xB, ax)) + hB.y * Math.abs(Vec3.dot(yB, ax)) + hB.z * Math.abs(Vec3.dot(zB, ax));
-            const d = Math.abs(Vec3.dot(delta, ax));
+            const projection = Vec3.dot(delta, ax);
+            const d = Math.abs(projection);
             const pen = pA + pB - d;
             if (pen < 0) return null;
-            if (pen < minP) { minP = pen; bestN = Vec3.dot(delta, ax) > 0 ? ax : Vec3.negate(ax); }
+            if (pen < minP) {
+                minP = pen;
+                bestN = projection > 0 ? { x: ax.x, y: ax.y, z: ax.z } : Vec3.negate(ax);
+            }
         }
         return { normal: bestN, point: midpointVec3(cA, cB), penetration: minP };
     }
@@ -277,27 +307,20 @@ export class PhysicsWorld3DNarrowphase {
         dA: IShapeDescriptor3D, dB: IShapeDescriptor3D,
         normal: IVec3Like, totalPen: number
     ): { worldPoint: IVec3Like; separation: number }[] {
-        const bm = this._host.bodyManager;
         const bDA = dA.def as { center: IVec3Like; halfExtents: IVec3Like; rotation?: IVec3Like };
         const bDB = dB.def as { center: IVec3Like; halfExtents: IVec3Like; rotation?: IVec3Like };
 
-        const posA = bm.getPosition(dA.bodyId), rotA = bm.getRotation(dA.bodyId);
-        const posB = bm.getPosition(dB.bodyId), rotB = bm.getRotation(dB.bodyId);
-        const cA = transformPoint3D(bDA.center, posA, rotA);
-        const cB = transformPoint3D(bDB.center, posB, rotB);
-        const rA = Quat.multiply(rotA, (bDA.rotation ?? IDENTITY_ROTATION) as IQuatLike);
-        const rB = Quat.multiply(rotB, (bDB.rotation ?? IDENTITY_ROTATION) as IQuatLike);
-
-        const axesA = [
-            Quat.rotateVector(rA, { x: 1, y: 0, z: 0 }),
-            Quat.rotateVector(rA, { x: 0, y: 1, z: 0 }),
-            Quat.rotateVector(rA, { x: 0, y: 0, z: 1 }),
-        ];
-        const axesB = [
-            Quat.rotateVector(rB, { x: 1, y: 0, z: 0 }),
-            Quat.rotateVector(rB, { x: 0, y: 1, z: 0 }),
-            Quat.rotateVector(rB, { x: 0, y: 0, z: 1 }),
-        ];
+        // Same frames the SAT test used moments ago, so the centre/rotation/axis
+        // derivation happens once per shape per step instead of once per pass.
+        const frameA = this._frameFor(dA);
+        const frameB = this._frameFor(dB);
+        if (!frameA || !frameB) {
+            throw new PhysicsError3D('Box manifold requires a box shape frame', 'INVALID_STATE');
+        }
+        const cA = frameA.center;
+        const cB = frameB.center;
+        const axesA = frameA.axes;
+        const axesB = frameB.axes;
 
         const negNormal = Vec3.negate(normal);
         let bestDotA = -Infinity, bestA = 0;
@@ -353,7 +376,6 @@ export class PhysicsWorld3DNarrowphase {
             )),
         ];
 
-        const refNormal = refAxes[bestDotA >= bestDotB ? bestA : bestB];
         const refFaceDist = refSign * refHalf[bestDotA >= bestDotB ? bestA : bestB];
         const refNormalActual = isARef
             ? (Vec3.dot(normal, refAxes[bestA]) > 0 ? refAxes[bestA] : Vec3.negate(refAxes[bestA]))

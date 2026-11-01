@@ -6,6 +6,7 @@ import {
     type IResolvedContactManifold3D,
     type IMutableContactPoint3D,
     type IShapeDescriptor3D,
+    type IShapeFrame3D,
     type IShapePairCandidate3D,
     buildOrthonormalBasis,
     inverseTransformPoint3D,
@@ -13,6 +14,7 @@ import {
     isSphereDef,
 } from './physics-world-3d-shared';
 import type { ICollisionResult, INarrowphaseHost } from './physics-world-3d-narrowphase';
+import { resolveShapeFrame } from './physics-world-3d-shape-geometry';
 
 export interface IManifoldBuilderHost extends INarrowphaseHost {
     readonly bodyManager: {
@@ -49,6 +51,11 @@ export class PhysicsWorld3DManifoldBuilder {
 
     constructor(private readonly _host: IManifoldBuilderHost) {}
 
+    /** Current-step transform frame of a box shape, or null for other kinds. */
+    private _frameFor(descriptor: IShapeDescriptor3D): IShapeFrame3D | null {
+        return resolveShapeFrame(descriptor, this._host.bodyManager, this._host.getFrameGeneration());
+    }
+
     buildContactManifold(pair: IShapePairCandidate3D): IResolvedContactManifold3D | null {
         const dA = pair.descriptorA, dB = pair.descriptorB;
         const c = this._host.detectCollision(dA, dB, pair.aabbA, pair.aabbB);
@@ -62,10 +69,13 @@ export class PhysicsWorld3DManifoldBuilder {
             if (clipPoints.length >= 2) {
                 const points: IMutableContactPoint3D[] = [];
                 const bm = this._host.bodyManager;
-                const posA = bm.getPosition(dA.bodyId);
-                const rotA = bm.getRotation(dA.bodyId);
-                const posB = bm.getPosition(dB.bodyId);
-                const rotB = bm.getRotation(dB.bodyId);
+                // Box shapes already carry this step's transform frame, so the
+                // body pose needs no Map lookup here.
+                const frameA = this._frameFor(dA), frameB = this._frameFor(dB);
+                const posA = frameA ? frameA.bodyPosition : bm.getPosition(dA.bodyId);
+                const rotA = frameA ? frameA.bodyRotation : bm.getRotation(dA.bodyId);
+                const posB = frameB ? frameB.bodyPosition : bm.getPosition(dB.bodyId);
+                const rotB = frameB ? frameB.bodyRotation : bm.getRotation(dB.bodyId);
                 for (const cp of clipPoints) {
                     const lA = inverseTransformPoint3D(cp.worldPoint, posA, rotA);
                     const lB = inverseTransformPoint3D(cp.worldPoint, posB, rotB);
@@ -84,6 +94,7 @@ export class PhysicsWorld3DManifoldBuilder {
                     normal: c.normal, tangent1, tangent2, pointCount: points.length,
                     points, sensor: dA.isSensor || dB.isSensor,
                     friction, restitution,
+                    solverOffset: -1,
                 };
             }
         }
@@ -106,6 +117,7 @@ export class PhysicsWorld3DManifoldBuilder {
             }],
             sensor: dA.isSensor || dB.isSensor,
             friction, restitution,
+            solverOffset: -1,
         };
     }
 

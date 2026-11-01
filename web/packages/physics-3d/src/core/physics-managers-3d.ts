@@ -35,6 +35,25 @@ const ROTATION_OFFSET = 3;
 const LINEAR_VEL_OFFSET = 0;
 const ANGULAR_VEL_OFFSET = 3;
 
+/**
+ * Row layout of the body manager structure-of-arrays. Exported for the contact
+ * solver, which reads and writes rows directly (see `resolveIndex` and the
+ * `*Raw()` views on {@link BodyManager3D}).
+ */
+export const BODY_LAYOUT = {
+    positionStride: POSITION_STRIDE,
+    velocityStride: VELOCITY_STRIDE,
+    massStride: MASS_STRIDE,
+    positionOffset: POSITION_OFFSET,
+    rotationOffset: ROTATION_OFFSET,
+    linearVelocityOffset: LINEAR_VEL_OFFSET,
+    angularVelocityOffset: ANGULAR_VEL_OFFSET,
+    mass: 0,
+    inverseMass: 1,
+    inertia: 2,
+    inverseInertia: 5,
+} as const;
+
 type ErrorCode3D =
     | 'INVALID_STATE'
     | 'NOT_FOUND'
@@ -565,6 +584,33 @@ export class BodyManager3D implements Disposable {
         if (index === undefined) throw new PhysicsError3D('Body not found', 'INVALID_STATE');
         return index;
     }
+
+    /**
+     * Row index for a body id, or -1 when the body no longer exists.
+     *
+     * Internal to physics-3d. The contact solver resolves each body once per
+     * step and then works against the returned row (`*Raw()` views below),
+     * instead of paying a Map lookup per accessor call inside the solve
+     * iterations.
+     */
+    resolveIndex(bodyId: BodyId3D): number {
+        const index = this._bodyIdToIndex.get(bodyId);
+        return index === undefined ? -1 : index;
+    }
+
+    /**
+     * Structure-of-arrays backing stores, keyed by row index.
+     *
+     * Internal to physics-3d: owned by this manager, never reallocated, and
+     * must not be retained across a body destroy or handed to package
+     * consumers. Written through these views only by the contact solver, which
+     * reproduces the exact arithmetic of the accessor methods above.
+     */
+    positionsRaw(): Float64Array { return this._positions; }
+    velocitiesRaw(): Float64Array { return this._velocities; }
+    massDataRaw(): Float64Array { return this._massData; }
+    bodyTypesRaw(): Uint8Array { return this._bodyTypes; }
+    bodyFlagsRaw(): Uint32Array { return this._bodyFlags; }
 
     private _readVec(arr: Float64Array, offset: number, out?: IVec3Like): IVec3Like {
         if (out) {

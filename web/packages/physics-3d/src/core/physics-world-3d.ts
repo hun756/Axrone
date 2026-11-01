@@ -73,6 +73,7 @@ import {
 import {
     computeShapeAabb as computeShapeAabbImpl,
     getShapeWorldCenter as getShapeWorldCenterImpl,
+    refreshShapeFrame as refreshShapeFrameImpl,
     rayCastShape as rayCastShapeImpl,
     testPointShape as testPointShapeImpl,
 } from './physics-world-3d-shape-geometry';
@@ -118,6 +119,12 @@ export class PhysicsWorld3D implements Disposable {
     private readonly _contactRuntime: PhysicsWorld3DContactRuntime;
 
     private _profiler: IPhysicsProfiler3D | null = null;
+    /**
+     * Monotonic step token. Shape transform frames are refreshed during the
+     * broadphase pass of the same step and are only trusted while the token
+     * matches, so a frame can never be read after bodies have moved.
+     */
+    private _frameGeneration = 0;
     private _contactListener: IContactListener3D | null = null;
     private _collisionFilter: ICollisionFilter | null = null;
     private _autoClearForces = true;
@@ -169,6 +176,7 @@ export class PhysicsWorld3D implements Disposable {
             getContactListener: () => this._contactListener,
             getCollisionFilter: () => this._collisionFilter,
             computeShapeAabb: (descriptor) => this._computeShapeAabb(descriptor),
+            getFrameGeneration: () => this._frameGeneration,
             getShapeWorldCenter: (descriptor) => this._getShapeWorldCenter(descriptor),
             getConstraintAnchor: (def, firstBody) => this._getConstraintAnchor(def, firstBody),
         });
@@ -481,6 +489,8 @@ export class PhysicsWorld3D implements Disposable {
         this._integrateVelocities(deltaTime);
 
         // 2. Broadphase + narrowphase → collect contact manifolds
+        // Shape transform frames are valid only for this step.
+        this._frameGeneration += 1;
         this._contactRuntime.collectManifolds();
 
         // 3. Warm start: apply cached impulses from previous frame
@@ -1071,11 +1081,16 @@ export class PhysicsWorld3D implements Disposable {
 
 
     private _computeShapeAabb(descriptor: IShapeDescriptor3D): IAabb3D {
-        return computeShapeAabbImpl(
+        const position = this._bodyManager.getPosition(descriptor.bodyId);
+        const rotation = this._bodyManager.getRotation(descriptor.bodyId);
+        // One derivation per shape per step, shared with the box-box narrowphase.
+        const frame = refreshShapeFrameImpl(
             descriptor,
-            this._bodyManager.getPosition(descriptor.bodyId),
-            this._bodyManager.getRotation(descriptor.bodyId)
+            position,
+            rotation,
+            this._frameGeneration
         );
+        return computeShapeAabbImpl(descriptor, position, rotation, frame);
     }
 
     private _testPointShape(descriptor: IShapeDescriptor3D, point: Readonly<IVec3Like>): boolean {

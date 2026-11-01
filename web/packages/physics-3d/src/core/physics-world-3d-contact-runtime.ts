@@ -22,7 +22,7 @@ import { PhysicsWorld3DContactIndex } from './physics-world-3d-contact-index';
 import { PhysicsWorld3DEvents } from './physics-world-3d-events';
 import { PhysicsWorld3DManifoldBuilder } from './physics-world-3d-manifold';
 import { PhysicsWorld3DNarrowphase } from './physics-world-3d-narrowphase';
-import { PhysicsWorld3DSolver } from './physics-world-3d-solver';
+import { ContactSolverCache, PhysicsWorld3DSolver } from './physics-world-3d-solver';
 import { PhysicsWorld3DSpring } from './physics-world-3d-spring';
 import { makeCollisionPairKey } from '@axrone/physics-core';
 
@@ -43,6 +43,13 @@ import {
     applyConstraintPositionCorrection,
 } from './physics-world-3d-constraints-framework';
 
+/** Cached warm-start impulses for one contact point, plus the step that wrote it. */
+interface IWarmImpulseEntry3D {
+    normal: number;
+    tangent: number;
+    generation: number;
+}
+
 export interface IPhysicsWorld3DContactRuntimeHost {
     readonly bodyManager: BodyManager3D;
     readonly constraintManager: ConstraintManager3D;
@@ -52,6 +59,8 @@ export interface IPhysicsWorld3DContactRuntimeHost {
     readonly getContactListener: () => IContactListener3D | null;
     readonly getCollisionFilter: () => ICollisionFilter | null;
     readonly computeShapeAabb: (descriptor: IShapeDescriptor3D) => IAabb3D;
+    /** Step token used to validate per-shape transform frames (see INarrowphaseHost). */
+    readonly getFrameGeneration: () => number;
     readonly getShapeWorldCenter: (descriptor: IShapeDescriptor3D) => IVec3Like;
     readonly getConstraintAnchor: (
         def: SupportedConstraintDef3D,
@@ -63,12 +72,30 @@ export class PhysicsWorld3DContactRuntime {
     private _contactManifolds = new Map<number, IResolvedContactManifold3D>();
     private readonly _broadphase = new DynamicAABBTree3D<ShapeId3D>(1024);
 
+    /**
+     * Flat view of `_contactManifolds` used by the solve phases. The velocity
+     * and position solvers walk every manifold 10 and 5 times per step; a Map
+     * iterator per pass allocated an iterator object per pass, so the loops
+     * index this array instead. Rebuilt whenever the map size diverges.
+     */
+    private readonly _manifoldList: IResolvedContactManifold3D[] = [];
+
     // ─── Constraint solver state (reused per step, allocated once) ───
     private _jacobianCache = new Map<ConstraintId3D, JacobianRow3D[]>();
     private _solverBodies = new Map<BodyId3D, SolverBody3D>();
 
     /** Warm-start impulse cache keyed by pairKey * 4 + pointIndex. */
-    private readonly _warmImpulses = new Map<number, { normal: number; tangent: number }>();
+    private readonly _warmImpulses = new Map<number, IWarmImpulseEntry3D>();
+    private _warmImpulseGeneration = 0;
+
+    /** Refreshes the flat manifold view when it diverged from the map. */
+    private _ensureManifoldList(): IResolvedContactManifold3D[] {
+        if (this._manifoldList.length !== this._contactManifolds.size) {
+            this._manifoldList.length = 0;
+            for (const m of this._contactManifolds.values()) this._manifoldList.push(m);
+        }
+        return this._manifoldList;
+    }
     private _lastIslandCount = 0;
 
     /** Previous-frame manifold snapshot for event dispatch diff. */
@@ -77,6 +104,8 @@ export class PhysicsWorld3DContactRuntime {
     private readonly _narrowphase: PhysicsWorld3DNarrowphase;
     private readonly _manifoldBuilder: PhysicsWorld3DManifoldBuilder;
     private readonly _solver: PhysicsWorld3DSolver;
+    /** Per-step contact solve data; reset whenever manifolds are recollected. */
+    private readonly _solverCache = new ContactSolverCache();
     private readonly _spring: PhysicsWorld3DSpring;
     private readonly _broadphaseModule: PhysicsWorld3DBroadphase;
     private readonly _events: PhysicsWorld3DEvents;
@@ -95,6 +124,7 @@ export class PhysicsWorld3DContactRuntime {
         this._manifoldBuilder = new PhysicsWorld3DManifoldBuilder({
             bodyManager: _host.bodyManager,
             getShapeWorldCenter: _host.getShapeWorldCenter,
+            getFrameGeneration: _host.getFrameGeneration,
             detectCollision: (dA, dB, aabbA, aabbB) =>
                 this._narrowphase.detectCollision(dA, dB, aabbA, aabbB),
             buildBoxBoxManifold: (dA, dB, normal, totalPen) =>
@@ -201,6 +231,10 @@ export class PhysicsWorld3DContactRuntime {
 
         const next = this._contactManifolds;
         next.clear();
+        this._manifoldList.length = 0;
+        // Solver blocks are per step: manifolds are rebuilt every step, so the
+        // flat cache starts over with them.
+        this._solverCache.reset();
 
         // collideConnected filter: skip pairs joined by a non-colliding constraint.
         // The broadphase module owns proxy/candidate bookkeeping only, so the
@@ -233,6 +267,8 @@ export class PhysicsWorld3DContactRuntime {
                 }
             }
             next.set(pair.pairKey, m);
+            this._manifoldList.push(m);
+            this._solver.prepareContact(m, this._solverCache);
         }
         const nTime = performance.now() - nStart;
         const profiler = this._host.getProfiler();
@@ -242,18 +278,18 @@ export class PhysicsWorld3DContactRuntime {
             profiler.collisionTime = bTime + nTime;
         }
 
-        this._lastIslandCount = this._solver.countIslands(next);
+        this._lastIslandCount = this._solver.countIslands(this._manifoldList, this._solverCache);
     }
 
     /** Phase 2: apply cached impulses to velocities. */
     warmStart(): void {
-        for (const m of this._contactManifolds.values()) this._solver.warmStartContact(m);
+        const list = this._ensureManifoldList();
+        for (let i = 0; i < list.length; i++) this._solver.warmStartContact(list[i], this._solverCache);
     }
 
     /** Phase 3: sequential impulse velocity solve. */
     solveVelocity(velIters: number, dt?: number): void {
         const vStart = performance.now();
-        const manifolds = this._contactManifolds;
 
         // ─── Prepare Jacobian constraints (once per step, outside iteration loop) ───
         const stepDt = dt ?? (1 / 60);
@@ -275,8 +311,9 @@ export class PhysicsWorld3DContactRuntime {
             this._jacobianCache.clear();
         }
 
+        const list = this._ensureManifoldList();
         for (let i = 0; i < velIters; i++) {
-            for (const m of manifolds.values()) this._solver.solveContactVelocity(m);
+            for (let m = 0; m < list.length; m++) this._solver.solveContactVelocity(list[m], this._solverCache);
             this._solveDistanceConstraints(velIters);
             // Sync solver body velocities from body manager (contact solve modifies it directly)
             syncSolverBodiesFromManager(this._solverBodies, this._host.bodyManager);
@@ -297,11 +334,11 @@ export class PhysicsWorld3DContactRuntime {
     /** Phase 4: Baumgarte positional correction. */
     solvePosition(posIters: number): void {
         const pStart = performance.now();
-        const manifolds = this._contactManifolds;
+        const list = this._ensureManifoldList();
         for (let i = 0; i < posIters; i++) {
-            for (const m of manifolds.values()) this._solver.correctContactPositions(m, 0.2);
+            for (let m = 0; m < list.length; m++) this._solver.correctContactPositions(list[m], 0.2, this._solverCache);
         }
-        for (const m of manifolds.values()) this._solver.correctContactPositions(m, 1.0);
+        for (let m = 0; m < list.length; m++) this._solver.correctContactPositions(list[m], 1.0, this._solverCache);
 
         // ─── Jacobian constraint position correction ───
         // Apply anchor-alignment position corrections for constraints (Fixed, Hinge, etc.)
@@ -322,15 +359,31 @@ export class PhysicsWorld3DContactRuntime {
     /** Persist accumulated impulses for next-frame warm starting.
      *  Reuses existing cache entries in-place to avoid per-step object allocation. */
     private _persistWarmImpulses(): void {
-        this._warmImpulses.clear();
-        for (const m of this._contactManifolds.values()) {
+        const generation = ++this._warmImpulseGeneration;
+        const list = this._ensureManifoldList();
+        for (let i = 0; i < list.length; i++) {
+            const m = list[i];
             for (let pi = 0; pi < m.pointCount; pi++) {
                 const p = m.points[pi];
-                this._warmImpulses.set(m.pairKey * 4 + pi, {
-                    normal: p.normalImpulse as number,
-                    tangent: p.tangentImpulse1 as number,
-                });
+                const key = m.pairKey * 4 + pi;
+                const entry = this._warmImpulses.get(key);
+                if (entry) {
+                    entry.normal = p.normalImpulse as number;
+                    entry.tangent = p.tangentImpulse1 as number;
+                    entry.generation = generation;
+                } else {
+                    this._warmImpulses.set(key, {
+                        normal: p.normalImpulse as number,
+                        tangent: p.tangentImpulse1 as number,
+                        generation,
+                    });
+                }
             }
+        }
+        // Parity with the previous clear-then-rebuild: a key that this step did
+        // not produce must not be readable by the next one.
+        for (const [key, entry] of this._warmImpulses) {
+            if (entry.generation !== generation) this._warmImpulses.delete(key);
         }
     }
 

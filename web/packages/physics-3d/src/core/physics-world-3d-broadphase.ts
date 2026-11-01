@@ -1,6 +1,5 @@
 import { Vec3, type IVec3Like } from '@axrone/numeric';
 import { makeCollisionPairKey } from '@axrone/physics-core';
-import { AABB3D } from '@axrone/geometry';
 import type { BodyId3D, ShapeId3D } from '../types/physics-3d';
 import {
     BODY_TYPE_STATIC,
@@ -65,9 +64,9 @@ export class PhysicsWorld3DBroadphase {
                     this._scratchDisp.y = 0;
                     this._scratchDisp.z = 0;
                 }
-                this._broadphase.moveProxy(existing, this._scratchAabb as unknown as AABB3D, this._scratchDisp);
+                this._broadphase.moveProxy(existing, this._scratchAabb, this._scratchDisp);
             } else {
-                const pid = this._broadphase.createProxy(this._scratchAabb as unknown as AABB3D, d.id);
+                const pid = this._broadphase.createProxy(this._scratchAabb, d.id);
                 this._shapeProxyMap.set(d.id, pid);
             }
             const prevCenter = this._shapePreviousCenter.get(d.id);
