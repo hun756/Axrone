@@ -249,6 +249,31 @@ describe('attachHeightField', () => {
     });
 });
 
+describe('bulk pool laziness', () => {
+    it('keeps primitive-only worlds free of the bulk pool and bills uploaders for it', async () => {
+        const world = await createWorld([0, -9.81, 0], 32, 256);
+        try {
+            const before = world.memoryBytes;
+            addGround(world);
+            world.createBody({ type: 'dynamic', position: [0, 4, 0], shape: { kind: 'sphere', radius: 0.5 } });
+            world.createBody({ type: 'dynamic', position: [1, 5, 0], shape: { kind: 'capsule', radius: 0.25, halfSegment: 0.5 } });
+            world.createBody({ type: 'dynamic', position: [2, 6, 0], shape: { kind: 'cylinder', radius: 0.3, halfHeight: 0.5 } });
+            world.createBody({ type: 'dynamic', position: [3, 7, 0], shape: { kind: 'cone', radius: 0.3, halfHeight: 0.5 } });
+            for (let i = 0; i < 120; i += 1) {
+                world.step(DT);
+            }
+            expect(world.memoryBytes).toBe(before);
+            expect(world.memoryBytes).toBeLessThan(4 * 1024 * 1024);
+
+            const hull = world.createBody({ type: 'dynamic', position: [0, 9, 0] });
+            world.attachHull(hull, { vertices: kUnitBoxHull, density: 1 });
+            expect(world.memoryBytes).toBeGreaterThanOrEqual(before + 8 * 1024 * 1024);
+        } finally {
+            world.dispose();
+        }
+    });
+});
+
 describe('compat bulk shape adapters', () => {
     it('maps hull, mesh and height field descriptors onto the wasm facade', async () => {
         const world = await WasmPhysicsWorld3DCompat.create({ gravity: { x: 0, y: -9.81, z: 0 }, maxBodies: 32 });

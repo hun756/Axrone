@@ -34,7 +34,7 @@ void loadShapeWorld(const World& world, int32_t id, int32_t slot, ShapeWorld& ou
     out.kind = shape.kind;
     out.half = shape.extents;
     out.center = shapeCenter(position, body.rotation, shape);
-    out.bulk = isBulkKind(shape.kind) ? shape.bulk : nullptr;
+    out.bulk = isBulkKind(shape.kind) ? world.bulkOf(id, slot) : nullptr;
     if (shape.kind == kShapeSphere) {
         out.rotation = body.rotation;
     } else {

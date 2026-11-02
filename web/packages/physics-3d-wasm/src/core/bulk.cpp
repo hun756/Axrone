@@ -2,6 +2,7 @@
 
 #include "core/polytope.h"
 #include "platform/math.h"
+#include "platform/memory.h"
 #include "runtime/arena.h"
 
 namespace axrone::physics {
@@ -99,8 +100,37 @@ void expandBounds(const Vec3& vertex, Vec3& minOut, Vec3& maxOut) {
 
 }
 
+bool World::ensureBulkPool() {
+    if (scratchBegin != 0) {
+        return true;
+    }
+    if (!initialized || bulkArena == nullptr) {
+        return false;
+    }
+    if (shapeBulks == nullptr) {
+        const size_t tableBytes = sizeof(ShapeBulk*) * static_cast<size_t>(maxBodies) * kMaxShapesPerBody;
+        void* table = bulkArena->alloc(tableBytes, 16);
+        if (table == nullptr) {
+            return false;
+        }
+        shapeBulks = reinterpret_cast<ShapeBulk**>(table);
+        memset(shapeBulks, 0, tableBytes);
+    }
+    void* scratch = bulkArena->alloc(kBulkScratchBytes, 64);
+    if (scratch == nullptr) {
+        return false;
+    }
+    scratchBegin = reinterpret_cast<uintptr_t>(scratch);
+    scratchCursor = scratchBegin;
+    scratchEnd = scratchBegin + static_cast<uintptr_t>(kBulkScratchBytes);
+    return true;
+}
+
 uintptr_t World::bulkAlloc(int32_t bytes) {
     if (bytes <= 0) {
+        return 0;
+    }
+    if (!ensureBulkPool()) {
         return 0;
     }
     const uintptr_t aligned = alignUp(scratchCursor, 8U);
@@ -137,7 +167,7 @@ size_t World::bulkArenaUsed() const {
 }
 
 void World::clearShapeBulk(int32_t bodyId, int32_t slot) {
-    if (!initialized || bodies == nullptr || slot < 0 || slot >= kMaxShapesPerBody) {
+    if (!initialized || bodies == nullptr || shapeBulks == nullptr || slot < 0 || slot >= kMaxShapesPerBody) {
         return;
     }
     if (bodyId < 0 || bodyId >= highWater) {
@@ -147,8 +177,9 @@ void World::clearShapeBulk(int32_t bodyId, int32_t slot) {
     if (!isBulkKind(shape.kind)) {
         return;
     }
-    ShapeBulk* bulk = shape.bulk;
+    ShapeBulk* bulk = shapeBulks[static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot)];
     shape.resetBulkFields();
+    setBulkAt(bodyId, slot, nullptr);
     if (bulk == nullptr || bulkArena == nullptr) {
         return;
     }
@@ -175,6 +206,9 @@ int32_t World::addBulkShape(int32_t kind, int32_t id, float density, float px, f
     if (body.shapeCount >= kMaxShapesPerBody) {
         return -1;
     }
+    if (!ensureBulkPool()) {
+        return -1;
+    }
 
     Transform local = { 0.0f, 0.0f, 0.0f, qx, qy, qz, qw };
     normalizeQuaternion(local);
@@ -185,7 +219,7 @@ int32_t World::addBulkShape(int32_t kind, int32_t id, float density, float px, f
     }
 
     Shape& shape = body.shapes[slot];
-    shape.clearBulk();
+    setBulkAt(id, slot, nullptr);
     if (kind == kShapeHull) {
         shape.setHull(density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
     } else if (kind == kShapeMesh) {
@@ -238,7 +272,7 @@ int32_t World::setShapeVertices(int32_t shapeId, uintptr_t address, int32_t coun
         return -1;
     }
 
-    if (shape->bulk != nullptr) {
+    if (bulkOf(bodyId, slot) != nullptr) {
         clearShapeBulk(bodyId, slot);
     }
 
@@ -283,7 +317,7 @@ int32_t World::setShapeVertices(int32_t shapeId, uintptr_t address, int32_t coun
             expandBounds(bulk->vertices[i], minVertex, maxVertex);
         }
 
-        shape->bulk = bulk;
+        setBulkAt(bodyId, slot, bulk);
         bulk->localMin = minVertex;
         bulk->localMax = maxVertex;
         recomputeMass(bodies[bodyId]);
@@ -382,7 +416,7 @@ int32_t World::setShapeVertices(int32_t shapeId, uintptr_t address, int32_t coun
         bulk->faceOffsets[f] = faceOffsets[f];
     }
 
-    shape->bulk = bulk;
+    setBulkAt(bodyId, slot, bulk);
     shape->extents = half;
     bulk->localMin = -half;
     bulk->localMax = half;
@@ -398,7 +432,8 @@ int32_t World::setShapeIndices(int32_t shapeId, uintptr_t address, int32_t count
     if (!resolveBulkSlot(*this, shapeId, bodyId, slot, shape)) {
         return -1;
     }
-    if (shape->kind != kShapeMesh || shape->bulk == nullptr || shape->bulk->vertexCount <= 0) {
+    ShapeBulk* bulk = bulkOf(bodyId, slot);
+    if (shape->kind != kShapeMesh || bulk == nullptr || bulk->vertexCount <= 0) {
         return -1;
     }
     if (count < 1 || count > kBulkMaxTriangles) {
@@ -412,7 +447,7 @@ int32_t World::setShapeIndices(int32_t shapeId, uintptr_t address, int32_t count
         return -1;
     }
     const uint32_t* source = reinterpret_cast<const uint32_t*>(address);
-    const int32_t vertexCount = shape->bulk->vertexCount;
+    const int32_t vertexCount = bulk->vertexCount;
     for (int32_t i = 0; i < count * 3; ++i) {
         if (static_cast<int32_t>(source[i]) >= vertexCount) {
             return -1;
@@ -420,9 +455,9 @@ int32_t World::setShapeIndices(int32_t shapeId, uintptr_t address, int32_t count
     }
 
     for (int32_t i = 0; i < count * 3; ++i) {
-        shape->bulk->indices[i] = source[i];
+        bulk->indices[i] = source[i];
     }
-    shape->bulk->triangleCount = count;
+    bulk->triangleCount = count;
     recomputeMass(bodies[bodyId]);
     return 0;
 }
@@ -465,7 +500,7 @@ int32_t World::setShapeHeightField(
         return -1;
     }
 
-    if (shape->bulk != nullptr) {
+    if (bulkOf(bodyId, slot) != nullptr) {
         clearShapeBulk(bodyId, slot);
     }
 
@@ -514,7 +549,7 @@ int32_t World::setShapeHeightField(
 
     const float halfWidth = static_cast<float>(width - 1) * 0.5f * scaleX;
     const float halfDepth = static_cast<float>(depth - 1) * 0.5f * scaleZ;
-    shape->bulk = bulk;
+    setBulkAt(bodyId, slot, bulk);
     bulk->localMin = Vec3(-halfWidth, minHeight * scaleY, -halfDepth);
     bulk->localMax = Vec3(halfWidth, maxHeight * scaleY, halfDepth);
     recomputeMass(bodies[bodyId]);

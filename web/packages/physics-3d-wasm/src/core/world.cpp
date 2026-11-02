@@ -44,7 +44,7 @@ bool accumulateMass(const Body& body, float& mass, float& inertiaX, float& inert
         if (shape.kind == kShapeMesh || shape.kind == kShapeHeightField) {
             continue;
         }
-        if (shape.kind == kShapeHull && shape.bulk == nullptr) {
+        if (shape.kind == kShapeHull && (shape.extents.x <= 0.0f || shape.extents.y <= 0.0f || shape.extents.z <= 0.0f)) {
             continue;
         }
 
@@ -366,17 +366,6 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     memset(cacheNext, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
 
     this->bulkArena = &arena;
-    void* scratch = arena.alloc(kBulkScratchBytes, 64);
-    if (scratch == nullptr) {
-        this->bulkArena = nullptr;
-        scratchBegin = 0;
-        scratchCursor = 0;
-        scratchEnd = 0;
-        return false;
-    }
-    scratchBegin = reinterpret_cast<uintptr_t>(scratch);
-    scratchCursor = scratchBegin;
-    scratchEnd = scratchBegin + static_cast<uintptr_t>(kBulkScratchBytes);
 
     initialized = true;
     return true;
@@ -470,7 +459,10 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     body.torqueAccum = Vec3();
     for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
         body.shapes[slot].kind = kShapeNone;
-        body.shapes[slot].clearBulk();
+        body.shapes[slot].resetBulkFields();
+        if (shapeBulks != nullptr) {
+            setBulkAt(id, slot, nullptr);
+        }
     }
 
     ++liveCount;

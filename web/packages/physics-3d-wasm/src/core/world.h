@@ -40,6 +40,7 @@ struct World {
     PackedContact* packedContacts = nullptr;
     Body* bodies = nullptr;
     uint16_t* slotGen = nullptr;
+    ShapeBulk** shapeBulks = nullptr;
     int32_t* sweepOrder = nullptr;
     int32_t* freeIds = nullptr;
     Contact* contacts = nullptr;
@@ -173,6 +174,18 @@ struct World {
     size_t bulkScratchUsed() const;
     size_t bulkArenaUsed() const;
     void clearShapeBulk(int32_t bodyId, int32_t slot);
+    bool ensureBulkPool();
+
+    ShapeBulk* bulkOf(int32_t bodyId, int32_t slot) const {
+        if (shapeBulks == nullptr || bodyId < 0 || slot < 0 || slot >= kMaxShapesPerBody) {
+            return nullptr;
+        }
+        return shapeBulks[static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot)];
+    }
+
+    void setBulkAt(int32_t bodyId, int32_t slot, ShapeBulk* bulk) {
+        shapeBulks[static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot)] = bulk;
+    }
     int32_t addBulkShape(
         int32_t kind,
         int32_t id,

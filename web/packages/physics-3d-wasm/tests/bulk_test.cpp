@@ -8,6 +8,9 @@
 
 using namespace axrone::physics;
 
+static_assert(sizeof(Shape) == 112, "inline shape record must stay at 112 bytes");
+static_assert(sizeof(Body) == 1072, "body record must stay at 1072 bytes");
+
 namespace {
 
 alignas(64) unsigned char g_memoryA[64 * 1024 * 1024];
@@ -82,9 +85,11 @@ void testBulkScratchCycles() {
     Arena arena;
     World world;
     CHECK(initWorld(world, arena, g_memoryA, 16, 256));
-    const size_t baseline = world.bulkArenaUsed();
+    CHECK(world.scratchBegin == 0);
+    CHECK(world.shapeBulks == nullptr);
 
     uintptr_t firstAddress = 0;
+    size_t steadyUsage = 0;
     for (int32_t cycle = 0; cycle < 1000; ++cycle) {
         const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
         CHECK(body >= 0);
@@ -99,10 +104,54 @@ void testBulkScratchCycles() {
         CHECK(world.bulkScratchUsed() == 0);
         CHECK(world.shapeDestroy(shapeId) == 0);
         CHECK(world.destroyBody(body) == 0);
+        if (cycle == 0) {
+            steadyUsage = world.bulkArenaUsed();
+            CHECK(steadyUsage > 0);
+        } else {
+            CHECK(world.bulkArenaUsed() == steadyUsage);
+        }
     }
 
     CHECK(world.bulkScratchUsed() == 0);
+    CHECK(world.bulkArenaUsed() == steadyUsage);
+}
+
+void testPrimitiveWorldHasNoBulkPool() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 32, 2048));
+    const size_t baseline = world.bulkArenaUsed();
+    CHECK(baseline == arena.used());
+    CHECK(world.scratchBegin == 0);
+    CHECK(world.shapeBulks == nullptr);
+    CHECK(world.bulkScratchUsed() == 0);
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+    const int32_t sphere = world.createBody(kBodyTypeDynamic, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setSphere(sphere, 0.5f, 1.0f) == 0);
+    const int32_t capsule = world.createBody(kBodyTypeDynamic, 1.0f, 6.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.addCapsule(capsule, 0.25f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) >= 0);
+    const int32_t cylinder = world.createBody(kBodyTypeDynamic, 2.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.addCylinder(cylinder, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) >= 0);
+    const int32_t cone = world.createBody(kBodyTypeDynamic, 3.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.addCone(cone, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) >= 0);
+
+    for (int32_t i = 0; i < 240; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(world.scratchBegin == 0);
+    CHECK(world.shapeBulks == nullptr);
+    CHECK(world.bulkScratchUsed() == 0);
     CHECK(world.bulkArenaUsed() == baseline);
+
+    const int32_t hullSlot = world.addHull(cone, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(hullSlot >= 0);
+    CHECK(world.scratchBegin != 0);
+    CHECK(world.shapeBulks != nullptr);
+    CHECK(world.bulkScratchUsed() == 0);
+    CHECK(world.bulkArenaUsed() > baseline);
 }
 
 void testHullMassAndAabb() {
@@ -431,6 +480,7 @@ void testShapeGetKindBulkCodes() {
 
 int main() {
     testBulkScratchCycles();
+    testPrimitiveWorldHasNoBulkPool();
     testHullMassAndAabb();
     testHullDedupRejectsDegenerate();
     testHullRestsOnBoxAndHull();

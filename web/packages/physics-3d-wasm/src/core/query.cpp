@@ -390,10 +390,9 @@ bool rayMeshShape(
     const QueryRay& ray,
     const Vec3& center,
     const Mat3& rotation,
-    const Shape& shape,
+    const ShapeBulk* bulk,
     LocalHit& out
 ) {
-    const ShapeBulk* bulk = shape.bulk;
     if (bulk == nullptr || bulk->triangleCount <= 0 || bulk->vertexCount <= 0) {
         return false;
     }
@@ -441,10 +440,9 @@ bool rayHeightFieldShape(
     const QueryRay& ray,
     const Vec3& center,
     const Mat3& rotation,
-    const Shape& shape,
+    const ShapeBulk* bulk,
     LocalHit& out
 ) {
-    const ShapeBulk* bulk = shape.bulk;
     if (bulk == nullptr || bulk->heightFieldWidth < 2 || bulk->heightFieldDepth < 2) {
         return false;
     }
@@ -559,6 +557,7 @@ bool testShape(
     const QueryRay& ray,
     RayHit& out) {
     const Vec3 center = shapeCenter(position, body.rotation, shape);
+    const ShapeBulk* shapeBulk = world.bulkOf(id, slot);
     LocalHit local;
     bool struck = false;
     if (shape.kind == kShapeSphere) {
@@ -576,19 +575,19 @@ bool testShape(
         shapeWorldRotation(body.rotation, shape, rotation);
         struck = rayConeShape(ray, center, rotation, shape.extents, local);
     } else if (shape.kind == kShapeHull) {
-        if (shape.bulk != nullptr && shape.bulk->faceCount > 0) {
+        if (shapeBulk != nullptr && shapeBulk->faceCount > 0) {
             Mat3 rotation;
             shapeWorldRotation(body.rotation, shape, rotation);
-            struck = rayHullShape(ray, center, rotation, bulkLocalHullView(*shape.bulk), local);
+            struck = rayHullShape(ray, center, rotation, bulkLocalHullView(*shapeBulk), local);
         }
     } else if (shape.kind == kShapeMesh) {
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
-        struck = rayMeshShape(ray, center, rotation, shape, local);
+        struck = rayMeshShape(ray, center, rotation, shapeBulk, local);
     } else if (shape.kind == kShapeHeightField) {
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
-        struck = rayHeightFieldShape(ray, center, rotation, shape, local);
+        struck = rayHeightFieldShape(ray, center, rotation, shapeBulk, local);
     } else {
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
@@ -839,13 +838,14 @@ int32_t overlapSphere(
             const Vec3 local = rotation.transposeTransform(offset);
             Vec3 closest;
             if (shape.kind == kShapeHull) {
-                if (shape.bulk == nullptr || shape.bulk->faceCount <= 0) {
+                const ShapeBulk* hullBulk = world.bulkOf(id, slot);
+                if (hullBulk == nullptr || hullBulk->faceCount <= 0) {
                     continue;
                 }
                 float distance = 0.0f;
                 Vec3 point;
                 Vec3 hint;
-                hullClosestPoint(bulkLocalHullView(*shape.bulk), local, point, distance, hint);
+                hullClosestPoint(bulkLocalHullView(*hullBulk), local, point, distance, hint);
                 if (distance <= radius) {
                     struck = true;
                     break;
@@ -853,7 +853,7 @@ int32_t overlapSphere(
                 continue;
             }
             if (shape.kind == kShapeMesh) {
-                const ShapeBulk* bulk = shape.bulk;
+                const ShapeBulk* bulk = world.bulkOf(id, slot);
                 if (bulk == nullptr || bulk->triangleCount <= 0 || bulk->vertexCount <= 0) {
                     continue;
                 }
@@ -877,13 +877,14 @@ int32_t overlapSphere(
                 continue;
             }
             if (shape.kind == kShapeHeightField) {
-                if (shape.bulk == nullptr || shape.bulk->heightFieldWidth < 2) {
+                const ShapeBulk* fieldBulk = world.bulkOf(id, slot);
+                if (fieldBulk == nullptr || fieldBulk->heightFieldWidth < 2) {
                     continue;
                 }
                 closest = Vec3(
-                    clampf(local.x, shape.bulk->localMin.x, shape.bulk->localMax.x),
-                    clampf(local.y, shape.bulk->localMin.y, shape.bulk->localMax.y),
-                    clampf(local.z, shape.bulk->localMin.z, shape.bulk->localMax.z)
+                    clampf(local.x, fieldBulk->localMin.x, fieldBulk->localMax.x),
+                    clampf(local.y, fieldBulk->localMin.y, fieldBulk->localMax.y),
+                    clampf(local.z, fieldBulk->localMin.z, fieldBulk->localMax.z)
                 );
                 if (lengthSq(local - closest) <= radiusSq) {
                     struck = true;

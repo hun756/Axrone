@@ -61,7 +61,7 @@ void updateBounds(World& world) {
                 ey = ex;
                 ez = ex;
             } else if (shape.kind == kShapeMesh || shape.kind == kShapeHeightField) {
-                const ShapeBulk* bulk = shape.bulk;
+                const ShapeBulk* bulk = world.bulkOf(i, slot);
                 if (bulk == nullptr) {
                     continue;
                 }

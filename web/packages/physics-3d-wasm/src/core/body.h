@@ -55,7 +55,6 @@ struct Shape {
     int32_t maskBits;
     int32_t groupIndex;
     int32_t sensor;
-    ShapeBulk* bulk;
 
     AXRONE_PHYSICS_INLINE void applyDefaults() {
         friction = kShapeMaterialInherit;
@@ -148,12 +147,7 @@ struct Shape {
         applyDefaults();
     }
 
-    AXRONE_PHYSICS_INLINE void clearBulk() {
-        bulk = nullptr;
-    }
-
     AXRONE_PHYSICS_INLINE void resetBulkFields() {
-        bulk = nullptr;
         extents = Vec3();
     }
 
@@ -228,9 +222,9 @@ struct Body {
     Shape shapes[kMaxShapesPerBody];
 };
 
-static_assert(sizeof(Shape) == 128, "shape size must stay fixed for arena sizing");
+static_assert(sizeof(Shape) == 112, "shape size must stay fixed for arena sizing");
 static_assert(alignof(Shape) == 16, "shape must stay vector aligned");
-static_assert(sizeof(Body) == 1200, "body size must stay fixed for arena sizing");
+static_assert(sizeof(Body) == 1072, "body size must stay fixed for arena sizing");
 static_assert(alignof(Body) == 16, "body must stay vector aligned");
 
 AXRONE_PHYSICS_INLINE int32_t shapeSlots(const Body& body) {
@@ -248,20 +242,20 @@ AXRONE_PHYSICS_INLINE bool isHullBackedKind(int32_t kind) {
     return kind == kShapeCylinder || kind == kShapeCone || kind == kShapeHull || kind == kShapeHeightField;
 }
 
-AXRONE_PHYSICS_INLINE bool shapeBulkReady(const Shape& shape) {
+AXRONE_PHYSICS_INLINE bool shapeBulkReady(const Shape& shape, const ShapeBulk* bulk) {
     if (!isBulkKind(shape.kind)) {
         return false;
     }
-    if (shape.bulk == nullptr) {
+    if (bulk == nullptr) {
         return false;
     }
     if (shape.kind == kShapeHull) {
-        return shape.bulk->faceCount > 0 && shape.bulk->vertexCount >= 4;
+        return bulk->faceCount > 0 && bulk->vertexCount >= 4;
     }
     if (shape.kind == kShapeMesh) {
-        return shape.bulk->triangleCount > 0 && shape.bulk->vertexCount > 0;
+        return bulk->triangleCount > 0 && bulk->vertexCount > 0;
     }
-    return shape.bulk->heightFieldWidth >= 2 && shape.bulk->heightFieldDepth >= 2;
+    return bulk->heightFieldWidth >= 2 && bulk->heightFieldDepth >= 2;
 }
 
 AXRONE_PHYSICS_INLINE bool shapeValid(const Shape& shape) {
