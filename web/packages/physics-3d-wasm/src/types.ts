@@ -60,6 +60,14 @@ export interface ContactSnapshot {
     readonly penetration: number;
 }
 
+export interface ContactEventSnapshot {
+    readonly kind: "begin" | "stay" | "end";
+    readonly a: number;
+    readonly b: number;
+    readonly normal: Vec3Tuple;
+    readonly penetration: number;
+}
+
 export interface RaycastHit {
     readonly body: number;
     readonly distance: number;

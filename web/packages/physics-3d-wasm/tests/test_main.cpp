@@ -1018,6 +1018,284 @@ void testDynamicsDefaultsAndReset() {
     CHECK(world.bodies[reused].invMass == 1.0f);
 }
 
+int32_t addSleepGround(World& world) {
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+    return ground;
+}
+
+int32_t addSettledBox(World& world) {
+    const int32_t box = world.createBody(kBodyTypeDynamic, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(box >= 0);
+    CHECK(world.setBox(box, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setMaterial(box, 0.7f, 0.0f) == 0);
+    return box;
+}
+
+bool settleToSleep(World& world, int32_t id, int32_t steps) {
+    for (int32_t i = 0; i < steps; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        if (world.isSleeping(id) == 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void testSleepDefaultsOff() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.allowSleep == 0);
+    CHECK(world.setAllowSleep(2) == -1);
+    CHECK(world.setAllowSleep(-1) == -1);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(world.bodies[box].awake == 1);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+    CHECK(world.isSleeping(box) == 0);
+
+    for (int32_t i = 0; i < 600; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+    CHECK(world.bodies[box].awake == 1);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+    CHECK(world.isSleeping(box) == 0);
+}
+
+void testSleepAfterRest() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+    CHECK(world.allowSleep == 1);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.isSleeping(box) == 1);
+    CHECK(world.bodies[box].awake == 0);
+    CHECK(world.bodies[box].sleepTime >= kSleepTimeLimit);
+    CHECK(world.velocities[box].x == 0.0f && world.velocities[box].y == 0.0f && world.velocities[box].z == 0.0f);
+    CHECK(world.angularVelocities[box].x == 0.0f && world.angularVelocities[box].y == 0.0f && world.angularVelocities[box].z == 0.0f);
+
+    const Transform frozen = world.transforms[box];
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+    CHECK(world.isSleeping(box) == 1);
+    CHECK(world.transforms[box].px == frozen.px);
+    CHECK(world.transforms[box].py == frozen.py);
+    CHECK(world.transforms[box].pz == frozen.pz);
+    CHECK(world.transforms[box].qx == frozen.qx);
+    CHECK(world.transforms[box].qy == frozen.qy);
+    CHECK(world.transforms[box].qz == frozen.qz);
+    CHECK(world.transforms[box].qw == frozen.qw);
+    CHECK(world.velocities[box].x == 0.0f && world.velocities[box].y == 0.0f && world.velocities[box].z == 0.0f);
+}
+
+void testWakeOnImpulse() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(settleToSleep(world, box, 600));
+
+    CHECK(world.applyImpulse(box, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+    CHECK(world.isSleeping(box) == 0);
+    CHECK(world.velocities[box].y > 4.0f);
+
+    world.step(1.0f / 60.0f, 8, 3);
+    CHECK(world.isSleeping(box) == 0);
+    CHECK(world.transforms[box].py > 0.45f);
+}
+
+void testWakeOnForceAndTorque() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.applyForce(box, 50.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.applyTorque(box, 0.0f, 10.0f, 0.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.applyAngularImpulse(box, 0.0f, 2.0f, 0.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.setTransform(box, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+
+    CHECK(settleToSleep(world, box, 600));
+    CHECK(world.setVelocity(box, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[box].awake == 1);
+}
+
+void testWakeByFastDynamicNeighbor() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t sleeper = addSettledBox(world);
+    CHECK(settleToSleep(world, sleeper, 600));
+
+    const int32_t striker = world.createBody(kBodyTypeDynamic, 2.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(striker >= 0);
+    CHECK(world.setBox(striker, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setMaterial(striker, 0.0f, 0.0f) == 0);
+    CHECK(world.setVelocity(striker, -4.0f, 0.0f, 0.0f) == 0);
+
+    bool woke = false;
+    for (int32_t i = 0; i < 180; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        if (world.isSleeping(sleeper) == 0) {
+            woke = true;
+            break;
+        }
+    }
+    CHECK(woke);
+    CHECK(world.bodies[sleeper].awake == 1);
+    CHECK(world.bodies[sleeper].sleepTime == 0.0f);
+}
+
+void testKinematicWakesSleepingBody() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t sleeper = addSettledBox(world);
+    CHECK(settleToSleep(world, sleeper, 600));
+
+    const int32_t platform = world.createBody(kBodyTypeKinematic, 4.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(platform >= 0);
+    CHECK(world.setBox(platform, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setVelocity(platform, -2.0f, 0.0f, 0.0f) == 0);
+
+    bool woke = false;
+    for (int32_t i = 0; i < 240; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        if (world.isSleeping(sleeper) == 0) {
+            woke = true;
+            break;
+        }
+    }
+    CHECK(woke);
+    CHECK(world.bodies[platform].awake == 1);
+    CHECK(world.isSleeping(platform) == 0);
+}
+
+void testAwakeApiValidation() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t ground = addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    const int32_t platform = world.createBody(kBodyTypeKinematic, 2.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(platform >= 0);
+
+    CHECK(world.setAwake(-1, 1) == -1);
+    CHECK(world.setAwake(999, 1) == -1);
+    CHECK(world.setAwake(box, 2) == -1);
+    CHECK(world.setAwake(box, -1) == -1);
+    CHECK(world.setAwake(ground, 0) == -1);
+    CHECK(world.setAwake(platform, 0) == -1);
+    CHECK(world.isSleeping(-1) == -1);
+    CHECK(world.isSleeping(999) == -1);
+    CHECK(world.isSleeping(ground) == 0);
+    CHECK(world.isSleeping(platform) == 0);
+
+    CHECK(world.setAllowSleep(1) == 0);
+    CHECK(world.setAwake(box, 0) == 0);
+    CHECK(world.isSleeping(box) == 1);
+    CHECK(world.velocities[box].x == 0.0f && world.velocities[box].y == 0.0f && world.velocities[box].z == 0.0f);
+
+    world.step(1.0f / 60.0f, 8, 3);
+    CHECK(world.isSleeping(box) == 1);
+
+    CHECK(world.setAwake(box, 1) == 0);
+    CHECK(world.isSleeping(box) == 0);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+}
+
+void testSleepResetClearsState() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(settleToSleep(world, box, 600));
+
+    world.reset();
+    CHECK(world.isSleeping(box) == -1);
+
+    const int32_t fresh = addSettledBox(world);
+    CHECK(fresh >= 0);
+    CHECK(world.bodies[fresh].awake == 1);
+    CHECK(world.bodies[fresh].sleepTime == 0.0f);
+    CHECK(world.isSleeping(fresh) == 0);
+}
+
+void testSleepingBodiesSkipIntegration() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t sleeper = addSettledBox(world);
+    CHECK(settleToSleep(world, sleeper, 600));
+
+    const int32_t drifter = world.createBody(kBodyTypeDynamic, 6.0f, 6.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(drifter >= 0);
+    CHECK(world.setBox(drifter, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+
+    const float sleeperY = world.transforms[sleeper].py;
+    world.step(1.0f / 60.0f, 8, 3);
+    CHECK(world.transforms[sleeper].py == sleeperY);
+    CHECK(world.transforms[drifter].py < 6.0f);
+    CHECK(world.isSleeping(sleeper) == 1);
+}
+
+void testSleepDisableWakesEverything() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+    CHECK(world.setAllowSleep(1) == 0);
+
+    addSleepGround(world);
+    const int32_t box = addSettledBox(world);
+    CHECK(settleToSleep(world, box, 600));
+
+    CHECK(world.setAllowSleep(0) == 0);
+    world.step(1.0f / 60.0f, 8, 3);
+    CHECK(world.isSleeping(box) == 0);
+    CHECK(world.bodies[box].awake == 1);
+    CHECK(world.bodies[box].sleepTime == 0.0f);
+}
+
 }
 
 int main() {
@@ -1055,6 +1333,16 @@ int main() {
     testMassOverride();
     testKinematicDampingKeepsMotion();
     testDynamicsDefaultsAndReset();
+    testSleepDefaultsOff();
+    testSleepAfterRest();
+    testWakeOnImpulse();
+    testWakeOnForceAndTorque();
+    testWakeByFastDynamicNeighbor();
+    testKinematicWakesSleepingBody();
+    testAwakeApiValidation();
+    testSleepResetClearsState();
+    testSleepingBodiesSkipIntegration();
+    testSleepDisableWakesEverything();
 
     if (g_failures == 0) {
         std::printf("PASS\n");

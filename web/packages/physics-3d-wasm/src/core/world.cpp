@@ -137,6 +137,39 @@ int32_t shapeSignature(const Body& body) {
     return kMaxShapesPerBody + slots;
 }
 
+void wakeBody(World& world, int32_t id) {
+    Body& body = world.bodies[id];
+    body.awake = 1;
+    body.sleepTime = 0.0f;
+}
+
+bool isSleepThreat(const World& world, int32_t id) {
+    const Body& body = world.bodies[id];
+    if (body.state == kBodyDynamic) {
+        return body.awake != 0 && lengthSq(world.velocities[id]) > kSleepWakeSpeedSq;
+    }
+    if (body.state == kBodyKinematic) {
+        return lengthSq(world.velocities[id]) > kSleepWakeSpeedSq;
+    }
+    return false;
+}
+
+void wakeSleepingOnContacts(World& world) {
+    for (int32_t k = 0; k < world.contactCount; ++k) {
+        const Contact& contact = world.contacts[k];
+        Body& bodyA = world.bodies[contact.a];
+        Body& bodyB = world.bodies[contact.b];
+        const bool aSleeping = bodyA.state == kBodyDynamic && bodyA.awake == 0;
+        const bool bSleeping = bodyB.state == kBodyDynamic && bodyB.awake == 0;
+        if (aSleeping && !bSleeping && isSleepThreat(world, contact.b)) {
+            wakeBody(world, contact.a);
+        }
+        if (bSleeping && !aSleeping && isSleepThreat(world, contact.a)) {
+            wakeBody(world, contact.b);
+        }
+    }
+}
+
 struct Hasher {
     uint64_t value;
 
@@ -184,6 +217,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     maxBodies = bodyCapacity;
     maxContacts = contactCapacity;
     gravity = initialGravity;
+    allowSleep = 0;
     highWater = 0;
     liveCount = 0;
     freeCount = 0;
@@ -196,6 +230,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     cacheMask = static_cast<uint32_t>(cacheCapacity - 1);
 
     transforms = allocateArray<Transform>(arena, maxBodies);
+    sleepTransforms = allocateArray<Transform>(arena, maxBodies);
     velocities = allocateArray<Vec3>(arena, maxBodies);
     angularVelocities = allocateArray<Vec3>(arena, maxBodies);
     packedContacts = allocateArray<PackedContact>(arena, maxContacts);
@@ -208,7 +243,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     cachePrevUsed = allocateArray<int32_t>(arena, maxContacts);
     cacheNextUsed = allocateArray<int32_t>(arena, maxContacts);
 
-    if (transforms == nullptr || velocities == nullptr || angularVelocities == nullptr ||
+    if (transforms == nullptr || sleepTransforms == nullptr || velocities == nullptr || angularVelocities == nullptr ||
         packedContacts == nullptr || bodies == nullptr || sweepOrder == nullptr ||
         freeIds == nullptr || contacts == nullptr || cachePrev == nullptr || cacheNext == nullptr ||
         cachePrevUsed == nullptr || cacheNextUsed == nullptr) {
@@ -227,6 +262,10 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
 void World::reset() {
     if (!initialized) {
         return;
+    }
+    for (int32_t i = 0; i < highWater; ++i) {
+        bodies[i].sleepTime = 0.0f;
+        bodies[i].awake = 1;
     }
     highWater = 0;
     liveCount = 0;
@@ -281,6 +320,8 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     body.friction = kDefaultFriction;
     body.restitution = 0.0f;
+    body.sleepTime = 0.0f;
+    body.awake = 1;
     body.customInertia = Vec3();
     body.forceAccum = Vec3();
     body.torqueAccum = Vec3();
@@ -300,6 +341,8 @@ int32_t World::destroyBody(int32_t id) {
     body.invMass = 0.0f;
     body.invInertia = Vec3();
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    body.sleepTime = 0.0f;
+    body.awake = 1;
     velocities[id] = Vec3();
     angularVelocities[id] = Vec3();
 
@@ -474,7 +517,10 @@ int32_t World::setTransform(int32_t id, float px, float py, float pz, float qx, 
     Transform transform = { px, py, pz, qx, qy, qz, qw };
     normalizeQuaternion(transform);
     transforms[id] = transform;
-    bodies[id].rotation.fromQuaternion(transform.qx, transform.qy, transform.qz, transform.qw);
+    Body& body = bodies[id];
+    body.rotation.fromQuaternion(transform.qx, transform.qy, transform.qz, transform.qw);
+    body.awake = 1;
+    body.sleepTime = 0.0f;
     return 0;
 }
 
@@ -483,6 +529,8 @@ int32_t World::setVelocity(int32_t id, float vx, float vy, float vz) {
         return -1;
     }
     velocities[id] = Vec3(vx, vy, vz);
+    bodies[id].awake = 1;
+    bodies[id].sleepTime = 0.0f;
     return 0;
 }
 
@@ -491,6 +539,8 @@ int32_t World::setAngularVelocity(int32_t id, float vx, float vy, float vz) {
         return -1;
     }
     angularVelocities[id] = Vec3(vx, vy, vz);
+    bodies[id].awake = 1;
+    bodies[id].sleepTime = 0.0f;
     return 0;
 }
 
@@ -544,6 +594,8 @@ int32_t World::applyForce(int32_t id, float fx, float fy, float fz, float px, fl
     const Vec3 force(fx, fy, fz);
     body.forceAccum += force;
     body.torqueAccum += cross(Vec3(px, py, pz), force);
+    body.awake = 1;
+    body.sleepTime = 0.0f;
     return 0;
 }
 
@@ -562,6 +614,8 @@ int32_t World::applyImpulse(int32_t id, float ix, float iy, float iz, float px, 
     const Vec3 impulse(ix, iy, iz);
     velocities[id] += impulse * body.invMass;
     addAngularResponse(*this, body, id, cross(Vec3(px, py, pz), impulse));
+    body.awake = 1;
+    body.sleepTime = 0.0f;
     return 0;
 }
 
@@ -577,6 +631,8 @@ int32_t World::applyTorque(int32_t id, float tx, float ty, float tz) {
         return -1;
     }
     body.torqueAccum += Vec3(tx, ty, tz);
+    body.awake = 1;
+    body.sleepTime = 0.0f;
     return 0;
 }
 
@@ -592,6 +648,8 @@ int32_t World::applyAngularImpulse(int32_t id, float ix, float iy, float iz) {
         return -1;
     }
     addAngularResponse(*this, body, id, Vec3(ix, iy, iz));
+    body.awake = 1;
+    body.sleepTime = 0.0f;
     return 0;
 }
 
@@ -644,6 +702,39 @@ int32_t World::setGravity(float gx, float gy, float gz) {
     return 0;
 }
 
+int32_t World::setAllowSleep(int32_t on) {
+    if (!initialized || (on != 0 && on != 1)) {
+        return -1;
+    }
+    allowSleep = on;
+    return 0;
+}
+
+int32_t World::setAwake(int32_t id, int32_t awake) {
+    if (!isActive(id) || (awake != 0 && awake != 1)) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    if (awake == 0 && body.state != kBodyDynamic) {
+        return -1;
+    }
+    body.awake = awake;
+    body.sleepTime = 0.0f;
+    if (awake == 0) {
+        velocities[id] = Vec3();
+        angularVelocities[id] = Vec3();
+    }
+    return 0;
+}
+
+int32_t World::isSleeping(int32_t id) const {
+    if (!isActive(id)) {
+        return -1;
+    }
+    const Body& body = bodies[id];
+    return body.state == kBodyDynamic && body.awake == 0 ? 1 : 0;
+}
+
 int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterations) {
     if (!initialized) {
         return -1;
@@ -658,12 +749,24 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     positionIterations = positionIterations < 0 ? 0 : (positionIterations > kMaxIterations ? kMaxIterations : positionIterations);
 
     const Vec3 gravityStep = gravity * dt;
+    const bool sleepEnabled = allowSleep != 0;
 
     for (int32_t i = 0; i < highWater; ++i) {
         Body& body = bodies[i];
         const int32_t state = body.state;
         if (state != kBodyDynamic && state != kBodyKinematic) {
             continue;
+        }
+
+        if (state == kBodyDynamic) {
+            if (sleepEnabled && body.awake == 0) {
+                sleepTransforms[i] = transforms[i];
+                continue;
+            }
+            if (!sleepEnabled) {
+                body.awake = 1;
+                body.sleepTime = 0.0f;
+            }
         }
 
         Vec3& velocity = velocities[i];
@@ -735,8 +838,38 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     cacheNextUsedCount = 0;
     broadphase(*this);
     prepareContacts(*this);
+    if (sleepEnabled) {
+        wakeSleepingOnContacts(*this);
+    }
     solveVelocities(*this, velocityIterations);
     solvePositions(*this, positionIterations);
+
+    if (sleepEnabled) {
+        for (int32_t i = 0; i < highWater; ++i) {
+            Body& body = bodies[i];
+            if (body.state != kBodyDynamic) {
+                continue;
+            }
+            if (body.awake == 0) {
+                transforms[i] = sleepTransforms[i];
+                body.rotation.fromQuaternion(transforms[i].qx, transforms[i].qy, transforms[i].qz, transforms[i].qw);
+                velocities[i] = Vec3();
+                angularVelocities[i] = Vec3();
+                continue;
+            }
+            if (lengthSq(velocities[i]) < kSleepLinearThresholdSq &&
+                lengthSq(angularVelocities[i]) < kSleepAngularThresholdSq) {
+                body.sleepTime += dt;
+                if (body.sleepTime >= kSleepTimeLimit) {
+                    body.awake = 0;
+                    velocities[i] = Vec3();
+                    angularVelocities[i] = Vec3();
+                }
+            } else {
+                body.sleepTime = 0.0f;
+            }
+        }
+    }
 
     for (int32_t k = 0; k < contactCount; ++k) {
         const Contact& contact = contacts[k];

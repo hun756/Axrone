@@ -1,7 +1,9 @@
 #include "axrone/physics_wasm.h"
 
+#include "core/events.h"
 #include "core/query.h"
 #include "core/world.h"
+#include "platform/memory.h"
 #include "platform/wasm.h"
 #include "runtime/arena.h"
 
@@ -21,6 +23,23 @@ constexpr int32_t kQueryScratchCapacity = 256;
 alignas(16) axrone::physics::RayHit g_queryScratch[kQueryScratchCapacity];
 
 static_assert(sizeof(axrone::physics::RayHit) == 32, "ray hit record must stay 32 bytes");
+
+constexpr int32_t kEventCapacity = 4096;
+alignas(16) axrone::physics::ContactEvent g_events[kEventCapacity];
+alignas(16) uint64_t g_eventKeys[kEventCapacity];
+axrone::physics::ContactEventState g_eventState;
+int32_t g_eventCount = 0;
+int32_t g_eventOverflow = 0;
+
+static_assert(sizeof(axrone::physics::ContactEvent) == 28, "contact event record must stay 28 bytes");
+
+void resetContactEvents() {
+    g_eventState.keys = g_eventKeys;
+    g_eventState.capacity = kEventCapacity;
+    g_eventState.count = 0;
+    g_eventCount = 0;
+    g_eventOverflow = 0;
+}
 
 uint64_t packView(uintptr_t pointer, size_t bytes) {
     return (static_cast<uint64_t>(pointer) << 32) | static_cast<uint64_t>(bytes);
@@ -50,6 +69,7 @@ extern "C" char __heap_base;
 
 AXRONE_PHYSICS_EXPORT(worldInit) int32_t worldInit(int32_t maxBodies, int32_t maxContacts, float gx, float gy, float gz) {
     g_world.initialized = false;
+    resetContactEvents();
 
 #if AXRONE_PHYSICS_TARGET_WASM
     const uintptr_t heapBase = reinterpret_cast<uintptr_t>(&__heap_base);
@@ -142,7 +162,18 @@ AXRONE_PHYSICS_EXPORT(bodySetMassData) int32_t bodySetMassData(int32_t id, float
 }
 
 AXRONE_PHYSICS_EXPORT(step) int32_t step(float dt, int32_t velocityIterations, int32_t positionIterations) {
-    return g_world.step(dt, velocityIterations, positionIterations);
+    const int32_t contacts = g_world.step(dt, velocityIterations, positionIterations);
+    if (contacts < 0) {
+        return contacts;
+    }
+    const int32_t written = axrone::physics::collectContactEvents(g_world, g_eventState, g_events, kEventCapacity);
+    if (written < 0) {
+        g_eventCount = 0;
+        g_eventOverflow += 1;
+    } else {
+        g_eventCount = written;
+    }
+    return contacts;
 }
 
 AXRONE_PHYSICS_EXPORT(bodyCount) int32_t bodyCount(void) {
@@ -191,6 +222,7 @@ AXRONE_PHYSICS_EXPORT(lib_init) int32_t lib_init(int32_t maxBodies, int32_t maxC
 
 AXRONE_PHYSICS_EXPORT(world_reset) void world_reset(void) {
     g_world.reset();
+    resetContactEvents();
 }
 
 AXRONE_PHYSICS_EXPORT(worldReset) void worldReset(void) {
@@ -384,4 +416,44 @@ AXRONE_PHYSICS_EXPORT(queryScratchPtr) uintptr_t queryScratchPtr(void) {
 
 AXRONE_PHYSICS_EXPORT(queryScratchCapacity) int32_t queryScratchCapacity(void) {
     return kQueryScratchCapacity;
+}
+
+AXRONE_PHYSICS_EXPORT(bodySetAwake) int32_t bodySetAwake(int32_t id, int32_t awake) {
+    return g_world.setAwake(id, awake);
+}
+
+AXRONE_PHYSICS_EXPORT(body_set_awake) int32_t body_set_awake(int32_t id, int32_t awake) {
+    return bodySetAwake(id, awake);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyIsSleeping) int32_t bodyIsSleeping(int32_t id) {
+    return g_world.isSleeping(id);
+}
+
+AXRONE_PHYSICS_EXPORT(body_is_sleeping) int32_t body_is_sleeping(int32_t id) {
+    return bodyIsSleeping(id);
+}
+
+AXRONE_PHYSICS_EXPORT(worldSetAllowSleep) int32_t worldSetAllowSleep(int32_t on) {
+    return g_world.setAllowSleep(on);
+}
+
+AXRONE_PHYSICS_EXPORT(world_set_allow_sleep) int32_t world_set_allow_sleep(int32_t on) {
+    return worldSetAllowSleep(on);
+}
+
+AXRONE_PHYSICS_EXPORT(eventsPtr) uintptr_t eventsPtr(void) {
+    return reinterpret_cast<uintptr_t>(g_events);
+}
+
+AXRONE_PHYSICS_EXPORT(eventCount) int32_t eventCount(void) {
+    return g_eventCount;
+}
+
+AXRONE_PHYSICS_EXPORT(eventsOverflow) int32_t eventsOverflow(void) {
+    return g_eventOverflow;
+}
+
+AXRONE_PHYSICS_EXPORT(eventsClear) void eventsClear(void) {
+    g_eventCount = 0;
 }

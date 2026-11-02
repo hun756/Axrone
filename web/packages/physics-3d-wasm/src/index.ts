@@ -19,6 +19,7 @@ export type {
     BodyOptions,
     BodyType,
     BoxShape,
+    ContactEventSnapshot,
     ContactSnapshot,
     MutableQuat,
     MutableVec3,

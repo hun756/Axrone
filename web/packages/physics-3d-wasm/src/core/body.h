@@ -65,6 +65,8 @@ struct Body {
     AABB aabb;
     float friction;
     float restitution;
+    float sleepTime;
+    int32_t awake;
     Vec3 customInertia;
     Vec3 forceAccum;
     Vec3 torqueAccum;

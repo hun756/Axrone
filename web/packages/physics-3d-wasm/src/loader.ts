@@ -45,6 +45,16 @@ export interface WasmPhysicsExports {
     bodySetMassData(id: number, mass: number, ix: number, iy: number, iz: number): number;
     body_set_mass_data(id: number, mass: number, ix: number, iy: number, iz: number): number;
     step(dt: number, velocityIterations: number, positionIterations: number): number;
+    bodySetAwake(id: number, awake: number): number;
+    body_set_awake(id: number, awake: number): number;
+    bodyIsSleeping(id: number): number;
+    body_is_sleeping(id: number): number;
+    worldSetAllowSleep(on: number): number;
+    world_set_allow_sleep(on: number): number;
+    eventsPtr(): number;
+    eventCount(): number;
+    eventsOverflow(): number;
+    eventsClear(): void;
     bodyCount(): number;
     body_count(): number;
     contactCount(): number;
@@ -118,6 +128,13 @@ const REQUIRED_EXPORTS = [
     "bodyApplyAngularImpulse",
     "bodySetMassData",
     "step",
+    "bodySetAwake",
+    "bodyIsSleeping",
+    "worldSetAllowSleep",
+    "eventsPtr",
+    "eventCount",
+    "eventsOverflow",
+    "eventsClear",
     "bodyCount",
     "contactCount",
     "transformsPtr",

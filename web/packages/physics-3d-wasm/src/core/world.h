@@ -21,8 +21,10 @@ struct World {
     int32_t freeCount;
     int32_t contactCount;
     Vec3 gravity;
+    int32_t allowSleep;
 
     Transform* transforms;
+    Transform* sleepTransforms;
     Vec3* velocities;
     Vec3* angularVelocities;
     PackedContact* packedContacts;
@@ -77,6 +79,9 @@ struct World {
     int32_t applyAngularImpulse(int32_t id, float ix, float iy, float iz);
     int32_t setMassData(int32_t id, float mass, float ix, float iy, float iz);
     int32_t setGravity(float gx, float gy, float gz);
+    int32_t setAllowSleep(int32_t on);
+    int32_t setAwake(int32_t id, int32_t awake);
+    int32_t isSleeping(int32_t id) const;
     int32_t step(float dt, int32_t velocityIterations, int32_t positionIterations);
 
     int32_t bodyCount() const;

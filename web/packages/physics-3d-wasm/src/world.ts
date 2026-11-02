@@ -2,6 +2,7 @@ import { instantiateWasm, loadEmbeddedWasm, WasmPhysicsExports } from "./loader"
 import type {
     BodyOptions,
     BodyType,
+    ContactEventSnapshot,
     ContactSnapshot,
     MutableQuat,
     MutableVec3,
@@ -22,6 +23,8 @@ const MAX_CONTACTS = 262144;
 const TRANSFORM_STRIDE = 7;
 const VEC3_STRIDE = 4;
 const CONTACT_BYTES = 24;
+const EVENT_RECORD_STRIDE = 7;
+const EVENT_CAPACITY = 4096;
 const RAY_HIT_STRIDE = 8;
 const DEFAULT_QUERY_CAPACITY = 256;
 
@@ -82,6 +85,8 @@ export class WasmPhysicsWorld3D {
     private velocityView: Float32Array | null = null;
     private angularVelocityView: Float32Array | null = null;
     private contactView: DataView | null = null;
+    private eventIntView: Int32Array | null = null;
+    private eventFloatView: Float32Array | null = null;
     private queryHitsView: Float32Array | null = null;
     private queryIdsView: Int32Array | null = null;
 
@@ -426,6 +431,54 @@ export class WasmPhysicsWorld3D {
         this.activeBodies.clear();
     }
 
+    setAllowSleep(on: boolean): void {
+        this.ensureAlive();
+        if (this.wasm.worldSetAllowSleep(on ? 1 : 0) !== 0) {
+            throw new Error("allow sleep update failed");
+        }
+    }
+
+    setAwake(id: number, awake: boolean): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        if (this.wasm.bodySetAwake(id, awake ? 1 : 0) !== 0) {
+            throw new Error(`body ${id} awake state failed`);
+        }
+    }
+
+    isSleeping(id: number): boolean {
+        this.ensureAlive();
+        this.assertActive(id);
+        const state = this.wasm.bodyIsSleeping(id);
+        if (state < 0) {
+            throw new Error(`body ${id} sleep query failed`);
+        }
+        return state === 1;
+    }
+
+    drainEvents(): ContactEventSnapshot[] {
+        this.ensureAlive();
+        const count = this.wasm.eventCount();
+        const events: ContactEventSnapshot[] = [];
+        if (count > 0) {
+            const ints = this.getEventInts();
+            const floats = this.getEventFloats();
+            for (let index = 0; index < count; index += 1) {
+                const base = index * EVENT_RECORD_STRIDE;
+                const kindCode = ints[base];
+                events.push({
+                    kind: kindCode === 0 ? "begin" : kindCode === 2 ? "end" : "stay",
+                    a: ints[base + 1],
+                    b: ints[base + 2],
+                    normal: [floats[base + 3], floats[base + 4], floats[base + 5]],
+                    penetration: floats[base + 6]
+                });
+            }
+        }
+        this.wasm.eventsClear();
+        return events;
+    }
+
     hasBody(id: number): boolean {
         return this.activeBodies.has(id);
     }
@@ -688,6 +741,8 @@ export class WasmPhysicsWorld3D {
         this.velocityView = null;
         this.angularVelocityView = null;
         this.contactView = null;
+        this.eventIntView = null;
+        this.eventFloatView = null;
         this.queryHitsView = null;
         this.queryIdsView = null;
     }
@@ -706,9 +761,35 @@ export class WasmPhysicsWorld3D {
             this.velocityView = null;
             this.angularVelocityView = null;
             this.contactView = null;
+            this.eventIntView = null;
+            this.eventFloatView = null;
             this.queryHitsView = null;
             this.queryIdsView = null;
         }
+    }
+
+    private getEventInts(): Int32Array {
+        this.refreshViews();
+        if (this.eventIntView === null) {
+            const pointer = this.wasm.eventsPtr();
+            if (pointer === 0 || (pointer & 15) !== 0) {
+                throw new Error("event buffer is unavailable");
+            }
+            this.eventIntView = new Int32Array(this.wasm.memory.buffer, pointer, EVENT_CAPACITY * EVENT_RECORD_STRIDE);
+        }
+        return this.eventIntView;
+    }
+
+    private getEventFloats(): Float32Array {
+        this.refreshViews();
+        if (this.eventFloatView === null) {
+            const pointer = this.wasm.eventsPtr();
+            if (pointer === 0 || (pointer & 15) !== 0) {
+                throw new Error("event buffer is unavailable");
+            }
+            this.eventFloatView = new Float32Array(this.wasm.memory.buffer, pointer, EVENT_CAPACITY * EVENT_RECORD_STRIDE);
+        }
+        return this.eventFloatView;
     }
 
     private queryHits(): Float32Array {

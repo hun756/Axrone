@@ -40,4 +40,9 @@ constexpr int32_t kBodyFreezePositionX = 8;
 constexpr int32_t kBodyFreezePositionY = 16;
 constexpr int32_t kBodyFreezePositionZ = 32;
 
+constexpr float kSleepTimeLimit = 0.5f;
+constexpr float kSleepLinearThresholdSq = 1e-4f;
+constexpr float kSleepAngularThresholdSq = 1.218e-3f;
+constexpr float kSleepWakeSpeedSq = 1e-4f;
+
 }
