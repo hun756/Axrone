@@ -6,8 +6,38 @@ namespace axrone::physics {
 
 namespace {
 
+struct ShapeWorld {
+    int32_t kind;
+    Vec3 center;
+    Vec3 half;
+    Mat3 rotation;
+};
+
 Vec3 worldPosition(const World& world, int32_t id) {
     return transformPosition(world.transforms[id]);
+}
+
+void loadShapeWorld(const World& world, int32_t id, int32_t slot, ShapeWorld& out) {
+    const Body& body = world.bodies[id];
+    const Shape& shape = body.shapes[slot];
+    const Vec3 position = worldPosition(world, id);
+
+    out.kind = shape.kind;
+    out.half = shape.extents;
+    out.center = shapeCenter(position, body.rotation, shape);
+    if (shape.kind == kShapeBox) {
+        shapeWorldRotation(body.rotation, shape, out.rotation);
+    } else {
+        out.rotation = body.rotation;
+    }
+}
+
+float shapeRadius(const ShapeWorld& shape) {
+    return shape.half.x;
+}
+
+int32_t pairFeature(int32_t shapeIndexA, int32_t shapeIndexB, int32_t baseFeature) {
+    return ((shapeIndexA * kMaxShapesPerBody + shapeIndexB) << 12) | baseFeature;
 }
 
 float boxProjection(const Vec3 axes[3], const Vec3& half, const Vec3& normal) {
@@ -27,7 +57,9 @@ void addContact(
     Vec3 surfB,
     int32_t normalMode,
     Vec3 localNormal,
-    int32_t feature
+    int32_t shapeIndexA,
+    int32_t shapeIndexB,
+    int32_t baseFeature
 ) {
     if (world.contactCount >= world.maxContacts) {
         return;
@@ -37,6 +69,9 @@ void addContact(
         int32_t swap = a;
         a = b;
         b = swap;
+        swap = shapeIndexA;
+        shapeIndexA = shapeIndexB;
+        shapeIndexB = swap;
         normal = -normal;
         Vec3 surfaceSwap = surfA;
         surfA = surfB;
@@ -47,6 +82,8 @@ void addContact(
             normalMode = 1;
         }
     }
+
+    const int32_t feature = pairFeature(shapeIndexA, shapeIndexB, baseFeature);
 
     const int32_t index = world.contactCount++;
     Contact& contact = world.contacts[index];
@@ -94,13 +131,11 @@ void addContact(
     contact.localB = world.bodies[b].rotation.transposeTransform(surfB - posB);
 }
 
-void collideSphereSphere(World& world, int32_t a, int32_t b) {
-    const Vec3 posA = worldPosition(world, a);
-    const Vec3 posB = worldPosition(world, b);
-    const Vec3 delta = posB - posA;
+void collideSphereSphere(World& world, int32_t a, int32_t indexA, const ShapeWorld& sphereA, int32_t b, int32_t indexB, const ShapeWorld& sphereB) {
+    const Vec3 delta = sphereB.center - sphereA.center;
 
-    const float radiusA = world.bodies[a].extents.x;
-    const float radiusB = world.bodies[b].extents.x;
+    const float radiusA = shapeRadius(sphereA);
+    const float radiusB = shapeRadius(sphereB);
     const float radiusSum = radiusA + radiusB;
     const float distanceSq = lengthSq(delta);
     if (distanceSq > radiusSum * radiusSum) {
@@ -115,20 +150,27 @@ void collideSphereSphere(World& world, int32_t a, int32_t b) {
     }
 
     const float pen = radiusSum - distance;
-    const Vec3 point = posA + normal * (radiusA - pen * 0.5f);
-    const Vec3 surfA = posA + normal * radiusA;
-    const Vec3 surfB = posB - normal * radiusB;
+    const Vec3 point = sphereA.center + normal * (radiusA - pen * 0.5f);
+    const Vec3 surfA = sphereA.center + normal * radiusA;
+    const Vec3 surfB = sphereB.center - normal * radiusB;
 
-    addContact(world, a, b, normal, pen, point, surfA, surfB, 0, Vec3(), kKindSphereSphere * 16);
+    addContact(world, a, b, normal, pen, point, surfA, surfB, 0, Vec3(), indexA, indexB, kKindSphereSphere * 16);
 }
 
-void collideSphereBox(World& world, int32_t sphere, int32_t box, bool sphereIsA) {
-    const Vec3 spherePos = worldPosition(world, sphere);
-    const Vec3 boxPos = worldPosition(world, box);
-    const Vec3 delta = spherePos - boxPos;
+void collideSphereBox(
+    World& world,
+    int32_t sphere,
+    int32_t sphereIndex,
+    const ShapeWorld& sphereShape,
+    int32_t box,
+    int32_t boxIndex,
+    const ShapeWorld& boxShape,
+    bool sphereIsA
+) {
+    const Vec3 delta = sphereShape.center - boxShape.center;
 
-    const Vec3 localSphere = world.bodies[box].rotation.transposeTransform(delta);
-    const Vec3 half = world.bodies[box].extents;
+    const Vec3 localSphere = boxShape.rotation.transposeTransform(delta);
+    const Vec3 half = boxShape.half;
 
     const Vec3 closest(
         localSphere.x > half.x ? half.x : (localSphere.x < -half.x ? -half.x : localSphere.x),
@@ -138,7 +180,7 @@ void collideSphereBox(World& world, int32_t sphere, int32_t box, bool sphereIsA)
 
     const Vec3 difference = localSphere - closest;
     const float distanceSq = lengthSq(difference);
-    const float radius = world.bodies[sphere].extents.x;
+    const float radius = shapeRadius(sphereShape);
     if (distanceSq > radius * radius) {
         return;
     }
@@ -171,19 +213,18 @@ void collideSphereBox(World& world, int32_t sphere, int32_t box, bool sphereIsA)
         }
     }
 
-    const Vec3 worldNormal = world.bodies[box].rotation.transform(localNormal);
-    const Vec3 point = boxPos + world.bodies[box].rotation.transform(localPoint);
-    const Vec3 sphereSurface = spherePos - worldNormal * radius;
+    const Vec3 worldNormal = boxShape.rotation.transform(localNormal);
+    const Vec3 point = boxShape.center + boxShape.rotation.transform(localPoint);
+    const Vec3 sphereSurface = sphereShape.center - worldNormal * radius;
 
     if (sphereIsA) {
-        addContact(world, sphere, box, -worldNormal, pen, point, sphereSurface, point, 0, Vec3(), kKindSphereBox * 16);
+        addContact(world, sphere, box, -worldNormal, pen, point, sphereSurface, point, 0, Vec3(), sphereIndex, boxIndex, kKindSphereBox * 16);
     } else {
-        addContact(world, box, sphere, worldNormal, pen, point, point, sphereSurface, 0, Vec3(), kKindSphereBox * 16);
+        addContact(world, box, sphere, worldNormal, pen, point, point, sphereSurface, 0, Vec3(), boxIndex, sphereIndex, kKindSphereBox * 16);
     }
 }
 
-void buildFace(const World& world, int32_t id, const Vec3 axes[3], int32_t axisIndex, float sign, Vec3 out[4]) {
-    const Vec3 half = world.bodies[id].extents;
+void buildFace(const Vec3& center, const Vec3 axes[3], const Vec3& half, int32_t axisIndex, float sign, Vec3 out[4]) {
     const int32_t uIndex = (axisIndex + 1) % 3;
     const int32_t vIndex = (axisIndex + 2) % 3;
 
@@ -193,12 +234,12 @@ void buildFace(const World& world, int32_t id, const Vec3 axes[3], int32_t axisI
     const float hv = vIndex == 0 ? half.x : (vIndex == 1 ? half.y : half.z);
     const float ha = axisIndex == 0 ? half.x : (axisIndex == 1 ? half.y : half.z);
 
-    const Vec3 center = worldPosition(world, id) + axes[axisIndex] * (sign * ha);
+    const Vec3 faceCenter = center + axes[axisIndex] * (sign * ha);
 
-    out[0] = center + u * hu + v * hv;
-    out[1] = center - u * hu + v * hv;
-    out[2] = center - u * hu - v * hv;
-    out[3] = center + u * hu - v * hv;
+    out[0] = faceCenter + u * hu + v * hv;
+    out[1] = faceCenter - u * hu + v * hv;
+    out[2] = faceCenter - u * hu - v * hv;
+    out[3] = faceCenter + u * hu - v * hv;
 }
 
 int32_t clipPlane(const Vec3 input[], int32_t count, Vec3 output[], const Vec3& reference, const Vec3& normal, float offset) {
@@ -231,19 +272,31 @@ int32_t clipPlane(const Vec3 input[], int32_t count, Vec3 output[], const Vec3& 
     return outputCount;
 }
 
-void addFaceContacts(World& world, int32_t a, int32_t b, const Vec3& normal, bool referenceIsA, int32_t axisIndex) {
-    const int32_t reference = referenceIsA ? a : b;
-    const int32_t incident = referenceIsA ? b : a;
+void addFaceContacts(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& shapeA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& shapeB,
+    const Vec3& normal,
+    bool referenceIsA,
+    int32_t axisIndex
+) {
     const Vec3* referenceAxes = referenceIsA ? world.axesA : world.axesB;
     const Vec3* incidentAxes = referenceIsA ? world.axesB : world.axesA;
+    const ShapeWorld& referenceShape = referenceIsA ? shapeA : shapeB;
+    const ShapeWorld& incidentShape = referenceIsA ? shapeB : shapeA;
+    const int32_t reference = referenceIsA ? a : b;
 
     const Vec3 referenceNormal = referenceIsA ? normal : -normal;
     const float sign = dot(referenceAxes[axisIndex], referenceNormal) >= 0.0f ? 1.0f : -1.0f;
 
-    const Vec3 referenceHalf = world.bodies[reference].extents;
+    const Vec3& referenceHalf = referenceShape.half;
     const float referenceHalfExtent = axisIndex == 0 ? referenceHalf.x : (axisIndex == 1 ? referenceHalf.y : referenceHalf.z);
 
-    const Vec3 referencePosition = worldPosition(world, reference);
+    const Vec3 referencePosition = referenceShape.center;
     const Vec3 faceCenter = referencePosition + referenceAxes[axisIndex] * (sign * referenceHalfExtent);
 
     const int32_t uIndex = (axisIndex + 1) % 3;
@@ -267,7 +320,7 @@ void addFaceContacts(World& world, int32_t a, int32_t b, const Vec3& normal, boo
         }
     }
 
-    buildFace(world, incident, incidentAxes, incidentAxis, incidentSign, world.faceVertices);
+    buildFace(incidentShape.center, incidentAxes, incidentShape.half, incidentAxis, incidentSign, world.faceVertices);
 
     int32_t count = clipPlane(world.faceVertices, 4, world.clipA, referencePosition, u, hu);
     count = clipPlane(world.clipA, count, world.clipB, referencePosition, -u, hu);
@@ -300,9 +353,9 @@ void addFaceContacts(World& world, int32_t a, int32_t b, const Vec3& normal, boo
 
         const Vec3 referencePoint = point - referenceNormal * separation;
         if (referenceIsA) {
-            addContact(world, a, b, normal, -separation, point, referencePoint, point, 1, localNormal, kKindBoxFace * 16 + added);
+            addContact(world, a, b, normal, -separation, point, referencePoint, point, 1, localNormal, indexA, indexB, kKindBoxFace * 16 + added);
         } else {
-            addContact(world, a, b, normal, -separation, point, point, referencePoint, 2, localNormal, kKindBoxFace * 16 + added);
+            addContact(world, a, b, normal, -separation, point, point, referencePoint, 2, localNormal, indexA, indexB, kKindBoxFace * 16 + added);
         }
 
         if (++added >= 8) {
@@ -311,9 +364,21 @@ void addFaceContacts(World& world, int32_t a, int32_t b, const Vec3& normal, boo
     }
 }
 
-void addEdgeContact(World& world, int32_t a, int32_t b, const Vec3& normal, int32_t axisA, int32_t axisB, float pen) {
-    const Vec3 halfA = world.bodies[a].extents;
-    Vec3 centerA = worldPosition(world, a);
+void addEdgeContact(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& shapeA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& shapeB,
+    const Vec3& normal,
+    int32_t axisA,
+    int32_t axisB,
+    float pen
+) {
+    const Vec3& halfA = shapeA.half;
+    Vec3 centerA = shapeA.center;
     for (int32_t k = 0; k < 3; ++k) {
         if (k == axisA) {
             continue;
@@ -326,8 +391,8 @@ void addEdgeContact(World& world, int32_t a, int32_t b, const Vec3& normal, int3
     const Vec3 directionA = world.axesA[axisA];
     const float halfExtentA = axisA == 0 ? halfA.x : (axisA == 1 ? halfA.y : halfA.z);
 
-    const Vec3 halfB = world.bodies[b].extents;
-    Vec3 centerB = worldPosition(world, b);
+    const Vec3& halfB = shapeB.half;
+    Vec3 centerB = shapeB.center;
     for (int32_t k = 0; k < 3; ++k) {
         if (k == axisB) {
             continue;
@@ -358,23 +423,23 @@ void addEdgeContact(World& world, int32_t a, int32_t b, const Vec3& normal, int3
     const Vec3 pointA = centerA + directionA * s;
     const Vec3 pointB = centerB + directionB * t;
 
-    addContact(world, a, b, normal, pen, (pointA + pointB) * 0.5f, pointA, pointB, 0, Vec3(), kKindBoxEdge * 16);
+    addContact(world, a, b, normal, pen, (pointA + pointB) * 0.5f, pointA, pointB, 0, Vec3(), indexA, indexB, kKindBoxEdge * 16);
 }
 
-void collideBoxBox(World& world, int32_t a, int32_t b) {
-    const Mat3& rotationA = world.bodies[a].rotation;
+void collideBoxBox(World& world, int32_t a, int32_t indexA, const ShapeWorld& shapeA, int32_t b, int32_t indexB, const ShapeWorld& shapeB) {
+    const Mat3& rotationA = shapeA.rotation;
     world.axesA[0] = Vec3(rotationA.m[0], rotationA.m[3], rotationA.m[6]);
     world.axesA[1] = Vec3(rotationA.m[1], rotationA.m[4], rotationA.m[7]);
     world.axesA[2] = Vec3(rotationA.m[2], rotationA.m[5], rotationA.m[8]);
 
-    const Mat3& rotationB = world.bodies[b].rotation;
+    const Mat3& rotationB = shapeB.rotation;
     world.axesB[0] = Vec3(rotationB.m[0], rotationB.m[3], rotationB.m[6]);
     world.axesB[1] = Vec3(rotationB.m[1], rotationB.m[4], rotationB.m[7]);
     world.axesB[2] = Vec3(rotationB.m[2], rotationB.m[5], rotationB.m[8]);
 
-    const Vec3 offset = worldPosition(world, b) - worldPosition(world, a);
-    const Vec3 halfA = world.bodies[a].extents;
-    const Vec3 halfB = world.bodies[b].extents;
+    const Vec3 offset = shapeB.center - shapeA.center;
+    const Vec3& halfA = shapeA.half;
+    const Vec3& halfB = shapeB.half;
 
     float bestSeparation = -kBig;
     int32_t bestKind = 0;
@@ -443,28 +508,51 @@ void collideBoxBox(World& world, int32_t a, int32_t b) {
     }
 
     if (bestKind == 1) {
-        addFaceContacts(world, a, b, bestNormal, true, bestIndexA);
+        addFaceContacts(world, a, indexA, shapeA, b, indexB, shapeB, bestNormal, true, bestIndexA);
     } else if (bestKind == 2) {
-        addFaceContacts(world, a, b, bestNormal, false, bestIndexA);
+        addFaceContacts(world, a, indexA, shapeA, b, indexB, shapeB, bestNormal, false, bestIndexA);
     } else {
-        addEdgeContact(world, a, b, bestNormal, bestIndexA, bestIndexB, -bestSeparation);
+        addEdgeContact(world, a, indexA, shapeA, b, indexB, shapeB, bestNormal, bestIndexA, bestIndexB, -bestSeparation);
     }
 }
 
 }
 
 void collidePair(World& world, int32_t a, int32_t b) {
-    const int32_t shapeA = world.bodies[a].shape;
-    const int32_t shapeB = world.bodies[b].shape;
+    const Body& bodyA = world.bodies[a];
+    const Body& bodyB = world.bodies[b];
+    const int32_t countA = shapeSlots(bodyA);
+    const int32_t countB = shapeSlots(bodyB);
 
-    if (shapeA == kShapeSphere && shapeB == kShapeSphere) {
-        collideSphereSphere(world, a, b);
-    } else if (shapeA == kShapeSphere && shapeB == kShapeBox) {
-        collideSphereBox(world, a, b, true);
-    } else if (shapeA == kShapeBox && shapeB == kShapeSphere) {
-        collideSphereBox(world, b, a, false);
-    } else if (shapeA == kShapeBox && shapeB == kShapeBox) {
-        collideBoxBox(world, a, b);
+    ShapeWorld stateA;
+    ShapeWorld stateB;
+
+    for (int32_t indexA = 0; indexA < countA; ++indexA) {
+        if (!shapeValid(bodyA.shapes[indexA])) {
+            continue;
+        }
+        loadShapeWorld(world, a, indexA, stateA);
+
+        for (int32_t indexB = 0; indexB < countB; ++indexB) {
+            if (!shapeValid(bodyB.shapes[indexB])) {
+                continue;
+            }
+            loadShapeWorld(world, b, indexB, stateB);
+
+            if (stateA.kind == kShapeSphere) {
+                if (stateB.kind == kShapeSphere) {
+                    collideSphereSphere(world, a, indexA, stateA, b, indexB, stateB);
+                } else if (stateB.kind == kShapeBox) {
+                    collideSphereBox(world, a, indexA, stateA, b, indexB, stateB, true);
+                }
+            } else if (stateA.kind == kShapeBox) {
+                if (stateB.kind == kShapeSphere) {
+                    collideSphereBox(world, b, indexB, stateB, a, indexA, stateA, false);
+                } else if (stateB.kind == kShapeBox) {
+                    collideBoxBox(world, a, indexA, stateA, b, indexB, stateB);
+                }
+            }
+        }
     }
 }
 

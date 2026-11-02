@@ -24,6 +24,104 @@ uint32_t contactHash(int32_t a, int32_t b, int32_t feature) {
            (static_cast<uint32_t>(feature) * 83492791u);
 }
 
+void zeroMass(Body& body) {
+    body.invMass = 0.0f;
+    body.invInertia = Vec3();
+}
+
+bool accumulateMass(const Body& body, float& mass, float& inertiaX, float& inertiaY, float& inertiaZ) {
+    mass = 0.0f;
+    inertiaX = 0.0f;
+    inertiaY = 0.0f;
+    inertiaZ = 0.0f;
+
+    const int32_t slots = shapeSlots(body);
+    for (int32_t slot = 0; slot < slots; ++slot) {
+        const Shape& shape = body.shapes[slot];
+        if (!shapeValid(shape)) {
+            continue;
+        }
+
+        float shapeMass = 0.0f;
+        float shapeInertiaX = 0.0f;
+        float shapeInertiaY = 0.0f;
+        float shapeInertiaZ = 0.0f;
+
+        if (shape.kind == kShapeSphere) {
+            const float radius = shape.extents.x;
+            shapeMass = shape.density * kSphereVolume * radius * radius * radius;
+            const float spin = kSphereInertia * shapeMass * radius * radius;
+            shapeInertiaX = spin;
+            shapeInertiaY = spin;
+            shapeInertiaZ = spin;
+        } else {
+            const float hx = shape.extents.x;
+            const float hy = shape.extents.y;
+            const float hz = shape.extents.z;
+            shapeMass = shape.density * kBoxVolume * hx * hy * hz;
+            const float third = 1.0f / 3.0f;
+            shapeInertiaX = shapeMass * (hy * hy + hz * hz) * third;
+            shapeInertiaY = shapeMass * (hx * hx + hz * hz) * third;
+            shapeInertiaZ = shapeMass * (hx * hx + hy * hy) * third;
+        }
+
+        const float dx = shape.offset.x;
+        const float dy = shape.offset.y;
+        const float dz = shape.offset.z;
+
+        mass += shapeMass;
+        inertiaX += shapeInertiaX + shapeMass * (dy * dy + dz * dz);
+        inertiaY += shapeInertiaY + shapeMass * (dx * dx + dz * dz);
+        inertiaZ += shapeInertiaZ + shapeMass * (dx * dx + dy * dy);
+    }
+
+    return isFinite(mass) && isFinite(inertiaX) && isFinite(inertiaY) && isFinite(inertiaZ);
+}
+
+bool recomputeMass(Body& body) {
+    float mass = 0.0f;
+    float inertiaX = 0.0f;
+    float inertiaY = 0.0f;
+    float inertiaZ = 0.0f;
+    const bool finite = accumulateMass(body, mass, inertiaX, inertiaY, inertiaZ);
+
+    if (body.state != kBodyDynamic || !finite) {
+        zeroMass(body);
+        return finite;
+    }
+
+    if (mass <= 0.0f) {
+        zeroMass(body);
+        return true;
+    }
+
+    const float invMass = 1.0f / mass;
+    float inverse[3];
+    inverse[0] = inertiaX > 0.0f ? 1.0f / inertiaX : 0.0f;
+    inverse[1] = inertiaY > 0.0f ? 1.0f / inertiaY : 0.0f;
+    inverse[2] = inertiaZ > 0.0f ? 1.0f / inertiaZ : 0.0f;
+
+    if (!isFinite(invMass) || !isFinite(inverse[0]) || !isFinite(inverse[1]) || !isFinite(inverse[2])) {
+        zeroMass(body);
+        return false;
+    }
+
+    body.invMass = invMass;
+    body.invInertia = Vec3(inverse[0], inverse[1], inverse[2]);
+    return true;
+}
+
+int32_t shapeSignature(const Body& body) {
+    const int32_t slots = shapeSlots(body);
+    if (slots == 1) {
+        return body.shapes[0].kind;
+    }
+    if (slots == 0) {
+        return kShapeNone;
+    }
+    return kMaxShapesPerBody + slots;
+}
+
 struct Hasher {
     uint64_t value;
 
@@ -155,10 +253,9 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
 
     Body& body = bodies[id];
     body.state = type == kBodyTypeStatic ? kBodyStatic : (type == kBodyTypeDynamic ? kBodyDynamic : kBodyKinematic);
-    body.shape = kShapeNone;
+    body.shapeCount = 0;
     body.invMass = 0.0f;
     body.invInertia = Vec3();
-    body.extents = Vec3();
     body.rotation.setIdentity();
     body.rotation.fromQuaternion(transform.qx, transform.qy, transform.qz, transform.qw);
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
@@ -176,10 +273,9 @@ int32_t World::destroyBody(int32_t id) {
 
     Body& body = bodies[id];
     body.state = kBodyFree;
-    body.shape = kShapeNone;
+    body.shapeCount = 0;
     body.invMass = 0.0f;
     body.invInertia = Vec3();
-    body.extents = Vec3();
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     velocities[id] = Vec3();
     angularVelocities[id] = Vec3();
@@ -218,8 +314,8 @@ int32_t World::setSphere(int32_t id, float radius, float density) {
         }
     }
 
-    body.shape = kShapeSphere;
-    body.extents = Vec3(radius, 0.0f, 0.0f);
+    body.shapeCount = 1;
+    body.shapes[0].setSphere(radius, density, Vec3());
     body.invMass = invMass;
     body.invInertia = Vec3(invInertia, invInertia, invInertia);
     return 0;
@@ -264,10 +360,87 @@ int32_t World::setBox(int32_t id, float hx, float hy, float hz, float density) {
         }
     }
 
-    body.shape = kShapeBox;
-    body.extents = Vec3(hx, hy, hz);
+    body.shapeCount = 1;
+    body.shapes[0].setBox(hx, hy, hz, density, Vec3(), 0.0f, 0.0f, 0.0f, 1.0f);
     body.invMass = invMass;
     body.invInertia = Vec3(invInertiaX, invInertiaY, invInertiaZ);
+    return 0;
+}
+
+int32_t World::addSphere(int32_t id, float radius, float density, float px, float py, float pz) {
+    if (!isActive(id) || !isFinite(radius) || !isFinite(density) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz) ||
+        radius <= 0.0f || density < 0.0f) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    if (body.shapeCount >= kMaxShapesPerBody) {
+        return -1;
+    }
+
+    const int32_t slot = body.shapeCount;
+    body.shapes[slot].setSphere(radius, density, Vec3(px, py, pz));
+    body.shapeCount = slot + 1;
+
+    if (!recomputeMass(body)) {
+        body.shapeCount = slot;
+        recomputeMass(body);
+        return -1;
+    }
+    return slot;
+}
+
+int32_t World::addBox(
+    int32_t id,
+    float hx,
+    float hy,
+    float hz,
+    float density,
+    float px,
+    float py,
+    float pz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    if (!isActive(id) || !isFinite(hx) || !isFinite(hy) || !isFinite(hz) || !isFinite(density) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz) ||
+        !isFinite(qx) || !isFinite(qy) || !isFinite(qz) || !isFinite(qw) ||
+        hx <= 0.0f || hy <= 0.0f || hz <= 0.0f || density < 0.0f) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    if (body.shapeCount >= kMaxShapesPerBody) {
+        return -1;
+    }
+
+    Transform local = { 0.0f, 0.0f, 0.0f, qx, qy, qz, qw };
+    normalizeQuaternion(local);
+
+    const int32_t slot = body.shapeCount;
+    body.shapes[slot].setBox(hx, hy, hz, density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
+    body.shapeCount = slot + 1;
+
+    if (!recomputeMass(body)) {
+        body.shapeCount = slot;
+        recomputeMass(body);
+        return -1;
+    }
+    return slot;
+}
+
+int32_t World::clearShapes(int32_t id) {
+    if (!isActive(id)) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    body.shapeCount = 0;
+    body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    recomputeMass(body);
     return 0;
 }
 
@@ -438,7 +611,7 @@ uint64_t World::fingerprint() const {
     for (int32_t i = 0; i < highWater; ++i) {
         const Body& body = bodies[i];
         hasher.i32(body.state);
-        hasher.i32(body.shape);
+        hasher.i32(shapeSignature(body));
         if (body.state == kBodyFree) {
             continue;
         }

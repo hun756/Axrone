@@ -415,6 +415,254 @@ void testDynamicCannotPushKinematic() {
     CHECK(isFinite(world.transforms[ram].px));
 }
 
+void testMultiShapeMassAccumulation() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t single = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(single >= 0);
+    CHECK(world.setBox(single, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.bodies[single].shapeCount == 1);
+    CHECK(near(world.bodies[single].invMass, 1.0f, 1e-5f));
+    CHECK(near(world.bodies[single].invInertia.x, 6.0f, 1e-4f));
+    CHECK(near(world.bodies[single].invInertia.y, 6.0f, 1e-4f));
+
+    const int32_t compound = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(compound >= 0);
+    CHECK(world.setBox(compound, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.addBox(compound, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+    CHECK(world.bodies[compound].shapeCount == 2);
+    CHECK(near(world.bodies[compound].invMass, 0.5f, 1e-5f));
+    CHECK(near(world.bodies[compound].invInertia.x, 3.0f, 1e-4f));
+    CHECK(near(world.bodies[compound].invInertia.y, 3.0f, 1e-4f));
+    CHECK(near(world.bodies[compound].invInertia.z, 3.0f, 1e-4f));
+
+    CHECK(world.addSphere(compound, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f) == 2);
+    CHECK(world.bodies[compound].shapeCount == 3);
+    CHECK(world.bodies[compound].invMass < 0.5f);
+    CHECK(world.bodies[compound].invMass > 0.0f);
+}
+
+void testParallelAxisInertiaGrows() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t centered = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(centered, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.addBox(centered, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+
+    const int32_t offset = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(offset, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.addBox(offset, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+
+    CHECK(world.bodies[offset].invMass == world.bodies[centered].invMass);
+    CHECK(world.bodies[offset].invInertia.x < world.bodies[centered].invInertia.x);
+    CHECK(world.bodies[offset].invInertia.z < world.bodies[centered].invInertia.z);
+    CHECK(near(world.bodies[offset].invInertia.y, 3.0f, 1e-4f));
+    CHECK(near(world.bodies[offset].invInertia.x, 0.75f, 1e-4f));
+    CHECK(near(world.bodies[offset].invInertia.z, 0.75f, 1e-4f));
+}
+
+void testOffsetShapeRestsOnGround() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    CHECK(world.setMaterial(body, 0.7f, 0.0f) == 0);
+
+    for (int32_t i = 0; i < 240; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    const Transform& transform = world.transforms[body];
+    CHECK(isFinite(transform.px) && isFinite(transform.py) && isFinite(transform.pz));
+    CHECK(near(transform.py, 1.5f, 0.08f));
+    CHECK(fabsf(world.velocities[body].y) < 0.25f);
+    CHECK(world.getContactCount() >= 1);
+}
+
+void testClearShapesResetsProperties() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.setSphere(body, 0.5f, 1.0f) == 0);
+    CHECK(world.bodies[body].invMass > 0.0f);
+    CHECK(world.step(1.0f / 60.0f, 4, 2) >= 0);
+    CHECK(world.getContactCount() >= 1);
+
+    CHECK(world.clearShapes(body) == 0);
+    CHECK(world.bodies[body].shapeCount == 0);
+    CHECK(world.bodies[body].invMass == 0.0f);
+    CHECK(world.bodies[body].invInertia.x == 0.0f);
+    CHECK(world.bodies[body].invInertia.y == 0.0f);
+    CHECK(world.bodies[body].invInertia.z == 0.0f);
+    CHECK(world.step(1.0f / 60.0f, 4, 2) >= 0);
+    CHECK(world.getContactCount() == 0);
+
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    CHECK(world.bodies[body].shapeCount == 1);
+    CHECK(near(world.bodies[body].invMass, 1.0f, 1e-5f));
+    CHECK(world.clearShapes(-1) == -1);
+    CHECK(world.clearShapes(9999) == -1);
+}
+
+void testShapeCapacityRejection() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+
+    for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
+        const float offset = static_cast<float>(slot) * 0.1f;
+        CHECK(world.addSphere(body, 0.5f, 1.0f, offset, 0.0f, 0.0f) == slot);
+    }
+    CHECK(world.bodies[body].shapeCount == kMaxShapesPerBody);
+
+    const float invMassBefore = world.bodies[body].invMass;
+    const Vec3 inertiaBefore = world.bodies[body].invInertia;
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.bodies[body].shapeCount == kMaxShapesPerBody);
+    CHECK(world.bodies[body].invMass == invMassBefore);
+    CHECK(world.bodies[body].invInertia.x == inertiaBefore.x);
+    CHECK(world.bodies[body].invInertia.y == inertiaBefore.y);
+    CHECK(world.bodies[body].invInertia.z == inertiaBefore.z);
+    CHECK(world.step(1.0f / 60.0f, 4, 2) >= 0);
+
+    const int32_t probe = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(probe >= 0);
+    CHECK(world.setSphere(probe, 0.5f, 1.0f) == 0);
+    CHECK(world.addSphere(probe, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.addSphere(probe, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.addSphere(probe, 1.0f, 1.0f, kFloatMax, 0.0f, 0.0f) == -1);
+    CHECK(world.addBox(probe, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.addBox(probe, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, kFloatMax, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.addSphere(probe, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f) == 1);
+    CHECK(world.bodies[probe].shapeCount == 2);
+}
+
+void testStaticAndKinematicKeepZeroMass() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t staticBody = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t kinematicBody = world.createBody(kBodyTypeKinematic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(staticBody >= 0);
+    CHECK(kinematicBody >= 0);
+
+    const int32_t bodies[2] = { staticBody, kinematicBody };
+    for (int32_t i = 0; i < 2; ++i) {
+        const int32_t id = bodies[i];
+        CHECK(world.setSphere(id, 0.5f, 5.0f) == 0);
+        CHECK(world.bodies[id].invMass == 0.0f);
+        CHECK(world.setBox(id, 0.5f, 0.5f, 0.5f, 5.0f) == 0);
+        CHECK(world.bodies[id].invMass == 0.0f);
+        CHECK(world.bodies[id].invInertia.x == 0.0f);
+        CHECK(world.addSphere(id, 0.5f, 5.0f, 0.0f, 1.0f, 0.0f) == 1);
+        CHECK(world.bodies[id].invMass == 0.0f);
+        CHECK(world.addBox(id, 0.5f, 0.5f, 0.5f, 5.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.70710678f, 0.0f, 0.70710678f) == 2);
+        CHECK(world.bodies[id].shapeCount == 3);
+        CHECK(world.bodies[id].invMass == 0.0f);
+        CHECK(world.bodies[id].invInertia.y == 0.0f);
+        CHECK(world.bodies[id].invInertia.z == 0.0f);
+    }
+}
+
+void testOffsetShapeAabbUnion() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.setBox(body, 1.0f, 1.0f, 1.0f, 0.0f) == 0);
+    CHECK(world.step(1.0f / 60.0f, 1, 1) >= 0);
+    CHECK(near(world.bodies[body].aabb.minX, -1.0f, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxX, 1.0f, 1e-5f));
+
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+    CHECK(world.step(1.0f / 60.0f, 1, 1) >= 0);
+    CHECK(near(world.bodies[body].aabb.maxX, 4.5f, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.minX, -1.0f, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxY, 1.0f, 1e-5f));
+
+    CHECK(world.addSphere(body, 2.0f, 0.0f, -6.0f, 0.0f, 0.0f) == 2);
+    CHECK(world.step(1.0f / 60.0f, 1, 1) >= 0);
+    CHECK(near(world.bodies[body].aabb.minX, -8.0f, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxX, 4.5f, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.minY, -2.0f, 1e-5f));
+}
+
+void testMultiShapeDeterminism() {
+    Arena arenaA;
+    Arena arenaB;
+    World worldA;
+    World worldB;
+    CHECK(initWorld(worldA, arenaA, g_memoryA, 64, 4096));
+    CHECK(initWorld(worldB, arenaB, g_memoryB, 64, 4096));
+
+    World* const worlds[2] = { &worldA, &worldB };
+    for (int32_t w = 0; w < 2; ++w) {
+        World& world = *worlds[w];
+        const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        CHECK(ground >= 0);
+        CHECK(world.setBox(ground, 20.0f, 0.5f, 20.0f, 0.0f) == 0);
+        CHECK(world.setMaterial(ground, 0.8f, 0.0f) == 0);
+
+        for (int32_t i = 0; i < 6; ++i) {
+            const float x = static_cast<float>(i) * 2.5f - 6.0f;
+            const int32_t body = world.createBody(
+                kBodyTypeDynamic, x, 2.0f + static_cast<float>(i), 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+            CHECK(body >= 0);
+            CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+            CHECK(world.addSphere(body, 0.4f, 1.0f, 1.1f, 0.0f, 0.0f) == 1);
+            CHECK(world.addBox(body, 0.25f, 0.75f, 0.25f, 2.0f, -1.0f, 0.5f, 0.0f, 0.0f, 0.3826834f, 0.0f, 0.9238795f) == 2);
+            CHECK(world.setMaterial(body, 0.7f, 0.0f) == 0);
+        }
+    }
+
+    for (int32_t i = 0; i < 180; ++i) {
+        worldA.step(1.0f / 60.0f, 8, 3);
+        worldB.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(worldA.getContactCount() == worldB.getContactCount());
+    CHECK(worldA.fingerprint() == worldB.fingerprint());
+    CHECK(worldA.getContactCount() >= 1);
+
+    for (int32_t i = 0; i < worldA.highWater; ++i) {
+        if (worldA.bodies[i].state == kBodyFree) {
+            continue;
+        }
+        const Transform& transform = worldA.transforms[i];
+        CHECK(isFinite(transform.px) && isFinite(transform.py) && isFinite(transform.pz));
+        CHECK(isFinite(transform.qx) && isFinite(transform.qy) && isFinite(transform.qz) && isFinite(transform.qw));
+        CHECK(finiteVector(worldA.velocities[i]));
+        CHECK(finiteVector(worldA.angularVelocities[i]));
+        CHECK(isFinite(worldA.bodies[i].invMass));
+        CHECK(finiteVector(worldA.bodies[i].invInertia));
+    }
+}
+
 void testArenaExhaustion() {
     alignas(64) unsigned char small[8192];
     Arena arena;
@@ -468,6 +716,14 @@ int main() {
     testKinematicCollidesWithStatic();
     testKinematicPlatformCarriesBox();
     testDynamicCannotPushKinematic();
+    testMultiShapeMassAccumulation();
+    testParallelAxisInertiaGrows();
+    testOffsetShapeRestsOnGround();
+    testClearShapesResetsProperties();
+    testShapeCapacityRejection();
+    testStaticAndKinematicKeepZeroMass();
+    testOffsetShapeAabbUnion();
+    testMultiShapeDeterminism();
     testArenaExhaustion();
     testStressDeterminism();
 

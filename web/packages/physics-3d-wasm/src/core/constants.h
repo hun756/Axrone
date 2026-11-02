@@ -20,6 +20,7 @@ constexpr float kMaxDt = 0.1f;
 constexpr int32_t kMaxIterations = 64;
 constexpr int32_t kMaxBodies = 262144;
 constexpr int32_t kMaxContacts = 262144;
+constexpr int32_t kMaxShapesPerBody = 8;
 constexpr float kBig = 1e30f;
 constexpr float kRestitutionThreshold = 1.0f;
 

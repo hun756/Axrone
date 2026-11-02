@@ -19,40 +19,83 @@ bool sweepLess(const World& world, int32_t left, int32_t right) {
     return left < right;
 }
 
+float selectExtent(const Vec3& half, int32_t axis) {
+    if (axis == 0) {
+        return half.x;
+    }
+    if (axis == 1) {
+        return half.y;
+    }
+    return half.z;
+}
+
 }
 
 void updateBounds(World& world) {
     for (int32_t i = 0; i < world.highWater; ++i) {
         Body& body = world.bodies[i];
-        if (body.state == kBodyFree || body.shape == kShapeNone) {
+        const int32_t slots = shapeSlots(body);
+        if (body.state == kBodyFree || slots == 0) {
+            body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
             continue;
         }
 
         const Vec3 position = transformPosition(world.transforms[i]);
-        AABB& bounds = body.aabb;
+        const Mat3& rotation = body.rotation;
+        AABB bounds = { kBig, kBig, kBig, -kBig, -kBig, -kBig };
+        bool covered = false;
 
-        if (body.shape == kShapeSphere) {
-            const float radius = body.extents.x;
-            bounds.minX = position.x - radius;
-            bounds.minY = position.y - radius;
-            bounds.minZ = position.z - radius;
-            bounds.maxX = position.x + radius;
-            bounds.maxY = position.y + radius;
-            bounds.maxZ = position.z + radius;
-            continue;
+        for (int32_t slot = 0; slot < slots; ++slot) {
+            const Shape& shape = body.shapes[slot];
+            if (!shapeValid(shape)) {
+                continue;
+            }
+
+            const Vec3 center = shapeCenter(position, rotation, shape);
+            float ex = 0.0f;
+            float ey = 0.0f;
+            float ez = 0.0f;
+
+            if (shape.kind == kShapeSphere) {
+                ex = shape.extents.x;
+                ey = ex;
+                ez = ex;
+            } else {
+                Mat3 worldRotation;
+                shapeWorldRotation(rotation, shape, worldRotation);
+                ex = fabsf(worldRotation.m[0]) * selectExtent(shape.extents, 0) +
+                     fabsf(worldRotation.m[1]) * selectExtent(shape.extents, 1) +
+                     fabsf(worldRotation.m[2]) * selectExtent(shape.extents, 2);
+                ey = fabsf(worldRotation.m[3]) * selectExtent(shape.extents, 0) +
+                     fabsf(worldRotation.m[4]) * selectExtent(shape.extents, 1) +
+                     fabsf(worldRotation.m[5]) * selectExtent(shape.extents, 2);
+                ez = fabsf(worldRotation.m[6]) * selectExtent(shape.extents, 0) +
+                     fabsf(worldRotation.m[7]) * selectExtent(shape.extents, 1) +
+                     fabsf(worldRotation.m[8]) * selectExtent(shape.extents, 2);
+            }
+
+            if (center.x - ex < bounds.minX) {
+                bounds.minX = center.x - ex;
+            }
+            if (center.y - ey < bounds.minY) {
+                bounds.minY = center.y - ey;
+            }
+            if (center.z - ez < bounds.minZ) {
+                bounds.minZ = center.z - ez;
+            }
+            if (center.x + ex > bounds.maxX) {
+                bounds.maxX = center.x + ex;
+            }
+            if (center.y + ey > bounds.maxY) {
+                bounds.maxY = center.y + ey;
+            }
+            if (center.z + ez > bounds.maxZ) {
+                bounds.maxZ = center.z + ez;
+            }
+            covered = true;
         }
 
-        const Mat3& rotation = body.rotation;
-        const Vec3 half = body.extents;
-        const float ex = fabsf(rotation.m[0]) * half.x + fabsf(rotation.m[1]) * half.y + fabsf(rotation.m[2]) * half.z;
-        const float ey = fabsf(rotation.m[3]) * half.x + fabsf(rotation.m[4]) * half.y + fabsf(rotation.m[5]) * half.z;
-        const float ez = fabsf(rotation.m[6]) * half.x + fabsf(rotation.m[7]) * half.y + fabsf(rotation.m[8]) * half.z;
-        bounds.minX = position.x - ex;
-        bounds.minY = position.y - ey;
-        bounds.minZ = position.z - ez;
-        bounds.maxX = position.x + ex;
-        bounds.maxY = position.y + ey;
-        bounds.maxZ = position.z + ez;
+        body.aabb = covered ? bounds : AABB{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     }
 }
 
@@ -60,7 +103,7 @@ int32_t buildSweep(World& world) {
     int32_t count = 0;
     for (int32_t i = 0; i < world.highWater; ++i) {
         const Body& body = world.bodies[i];
-        if (body.state != kBodyFree && body.shape != kShapeNone) {
+        if (body.state != kBodyFree && shapeSlots(body) > 0) {
             world.sweepOrder[count++] = i;
         }
     }

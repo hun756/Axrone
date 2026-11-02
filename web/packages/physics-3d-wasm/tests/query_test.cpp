@@ -4,20 +4,17 @@
 
 #include "core/query.h"
 
+using axrone::physics::AABB;
 using axrone::physics::Body;
-using axrone::physics::BodyState;
 using axrone::physics::kBodyDynamic;
 using axrone::physics::kBodyFree;
 using axrone::physics::kBodyStatic;
-using axrone::physics::kShapeBox;
-using axrone::physics::kShapeNone;
-using axrone::physics::kShapeSphere;
-using axrone::physics::Mat3;
+using axrone::physics::kMaxShapesPerBody;
 using axrone::physics::overlapSphere;
 using axrone::physics::raycastAll;
 using axrone::physics::raycastClosest;
 using axrone::physics::RayHit;
-using axrone::physics::ShapeKind;
+using axrone::physics::Shape;
 using axrone::physics::Transform;
 using axrone::physics::Vec3;
 using axrone::physics::World;
@@ -46,8 +43,8 @@ bool near(float left, float right) {
 
 struct Fixture {
     World world;
-    Body bodies[16];
-    Transform transforms[16];
+    Body bodies[8];
+    Transform transforms[8];
 
     Fixture() : world(), bodies(), transforms() {
         world.initialized = true;
@@ -56,21 +53,51 @@ struct Fixture {
         world.highWater = 0;
     }
 
-    int32_t addSphere(Vec3 position, float radius, int32_t state = kBodyStatic) {
+    int32_t reserve(Vec3 position, float qx, float qy, float qz, float qw, int32_t state) {
         const int32_t id = world.highWater++;
         Body& body = bodies[id];
         body.state = state;
-        body.shape = kShapeSphere;
-        body.extents = Vec3(radius, 0.0f, 0.0f);
+        body.shapeCount = 0;
+        body.invMass = 0.0f;
+        body.invInertia = Vec3();
+        body.friction = 0.6f;
+        body.restitution = 0.0f;
+        body.aabb = AABB{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         body.rotation.setIdentity();
         Transform& transform = transforms[id];
         transform.px = position.x;
         transform.py = position.y;
         transform.pz = position.z;
-        transform.qx = 0.0f;
-        transform.qy = 0.0f;
-        transform.qz = 0.0f;
-        transform.qw = 1.0f;
+        transform.qx = qx;
+        transform.qy = qy;
+        transform.qz = qz;
+        transform.qw = qw;
+        return id;
+    }
+
+    int32_t addSphereShape(int32_t id, float radius, Vec3 offset) {
+        const int32_t slot = bodies[id].shapeCount;
+        if (slot >= kMaxShapesPerBody) {
+            return -1;
+        }
+        bodies[id].shapes[slot].setSphere(radius, 0.0f, offset);
+        bodies[id].shapeCount = slot + 1;
+        return slot;
+    }
+
+    int32_t addBoxShape(int32_t id, Vec3 half, Vec3 offset, float qx, float qy, float qz, float qw) {
+        const int32_t slot = bodies[id].shapeCount;
+        if (slot >= kMaxShapesPerBody) {
+            return -1;
+        }
+        bodies[id].shapes[slot].setBox(half.x, half.y, half.z, 0.0f, offset, qx, qy, qz, qw);
+        bodies[id].shapeCount = slot + 1;
+        return slot;
+    }
+
+    int32_t addSphere(Vec3 position, float radius, int32_t state = kBodyStatic) {
+        const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
+        addSphereShape(id, radius, Vec3());
         return id;
     }
 
@@ -82,20 +109,15 @@ struct Fixture {
         float qz = 0.0f,
         float qw = 1.0f,
         int32_t state = kBodyStatic) {
-        const int32_t id = world.highWater++;
-        Body& body = bodies[id];
-        body.state = state;
-        body.shape = kShapeBox;
-        body.extents = half;
-        body.rotation.fromQuaternion(qx, qy, qz, qw);
-        Transform& transform = transforms[id];
-        transform.px = position.x;
-        transform.py = position.y;
-        transform.pz = position.z;
-        transform.qx = qx;
-        transform.qy = qy;
-        transform.qz = qz;
-        transform.qw = qw;
+        const int32_t id = reserve(position, qx, qy, qz, qw, state);
+        bodies[id].rotation.fromQuaternion(qx, qy, qz, qw);
+        addBoxShape(id, half, Vec3(), 0.0f, 0.0f, 0.0f, 1.0f);
+        return id;
+    }
+
+    int32_t addCompound(Vec3 position, float qx = 0.0f, float qy = 0.0f, float qz = 0.0f, float qw = 1.0f, int32_t state = kBodyStatic) {
+        const int32_t id = reserve(position, qx, qy, qz, qw, state);
+        bodies[id].rotation.fromQuaternion(qx, qy, qz, qw);
         return id;
     }
 };
@@ -117,18 +139,29 @@ uint32_t checksum(const Fixture& fixture) {
         const Body& body = fixture.world.bodies[id];
         const Transform& transform = fixture.world.transforms[id];
         hash = mix(hash, static_cast<uint32_t>(body.state));
-        hash = mix(hash, static_cast<uint32_t>(body.shape));
+        hash = mix(hash, static_cast<uint32_t>(body.shapeCount));
         hash = mix(hash, floatBits(body.invMass));
         hash = mix(hash, floatBits(body.invInertia.x));
         hash = mix(hash, floatBits(body.invInertia.y));
         hash = mix(hash, floatBits(body.invInertia.z));
-        hash = mix(hash, floatBits(body.extents.x));
-        hash = mix(hash, floatBits(body.extents.y));
-        hash = mix(hash, floatBits(body.extents.z));
         hash = mix(hash, floatBits(body.friction));
         hash = mix(hash, floatBits(body.restitution));
         for (int32_t i = 0; i < 9; ++i) {
             hash = mix(hash, floatBits(body.rotation.m[i]));
+        }
+        for (int32_t slot = 0; slot < body.shapeCount; ++slot) {
+            const Shape& shape = body.shapes[slot];
+            hash = mix(hash, static_cast<uint32_t>(shape.kind));
+            hash = mix(hash, floatBits(shape.density));
+            hash = mix(hash, floatBits(shape.extents.x));
+            hash = mix(hash, floatBits(shape.extents.y));
+            hash = mix(hash, floatBits(shape.extents.z));
+            hash = mix(hash, floatBits(shape.offset.x));
+            hash = mix(hash, floatBits(shape.offset.y));
+            hash = mix(hash, floatBits(shape.offset.z));
+            for (int32_t i = 0; i < 9; ++i) {
+                hash = mix(hash, floatBits(shape.rotation.m[i]));
+            }
         }
         hash = mix(hash, floatBits(body.aabb.minX));
         hash = mix(hash, floatBits(body.aabb.minY));
@@ -412,9 +445,9 @@ void testSkipsUnusableBodies() {
     const int32_t freeId = fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
     fixture.bodies[freeId].state = kBodyFree;
     const int32_t noneId = fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
-    fixture.bodies[noneId].shape = kShapeNone;
+    fixture.bodies[noneId].shapeCount = 0;
     const int32_t flatId = fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 0.0f);
-    fixture.bodies[flatId].extents = Vec3(0.0f, 0.0f, 0.0f);
+    fixture.bodies[flatId].shapes[0].extents = Vec3(0.0f, 0.0f, 0.0f);
     const int32_t degenerateId = fixture.addBox(Vec3(0.0f, 0.0f, -5.0f), Vec3(1.0f, 0.0f, 1.0f));
     CHECK(flatId == 2);
     CHECK(degenerateId == 3);
@@ -489,12 +522,119 @@ void testOverlapDisjointAndOrdering() {
     CHECK(overlapSphere(fixture.world, Vec3(100.0f, 100.0f, 100.0f), 1.0f, bodies, 8) == 0);
 }
 
+void testRayHitsSecondShape() {
+    Fixture fixture;
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addBoxShape(compound, Vec3(1.0f, 1.0f, 1.0f), Vec3(4.0f, 0.0f, -5.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+    fixture.addSphereShape(compound, 1.0f, Vec3(0.0f, 0.0f, -5.0f));
+    CHECK(fixture.bodies[compound].shapeCount == 2);
+
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(hits[0].body == compound);
+        CHECK(near(hits[0].t, 4.0f));
+        CHECK(near(hits[0].pz, -4.0f));
+        CHECK(near(hits[0].nz, 1.0f));
+    }
+    RayHit closest;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
+    CHECK(closest.body == compound);
+    CHECK(near(closest.t, 4.0f));
+}
+
+void testRayKeepsNearestShapeOfBody() {
+    Fixture fixture;
+    const int32_t first = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(first, 1.0f, Vec3(0.0f, 0.0f, -9.0f));
+    fixture.addBoxShape(first, Vec3(0.5f, 0.5f, 0.5f), Vec3(0.0f, 0.0f, -4.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+
+    const int32_t second = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addBoxShape(second, Vec3(0.5f, 0.5f, 0.5f), Vec3(0.0f, 0.0f, -4.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+    fixture.addSphereShape(second, 1.0f, Vec3(0.0f, 0.0f, -9.0f));
+
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
+    CHECK(count == 2);
+    if (count == 2) {
+        CHECK(hits[0].body == first);
+        CHECK(hits[1].body == second);
+        CHECK(near(hits[0].t, 3.5f));
+        CHECK(near(hits[1].t, 3.5f));
+    }
+}
+
+void testRotatedShapeOffsetRotation() {
+    Fixture fixture;
+    const float yawHalf = 0.3826834323650898f;
+    const float yawCos = 0.9238795325112867f;
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addBoxShape(compound, Vec3(1.0f, 1.0f, 0.5f), Vec3(0.0f, 0.0f, -5.0f), 0.0f, yawHalf, 0.0f, yawCos);
+
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(near(hits[0].t, 4.2928932f));
+        CHECK(near(hits[0].nx, 0.7071068f));
+        CHECK(near(hits[0].nz, 0.7071068f));
+    }
+}
+
+void testOverlapDeduplicatesBody() {
+    Fixture fixture;
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(compound, 1.0f, Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(compound, 1.0f, Vec3(3.0f, 0.0f, 0.0f));
+    fixture.addBoxShape(compound, Vec3(0.5f, 0.5f, 0.5f), Vec3(1.5f, 0.0f, 0.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+
+    int32_t bodies[8];
+    const int32_t count = overlapSphere(fixture.world, Vec3(1.5f, 0.0f, 0.0f), 1.0f, bodies, 8);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(bodies[0] == compound);
+    }
+}
+
+void testOffsetShapeCoverage() {
+    Fixture fixture;
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addBoxShape(compound, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, -6.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+
+    int32_t bodies[8];
+    CHECK(overlapSphere(fixture.world, Vec3(0.0f, 0.0f, 0.0f), 0.5f, bodies, 8) == 0);
+    CHECK(overlapSphere(fixture.world, Vec3(0.0f, 0.0f, -6.0f), 0.5f, bodies, 8) == 1);
+    CHECK(overlapSphere(fixture.world, Vec3(1.5f, 0.0f, -6.0f), 0.6f, bodies, 8) == 1);
+    CHECK(overlapSphere(fixture.world, Vec3(1.5f, 0.0f, -6.0f), 0.4f, bodies, 8) == 0);
+
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(near(hits[0].t, 5.0f));
+        CHECK(near(hits[0].pz, -5.0f));
+    }
+    RayHit closest;
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(0.0f, 10.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
+}
+
 void testNoMutationOfWorld() {
     Fixture fixture;
     fixture.addSphere(Vec3(0.0f, 1.0f, -3.0f), 1.5f);
     const float yawHalf = 0.3826834323650898f;
     const float yawCos = 0.9238795325112867f;
     fixture.addBox(Vec3(-2.0f, 0.0f, -6.0f), Vec3(1.0f, 2.0f, 0.5f), 0.0f, yawHalf, 0.0f, yawCos);
+    const int32_t compound = fixture.addCompound(
+        Vec3(1.0f, 0.5f, -2.0f), 0.0f, yawHalf, 0.0f, yawCos, kBodyDynamic);
+    fixture.addSphereShape(compound, 0.75f, Vec3(0.0f, 1.5f, -3.0f));
+    fixture.addBoxShape(compound, Vec3(0.5f, 0.25f, 1.0f), Vec3(2.0f, 0.0f, 0.0f), 0.0f, 0.0f, 0.0f, 1.0f);
     const uint32_t before = checksum(fixture);
     RayHit hits[8];
     RayHit closest;
@@ -534,6 +674,11 @@ int main() {
     testRaycastClosestPicksMinimum();
     testInvalidArguments();
     testSkipsUnusableBodies();
+    testRayHitsSecondShape();
+    testRayKeepsNearestShapeOfBody();
+    testRotatedShapeOffsetRotation();
+    testOverlapDeduplicatesBody();
+    testOffsetShapeCoverage();
     testOverlapSphereWithSphere();
     testOverlapSphereWithBox();
     testOverlapDisjointAndOrdering();

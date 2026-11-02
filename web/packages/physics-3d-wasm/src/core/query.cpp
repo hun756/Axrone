@@ -36,19 +36,6 @@ bool worldQueryable(const World& world) {
     return world.initialized && world.bodies != nullptr && world.transforms != nullptr;
 }
 
-bool shapeUsable(const Body& body) {
-    if (body.state == kBodyFree) {
-        return false;
-    }
-    if (body.shape == kShapeSphere) {
-        return body.extents.x > 0.0f;
-    }
-    if (body.shape == kShapeBox) {
-        return body.extents.x > 0.0f && body.extents.y > 0.0f && body.extents.z > 0.0f;
-    }
-    return false;
-}
-
 float axisValue(const Vec3& value, int32_t axis) {
     if (axis == 0) {
         return value.x;
@@ -166,29 +153,48 @@ bool rayBoxShape(
 
 bool testBody(int32_t id, const World& world, const QueryRay& ray, RayHit& out) {
     const Body& body = world.bodies[id];
-    if (!shapeUsable(body)) {
+    if (!bodyQueryable(body)) {
         return false;
     }
     const Vec3 position = transformPosition(world.transforms[id]);
-    LocalHit local;
+    const int32_t slots = shapeSlots(body);
     bool struck = false;
-    if (body.shape == kShapeSphere) {
-        struck = raySphereShape(ray, position, body.extents.x, local);
-    } else {
-        struck = rayBoxShape(ray, position, body.rotation, body.extents, local);
+    LocalHit best;
+    for (int32_t slot = 0; slot < slots; ++slot) {
+        const Shape& shape = body.shapes[slot];
+        if (!shapeValid(shape)) {
+            continue;
+        }
+        const Vec3 center = shapeCenter(position, body.rotation, shape);
+        LocalHit local;
+        bool hit = false;
+        if (shape.kind == kShapeSphere) {
+            hit = raySphereShape(ray, center, shape.extents.x, local);
+        } else {
+            Mat3 rotation;
+            shapeWorldRotation(body.rotation, shape, rotation);
+            hit = rayBoxShape(ray, center, rotation, shape.extents, local);
+        }
+        if (!hit) {
+            continue;
+        }
+        if (!struck || local.t < best.t) {
+            best = local;
+            struck = true;
+        }
     }
     if (!struck) {
         return false;
     }
-    const Vec3 point = ray.origin + ray.dir * local.t;
+    const Vec3 point = ray.origin + ray.dir * best.t;
     out.body = id;
-    out.t = local.t;
+    out.t = best.t;
     out.px = point.x;
     out.py = point.y;
     out.pz = point.z;
-    out.nx = local.normal.x;
-    out.ny = local.normal.y;
-    out.nz = local.normal.z;
+    out.nx = best.normal.x;
+    out.ny = best.normal.y;
+    out.nz = best.normal.z;
     return true;
 }
 
@@ -278,22 +284,38 @@ int32_t overlapSphere(
     int32_t count = 0;
     for (int32_t id = 0; id < world.highWater; ++id) {
         const Body& body = world.bodies[id];
-        if (!shapeUsable(body)) {
+        if (!bodyQueryable(body)) {
             continue;
         }
-        const Vec3 offset = center - transformPosition(world.transforms[id]);
+        const Vec3 position = transformPosition(world.transforms[id]);
+        const int32_t slots = shapeSlots(body);
         bool struck = false;
-        if (body.shape == kShapeSphere) {
-            const float reach = radius + body.extents.x;
-            struck = lengthSq(offset) <= reach * reach;
-        } else {
-            const Vec3 local = body.rotation.transposeTransform(offset);
+        for (int32_t slot = 0; slot < slots; ++slot) {
+            const Shape& shape = body.shapes[slot];
+            if (!shapeValid(shape)) {
+                continue;
+            }
+            const Vec3 offset = center - shapeCenter(position, body.rotation, shape);
+            if (shape.kind == kShapeSphere) {
+                const float reach = radius + shape.extents.x;
+                if (lengthSq(offset) <= reach * reach) {
+                    struck = true;
+                    break;
+                }
+                continue;
+            }
+            Mat3 rotation;
+            shapeWorldRotation(body.rotation, shape, rotation);
+            const Vec3 local = rotation.transposeTransform(offset);
             const Vec3 closest(
-                clampf(local.x, -body.extents.x, body.extents.x),
-                clampf(local.y, -body.extents.y, body.extents.y),
-                clampf(local.z, -body.extents.z, body.extents.z)
+                clampf(local.x, -shape.extents.x, shape.extents.x),
+                clampf(local.y, -shape.extents.y, shape.extents.y),
+                clampf(local.z, -shape.extents.z, shape.extents.z)
             );
-            struck = lengthSq(local - closest) <= radiusSq;
+            if (lengthSq(local - closest) <= radiusSq) {
+                struck = true;
+                break;
+            }
         }
         if (struck) {
             bodies[count] = id;

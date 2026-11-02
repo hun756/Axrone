@@ -49,6 +49,21 @@ struct World {
     int32_t destroyBody(int32_t id);
     int32_t setSphere(int32_t id, float radius, float density);
     int32_t setBox(int32_t id, float hx, float hy, float hz, float density);
+    int32_t addSphere(int32_t id, float radius, float density, float px, float py, float pz);
+    int32_t addBox(
+        int32_t id,
+        float hx,
+        float hy,
+        float hz,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
+    int32_t clearShapes(int32_t id);
     int32_t setTransform(int32_t id, float px, float py, float pz, float qx, float qy, float qz, float qw);
     int32_t setVelocity(int32_t id, float vx, float vy, float vz);
     int32_t setAngularVelocity(int32_t id, float vx, float vy, float vz);
