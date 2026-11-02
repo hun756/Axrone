@@ -44,8 +44,8 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
         triangleMesh: false,
         heightField: false
     }),
-    multiShape: false,
-    shapeOffsets: false,
+    multiShape: true,
+    shapeOffsets: true,
     materials: true,
     restitution: true,
     sleeping: true,

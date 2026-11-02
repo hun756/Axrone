@@ -28,7 +28,7 @@ const VEC3_STRIDE = 4;
 const CONTACT_BYTES = 24;
 const EVENT_RECORD_STRIDE = 10;
 const EVENT_CAPACITY = 4096;
-const RAY_HIT_STRIDE = 8;
+const RAY_HIT_STRIDE = 10;
 const DEFAULT_QUERY_CAPACITY = 256;
 const SHAPE_ID_MAX = 0x7fffffff;
 const SHAPE_MATERIAL_INHERIT = -1;
@@ -278,6 +278,86 @@ export class WasmPhysicsWorld3D {
         if (this.wasm.bodySetBox(id, halfExtents[0], halfExtents[1], halfExtents[2], density) !== 0) {
             throw new Error(`body ${id} box attachment failed`);
         }
+    }
+
+    addSphere(id: number, radius: number, density = 1, offset: Vec3Tuple = [0, 0, 0]): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertPositive(radius, "radius");
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        assertVec3(offset, "offset");
+        const shapeId = this.wasm.shapeCreateSphere(
+            id,
+            radius,
+            density,
+            offset[0],
+            offset[1],
+            offset[2]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} sphere creation failed`);
+        }
+        return shapeId;
+    }
+
+    addBox(
+        id: number,
+        halfExtents: Vec3Tuple,
+        density = 1,
+        offset: Vec3Tuple = [0, 0, 0],
+        rotation: QuatTuple = [0, 0, 0, 1]
+    ): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertVec3(halfExtents, "halfExtents");
+        assertPositive(halfExtents[0], "halfExtents[0]");
+        assertPositive(halfExtents[1], "halfExtents[1]");
+        assertPositive(halfExtents[2], "halfExtents[2]");
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        assertVec3(offset, "offset");
+        assertQuat(rotation, "rotation");
+        const shapeId = this.wasm.shapeCreateBox(
+            id,
+            halfExtents[0],
+            halfExtents[1],
+            halfExtents[2],
+            density,
+            offset[0],
+            offset[1],
+            offset[2],
+            rotation[0],
+            rotation[1],
+            rotation[2],
+            rotation[3]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} box creation failed`);
+        }
+        return shapeId;
+    }
+
+    destroyShape(shapeId: number): void {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        if (this.wasm.shapeDestroy(shapeId) !== 0) {
+            throw new Error(`shape ${shapeId} destruction failed`);
+        }
+    }
+
+    getShapeBody(shapeId: number): number {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        const bodyId = this.wasm.shapeGetBody(shapeId);
+        if (bodyId < 0) {
+            throw new Error(`shape ${shapeId} body query failed`);
+        }
+        return bodyId;
     }
 
     destroyBody(id: number): void {
@@ -764,9 +844,10 @@ export class WasmPhysicsWorld3D {
             const base = index * RAY_HIT_STRIDE;
             result[index] = {
                 body: ids[base],
-                distance: hits[base + 1],
-                point: [hits[base + 2], hits[base + 3], hits[base + 4]],
-                normal: [hits[base + 5], hits[base + 6], hits[base + 7]]
+                shape: ids[base + 1],
+                distance: hits[base + 2],
+                point: [hits[base + 3], hits[base + 4], hits[base + 5]],
+                normal: [hits[base + 6], hits[base + 7], hits[base + 8]]
             };
         }
         return result;
@@ -795,9 +876,10 @@ export class WasmPhysicsWorld3D {
         }
         return {
             body: ids[0],
-            distance: hits[1],
-            point: [hits[2], hits[3], hits[4]],
-            normal: [hits[5], hits[6], hits[7]]
+            shape: ids[1],
+            distance: hits[2],
+            point: [hits[3], hits[4], hits[5]],
+            normal: [hits[6], hits[7], hits[8]]
         };
     }
 

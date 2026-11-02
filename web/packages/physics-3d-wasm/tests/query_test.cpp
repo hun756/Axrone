@@ -45,11 +45,13 @@ struct Fixture {
     World world;
     Body bodies[8];
     Transform transforms[8];
+    uint16_t gens[8 * kMaxShapesPerBody];
 
-    Fixture() : world(), bodies(), transforms() {
+    Fixture() : world(), bodies(), transforms(), gens() {
         world.initialized = true;
         world.bodies = bodies;
         world.transforms = transforms;
+        world.slotGen = gens;
         world.highWater = 0;
     }
 
@@ -189,6 +191,8 @@ void testRayHitsSphereFromOutside() {
     CHECK(count == 1);
     if (count == 1) {
         CHECK(hits[0].body == 0);
+        CHECK(hits[0].shape == 0);
+        CHECK(hits[0].reserved == 0.0f);
         CHECK(near(hits[0].t, 4.0f));
         CHECK(near(hits[0].px, 0.0f));
         CHECK(near(hits[0].py, 0.0f));
@@ -201,6 +205,7 @@ void testRayHitsSphereFromOutside() {
     CHECK(raycastClosest(
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
     CHECK(closest.body == 0);
+    CHECK(closest.shape == 0);
     CHECK(near(closest.t, 4.0f));
 }
 
@@ -231,6 +236,7 @@ void testRayInsideSphere() {
         fixture.world, Vec3(0.0f, 0.0f, -5.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == 0);
         CHECK(near(hits[0].t, 0.0f));
         CHECK(near(hits[0].px, 0.0f));
         CHECK(near(hits[0].py, 0.0f));
@@ -249,6 +255,7 @@ void testRayHitsAxisAlignedBox() {
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == 0);
         CHECK(near(hits[0].t, 4.0f));
         CHECK(near(hits[0].pz, -4.0f));
         CHECK(near(hits[0].nx, 0.0f));
@@ -267,6 +274,7 @@ void testRayHitsRotatedBox() {
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == 0);
         CHECK(near(hits[0].t, 4.2928932f));
         CHECK(near(hits[0].px, 0.0f));
         CHECK(near(hits[0].pz, -4.2928932f));
@@ -284,6 +292,7 @@ void testRayInsideBox() {
         fixture.world, Vec3(0.0f, 0.0f, -5.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == 0);
         CHECK(near(hits[0].t, 0.0f));
         CHECK(near(hits[0].pz, -5.0f));
         CHECK(near(hits[0].nx, 0.0f));
@@ -361,6 +370,8 @@ void testCapacityTruncationKeepsClosest() {
     if (count == 2) {
         CHECK(hits[0].body == 0);
         CHECK(hits[1].body == 1);
+        CHECK(hits[0].shape == 0);
+        CHECK(hits[1].shape == 8);
         CHECK(near(hits[0].t, 2.0f));
         CHECK(near(hits[1].t, 6.0f));
     }
@@ -370,6 +381,7 @@ void testCapacityTruncationKeepsClosest() {
     CHECK(one == 1);
     if (one == 1) {
         CHECK(single[0].body == 0);
+        CHECK(single[0].shape == 0);
     }
 }
 
@@ -386,6 +398,9 @@ void testHitOrderingByT() {
         CHECK(hits[0].body == 1);
         CHECK(hits[1].body == 2);
         CHECK(hits[2].body == 0);
+        CHECK(hits[0].shape == 8);
+        CHECK(hits[1].shape == 16);
+        CHECK(hits[2].shape == 0);
         CHECK(hits[0].t <= hits[1].t);
         CHECK(hits[1].t <= hits[2].t);
     }
@@ -403,6 +418,8 @@ void testTieBreakByBodyId() {
         CHECK(hits[0].t == hits[1].t);
         CHECK(hits[0].body == 0);
         CHECK(hits[1].body == 1);
+        CHECK(hits[0].shape == 0);
+        CHECK(hits[1].shape == 8);
     }
 }
 
@@ -415,6 +432,7 @@ void testRaycastClosestPicksMinimum() {
     CHECK(raycastClosest(
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
     CHECK(closest.body == 1);
+    CHECK(closest.shape == 8);
     CHECK(near(closest.t, 3.5f));
 }
 
@@ -535,6 +553,7 @@ void testRayHitsSecondShape() {
     CHECK(count == 1);
     if (count == 1) {
         CHECK(hits[0].body == compound);
+        CHECK(hits[0].shape == ((compound << 3) | 1));
         CHECK(near(hits[0].t, 4.0f));
         CHECK(near(hits[0].pz, -4.0f));
         CHECK(near(hits[0].nz, 1.0f));
@@ -543,10 +562,11 @@ void testRayHitsSecondShape() {
     CHECK(raycastClosest(
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
     CHECK(closest.body == compound);
+    CHECK(closest.shape == ((compound << 3) | 1));
     CHECK(near(closest.t, 4.0f));
 }
 
-void testRayKeepsNearestShapeOfBody() {
+void testRayKeepsEveryStruckShape() {
     Fixture fixture;
     const int32_t first = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
     fixture.addSphereShape(first, 1.0f, Vec3(0.0f, 0.0f, -9.0f));
@@ -556,15 +576,70 @@ void testRayKeepsNearestShapeOfBody() {
     fixture.addBoxShape(second, Vec3(0.5f, 0.5f, 0.5f), Vec3(0.0f, 0.0f, -4.0f), 0.0f, 0.0f, 0.0f, 1.0f);
     fixture.addSphereShape(second, 1.0f, Vec3(0.0f, 0.0f, -9.0f));
 
+    RayHit hits[8];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 8);
+    CHECK(count == 4);
+    if (count == 4) {
+        CHECK(hits[0].body == first);
+        CHECK(hits[0].shape == ((first << 3) | 1));
+        CHECK(near(hits[0].t, 3.5f));
+        CHECK(hits[1].body == second);
+        CHECK(hits[1].shape == ((second << 3) | 0));
+        CHECK(near(hits[1].t, 3.5f));
+        CHECK(hits[2].body == first);
+        CHECK(hits[2].shape == ((first << 3) | 0));
+        CHECK(near(hits[2].t, 8.0f));
+        CHECK(hits[3].body == second);
+        CHECK(hits[3].shape == ((second << 3) | 1));
+        CHECK(near(hits[3].t, 8.0f));
+    }
+
+    RayHit closest;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, closest));
+    CHECK(closest.body == first);
+    CHECK(closest.shape == ((first << 3) | 1));
+    CHECK(near(closest.t, 3.5f));
+}
+
+void testRayReportsStruckShapeId() {
+    Fixture fixture;
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(compound, 0.4f, Vec3(0.0f, 4.0f, 0.0f));
+    fixture.addSphereShape(compound, 0.4f, Vec3(0.0f, -4.0f, 0.0f));
+    fixture.addBoxShape(compound, Vec3(1.0f, 1.0f, 1.0f), Vec3(2.0f, 0.0f, 0.0f), 0.0f, 0.0f, 0.0f, 1.0f);
+
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(-5.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 30.0f, hits, 4);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(hits[0].body == compound);
+        CHECK(hits[0].shape == ((compound << 3) | 2));
+        CHECK(near(hits[0].t, 6.0f));
+        CHECK(near(hits[0].px, 1.0f));
+        CHECK(near(hits[0].nx, -1.0f));
+        CHECK(hits[0].reserved == 0.0f);
+    }
+
+    RayHit closest;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-5.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 30.0f, closest));
+    CHECK(closest.body == compound);
+    CHECK(closest.shape == ((compound << 3) | 2));
+}
+
+void testRayReportsMinusOneShapeWithoutGenerationTable() {
+    Fixture fixture;
+    fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
+    fixture.world.slotGen = nullptr;
     RayHit hits[4];
     const int32_t count = raycastAll(
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
-    CHECK(count == 2);
-    if (count == 2) {
-        CHECK(hits[0].body == first);
-        CHECK(hits[1].body == second);
-        CHECK(near(hits[0].t, 3.5f));
-        CHECK(near(hits[1].t, 3.5f));
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(hits[0].shape == -1);
     }
 }
 
@@ -580,6 +655,7 @@ void testRotatedShapeOffsetRotation() {
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == ((compound << 3) | 0));
         CHECK(near(hits[0].t, 4.2928932f));
         CHECK(near(hits[0].nx, 0.7071068f));
         CHECK(near(hits[0].nz, 0.7071068f));
@@ -617,6 +693,7 @@ void testOffsetShapeCoverage() {
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4);
     CHECK(count == 1);
     if (count == 1) {
+        CHECK(hits[0].shape == ((compound << 3) | 0));
         CHECK(near(hits[0].t, 5.0f));
         CHECK(near(hits[0].pz, -5.0f));
     }
@@ -641,7 +718,9 @@ void testNoMutationOfWorld() {
     int32_t bodies[8];
     for (int32_t i = 0; i < 8; ++i) {
         hits[i].body = -777;
+        hits[i].shape = -777;
         hits[i].t = -777.0f;
+        hits[i].reserved = -777.0f;
         bodies[i] = -777;
     }
     const int32_t all = raycastAll(
@@ -675,7 +754,9 @@ int main() {
     testInvalidArguments();
     testSkipsUnusableBodies();
     testRayHitsSecondShape();
-    testRayKeepsNearestShapeOfBody();
+    testRayKeepsEveryStruckShape();
+    testRayReportsStruckShapeId();
+    testRayReportsMinusOneShapeWithoutGenerationTable();
     testRotatedShapeOffsetRotation();
     testOverlapDeduplicatesBody();
     testOffsetShapeCoverage();

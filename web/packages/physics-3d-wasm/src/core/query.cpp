@@ -151,55 +151,82 @@ bool rayBoxShape(
     return true;
 }
 
-bool testBody(int32_t id, const World& world, const QueryRay& ray, RayHit& out) {
-    const Body& body = world.bodies[id];
-    if (!bodyQueryable(body)) {
-        return false;
-    }
-    const Vec3 position = transformPosition(world.transforms[id]);
-    const int32_t slots = shapeSlots(body);
+bool testShape(
+    const World& world,
+    int32_t id,
+    int32_t slot,
+    const Body& body,
+    const Vec3& position,
+    const Shape& shape,
+    const QueryRay& ray,
+    RayHit& out) {
+    const Vec3 center = shapeCenter(position, body.rotation, shape);
+    LocalHit local;
     bool struck = false;
-    LocalHit best;
-    for (int32_t slot = 0; slot < slots; ++slot) {
-        const Shape& shape = body.shapes[slot];
-        if (!shapeValid(shape)) {
-            continue;
-        }
-        const Vec3 center = shapeCenter(position, body.rotation, shape);
-        LocalHit local;
-        bool hit = false;
-        if (shape.kind == kShapeSphere) {
-            hit = raySphereShape(ray, center, shape.extents.x, local);
-        } else {
-            Mat3 rotation;
-            shapeWorldRotation(body.rotation, shape, rotation);
-            hit = rayBoxShape(ray, center, rotation, shape.extents, local);
-        }
-        if (!hit) {
-            continue;
-        }
-        if (!struck || local.t < best.t) {
-            best = local;
-            struck = true;
-        }
+    if (shape.kind == kShapeSphere) {
+        struck = raySphereShape(ray, center, shape.extents.x, local);
+    } else {
+        Mat3 rotation;
+        shapeWorldRotation(body.rotation, shape, rotation);
+        struck = rayBoxShape(ray, center, rotation, shape.extents, local);
     }
     if (!struck) {
         return false;
     }
-    const Vec3 point = ray.origin + ray.dir * best.t;
+    const Vec3 point = ray.origin + ray.dir * local.t;
     out.body = id;
-    out.t = best.t;
+    out.shape = world.shapeMakeId(id, slot);
+    out.t = local.t;
     out.px = point.x;
     out.py = point.y;
     out.pz = point.z;
-    out.nx = best.normal.x;
-    out.ny = best.normal.y;
-    out.nz = best.normal.z;
+    out.nx = local.normal.x;
+    out.ny = local.normal.y;
+    out.nz = local.normal.z;
+    out.reserved = 0.0f;
     return true;
 }
 
 bool hitBefore(const RayHit& left, const RayHit& right) {
-    return left.t < right.t || (left.t == right.t && left.body < right.body);
+    if (left.t != right.t) {
+        return left.t < right.t;
+    }
+    if (left.body != right.body) {
+        return left.body < right.body;
+    }
+    return left.shape < right.shape;
+}
+
+bool identicalShapeHit(const RayHit& left, const RayHit& right) {
+    return left.body == right.body && left.shape == right.shape && left.t == right.t;
+}
+
+bool hasIdenticalShapeHit(const RayHit* hits, int32_t count, const RayHit& candidate) {
+    for (int32_t index = 0; index < count; ++index) {
+        if (identicalShapeHit(hits[index], candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void insertSorted(RayHit* hits, int32_t capacity, int32_t& count, const RayHit& candidate) {
+    int32_t slot = count;
+    while (slot > 0 && hitBefore(candidate, hits[slot - 1])) {
+        --slot;
+    }
+    if (count < capacity) {
+        for (int32_t move = count; move > slot; --move) {
+            hits[move] = hits[move - 1];
+        }
+        hits[slot] = candidate;
+        ++count;
+    } else if (slot < capacity) {
+        for (int32_t move = capacity - 1; move > slot; --move) {
+            hits[move] = hits[move - 1];
+        }
+        hits[slot] = candidate;
+    }
 }
 
 }
@@ -219,26 +246,26 @@ int32_t raycastAll(
         return 0;
     }
     int32_t count = 0;
-    RayHit candidate;
     for (int32_t id = 0; id < world.highWater; ++id) {
-        if (!testBody(id, world, ray, candidate)) {
+        const Body& body = world.bodies[id];
+        if (!bodyQueryable(body)) {
             continue;
         }
-        int32_t slot = count;
-        while (slot > 0 && hitBefore(candidate, hits[slot - 1])) {
-            --slot;
-        }
-        if (count < capacity) {
-            for (int32_t move = count; move > slot; --move) {
-                hits[move] = hits[move - 1];
+        const Vec3 position = transformPosition(world.transforms[id]);
+        const int32_t slots = shapeSlots(body);
+        for (int32_t slot = 0; slot < slots; ++slot) {
+            const Shape& shape = body.shapes[slot];
+            if (!shapeValid(shape)) {
+                continue;
             }
-            hits[slot] = candidate;
-            ++count;
-        } else if (slot < capacity) {
-            for (int32_t move = capacity - 1; move > slot; --move) {
-                hits[move] = hits[move - 1];
+            RayHit candidate;
+            if (!testShape(world, id, slot, body, position, shape, ray, candidate)) {
+                continue;
             }
-            hits[slot] = candidate;
+            if (hasIdenticalShapeHit(hits, count, candidate)) {
+                continue;
+            }
+            insertSorted(hits, capacity, count, candidate);
         }
     }
     return count;
@@ -258,14 +285,26 @@ bool raycastClosest(
         return false;
     }
     bool found = false;
-    RayHit candidate;
     for (int32_t id = 0; id < world.highWater; ++id) {
-        if (!testBody(id, world, ray, candidate)) {
+        const Body& body = world.bodies[id];
+        if (!bodyQueryable(body)) {
             continue;
         }
-        if (!found || hitBefore(candidate, hit)) {
-            hit = candidate;
-            found = true;
+        const Vec3 position = transformPosition(world.transforms[id]);
+        const int32_t slots = shapeSlots(body);
+        for (int32_t slot = 0; slot < slots; ++slot) {
+            const Shape& shape = body.shapes[slot];
+            if (!shapeValid(shape)) {
+                continue;
+            }
+            RayHit candidate;
+            if (!testShape(world, id, slot, body, position, shape, ray, candidate)) {
+                continue;
+            }
+            if (!found || hitBefore(candidate, hit)) {
+                hit = candidate;
+                found = true;
+            }
         }
     }
     return found;

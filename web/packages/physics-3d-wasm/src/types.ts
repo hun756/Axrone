@@ -84,6 +84,7 @@ export interface ContactEventSnapshot {
 
 export interface RaycastHit {
     readonly body: number;
+    readonly shape: number;
     readonly distance: number;
     readonly point: Vec3Tuple;
     readonly normal: Vec3Tuple;

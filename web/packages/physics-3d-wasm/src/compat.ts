@@ -1,5 +1,11 @@
 import { WasmPhysicsWorld3D } from "./world";
-import type { BodyType, QuatTuple, Vec3Tuple } from "./types";
+import type {
+    BodyType,
+    ContactEventSnapshot,
+    QuatTuple,
+    TransformSnapshot,
+    Vec3Tuple
+} from "./types";
 
 export interface CompatVec3 {
     readonly x: number;
@@ -25,6 +31,8 @@ export interface CompatShapeDef {
     readonly center?: Partial<CompatVec3>;
     readonly halfExtents?: Partial<CompatVec3>;
     readonly radius?: number;
+    readonly rotation?: Partial<CompatQuat>;
+    readonly isSensor?: boolean;
 }
 
 export interface CompatMaterial {
@@ -47,6 +55,54 @@ export interface CompatStatistics {
     readonly contactCount: number;
 }
 
+export type CompatCollisionEventType = 0 | 1 | 2;
+
+export type CompatSensorEventType = 0 | 1 | 2;
+
+export interface CompatContactPoint {
+    readonly id: number;
+    readonly separation: number;
+}
+
+export interface CompatContactManifold {
+    readonly id: number;
+    readonly bodyIdA: number;
+    readonly bodyIdB: number;
+    readonly shapeIdA: number;
+    readonly shapeIdB: number;
+    readonly normal: CompatVec3;
+    readonly pointCount: number;
+    readonly points: readonly CompatContactPoint[];
+}
+
+export interface CompatCollisionEvent {
+    readonly type: CompatCollisionEventType;
+    readonly bodyIdA: number;
+    readonly bodyIdB: number;
+    readonly shapeIdA: number;
+    readonly shapeIdB: number;
+    readonly manifold: CompatContactManifold;
+    readonly timestamp: number;
+}
+
+export interface CompatSensorEvent {
+    readonly type: CompatSensorEventType;
+    readonly sensorBodyId: number;
+    readonly sensorShapeId: number;
+    readonly visitorBodyId: number;
+    readonly visitorShapeId: number;
+    readonly timestamp: number;
+}
+
+export interface CompatContactListener {
+    onCollisionBegin?(event: CompatCollisionEvent): void;
+    onCollisionStay?(event: CompatCollisionEvent): void;
+    onCollisionEnd?(event: CompatCollisionEvent): void;
+    onSensorEnter?(event: CompatSensorEvent): void;
+    onSensorStay?(event: CompatSensorEvent): void;
+    onSensorExit?(event: CompatSensorEvent): void;
+}
+
 function vector(value: Partial<CompatVec3> | undefined, fallback: number): Vec3Tuple {
     return [
         value?.x ?? fallback,
@@ -64,14 +120,56 @@ function quaternion(value: Partial<CompatQuat> | undefined): QuatTuple {
     ];
 }
 
-function isZero(value: Partial<CompatVec3> | undefined): boolean {
-    return (value?.x ?? 0) === 0 && (value?.y ?? 0) === 0 && (value?.z ?? 0) === 0;
+function eventTimestamp(): number {
+    return globalThis.performance?.now() ?? Date.now();
+}
+
+function buildCollisionEvent(
+    type: CompatCollisionEventType,
+    event: ContactEventSnapshot,
+    timestamp: number
+): CompatCollisionEvent {
+    const manifold: CompatContactManifold = {
+        id: 0,
+        bodyIdA: event.bodyA,
+        bodyIdB: event.bodyB,
+        shapeIdA: event.shapeA,
+        shapeIdB: event.shapeB,
+        normal: { x: event.normal[0], y: event.normal[1], z: event.normal[2] },
+        pointCount: 1,
+        points: [{ id: 0, separation: -event.penetration }]
+    };
+    return {
+        type,
+        bodyIdA: event.bodyA,
+        bodyIdB: event.bodyB,
+        shapeIdA: event.shapeA,
+        shapeIdB: event.shapeB,
+        manifold,
+        timestamp
+    };
+}
+
+function buildSensorEvent(
+    type: CompatSensorEventType,
+    event: ContactEventSnapshot,
+    timestamp: number
+): CompatSensorEvent {
+    return {
+        type,
+        sensorBodyId: event.bodyA,
+        sensorShapeId: event.shapeA,
+        visitorBodyId: event.bodyB,
+        visitorShapeId: event.shapeB,
+        timestamp
+    };
 }
 
 export class WasmPhysicsWorld3DCompat {
     private readonly physics: WasmPhysicsWorld3D;
-    private readonly shapeByBody = new Map<number, number>();
-    private nextShapeId = 1;
+    private readonly bodyShapes = new Map<number, Set<number>>();
+    private readonly shapeOwners = new Map<number, number>();
+    private listener: CompatContactListener | null = null;
     private disposed = false;
 
     private constructor(physics: WasmPhysicsWorld3D) {
@@ -121,44 +219,69 @@ export class WasmPhysicsWorld3DCompat {
     destroyBody(bodyId: number): void {
         this.ensureAlive();
         this.physics.destroyBody(bodyId);
-        this.shapeByBody.delete(bodyId);
+        this.forgetBodyShapes(bodyId);
     }
 
     createBoxShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
         this.ensureAlive();
-        if (!isZero(def.center)) {
-            throw new Error("offset shape centers are not supported by the wasm backend yet");
-        }
-        if (this.shapeByBody.has(bodyId)) {
-            throw new Error(`body ${bodyId} already has a wasm shape; multiple shapes are not supported yet`);
-        }
         const extents = def.halfExtents;
         if (extents === undefined) {
             throw new Error("box shape requires halfExtents");
         }
-        this.physics.attachBox(bodyId, [extents.x ?? 0, extents.y ?? 0, extents.z ?? 0], 1);
-        this.applyMaterial(bodyId, material);
-        const shapeId = this.nextShapeId++;
-        this.shapeByBody.set(bodyId, shapeId);
+        const shapeId = this.physics.addBox(
+            bodyId,
+            vector(extents, 0),
+            1,
+            vector(def.center, 0),
+            quaternion(def.rotation)
+        );
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
         return shapeId;
     }
 
     createSphereShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
         this.ensureAlive();
-        if (!isZero(def.center)) {
-            throw new Error("offset shape centers are not supported by the wasm backend yet");
-        }
-        if (this.shapeByBody.has(bodyId)) {
-            throw new Error(`body ${bodyId} already has a wasm shape; multiple shapes are not supported yet`);
-        }
         if (def.radius === undefined) {
             throw new Error("sphere shape requires radius");
         }
-        this.physics.attachSphere(bodyId, def.radius, 1);
-        this.applyMaterial(bodyId, material);
-        const shapeId = this.nextShapeId++;
-        this.shapeByBody.set(bodyId, shapeId);
+        const shapeId = this.physics.addSphere(
+            bodyId,
+            def.radius,
+            1,
+            vector(def.center, 0)
+        );
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
         return shapeId;
+    }
+
+    destroyShape(shapeId: number): void {
+        this.ensureAlive();
+        this.physics.destroyShape(shapeId);
+        const bodyId = this.shapeOwners.get(shapeId);
+        if (bodyId === undefined) {
+            return;
+        }
+        const ids = this.bodyShapes.get(bodyId);
+        if (ids !== undefined) {
+            ids.delete(shapeId);
+            if (ids.size === 0) {
+                this.bodyShapes.delete(bodyId);
+            }
+        }
+        this.shapeOwners.delete(shapeId);
+    }
+
+    getShapeBody(shapeId: number): number {
+        this.ensureAlive();
+        return this.physics.getShapeBody(shapeId);
     }
 
     getBody(bodyId: number): CompatBodyHandle | null {
@@ -174,9 +297,21 @@ export class WasmPhysicsWorld3DCompat {
         };
     }
 
+    getTransform(bodyId: number): TransformSnapshot {
+        this.ensureAlive();
+        return this.physics.readTransform(bodyId);
+    }
+
     step(dt: number, velocityIterations = 10, positionIterations = 4): number {
         this.ensureAlive();
-        return this.physics.step(dt, { velocityIterations, positionIterations });
+        const contacts = this.physics.step(dt, { velocityIterations, positionIterations });
+        this.dispatchContactEvents();
+        return contacts;
+    }
+
+    setContactListener(listener: CompatContactListener | null): void {
+        this.ensureAlive();
+        this.listener = listener;
     }
 
     getStatistics(): CompatStatistics {
@@ -190,8 +325,8 @@ export class WasmPhysicsWorld3DCompat {
     reset(): void {
         this.ensureAlive();
         this.physics.reset();
-        this.shapeByBody.clear();
-        this.nextShapeId = 1;
+        this.bodyShapes.clear();
+        this.shapeOwners.clear();
     }
 
     dispose(): void {
@@ -199,7 +334,9 @@ export class WasmPhysicsWorld3DCompat {
             return;
         }
         this.disposed = true;
-        this.shapeByBody.clear();
+        this.listener = null;
+        this.bodyShapes.clear();
+        this.shapeOwners.clear();
         this.physics.dispose();
     }
 
@@ -207,11 +344,94 @@ export class WasmPhysicsWorld3DCompat {
         this.dispose();
     }
 
-    private applyMaterial(bodyId: number, material: CompatMaterial | undefined): void {
+    private registerShape(bodyId: number, shapeId: number): void {
+        const ids = this.bodyShapes.get(bodyId);
+        if (ids === undefined) {
+            this.bodyShapes.set(bodyId, new Set([shapeId]));
+        } else {
+            ids.add(shapeId);
+        }
+        this.shapeOwners.set(shapeId, bodyId);
+    }
+
+    private forgetBodyShapes(bodyId: number): void {
+        const ids = this.bodyShapes.get(bodyId);
+        if (ids === undefined) {
+            return;
+        }
+        for (const shapeId of ids) {
+            this.shapeOwners.delete(shapeId);
+        }
+        this.bodyShapes.delete(bodyId);
+    }
+
+    private applyShapeMaterial(shapeId: number, material: CompatMaterial | undefined): void {
         if (material === undefined) {
             return;
         }
-        this.physics.setMaterial(bodyId, material.friction ?? 0.6, material.restitution ?? 0);
+        this.physics.setShapeMaterial(shapeId, material.friction ?? 0.6, material.restitution ?? 0);
+    }
+
+    private dispatchContactEvents(): void {
+        const listener = this.listener;
+        if (listener === null) {
+            return;
+        }
+        const events = this.physics.drainEvents();
+        if (events.length === 0) {
+            return;
+        }
+        const timestamp = eventTimestamp();
+        for (const event of events) {
+            switch (event.kind) {
+                case "begin":
+                    this.callCollision("onCollisionBegin", 0, listener, event, timestamp);
+                    break;
+                case "stay":
+                    this.callCollision("onCollisionStay", 1, listener, event, timestamp);
+                    break;
+                case "end":
+                    this.callCollision("onCollisionEnd", 2, listener, event, timestamp);
+                    break;
+                case "sensorEnter":
+                    this.callSensor("onSensorEnter", 0, listener, event, timestamp);
+                    break;
+                case "sensorStay":
+                    this.callSensor("onSensorStay", 1, listener, event, timestamp);
+                    break;
+                case "sensorExit":
+                    this.callSensor("onSensorExit", 2, listener, event, timestamp);
+                    break;
+            }
+        }
+    }
+
+    private callCollision(
+        method: "onCollisionBegin" | "onCollisionStay" | "onCollisionEnd",
+        type: CompatCollisionEventType,
+        listener: CompatContactListener,
+        event: ContactEventSnapshot,
+        timestamp: number
+    ): void {
+        const handler = listener[method];
+        if (handler === undefined) {
+            return;
+        }
+        handler.call(listener, buildCollisionEvent(type, event, timestamp));
+    }
+
+    private callSensor(
+        method: "onSensorEnter" | "onSensorStay" | "onSensorExit",
+        type: CompatSensorEventType,
+        listener: CompatContactListener,
+        event: ContactEventSnapshot,
+        timestamp: number
+    ): void {
+        const handler = listener[method];
+        if (handler === undefined) {
+            return;
+        }
+        handler.call(listener, buildSensorEvent(type, event, timestamp));
     }
 
     private ensureAlive(): void {

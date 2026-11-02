@@ -22,7 +22,7 @@ alignas(64) unsigned char g_hostMemory[64 * 1024 * 1024];
 constexpr int32_t kQueryScratchCapacity = 256;
 alignas(16) axrone::physics::RayHit g_queryScratch[kQueryScratchCapacity];
 
-static_assert(sizeof(axrone::physics::RayHit) == 32, "ray hit record must stay 32 bytes");
+static_assert(sizeof(axrone::physics::RayHit) == 40, "ray hit record must stay 40 bytes");
 
 constexpr int32_t kEventCapacity = 4096;
 alignas(16) axrone::physics::ContactEvent g_events[kEventCapacity];

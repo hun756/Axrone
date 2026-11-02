@@ -443,6 +443,14 @@ function addStaticSphere(world: WasmPhysicsWorld3D, position: readonly [number, 
     });
 }
 
+function shapeBodyOf(shapeId: number): number {
+    return (shapeId >> 3) & 0x3ffff;
+}
+
+function shapeSlotOf(shapeId: number): number {
+    return shapeId & 7;
+}
+
 describe('query facade', () => {
     it('hits a box along the ray', async () => {
         const world = await createWorld(16);
@@ -451,6 +459,8 @@ describe('query facade', () => {
         const hits = world.raycast([-5, 0, 0], [1, 0, 0], 20);
         expect(hits).toHaveLength(1);
         expect(hits[0].body).toBe(box);
+        expect(shapeBodyOf(hits[0].shape)).toBe(box);
+        expect(shapeSlotOf(hits[0].shape)).toBe(0);
         expect(hits[0].distance).toBeCloseTo(4.5, 4);
         expect(hits[0].point[0]).toBeCloseTo(-0.5, 4);
         expect(hits[0].point[1]).toBeCloseTo(0, 4);
@@ -460,10 +470,12 @@ describe('query facade', () => {
         const infinite = world.raycast([-5, 0, 0], [1, 0, 0]);
         expect(infinite).toHaveLength(1);
         expect(infinite[0].body).toBe(box);
+        expect(infinite[0].shape).toBe(hits[0].shape);
 
         const closest = world.raycastClosest([-5, 0, 0], [1, 0, 0], 20);
         expect(closest).not.toBeNull();
         expect(closest?.body).toBe(box);
+        expect(closest?.shape).toBe(hits[0].shape);
         expect(closest?.distance).toBeCloseTo(4.5, 4);
         world.dispose();
     });
@@ -475,6 +487,8 @@ describe('query facade', () => {
         const hits = world.raycast([0, 0, -5], [0, 0, 1], 20);
         expect(hits).toHaveLength(1);
         expect(hits[0].body).toBe(sphere);
+        expect(shapeBodyOf(hits[0].shape)).toBe(sphere);
+        expect(shapeSlotOf(hits[0].shape)).toBe(0);
         expect(hits[0].distance).toBeCloseTo(4.5, 4);
         expect(hits[0].point[2]).toBeCloseTo(-0.5, 4);
         expect(hits[0].normal[2]).toBeCloseTo(-1, 4);
@@ -499,6 +513,8 @@ describe('query facade', () => {
         expect(world.raycastClosest([-5, 0, 0], [1, 0, 0], 4)).toBeNull();
         expect(world.raycast([-5, 0, 0], [1, 0, 0], 5)).toHaveLength(1);
         expect(world.raycastClosest([-5, 0, 0], [1, 0, 0], 5)?.body).toBe(0);
+        expect(shapeBodyOf(world.raycastClosest([-5, 0, 0], [1, 0, 0], 5)!.shape)).toBe(0);
+        expect(shapeSlotOf(world.raycastClosest([-5, 0, 0], [1, 0, 0], 5)!.shape)).toBe(0);
         expect(() => world.raycast([-5, 0, 0], [1, 0, 0], 0)).toThrow();
         world.dispose();
     });
@@ -517,6 +533,8 @@ describe('query facade', () => {
         expect(hits).toHaveLength(1);
         const hit = hits[0];
         expect(hit.body).toBe(box);
+        expect(shapeBodyOf(hit.shape)).toBe(box);
+        expect(shapeSlotOf(hit.shape)).toBe(0);
         expect(Math.abs(hit.normal[0])).toBeCloseTo(Math.SQRT1_2, 4);
         expect(hit.normal[1]).toBeCloseTo(Math.SQRT1_2, 4);
         expect(hit.normal[2]).toBeCloseTo(0, 4);
@@ -551,21 +569,77 @@ describe('query facade', () => {
         expect(scratch % 16).toBe(0);
         expect(wasm.queryScratchCapacity()).toBe(256);
 
-        const hits = new Float32Array(wasm.memory.buffer, scratch, 8);
-        const ids = new Int32Array(wasm.memory.buffer, scratch, 8);
+        const hits = new Float32Array(wasm.memory.buffer, scratch, 10);
+        const ids = new Int32Array(wasm.memory.buffer, scratch, 10);
 
         expect(wasm.raycastAll(0, 5, -10, 0, 0, 1, 30, scratch, 256)).toBe(1);
         expect(ids[0]).toBe(body);
-        expect(hits[1]).toBeCloseTo(9.5, 4);
-        expect(hits[2]).toBeCloseTo(0, 4);
-        expect(hits[3]).toBeCloseTo(5, 4);
-        expect(hits[4]).toBeCloseTo(-0.5, 4);
-        expect(hits[7]).toBeCloseTo(-1, 4);
+        expect((ids[1] >> 3) & 0x3ffff).toBe(body);
+        expect(ids[1] & 7).toBe(1);
+        expect(hits[2]).toBeCloseTo(9.5, 4);
+        expect(hits[3]).toBeCloseTo(0, 4);
+        expect(hits[4]).toBeCloseTo(5, 4);
+        expect(hits[5]).toBeCloseTo(-0.5, 4);
+        expect(hits[8]).toBeCloseTo(-1, 4);
 
         expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, scratch, 256)).toBe(1);
+        expect(ids[0]).toBe(body);
+        expect((ids[1] >> 3) & 0x3ffff).toBe(body);
+        expect(ids[1] & 7).toBe(0);
         expect(wasm.raycastAll(0, 10, -10, 0, 0, 1, 30, scratch, 256)).toBe(0);
         expect(wasm.overlapSphere(0, 5, 0, 0.5, scratch, 256)).toBe(1);
         expect(ids[0]).toBe(body);
+    });
+
+    it('reports the struck shape id for a compound body', async () => {
+        const world = await createWorld(16);
+        const body = world.createBody({ type: 'static', position: [0, 0, 0] });
+        const upper = world.addSphere(body, 0.4, 0, [0, 4, 0]);
+        const lower = world.addSphere(body, 0.4, 0, [0, -4, 0]);
+        const side = world.addBox(body, [1, 1, 1], 0, [2, 0, 0]);
+        expect(shapeBodyOf(upper)).toBe(body);
+        expect(shapeSlotOf(upper)).toBe(0);
+        expect(shapeBodyOf(lower)).toBe(body);
+        expect(shapeSlotOf(lower)).toBe(1);
+        expect(shapeBodyOf(side)).toBe(body);
+        expect(shapeSlotOf(side)).toBe(2);
+
+        const hits = world.raycast([-5, 0, 0], [1, 0, 0], 30);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].body).toBe(body);
+        expect(hits[0].shape).toBe(side);
+        expect(hits[0].distance).toBeCloseTo(6, 4);
+        expect(hits[0].point[0]).toBeCloseTo(1, 4);
+        expect(hits[0].normal[0]).toBeCloseTo(-1, 4);
+
+        const closest = world.raycastClosest([-5, 0, 0], [1, 0, 0], 30);
+        expect(closest?.shape).toBe(side);
+
+        world.destroyShape(side);
+        expect(world.raycast([-5, 0, 0], [1, 0, 0], 30)).toEqual([]);
+        expect(world.getShapeBody(upper)).toBe(body);
+        expect(() => world.getShapeBody(side)).toThrow();
+        expect(() => world.destroyShape(side)).toThrow();
+        world.dispose();
+    });
+
+    it('keeps one hit per shape when a compound body is struck twice', async () => {
+        const world = await createWorld(16);
+        const body = world.createBody({ type: 'static', position: [0, 0, 0] });
+        const near = world.addBox(body, [0.5, 0.5, 0.5], 0, [0, 0, -4]);
+        const far = world.addSphere(body, 1, 0, [0, 0, -9]);
+
+        const hits = world.raycast([0, 0, 0], [0, 0, -1], 100);
+        expect(hits).toHaveLength(2);
+        expect(hits[0].body).toBe(body);
+        expect(hits[0].shape).toBe(near);
+        expect(hits[0].distance).toBeCloseTo(3.5, 4);
+        expect(hits[1].shape).toBe(far);
+        expect(hits[1].distance).toBeCloseTo(8, 4);
+
+        const closest = world.raycastClosest([0, 0, 0], [0, 0, -1], 100);
+        expect(closest?.shape).toBe(near);
+        world.dispose();
     });
 
     it('rejects invalid output pointers and capacities without growing memory', async () => {

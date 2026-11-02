@@ -9,9 +9,11 @@ namespace axrone::physics {
 
 struct RayHit {
     int32_t body;
+    int32_t shape;
     float t;
     float px, py, pz;
     float nx, ny, nz;
+    float reserved;
 };
 
 int32_t raycastAll(
