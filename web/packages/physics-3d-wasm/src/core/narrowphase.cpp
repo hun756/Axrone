@@ -25,10 +25,10 @@ void loadShapeWorld(const World& world, int32_t id, int32_t slot, ShapeWorld& ou
     out.kind = shape.kind;
     out.half = shape.extents;
     out.center = shapeCenter(position, body.rotation, shape);
-    if (shape.kind == kShapeBox) {
-        shapeWorldRotation(body.rotation, shape, out.rotation);
-    } else {
+    if (shape.kind == kShapeSphere) {
         out.rotation = body.rotation;
+    } else {
+        shapeWorldRotation(body.rotation, shape, out.rotation);
     }
 }
 
@@ -139,11 +139,20 @@ void addContact(
     contact.localB = world.bodies[b].rotation.transposeTransform(surfB - posB);
 }
 
-void collideSphereSphere(World& world, int32_t a, int32_t indexA, const ShapeWorld& sphereA, int32_t b, int32_t indexB, const ShapeWorld& sphereB) {
-    const Vec3 delta = sphereB.center - sphereA.center;
+void collideSphereVersusSphere(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const Vec3& centerA,
+    float radiusA,
+    int32_t b,
+    int32_t indexB,
+    const Vec3& centerB,
+    float radiusB,
+    int32_t baseFeature
+) {
+    const Vec3 delta = centerB - centerA;
 
-    const float radiusA = shapeRadius(sphereA);
-    const float radiusB = shapeRadius(sphereB);
     const float radiusSum = radiusA + radiusB;
     const float distanceSq = lengthSq(delta);
     if (distanceSq > radiusSum * radiusSum) {
@@ -158,11 +167,144 @@ void collideSphereSphere(World& world, int32_t a, int32_t indexA, const ShapeWor
     }
 
     const float pen = radiusSum - distance;
-    const Vec3 point = sphereA.center + normal * (radiusA - pen * 0.5f);
-    const Vec3 surfA = sphereA.center + normal * radiusA;
-    const Vec3 surfB = sphereB.center - normal * radiusB;
+    const Vec3 point = centerA + normal * (radiusA - pen * 0.5f);
+    const Vec3 surfA = centerA + normal * radiusA;
+    const Vec3 surfB = centerB - normal * radiusB;
 
-    addContact(world, a, b, normal, pen, point, surfA, surfB, 0, Vec3(), indexA, indexB, kKindSphereSphere * 16);
+    addContact(world, a, b, normal, pen, point, surfA, surfB, 0, Vec3(), indexA, indexB, baseFeature);
+}
+
+void collideSphereSphere(World& world, int32_t a, int32_t indexA, const ShapeWorld& sphereA, int32_t b, int32_t indexB, const ShapeWorld& sphereB) {
+    collideSphereVersusSphere(
+        world,
+        a,
+        indexA,
+        sphereA.center,
+        shapeRadius(sphereA),
+        b,
+        indexB,
+        sphereB.center,
+        shapeRadius(sphereB),
+        kKindSphereSphere * 16);
+}
+
+void capsuleSegment(const ShapeWorld& capsule, Vec3& p0, Vec3& p1) {
+    const float halfSegment = capsule.half.y;
+    const Vec3 axis(
+        capsule.rotation.m[1] * halfSegment,
+        capsule.rotation.m[4] * halfSegment,
+        capsule.rotation.m[7] * halfSegment
+    );
+    p0 = capsule.center - axis;
+    p1 = capsule.center + axis;
+}
+
+Vec3 closestPointOnSegment(const Vec3& point, const Vec3& p0, const Vec3& p1) {
+    const Vec3 direction = p1 - p0;
+    const float span = lengthSq(direction);
+    if (span <= kEps) {
+        return p0;
+    }
+    const float s = clampf(dot(point - p0, direction) / span, 0.0f, 1.0f);
+    return p0 + direction * s;
+}
+
+void closestPointsBetweenSegments(
+    const Vec3& a0,
+    const Vec3& a1,
+    const Vec3& b0,
+    const Vec3& b1,
+    Vec3& outA,
+    Vec3& outB
+) {
+    const Vec3 d1 = a1 - a0;
+    const Vec3 d2 = b1 - b0;
+    const Vec3 w = a0 - b0;
+    const float aa = dot(d1, d1);
+    const float bb = dot(d1, d2);
+    const float cc = dot(d2, d2);
+    const float dd = dot(d1, w);
+    const float ee = dot(d2, w);
+
+    float s = 0.0f;
+    float t = 0.0f;
+
+    if (aa <= kEps && cc <= kEps) {
+        s = 0.0f;
+        t = 0.0f;
+    } else if (aa <= kEps) {
+        t = clampf(ee / cc, 0.0f, 1.0f);
+    } else if (cc <= kEps) {
+        s = clampf(-dd / aa, 0.0f, 1.0f);
+    } else {
+        const float denominator = aa * cc - bb * bb;
+        s = denominator > kEps ? clampf((bb * ee - cc * dd) / denominator, 0.0f, 1.0f) : 0.0f;
+        t = clampf((ee + bb * s) / cc, 0.0f, 1.0f);
+        s = clampf((t * bb - dd) / aa, 0.0f, 1.0f);
+    }
+
+    outA = a0 + d1 * s;
+    outB = b0 + d2 * t;
+}
+
+void collideSphereCapsule(
+    World& world,
+    int32_t sphere,
+    int32_t sphereIndex,
+    const ShapeWorld& sphereShape,
+    int32_t capsule,
+    int32_t capsuleIndex,
+    const ShapeWorld& capsuleShape
+) {
+    Vec3 p0;
+    Vec3 p1;
+    capsuleSegment(capsuleShape, p0, p1);
+    const Vec3 anchor = closestPointOnSegment(sphereShape.center, p0, p1);
+
+    collideSphereVersusSphere(
+        world,
+        sphere,
+        sphereIndex,
+        sphereShape.center,
+        shapeRadius(sphereShape),
+        capsule,
+        capsuleIndex,
+        anchor,
+        shapeRadius(capsuleShape),
+        kKindCapsuleSphere * 16);
+}
+
+void collideCapsuleCapsule(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& capsuleA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& capsuleB
+) {
+    Vec3 a0;
+    Vec3 a1;
+    Vec3 b0;
+    Vec3 b1;
+    capsuleSegment(capsuleA, a0, a1);
+    capsuleSegment(capsuleB, b0, b1);
+
+    Vec3 pointA;
+    Vec3 pointB;
+    closestPointsBetweenSegments(a0, a1, b0, b1, pointA, pointB);
+
+    collideSphereVersusSphere(
+        world,
+        a,
+        indexA,
+        pointA,
+        shapeRadius(capsuleA),
+        b,
+        indexB,
+        pointB,
+        shapeRadius(capsuleB),
+        kKindCapsuleCapsule * 16);
 }
 
 void collideSphereBox(
@@ -173,7 +315,8 @@ void collideSphereBox(
     int32_t box,
     int32_t boxIndex,
     const ShapeWorld& boxShape,
-    bool sphereIsA
+    bool sphereIsA,
+    int32_t baseFeature
 ) {
     const Vec3 delta = sphereShape.center - boxShape.center;
 
@@ -226,10 +369,99 @@ void collideSphereBox(
     const Vec3 sphereSurface = sphereShape.center - worldNormal * radius;
 
     if (sphereIsA) {
-        addContact(world, sphere, box, -worldNormal, pen, point, sphereSurface, point, 0, Vec3(), sphereIndex, boxIndex, kKindSphereBox * 16);
+        addContact(world, sphere, box, -worldNormal, pen, point, sphereSurface, point, 0, Vec3(), sphereIndex, boxIndex, baseFeature);
     } else {
-        addContact(world, box, sphere, worldNormal, pen, point, point, sphereSurface, 0, Vec3(), boxIndex, sphereIndex, kKindSphereBox * 16);
+        addContact(world, box, sphere, worldNormal, pen, point, point, sphereSurface, 0, Vec3(), boxIndex, sphereIndex, baseFeature);
     }
+}
+
+Vec3 clampToBox(const Vec3& value, const Vec3& half) {
+    return Vec3(
+        value.x > half.x ? half.x : (value.x < -half.x ? -half.x : value.x),
+        value.y > half.y ? half.y : (value.y < -half.y ? -half.y : value.y),
+        value.z > half.z ? half.z : (value.z < -half.z ? -half.z : value.z)
+    );
+}
+
+float segmentBoxParametricDistanceSq(const Vec3& l0, const Vec3& dl, const Vec3& half, float t, Vec3& outLocal, Vec3& outClamped) {
+    outLocal = l0 + dl * t;
+    outClamped = clampToBox(outLocal, half);
+    const Vec3 difference = outLocal - outClamped;
+    return lengthSq(difference);
+}
+
+float closestSegmentBoxParameter(const Vec3& l0, const Vec3& l1, const Vec3& half) {
+    const Vec3 dl = l1 - l0;
+    float lo = 0.0f;
+    float hi = 1.0f;
+    float bestT = 0.0f;
+    int32_t bestIndex = 0;
+
+    for (int32_t pass = 0; pass < 2; ++pass) {
+        float bestDistanceSq = kBig;
+        const float step = (hi - lo) / static_cast<float>(kCapsuleBoxSamples);
+        for (int32_t i = 0; i <= kCapsuleBoxSamples; ++i) {
+            const float t = lo + step * static_cast<float>(i);
+            Vec3 local;
+            Vec3 clamped;
+            const float distanceSq = segmentBoxParametricDistanceSq(l0, dl, half, t, local, clamped);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                bestT = t;
+                bestIndex = i;
+            }
+        }
+        if (pass == 1) {
+            break;
+        }
+        const float windowStart = lo + step * static_cast<float>(bestIndex - 1 > 0 ? bestIndex - 1 : 0);
+        const float windowEnd = lo + step * static_cast<float>(bestIndex + 1 < kCapsuleBoxSamples ? bestIndex + 1 : kCapsuleBoxSamples);
+        lo = windowStart;
+        hi = windowEnd;
+    }
+
+    return bestT;
+}
+
+void collideCapsuleBox(
+    World& world,
+    int32_t capsule,
+    int32_t capsuleIndex,
+    const ShapeWorld& capsuleShape,
+    int32_t box,
+    int32_t boxIndex,
+    const ShapeWorld& boxShape,
+    bool capsuleIsA
+) {
+    Vec3 p0;
+    Vec3 p1;
+    capsuleSegment(capsuleShape, p0, p1);
+
+    const Vec3 delta0 = p0 - boxShape.center;
+    const Vec3 delta1 = p1 - boxShape.center;
+    const Vec3 l0 = boxShape.rotation.transposeTransform(delta0);
+    const Vec3 l1 = boxShape.rotation.transposeTransform(delta1);
+
+    const float t = closestSegmentBoxParameter(l0, l1, boxShape.half);
+    const Vec3 localAnchor = l0 + (l1 - l0) * t;
+    const Vec3 worldAnchor = boxShape.center + boxShape.rotation.transform(localAnchor);
+
+    ShapeWorld anchorSphere;
+    anchorSphere.kind = kShapeSphere;
+    anchorSphere.center = worldAnchor;
+    anchorSphere.half = Vec3(capsuleShape.half.x, 0.0f, 0.0f);
+    anchorSphere.rotation = boxShape.rotation;
+
+    collideSphereBox(
+        world,
+        capsule,
+        capsuleIndex,
+        anchorSphere,
+        box,
+        boxIndex,
+        boxShape,
+        capsuleIsA,
+        kKindCapsuleBox * 16);
 }
 
 void buildFace(const Vec3& center, const Vec3 axes[3], const Vec3& half, int32_t axisIndex, float sign, Vec3 out[4]) {
@@ -524,6 +756,45 @@ void collideBoxBox(World& world, int32_t a, int32_t indexA, const ShapeWorld& sh
     }
 }
 
+void cylinderProxy(const ShapeWorld& shape, ShapeWorld& out) {
+    if (shape.kind != kShapeCylinder) {
+        out = shape;
+        return;
+    }
+    out.kind = kShapeBox;
+    out.center = shape.center;
+    out.half = Vec3(shape.half.x, shape.half.y, shape.half.x);
+    out.rotation = shape.rotation;
+}
+
+void collideShapePair(World& world, int32_t a, int32_t indexA, const ShapeWorld& shapeA, int32_t b, int32_t indexB, const ShapeWorld& shapeB) {
+    if (shapeA.kind == kShapeSphere) {
+        if (shapeB.kind == kShapeSphere) {
+            collideSphereSphere(world, a, indexA, shapeA, b, indexB, shapeB);
+        } else if (shapeB.kind == kShapeBox) {
+            collideSphereBox(world, a, indexA, shapeA, b, indexB, shapeB, true, kKindSphereBox * 16);
+        } else if (shapeB.kind == kShapeCapsule) {
+            collideSphereCapsule(world, a, indexA, shapeA, b, indexB, shapeB);
+        }
+    } else if (shapeA.kind == kShapeBox) {
+        if (shapeB.kind == kShapeSphere) {
+            collideSphereBox(world, b, indexB, shapeB, a, indexA, shapeA, false, kKindSphereBox * 16);
+        } else if (shapeB.kind == kShapeBox) {
+            collideBoxBox(world, a, indexA, shapeA, b, indexB, shapeB);
+        } else if (shapeB.kind == kShapeCapsule) {
+            collideCapsuleBox(world, b, indexB, shapeB, a, indexA, shapeA, false);
+        }
+    } else if (shapeA.kind == kShapeCapsule) {
+        if (shapeB.kind == kShapeSphere) {
+            collideSphereCapsule(world, b, indexB, shapeB, a, indexA, shapeA);
+        } else if (shapeB.kind == kShapeBox) {
+            collideCapsuleBox(world, a, indexA, shapeA, b, indexB, shapeB, true);
+        } else if (shapeB.kind == kShapeCapsule) {
+            collideCapsuleCapsule(world, a, indexA, shapeA, b, indexB, shapeB);
+        }
+    }
+}
+
 }
 
 void collidePair(World& world, int32_t a, int32_t b) {
@@ -534,12 +805,15 @@ void collidePair(World& world, int32_t a, int32_t b) {
 
     ShapeWorld stateA;
     ShapeWorld stateB;
+    ShapeWorld proxyA;
+    ShapeWorld proxyB;
 
     for (int32_t indexA = 0; indexA < countA; ++indexA) {
         if (!shapeValid(bodyA.shapes[indexA])) {
             continue;
         }
         loadShapeWorld(world, a, indexA, stateA);
+        cylinderProxy(stateA, proxyA);
 
         for (int32_t indexB = 0; indexB < countB; ++indexB) {
             if (!shapeValid(bodyB.shapes[indexB])) {
@@ -549,20 +823,8 @@ void collidePair(World& world, int32_t a, int32_t b) {
                 continue;
             }
             loadShapeWorld(world, b, indexB, stateB);
-
-            if (stateA.kind == kShapeSphere) {
-                if (stateB.kind == kShapeSphere) {
-                    collideSphereSphere(world, a, indexA, stateA, b, indexB, stateB);
-                } else if (stateB.kind == kShapeBox) {
-                    collideSphereBox(world, a, indexA, stateA, b, indexB, stateB, true);
-                }
-            } else if (stateA.kind == kShapeBox) {
-                if (stateB.kind == kShapeSphere) {
-                    collideSphereBox(world, b, indexB, stateB, a, indexA, stateA, false);
-                } else if (stateB.kind == kShapeBox) {
-                    collideBoxBox(world, a, indexA, stateA, b, indexB, stateB);
-                }
-            }
+            cylinderProxy(stateB, proxyB);
+            collideShapePair(world, a, indexA, proxyA, b, indexB, proxyB);
         }
     }
 }

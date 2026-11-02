@@ -25,7 +25,35 @@ export interface BoxShape {
     readonly halfExtents: Vec3Tuple;
 }
 
-export type Shape = SphereShape | BoxShape;
+export interface CapsuleShape {
+    readonly kind: "capsule";
+    readonly radius: number;
+    readonly halfSegment: number;
+}
+
+export interface CylinderShape {
+    readonly kind: "cylinder";
+    readonly radius: number;
+    readonly halfHeight: number;
+}
+
+export type Shape = SphereShape | BoxShape | CapsuleShape | CylinderShape;
+
+export interface CapsuleAttachOptions {
+    readonly radius: number;
+    readonly halfSegment: number;
+    readonly density?: number;
+    readonly offset?: Vec3Tuple;
+    readonly rotation?: QuatTuple;
+}
+
+export interface CylinderAttachOptions {
+    readonly radius: number;
+    readonly halfHeight: number;
+    readonly density?: number;
+    readonly offset?: Vec3Tuple;
+    readonly rotation?: QuatTuple;
+}
 
 export interface BodyOptions {
     readonly type?: BodyType;

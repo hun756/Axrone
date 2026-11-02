@@ -15,7 +15,16 @@ enum {
 enum {
     AXRONE_PHYSICS_SHAPE_NONE = 0,
     AXRONE_PHYSICS_SHAPE_SPHERE = 1,
-    AXRONE_PHYSICS_SHAPE_BOX = 2
+    AXRONE_PHYSICS_SHAPE_BOX = 2,
+    AXRONE_PHYSICS_SHAPE_CAPSULE = 3,
+    AXRONE_PHYSICS_SHAPE_CYLINDER = 4
+};
+
+enum {
+    AXRONE_PHYSICS_SHAPE_TYPE_CAPSULE = 1,
+    AXRONE_PHYSICS_SHAPE_TYPE_BOX = 3,
+    AXRONE_PHYSICS_SHAPE_TYPE_SPHERE = 5,
+    AXRONE_PHYSICS_SHAPE_TYPE_CYLINDER = 6
 };
 
 enum {
@@ -86,6 +95,10 @@ int32_t shapeCreateSphere(int32_t bodyId, float radius, float density, float cx,
 int32_t shape_create_sphere(int32_t bodyId, float radius, float density, float cx, float cy, float cz);
 int32_t shapeCreateBox(int32_t bodyId, float hx, float hy, float hz, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
 int32_t shape_create_box(int32_t bodyId, float hx, float hy, float hz, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
+int32_t shapeCreateCapsule(int32_t bodyId, float radius, float halfSegment, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
+int32_t shape_create_capsule(int32_t bodyId, float radius, float halfSegment, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
+int32_t shapeCreateCylinder(int32_t bodyId, float radius, float halfHeight, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
+int32_t shape_create_cylinder(int32_t bodyId, float radius, float halfHeight, float density, float cx, float cy, float cz, float qx, float qy, float qz, float qw);
 int32_t shapeDestroy(int32_t shapeId);
 int32_t shape_destroy(int32_t shapeId);
 int32_t shapeClear(int32_t bodyId);

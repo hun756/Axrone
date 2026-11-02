@@ -66,6 +66,30 @@ struct World {
         float qy,
         float qz,
         float qw);
+    int32_t addCapsule(
+        int32_t id,
+        float radius,
+        float halfSegment,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
+    int32_t addCylinder(
+        int32_t id,
+        float radius,
+        float halfHeight,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
     int32_t clearShapes(int32_t id);
     int32_t shapeDestroy(int32_t shapeId);
     int32_t shapeClear(int32_t bodyId);

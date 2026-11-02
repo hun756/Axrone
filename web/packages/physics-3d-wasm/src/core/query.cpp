@@ -151,6 +151,183 @@ bool rayBoxShape(
     return true;
 }
 
+bool rayCapsuleShape(
+    const QueryRay& ray,
+    const Vec3& center,
+    const Mat3& rotation,
+    const Vec3& extents,
+    LocalHit& out) {
+    const float radius = extents.x;
+    const float halfSegment = extents.y;
+    const Vec3 axis(
+        rotation.m[1] * halfSegment,
+        rotation.m[4] * halfSegment,
+        rotation.m[7] * halfSegment
+    );
+    if (lengthSq(axis) <= kRayDirEps) {
+        return raySphereShape(ray, center, radius, out);
+    }
+
+    const Vec3 p0 = center - axis;
+    const Vec3 p1 = center + axis;
+    const Vec3 span = p1 - p0;
+    const float spanLength = 2.0f * halfSegment;
+    const float spanSq = lengthSq(span);
+    const Vec3 oc = ray.origin - p0;
+    const Vec3 u = span * (1.0f / sqrtf(spanSq));
+
+    const float anchorParam = clampf(dot(oc, span) / spanSq, 0.0f, 1.0f);
+    const Vec3 anchor = p0 + span * anchorParam;
+    const Vec3 originRadial = ray.origin - anchor;
+    if (lengthSq(originRadial) <= radius * radius) {
+        out.t = 0.0f;
+        out.normal = -ray.dir;
+        return true;
+    }
+
+    bool found = false;
+    LocalHit best;
+
+    const float projO = dot(oc, u);
+    const Vec3 oRad = oc - u * projO;
+    const float projD = dot(ray.dir, u);
+    const Vec3 dRad = ray.dir - u * projD;
+    const float A = lengthSq(dRad);
+    const float B = 2.0f * dot(oRad, dRad);
+    const float C = lengthSq(oRad) - radius * radius;
+    if (A > kSlabEps) {
+        const float disc = B * B - 4.0f * A * C;
+        if (disc >= 0.0f) {
+            const float tEnter = (-B - sqrtf(disc)) * (1.0f / (2.0f * A));
+            if (tEnter > 0.0f && tEnter <= ray.maxDistance) {
+                const float along = projO + tEnter * projD;
+                if (along >= 0.0f && along <= spanLength) {
+                    best.t = tEnter;
+                    best.normal = normalize(oRad + dRad * tEnter);
+                    found = true;
+                }
+            }
+        }
+    }
+
+    LocalHit candidate;
+    if (raySphereShape(ray, p0, radius, candidate)) {
+        if (!found || candidate.t < best.t) {
+            best = candidate;
+            found = true;
+        }
+    }
+    if (raySphereShape(ray, p1, radius, candidate)) {
+        if (!found || candidate.t < best.t) {
+            best = candidate;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        return false;
+    }
+    out = best;
+    return true;
+}
+
+bool rayCylinderShape(
+    const QueryRay& ray,
+    const Vec3& center,
+    const Mat3& rotation,
+    const Vec3& extents,
+    LocalHit& out) {
+    const float radius = extents.x;
+    const float halfHeight = extents.y;
+    const Vec3 offset = ray.origin - center;
+    const Vec3 ro = rotation.transposeTransform(offset);
+    const Vec3 rd = rotation.transposeTransform(ray.dir);
+
+    float tMin = -kBig;
+    float tMax = kBig;
+    bool enterFromCap = false;
+    float capSign = 1.0f;
+
+    if (fabsf(rd.y) < kSlabEps) {
+        if (fabsf(ro.y) > halfHeight) {
+            return false;
+        }
+    } else {
+        float t0 = (-halfHeight - ro.y) / rd.y;
+        float t1 = (halfHeight - ro.y) / rd.y;
+        if (t0 > t1) {
+            const float swap = t0;
+            t0 = t1;
+            t1 = swap;
+        }
+        if (t0 > tMin) {
+            tMin = t0;
+            enterFromCap = true;
+            capSign = rd.y < 0.0f ? 1.0f : -1.0f;
+        }
+        if (t1 < tMax) {
+            tMax = t1;
+        }
+        if (tMin > tMax) {
+            return false;
+        }
+    }
+
+    const float A = rd.x * rd.x + rd.z * rd.z;
+    const float B = 2.0f * (ro.x * rd.x + ro.z * rd.z);
+    const float C = ro.x * ro.x + ro.z * ro.z - radius * radius;
+    if (A <= kSlabEps) {
+        if (C > 0.0f) {
+            return false;
+        }
+    } else {
+        const float disc = B * B - 4.0f * A * C;
+        if (disc < 0.0f) {
+            return false;
+        }
+        const float sqrtDisc = sqrtf(disc);
+        const float tR0 = (-B - sqrtDisc) * (1.0f / (2.0f * A));
+        const float tR1 = (-B + sqrtDisc) * (1.0f / (2.0f * A));
+        if (tR0 > tMin) {
+            tMin = tR0;
+            enterFromCap = false;
+        }
+        if (tR1 < tMax) {
+            tMax = tR1;
+        }
+        if (tMin > tMax) {
+            return false;
+        }
+    }
+
+    if (tMax < 0.0f) {
+        return false;
+    }
+    if (tMin <= 0.0f) {
+        out.t = 0.0f;
+        out.normal = -ray.dir;
+        return true;
+    }
+    if (tMin > ray.maxDistance) {
+        return false;
+    }
+
+    out.t = tMin;
+    Vec3 localNormal(1.0f, 0.0f, 0.0f);
+    if (enterFromCap) {
+        localNormal = Vec3(0.0f, capSign, 0.0f);
+    } else {
+        const Vec3 hitLocal = ro + rd * tMin;
+        const float radialSq = hitLocal.x * hitLocal.x + hitLocal.z * hitLocal.z;
+        if (radialSq > kSlabEps) {
+            const float inv = 1.0f / sqrtf(radialSq);
+            localNormal = Vec3(hitLocal.x * inv, 0.0f, hitLocal.z * inv);
+        }
+    }
+    out.normal = normalize(rotation.transform(localNormal));
+    return true;
+}
+
 bool testShape(
     const World& world,
     int32_t id,
@@ -165,10 +342,18 @@ bool testShape(
     bool struck = false;
     if (shape.kind == kShapeSphere) {
         struck = raySphereShape(ray, center, shape.extents.x, local);
-    } else {
+    } else if (shape.kind == kShapeBox) {
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
         struck = rayBoxShape(ray, center, rotation, shape.extents, local);
+    } else if (shape.kind == kShapeCapsule) {
+        Mat3 rotation;
+        shapeWorldRotation(body.rotation, shape, rotation);
+        struck = rayCapsuleShape(ray, center, rotation, shape.extents, local);
+    } else {
+        Mat3 rotation;
+        shapeWorldRotation(body.rotation, shape, rotation);
+        struck = rayCylinderShape(ray, center, rotation, shape.extents, local);
     }
     if (!struck) {
         return false;
@@ -343,14 +528,50 @@ int32_t overlapSphere(
                 }
                 continue;
             }
+            if (shape.kind == kShapeCapsule) {
+                Mat3 rotation;
+                shapeWorldRotation(body.rotation, shape, rotation);
+                const Vec3 axis(
+                    rotation.m[1] * shape.extents.y,
+                    rotation.m[4] * shape.extents.y,
+                    rotation.m[7] * shape.extents.y
+                );
+                const Vec3 span = axis * 2.0f;
+                float distanceSq;
+                if (lengthSq(span) <= kRayDirEps) {
+                    distanceSq = lengthSq(offset);
+                } else {
+                    const float anchorParam = clampf(dot(offset + axis, span) / lengthSq(span), 0.0f, 1.0f);
+                    const Vec3 anchor = (axis * -1.0f) + span * anchorParam;
+                    distanceSq = lengthSq(offset - anchor);
+                }
+                const float reach = radius + shape.extents.x;
+                if (distanceSq <= reach * reach) {
+                    struck = true;
+                    break;
+                }
+                continue;
+            }
             Mat3 rotation;
             shapeWorldRotation(body.rotation, shape, rotation);
             const Vec3 local = rotation.transposeTransform(offset);
-            const Vec3 closest(
-                clampf(local.x, -shape.extents.x, shape.extents.x),
-                clampf(local.y, -shape.extents.y, shape.extents.y),
-                clampf(local.z, -shape.extents.z, shape.extents.z)
-            );
+            Vec3 closest;
+            if (shape.kind == kShapeCylinder) {
+                const float radialSq = local.x * local.x + local.z * local.z;
+                const float radiusLimit = shape.extents.x;
+                if (radialSq > radiusLimit * radiusLimit) {
+                    const float inv = radiusLimit / sqrtf(radialSq);
+                    closest = Vec3(local.x * inv, clampf(local.y, -shape.extents.y, shape.extents.y), local.z * inv);
+                } else {
+                    closest = Vec3(local.x, clampf(local.y, -shape.extents.y, shape.extents.y), local.z);
+                }
+            } else {
+                closest = Vec3(
+                    clampf(local.x, -shape.extents.x, shape.extents.x),
+                    clampf(local.y, -shape.extents.y, shape.extents.y),
+                    clampf(local.z, -shape.extents.z, shape.extents.z)
+                );
+            }
             if (lengthSq(local - closest) <= radiusSq) {
                 struck = true;
                 break;

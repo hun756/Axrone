@@ -16,6 +16,7 @@ constexpr float kTangentThreshold = 0.57735026f;
 constexpr float kSphereVolume = 4.1887902047863905f;
 constexpr float kSphereInertia = 0.4f;
 constexpr float kBoxVolume = 8.0f;
+constexpr float kPi = 3.14159274101257324219f;
 constexpr float kMaxDt = 0.1f;
 constexpr int32_t kMaxIterations = 64;
 constexpr int32_t kMaxBodies = 262144;
@@ -28,6 +29,11 @@ constexpr int32_t kKindSphereSphere = 1;
 constexpr int32_t kKindSphereBox = 2;
 constexpr int32_t kKindBoxFace = 3;
 constexpr int32_t kKindBoxEdge = 4;
+constexpr int32_t kKindCapsuleSphere = 5;
+constexpr int32_t kKindCapsuleCapsule = 6;
+constexpr int32_t kKindCapsuleBox = 7;
+
+constexpr int32_t kCapsuleBoxSamples = 16;
 
 constexpr int32_t kBodyTypeStatic = 0;
 constexpr int32_t kBodyTypeDynamic = 1;
@@ -35,6 +41,8 @@ constexpr int32_t kBodyTypeKinematic = 2;
 
 constexpr int32_t kShapeTypeCodeSphere = 5;
 constexpr int32_t kShapeTypeCodeBox = 3;
+constexpr int32_t kShapeTypeCodeCapsule = 1;
+constexpr int32_t kShapeTypeCodeCylinder = 6;
 
 constexpr int32_t kShapeIdSlotBits = 3;
 constexpr int32_t kShapeIdSlotMask = 7;

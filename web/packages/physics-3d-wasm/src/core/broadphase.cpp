@@ -60,18 +60,32 @@ void updateBounds(World& world) {
                 ex = shape.extents.x;
                 ey = ex;
                 ez = ex;
-            } else {
+            } else if (shape.kind == kShapeCapsule) {
                 Mat3 worldRotation;
                 shapeWorldRotation(rotation, shape, worldRotation);
-                ex = fabsf(worldRotation.m[0]) * selectExtent(shape.extents, 0) +
-                     fabsf(worldRotation.m[1]) * selectExtent(shape.extents, 1) +
-                     fabsf(worldRotation.m[2]) * selectExtent(shape.extents, 2);
-                ey = fabsf(worldRotation.m[3]) * selectExtent(shape.extents, 0) +
-                     fabsf(worldRotation.m[4]) * selectExtent(shape.extents, 1) +
-                     fabsf(worldRotation.m[5]) * selectExtent(shape.extents, 2);
-                ez = fabsf(worldRotation.m[6]) * selectExtent(shape.extents, 0) +
-                     fabsf(worldRotation.m[7]) * selectExtent(shape.extents, 1) +
-                     fabsf(worldRotation.m[8]) * selectExtent(shape.extents, 2);
+                const Vec3 halfAxis(worldRotation.m[1] * shape.extents.y,
+                                     worldRotation.m[4] * shape.extents.y,
+                                     worldRotation.m[7] * shape.extents.y);
+                const float radius = shape.extents.x;
+                ex = fabsf(halfAxis.x) + radius;
+                ey = fabsf(halfAxis.y) + radius;
+                ez = fabsf(halfAxis.z) + radius;
+            } else {
+                Vec3 half = shape.extents;
+                if (shape.kind == kShapeCylinder) {
+                    half.z = shape.extents.x;
+                }
+                Mat3 worldRotation;
+                shapeWorldRotation(rotation, shape, worldRotation);
+                ex = fabsf(worldRotation.m[0]) * selectExtent(half, 0) +
+                     fabsf(worldRotation.m[1]) * selectExtent(half, 1) +
+                     fabsf(worldRotation.m[2]) * selectExtent(half, 2);
+                ey = fabsf(worldRotation.m[3]) * selectExtent(half, 0) +
+                     fabsf(worldRotation.m[4]) * selectExtent(half, 1) +
+                     fabsf(worldRotation.m[5]) * selectExtent(half, 2);
+                ez = fabsf(worldRotation.m[6]) * selectExtent(half, 0) +
+                     fabsf(worldRotation.m[7]) * selectExtent(half, 1) +
+                     fabsf(worldRotation.m[8]) * selectExtent(half, 2);
             }
 
             if (center.x - ex < bounds.minX) {

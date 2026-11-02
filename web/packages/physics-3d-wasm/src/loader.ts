@@ -85,6 +85,58 @@ export interface WasmPhysicsExports {
         qz: number,
         qw: number
     ): number;
+    shapeCreateCapsule(
+        bodyId: number,
+        radius: number,
+        halfSegment: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shape_create_capsule(
+        bodyId: number,
+        radius: number,
+        halfSegment: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shapeCreateCylinder(
+        bodyId: number,
+        radius: number,
+        halfHeight: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shape_create_cylinder(
+        bodyId: number,
+        radius: number,
+        halfHeight: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
     shapeDestroy(shapeId: number): number;
     shape_destroy(shapeId: number): number;
     shapeClear(bodyId: number): number;
@@ -187,6 +239,8 @@ const REQUIRED_EXPORTS = [
     "eventsClear",
     "shapeCreateSphere",
     "shapeCreateBox",
+    "shapeCreateCapsule",
+    "shapeCreateCylinder",
     "shapeDestroy",
     "shapeClear",
     "shapeGetBody",

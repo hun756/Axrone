@@ -54,6 +54,26 @@ bool accumulateMass(const Body& body, float& mass, float& inertiaX, float& inert
             shapeInertiaX = spin;
             shapeInertiaY = spin;
             shapeInertiaZ = spin;
+        } else if (shape.kind == kShapeCapsule) {
+            const float radius = shape.extents.x;
+            const float halfSegment = shape.extents.y;
+            const float segmentLength = 2.0f * halfSegment;
+            const float cylinderMass = shape.density * kPi * radius * radius * segmentLength;
+            const float capMass = shape.density * kSphereVolume * radius * radius * radius;
+            shapeMass = cylinderMass + capMass;
+            shapeInertiaY = 0.5f * cylinderMass * radius * radius + 2.0f * kSphereInertia * capMass * radius * radius;
+            const float twelfth = 1.0f / 12.0f;
+            shapeInertiaX = cylinderMass * (3.0f * radius * radius + segmentLength * segmentLength) * twelfth +
+                            2.0f * (kSphereInertia * capMass * radius * radius + capMass * halfSegment * halfSegment);
+            shapeInertiaZ = shapeInertiaX;
+        } else if (shape.kind == kShapeCylinder) {
+            const float radius = shape.extents.x;
+            const float fullHeight = 2.0f * shape.extents.y;
+            shapeMass = shape.density * kPi * radius * radius * fullHeight;
+            const float twelfth = 1.0f / 12.0f;
+            shapeInertiaX = shapeMass * (3.0f * radius * radius + fullHeight * fullHeight) * twelfth;
+            shapeInertiaY = 0.5f * shapeMass * radius * radius;
+            shapeInertiaZ = shapeInertiaX;
         } else {
             const float hx = shape.extents.x;
             const float hy = shape.extents.y;
@@ -547,6 +567,104 @@ int32_t World::addBox(
 
     const int32_t previousCount = body.shapeCount;
     body.shapes[slot].setBox(hx, hy, hz, density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
+    bumpSlotGeneration(*this, id, slot);
+    if (slot + 1 > body.shapeCount) {
+        body.shapeCount = slot + 1;
+    }
+
+    if (!recomputeMass(body)) {
+        body.shapes[slot].kind = kShapeNone;
+        body.shapeCount = previousCount;
+        recomputeMass(body);
+        return -1;
+    }
+    return slot;
+}
+
+int32_t World::addCapsule(
+    int32_t id,
+    float radius,
+    float halfSegment,
+    float density,
+    float px,
+    float py,
+    float pz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    if (!isActive(id) || !isFinite(radius) || !isFinite(halfSegment) || !isFinite(density) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz) ||
+        !isFinite(qx) || !isFinite(qy) || !isFinite(qz) || !isFinite(qw) ||
+        radius <= 0.0f || halfSegment < 0.0f || density < 0.0f) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    if (body.shapeCount >= kMaxShapesPerBody) {
+        return -1;
+    }
+
+    Transform local = { 0.0f, 0.0f, 0.0f, qx, qy, qz, qw };
+    normalizeQuaternion(local);
+
+    const int32_t slot = firstFreeShapeSlot(body);
+    if (slot < 0) {
+        return -1;
+    }
+
+    const int32_t previousCount = body.shapeCount;
+    body.shapes[slot].setCapsule(radius, halfSegment, density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
+    bumpSlotGeneration(*this, id, slot);
+    if (slot + 1 > body.shapeCount) {
+        body.shapeCount = slot + 1;
+    }
+
+    if (!recomputeMass(body)) {
+        body.shapes[slot].kind = kShapeNone;
+        body.shapeCount = previousCount;
+        recomputeMass(body);
+        return -1;
+    }
+    return slot;
+}
+
+int32_t World::addCylinder(
+    int32_t id,
+    float radius,
+    float halfHeight,
+    float density,
+    float px,
+    float py,
+    float pz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    if (!isActive(id) || !isFinite(radius) || !isFinite(halfHeight) || !isFinite(density) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz) ||
+        !isFinite(qx) || !isFinite(qy) || !isFinite(qz) || !isFinite(qw) ||
+        radius <= 0.0f || halfHeight <= 0.0f || density < 0.0f) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    if (body.shapeCount >= kMaxShapesPerBody) {
+        return -1;
+    }
+
+    Transform local = { 0.0f, 0.0f, 0.0f, qx, qy, qz, qw };
+    normalizeQuaternion(local);
+
+    const int32_t slot = firstFreeShapeSlot(body);
+    if (slot < 0) {
+        return -1;
+    }
+
+    const int32_t previousCount = body.shapeCount;
+    body.shapes[slot].setCylinder(radius, halfHeight, density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
     bumpSlotGeneration(*this, id, slot);
     if (slot + 1 > body.shapeCount) {
         body.shapeCount = slot + 1;

@@ -2,9 +2,11 @@ import { instantiateWasm, loadEmbeddedWasm, WasmPhysicsExports } from "./loader"
 import type {
     BodyOptions,
     BodyType,
+    CapsuleAttachOptions,
     ContactEventKind,
     ContactEventSnapshot,
     ContactSnapshot,
+    CylinderAttachOptions,
     MutableQuat,
     MutableVec3,
     QuatTuple,
@@ -80,6 +82,13 @@ function assertPositive(value: number, label: string): void {
     assertFinite(value, label);
     if (value <= 0) {
         throw new Error(`${label} must be positive`);
+    }
+}
+
+function assertNonNegative(value: number, label: string): void {
+    assertFinite(value, label);
+    if (value < 0) {
+        throw new Error(`${label} must be non-negative`);
     }
 }
 
@@ -190,6 +199,12 @@ export class WasmPhysicsWorld3D {
                 assertPositive(options.shape.halfExtents[0], "shape.halfExtents[0]");
                 assertPositive(options.shape.halfExtents[1], "shape.halfExtents[1]");
                 assertPositive(options.shape.halfExtents[2], "shape.halfExtents[2]");
+            } else if (options.shape.kind === "capsule") {
+                assertPositive(options.shape.radius, "shape.radius");
+                assertNonNegative(options.shape.halfSegment, "shape.halfSegment");
+            } else if (options.shape.kind === "cylinder") {
+                assertPositive(options.shape.radius, "shape.radius");
+                assertPositive(options.shape.halfHeight, "shape.halfHeight");
             } else {
                 throw new Error(`unsupported shape: ${String((options.shape as { kind?: unknown }).kind)}`);
             }
@@ -227,16 +242,47 @@ export class WasmPhysicsWorld3D {
         }
 
         if (options.shape !== undefined) {
-            const shapeStatus = options.shape.kind === "sphere"
-                ? this.wasm.bodySetSphere(id, options.shape.radius, density)
-                : this.wasm.bodySetBox(
+            let shapeStatus = -1;
+            if (options.shape.kind === "sphere") {
+                shapeStatus = this.wasm.bodySetSphere(id, options.shape.radius, density);
+            } else if (options.shape.kind === "box") {
+                shapeStatus = this.wasm.bodySetBox(
                     id,
                     options.shape.halfExtents[0],
                     options.shape.halfExtents[1],
                     options.shape.halfExtents[2],
                     density
                 );
-            if (shapeStatus !== 0) {
+            } else if (options.shape.kind === "capsule") {
+                shapeStatus = this.wasm.shapeCreateCapsule(
+                    id,
+                    options.shape.radius,
+                    options.shape.halfSegment,
+                    density,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1
+                );
+            } else if (options.shape.kind === "cylinder") {
+                shapeStatus = this.wasm.shapeCreateCylinder(
+                    id,
+                    options.shape.radius,
+                    options.shape.halfHeight,
+                    density,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1
+                );
+            }
+            if (shapeStatus < 0) {
                 this.wasm.bodyDestroy(id);
                 throw new Error("body shape assignment failed");
             }
@@ -278,6 +324,72 @@ export class WasmPhysicsWorld3D {
         if (this.wasm.bodySetBox(id, halfExtents[0], halfExtents[1], halfExtents[2], density) !== 0) {
             throw new Error(`body ${id} box attachment failed`);
         }
+    }
+
+    attachCapsule(id: number, options: CapsuleAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertPositive(options.radius, "radius");
+        assertNonNegative(options.halfSegment, "halfSegment");
+        const density = options.density ?? 1;
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        const offset = options.offset ?? [0, 0, 0];
+        const rotation = options.rotation ?? [0, 0, 0, 1];
+        assertVec3(offset, "offset");
+        assertQuat(rotation, "rotation");
+        const shapeId = this.wasm.shapeCreateCapsule(
+            id,
+            options.radius,
+            options.halfSegment,
+            density,
+            offset[0],
+            offset[1],
+            offset[2],
+            rotation[0],
+            rotation[1],
+            rotation[2],
+            rotation[3]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} capsule attachment failed`);
+        }
+        return shapeId;
+    }
+
+    attachCylinder(id: number, options: CylinderAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertPositive(options.radius, "radius");
+        assertPositive(options.halfHeight, "halfHeight");
+        const density = options.density ?? 1;
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        const offset = options.offset ?? [0, 0, 0];
+        const rotation = options.rotation ?? [0, 0, 0, 1];
+        assertVec3(offset, "offset");
+        assertQuat(rotation, "rotation");
+        const shapeId = this.wasm.shapeCreateCylinder(
+            id,
+            options.radius,
+            options.halfHeight,
+            density,
+            offset[0],
+            offset[1],
+            offset[2],
+            rotation[0],
+            rotation[1],
+            rotation[2],
+            rotation[3]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} cylinder attachment failed`);
+        }
+        return shapeId;
     }
 
     addSphere(id: number, radius: number, density = 1, offset: Vec3Tuple = [0, 0, 0]): number {

@@ -31,6 +31,7 @@ export interface CompatShapeDef {
     readonly center?: Partial<CompatVec3>;
     readonly halfExtents?: Partial<CompatVec3>;
     readonly radius?: number;
+    readonly height?: number;
     readonly rotation?: Partial<CompatQuat>;
     readonly isSensor?: boolean;
 }
@@ -254,6 +255,65 @@ export class WasmPhysicsWorld3DCompat {
             1,
             vector(def.center, 0)
         );
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
+    createCapsuleShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        if (def.radius === undefined) {
+            throw new Error("capsule shape requires radius");
+        }
+        if (def.height === undefined) {
+            throw new Error("capsule shape requires height");
+        }
+        if (!Number.isFinite(def.radius) || def.radius <= 0) {
+            throw new Error("capsule radius must be a positive finite number");
+        }
+        if (!Number.isFinite(def.height) || def.height <= 0) {
+            throw new Error("capsule height must be a positive finite number");
+        }
+        const halfSegment = Math.max(0, def.height / 2 - def.radius);
+        const shapeId = this.physics.attachCapsule(bodyId, {
+            radius: def.radius,
+            halfSegment,
+            density: 1,
+            offset: vector(def.center, 0),
+            rotation: quaternion(def.rotation)
+        });
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
+    createCylinderShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        if (def.radius === undefined) {
+            throw new Error("cylinder shape requires radius");
+        }
+        if (def.height === undefined) {
+            throw new Error("cylinder shape requires height");
+        }
+        if (!Number.isFinite(def.radius) || def.radius <= 0) {
+            throw new Error("cylinder radius must be a positive finite number");
+        }
+        if (!Number.isFinite(def.height) || def.height <= 0) {
+            throw new Error("cylinder height must be a positive finite number");
+        }
+        const shapeId = this.physics.attachCylinder(bodyId, {
+            radius: def.radius,
+            halfHeight: def.height / 2,
+            density: 1,
+            offset: vector(def.center, 0),
+            rotation: quaternion(def.rotation)
+        });
         this.registerShape(bodyId, shapeId);
         this.applyShapeMaterial(shapeId, material);
         if (def.isSensor === true) {

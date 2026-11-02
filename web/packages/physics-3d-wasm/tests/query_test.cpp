@@ -122,6 +122,38 @@ struct Fixture {
         bodies[id].rotation.fromQuaternion(qx, qy, qz, qw);
         return id;
     }
+
+    int32_t addCapsuleShape(int32_t id, float radius, float halfSegment, Vec3 offset) {
+        const int32_t slot = bodies[id].shapeCount;
+        if (slot >= kMaxShapesPerBody) {
+            return -1;
+        }
+        bodies[id].shapes[slot].setCapsule(radius, halfSegment, 0.0f, offset, 0.0f, 0.0f, 0.0f, 1.0f);
+        bodies[id].shapeCount = slot + 1;
+        return slot;
+    }
+
+    int32_t addCylinderShape(int32_t id, float radius, float halfHeight, Vec3 offset) {
+        const int32_t slot = bodies[id].shapeCount;
+        if (slot >= kMaxShapesPerBody) {
+            return -1;
+        }
+        bodies[id].shapes[slot].setCylinder(radius, halfHeight, 0.0f, offset, 0.0f, 0.0f, 0.0f, 1.0f);
+        bodies[id].shapeCount = slot + 1;
+        return slot;
+    }
+
+    int32_t addCapsule(Vec3 position, float radius, float halfSegment, int32_t state = kBodyStatic) {
+        const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
+        addCapsuleShape(id, radius, halfSegment, Vec3());
+        return id;
+    }
+
+    int32_t addCylinder(Vec3 position, float radius, float halfHeight, int32_t state = kBodyStatic) {
+        const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
+        addCylinderShape(id, radius, halfHeight, Vec3());
+        return id;
+    }
 };
 
 uint32_t mix(uint32_t hash, uint32_t value) {
@@ -733,6 +765,139 @@ void testNoMutationOfWorld() {
     CHECK(before == after);
 }
 
+void testRayHitsCapsuleSide() {
+    Fixture fixture;
+    const int32_t capsule = fixture.addCapsule(Vec3(0.0f, 0.0f, 0.0f), 0.2f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(hit.body == capsule);
+    CHECK(hit.shape == fixture.world.shapeMakeId(capsule, 0));
+    CHECK(near(hit.t, 2.8f));
+    CHECK(near(hit.nx, -1.0f));
+    CHECK(near(hit.ny, 0.0f));
+    CHECK(near(hit.nz, 0.0f));
+    CHECK(near(hit.px, -0.2f));
+}
+
+void testRayHitsCapsuleCap() {
+    Fixture fixture;
+    fixture.addCapsule(Vec3(0.0f, 0.0f, 0.0f), 0.2f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 3.0f, 0.0f), Vec3(0.0f, -1.0f, 0.0f), 100.0f, hit));
+    CHECK(near(hit.t, 2.3f));
+    CHECK(near(hit.nx, 0.0f));
+    CHECK(near(hit.ny, 1.0f));
+    CHECK(near(hit.nz, 0.0f));
+    CHECK(near(hit.py, 0.7f));
+}
+
+void testRayMissesCapsule() {
+    Fixture fixture;
+    fixture.addCapsule(Vec3(0.0f, 0.0f, 0.0f), 0.2f, 0.5f);
+    RayHit hit;
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(-3.0f, 2.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(0.0f, 3.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), 100.0f, hit));
+}
+
+void testRayInsideCapsule() {
+    Fixture fixture;
+    fixture.addCapsule(Vec3(0.0f, 0.0f, 0.0f), 0.2f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f), 100.0f, hit));
+    CHECK(near(hit.t, 0.0f));
+    CHECK(near(hit.nz, -1.0f));
+}
+
+void testRayHitsRotatedCapsuleCap() {
+    Fixture fixture;
+    const float quarterTurn = 0.7071067811865476f;
+    const int32_t id = fixture.reserve(Vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, quarterTurn, quarterTurn, kBodyStatic);
+    fixture.bodies[id].rotation.fromQuaternion(0.0f, 0.0f, quarterTurn, quarterTurn);
+    fixture.addCapsuleShape(id, 0.2f, 0.5f, Vec3());
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(near(hit.t, 2.3f));
+    CHECK(near(hit.nx, -1.0f));
+    CHECK(near(hit.ny, 0.0f));
+}
+
+void testRayHitsCylinderSide() {
+    Fixture fixture;
+    const int32_t cylinder = fixture.addCylinder(Vec3(0.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(hit.body == cylinder);
+    CHECK(hit.shape == fixture.world.shapeMakeId(cylinder, 0));
+    CHECK(near(hit.t, 2.7f));
+    CHECK(near(hit.nx, -1.0f));
+    CHECK(near(hit.ny, 0.0f));
+}
+
+void testRayHitsCylinderCap() {
+    Fixture fixture;
+    fixture.addCylinder(Vec3(0.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 3.0f, 0.0f), Vec3(0.0f, -1.0f, 0.0f), 100.0f, hit));
+    CHECK(near(hit.t, 2.5f));
+    CHECK(near(hit.nx, 0.0f));
+    CHECK(near(hit.ny, 1.0f));
+    CHECK(near(hit.py, 0.5f));
+}
+
+void testRayMissesCylinder() {
+    Fixture fixture;
+    fixture.addCylinder(Vec3(0.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    RayHit hit;
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(0.5f, 3.0f, 0.0f), Vec3(0.0f, -1.0f, 0.0f), 100.0f, hit));
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.8f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(0.0f, -3.0f, 0.0f), Vec3(0.0f, -1.0f, 0.0f), 100.0f, hit));
+}
+
+void testRayInsideCylinder() {
+    Fixture fixture;
+    fixture.addCylinder(Vec3(0.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(near(hit.t, 0.0f));
+    CHECK(near(hit.nx, -1.0f));
+}
+
+void testOverlapReturnsCapsuleAndCylinder() {
+    Fixture fixture;
+    const int32_t capsule = fixture.addCapsule(Vec3(-2.0f, 0.0f, 0.0f), 0.2f, 0.5f);
+    const int32_t cylinder = fixture.addCylinder(Vec3(2.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    fixture.addSphere(Vec3(0.0f, 0.0f, -8.0f), 0.1f);
+
+    int32_t ids[8];
+    const int32_t count = overlapSphere(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), 2.5f, ids, 8);
+    CHECK(count == 2);
+    bool sawCapsule = false;
+    bool sawCylinder = false;
+    for (int32_t i = 0; i < count; ++i) {
+        sawCapsule = sawCapsule || ids[i] == capsule;
+        sawCylinder = sawCylinder || ids[i] == cylinder;
+    }
+    CHECK(sawCapsule);
+    CHECK(sawCylinder);
+
+    const int32_t tight = overlapSphere(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), 1.0f, ids, 8);
+    CHECK(tight == 0);
+}
+
 }
 
 int main() {
@@ -764,6 +929,16 @@ int main() {
     testOverlapSphereWithBox();
     testOverlapDisjointAndOrdering();
     testNoMutationOfWorld();
+    testRayHitsCapsuleSide();
+    testRayHitsCapsuleCap();
+    testRayMissesCapsule();
+    testRayInsideCapsule();
+    testRayHitsRotatedCapsuleCap();
+    testRayHitsCylinderSide();
+    testRayHitsCylinderCap();
+    testRayMissesCylinder();
+    testRayInsideCylinder();
+    testOverlapReturnsCapsuleAndCylinder();
 
     printf("query_test: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
