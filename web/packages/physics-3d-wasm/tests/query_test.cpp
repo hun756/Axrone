@@ -5,16 +5,24 @@
 #include "core/query.h"
 
 using axrone::physics::AABB;
+using axrone::physics::applyFractionConvention;
 using axrone::physics::Body;
+using axrone::physics::collectStepStatistics;
+using axrone::physics::Contact;
 using axrone::physics::kBodyDynamic;
 using axrone::physics::kBodyFree;
+using axrone::physics::kBodyKinematic;
 using axrone::physics::kBodyStatic;
+using axrone::physics::kMaxIterations;
 using axrone::physics::kMaxShapesPerBody;
+using axrone::physics::overlapBoxAll;
 using axrone::physics::overlapSphere;
+using axrone::physics::queryPointAll;
 using axrone::physics::raycastAll;
 using axrone::physics::raycastClosest;
 using axrone::physics::RayHit;
 using axrone::physics::Shape;
+using axrone::physics::StepStatistics;
 using axrone::physics::Transform;
 using axrone::physics::Vec3;
 using axrone::physics::World;
@@ -153,6 +161,17 @@ struct Fixture {
         const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
         addCylinderShape(id, radius, halfHeight, Vec3());
         return id;
+    }
+
+    void setAabb(int32_t id, Vec3 min, Vec3 max) {
+        bodies[id].aabb = AABB{ min.x, min.y, min.z, max.x, max.y, max.z };
+    }
+
+    void setShapeFilter(int32_t id, int32_t slot, int32_t categoryBits, int32_t maskBits, int32_t groupIndex) {
+        Shape& shape = bodies[id].shapes[slot];
+        shape.categoryBits = categoryBits;
+        shape.maskBits = maskBits;
+        shape.groupIndex = groupIndex;
     }
 };
 
@@ -898,6 +917,241 @@ void testOverlapReturnsCapsuleAndCylinder() {
     CHECK(tight == 0);
 }
 
+void testRaycastFilterByCategoryAndMask() {
+    Fixture fixture;
+    const int32_t first = fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
+    const int32_t second = fixture.addSphere(Vec3(0.0f, 0.0f, -9.0f), 1.0f);
+    fixture.setShapeFilter(first, 0, 2, 2, 0);
+    fixture.setShapeFilter(second, 0, 4, 4, 0);
+
+    RayHit hits[4];
+    CHECK(raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, hits, 4) == 2);
+    const int32_t onlyFirst = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 2, 2, hits, 4);
+    CHECK(onlyFirst == 1);
+    if (onlyFirst == 1) {
+        CHECK(hits[0].body == first);
+    }
+    const int32_t onlySecond = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 4, 4, hits, 4);
+    CHECK(onlySecond == 1);
+    if (onlySecond == 1) {
+        CHECK(hits[0].body == second);
+    }
+    CHECK(raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 0, 0, hits, 4) == 2);
+    CHECK(raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 1, 0xFFFF, hits, 4) == 0);
+
+    RayHit closest;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 4, 4, closest));
+    CHECK(closest.body == second);
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 8, 8, closest));
+}
+
+void testQueryIgnoresGroupAndCollisionFilterRules() {
+    Fixture fixture;
+    const int32_t first = fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
+    const int32_t second = fixture.addSphere(Vec3(0.0f, 0.0f, -9.0f), 1.0f);
+    fixture.setShapeFilter(first, 0, 1, 0xFFFF, -7);
+    fixture.setShapeFilter(second, 0, 1, 0xFFFF, -7);
+
+    RayHit hits[4];
+    CHECK(raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 1, 0xFFFF, hits, 4) == 2);
+    int32_t bodies[4];
+    CHECK(overlapSphere(
+        fixture.world, Vec3(0.0f, 0.0f, -7.0f), 5.0f, 1, 0xFFFF, bodies, 4) == 2);
+}
+
+void testOverlapSphereFilterRejectsMismatchedShapes() {
+    Fixture fixture;
+    const int32_t first = fixture.addSphere(Vec3(0.0f, 0.0f, 0.0f), 1.0f);
+    const int32_t second = fixture.addSphere(Vec3(2.0f, 0.0f, 0.0f), 1.0f);
+    fixture.setShapeFilter(first, 0, 2, 2, 0);
+    fixture.setShapeFilter(second, 0, 4, 4, 0);
+
+    int32_t bodies[4];
+    CHECK(overlapSphere(fixture.world, Vec3(1.0f, 0.0f, 0.0f), 2.0f, bodies, 4) == 2);
+    const int32_t onlyFirst = overlapSphere(
+        fixture.world, Vec3(1.0f, 0.0f, 0.0f), 2.0f, 2, 2, bodies, 4);
+    CHECK(onlyFirst == 1);
+    if (onlyFirst == 1) {
+        CHECK(bodies[0] == first);
+    }
+    const int32_t onlySecond = overlapSphere(
+        fixture.world, Vec3(1.0f, 0.0f, 0.0f), 2.0f, 4, 4, bodies, 4);
+    CHECK(onlySecond == 1);
+    if (onlySecond == 1) {
+        CHECK(bodies[0] == second);
+    }
+    CHECK(overlapSphere(fixture.world, Vec3(1.0f, 0.0f, 0.0f), 2.0f, 0, 0, bodies, 4) == 2);
+}
+
+void testFractionConvention() {
+    Fixture fixture;
+    fixture.addSphere(Vec3(0.0f, 0.0f, -5.0f), 1.0f);
+    RayHit hits[4];
+    const int32_t count = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -4.0f), 100.0f, 0, 0, hits, 4);
+    CHECK(count == 1);
+    if (count == 1) {
+        CHECK(hits[0].t == 4.0f);
+        applyFractionConvention(hits, count, Vec3(0.0f, 0.0f, -4.0f));
+        CHECK(hits[0].t == 1.0f);
+        CHECK(near(hits[0].pz, -4.0f));
+    }
+
+    const int32_t scaled = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -0.5f), 100.0f, 0, 0, hits, 4);
+    CHECK(scaled == 1);
+    if (scaled == 1) {
+        applyFractionConvention(hits, scaled, Vec3(0.0f, 0.0f, -0.5f));
+        CHECK(near(hits[0].t, 8.0f));
+    }
+
+    RayHit untouched;
+    const int32_t zeroCount = raycastAll(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), 100.0f, 0, 0, &untouched, 1);
+    CHECK(zeroCount == 1);
+    applyFractionConvention(&untouched, zeroCount, Vec3(0.0f, 0.0f, 0.0f));
+    CHECK(untouched.t == 4.0f);
+}
+
+void testOverlapBoxAllBasics() {
+    Fixture fixture;
+    const int32_t box = fixture.addBox(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f));
+    fixture.setAabb(box, Vec3(-1.0f, -1.0f, -1.0f), Vec3(1.0f, 1.0f, 1.0f));
+    const int32_t far = fixture.addSphere(Vec3(8.0f, 0.0f, 0.0f), 1.0f);
+    fixture.setAabb(far, Vec3(7.0f, -1.0f, -1.0f), Vec3(9.0f, 1.0f, 1.0f));
+    const int32_t freedId = fixture.addSphere(Vec3(0.0f, 0.0f, 0.0f), 1.0f);
+    fixture.bodies[freedId].state = kBodyFree;
+    const int32_t noShape = fixture.reserve(Vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, 0.0f, 1.0f, kBodyStatic);
+    fixture.setAabb(noShape, Vec3(-1.0f, -1.0f, -1.0f), Vec3(1.0f, 1.0f, 1.0f));
+
+    int32_t ids[8];
+    const AABB nearBox = { -2.0f, -2.0f, -2.0f, 2.0f, 2.0f, 2.0f };
+    CHECK(overlapBoxAll(fixture.world, nearBox, ids, 8) == 1);
+    if (overlapBoxAll(fixture.world, nearBox, ids, 8) == 1) {
+        CHECK(ids[0] == box);
+    }
+
+    const AABB touchBox = { 1.0f, -1.0f, -1.0f, 2.0f, 1.0f, 1.0f };
+    CHECK(overlapBoxAll(fixture.world, touchBox, ids, 8) == 1);
+
+    const AABB bothBox = { -5.0f, -5.0f, -5.0f, 20.0f, 5.0f, 5.0f };
+    const int32_t both = overlapBoxAll(fixture.world, bothBox, ids, 8);
+    CHECK(both == 2);
+    if (both == 2) {
+        CHECK(ids[0] == box);
+        CHECK(ids[1] == far);
+    }
+
+    const int32_t capped = overlapBoxAll(fixture.world, bothBox, ids, 1);
+    CHECK(capped == 1);
+    if (capped == 1) {
+        CHECK(ids[0] == box);
+    }
+
+    const AABB inverted = { 2.0f, -1.0f, -1.0f, -2.0f, 1.0f, 1.0f };
+    CHECK(overlapBoxAll(fixture.world, inverted, ids, 8) == 0);
+
+    const AABB nanBox = {
+        0.0f / 0.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f
+    };
+    CHECK(overlapBoxAll(fixture.world, nanBox, ids, 8) == 0);
+
+    CHECK(overlapBoxAll(fixture.world, nearBox, nullptr, 8) == 0);
+    CHECK(overlapBoxAll(fixture.world, nearBox, ids, 0) == 0);
+    CHECK(overlapBoxAll(fixture.world, nearBox, ids, -2) == 0);
+}
+
+void testQueryPointAllMatchesDegenerateBox() {
+    Fixture fixture;
+    const int32_t box = fixture.addBox(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f));
+    fixture.setAabb(box, Vec3(-1.0f, -1.0f, -1.0f), Vec3(1.0f, 1.0f, 1.0f));
+    const int32_t compound = fixture.addCompound(Vec3(0.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(compound, 1.0f, Vec3(4.0f, 0.0f, 0.0f));
+    fixture.addSphereShape(compound, 1.0f, Vec3(6.0f, 0.0f, 0.0f));
+    fixture.setAabb(compound, Vec3(3.0f, -1.0f, -1.0f), Vec3(7.0f, 1.0f, 1.0f));
+
+    int32_t ids[8];
+    CHECK(queryPointAll(fixture.world, Vec3(0.5f, 0.5f, 0.5f), ids, 8) == 1);
+    CHECK(queryPointAll(fixture.world, Vec3(1.0f, 1.0f, 1.0f), ids, 8) == 1);
+    CHECK(queryPointAll(fixture.world, Vec3(1.1f, 0.0f, 0.0f), ids, 8) == 0);
+    const int32_t both = queryPointAll(fixture.world, Vec3(4.5f, 0.0f, 0.0f), ids, 8);
+    CHECK(both == 1);
+    if (both == 1) {
+        CHECK(ids[0] == compound);
+    }
+    const int32_t spanning = queryPointAll(
+        fixture.world, Vec3(5.0f, 0.0f, 0.0f), ids, 1);
+    CHECK(spanning == 1);
+
+    fixture.reserve(Vec3(20.0f, 0.0f, 0.0f), 0.0f, 0.0f, 0.0f, 1.0f, kBodyStatic);
+    CHECK(queryPointAll(fixture.world, Vec3(20.0f, 0.0f, 0.0f), ids, 8) == 0);
+    CHECK(queryPointAll(fixture.world, Vec3(0.0f / 0.0f, 0.0f, 0.0f), ids, 8) == 0);
+}
+
+void testCollectStepStatistics() {
+    Fixture fixture;
+    const int32_t dynamic = fixture.addSphere(Vec3(0.0f, 0.0f, 0.0f), 1.0f, kBodyDynamic);
+    fixture.bodies[dynamic].awake = 1;
+    fixture.setAabb(dynamic, Vec3(-1.0f, -1.0f, -1.0f), Vec3(1.0f, 1.0f, 1.0f));
+
+    const int32_t touching = fixture.addSphere(Vec3(1.0f, 0.0f, 0.0f), 1.0f);
+    fixture.setAabb(touching, Vec3(0.0f, -1.0f, -1.0f), Vec3(2.0f, 1.0f, 1.0f));
+
+    const int32_t staticA = fixture.addSphere(Vec3(0.0f, 0.0f, 0.0f), 0.5f);
+    fixture.setAabb(staticA, Vec3(-1.0f, -1.0f, -1.0f), Vec3(1.0f, 1.0f, 1.0f));
+    const int32_t staticB = fixture.addSphere(Vec3(0.5f, 0.0f, 0.0f), 0.5f);
+    fixture.setAabb(staticB, Vec3(-0.5f, -0.5f, -0.5f), Vec3(1.5f, 0.5f, 0.5f));
+
+    const int32_t sleeping = fixture.addSphere(Vec3(30.0f, 0.0f, 0.0f), 1.0f, kBodyDynamic);
+    fixture.bodies[sleeping].awake = 0;
+    fixture.setAabb(sleeping, Vec3(29.0f, -1.0f, -1.0f), Vec3(31.0f, 1.0f, 1.0f));
+
+    const int32_t kinematic = fixture.addSphere(Vec3(32.0f, 0.0f, 0.0f), 1.0f, kBodyKinematic);
+    fixture.setAabb(kinematic, Vec3(31.0f, -1.0f, -1.0f), Vec3(33.0f, 1.0f, 1.0f));
+
+    Contact contacts[2];
+    contacts[0].sensor = 0;
+    contacts[1].sensor = 1;
+    fixture.world.contacts = contacts;
+    fixture.world.contactCount = 2;
+    fixture.world.liveCount = 6;
+
+    StepStatistics stats;
+    collectStepStatistics(fixture.world, 100, -5, stats);
+    CHECK(stats.broadphasePairsTested == 4.0f);
+    CHECK(stats.shapePairsTested == 4.0f);
+    CHECK(stats.contactsGenerated == 2.0f);
+    CHECK(stats.sensorContacts == 1.0f);
+    CHECK(stats.velocityIterations == static_cast<float>(kMaxIterations));
+    CHECK(stats.positionIterations == 0.0f);
+    CHECK(stats.sleepingBodies == 1.0f);
+    CHECK(stats.liveBodies == 6.0f);
+
+    collectStepStatistics(fixture.world, 8, 3, stats);
+    CHECK(stats.velocityIterations == 8.0f);
+    CHECK(stats.positionIterations == 3.0f);
+
+    Fixture uninitialized;
+    uninitialized.world.initialized = false;
+    collectStepStatistics(uninitialized.world, 4, 2, stats);
+    CHECK(stats.broadphasePairsTested == 0.0f);
+    CHECK(stats.shapePairsTested == 0.0f);
+    CHECK(stats.contactsGenerated == 0.0f);
+    CHECK(stats.sensorContacts == 0.0f);
+    CHECK(stats.velocityIterations == 4.0f);
+    CHECK(stats.positionIterations == 2.0f);
+    CHECK(stats.sleepingBodies == 0.0f);
+    CHECK(stats.liveBodies == 0.0f);
+}
+
 }
 
 int main() {
@@ -939,6 +1193,13 @@ int main() {
     testRayMissesCylinder();
     testRayInsideCylinder();
     testOverlapReturnsCapsuleAndCylinder();
+    testRaycastFilterByCategoryAndMask();
+    testQueryIgnoresGroupAndCollisionFilterRules();
+    testOverlapSphereFilterRejectsMismatchedShapes();
+    testFractionConvention();
+    testOverlapBoxAllBasics();
+    testQueryPointAllMatchesDegenerateBox();
+    testCollectStepStatistics();
 
     printf("query_test: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

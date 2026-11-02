@@ -423,6 +423,18 @@ int32_t raycastAll(
     float maxDistance,
     RayHit* hits,
     int32_t capacity) {
+    return raycastAll(world, origin, direction, maxDistance, 0, 0, hits, capacity);
+}
+
+int32_t raycastAll(
+    const World& world,
+    Vec3 origin,
+    Vec3 direction,
+    float maxDistance,
+    int32_t categoryBits,
+    int32_t maskBits,
+    RayHit* hits,
+    int32_t capacity) {
     if (capacity <= 0 || hits == nullptr || !worldQueryable(world)) {
         return 0;
     }
@@ -441,6 +453,9 @@ int32_t raycastAll(
         for (int32_t slot = 0; slot < slots; ++slot) {
             const Shape& shape = body.shapes[slot];
             if (!shapeValid(shape)) {
+                continue;
+            }
+            if (!queryShapePassesFilter(shape, categoryBits, maskBits)) {
                 continue;
             }
             RayHit candidate;
@@ -462,6 +477,17 @@ bool raycastClosest(
     Vec3 direction,
     float maxDistance,
     RayHit& hit) {
+    return raycastClosest(world, origin, direction, maxDistance, 0, 0, hit);
+}
+
+bool raycastClosest(
+    const World& world,
+    Vec3 origin,
+    Vec3 direction,
+    float maxDistance,
+    int32_t categoryBits,
+    int32_t maskBits,
+    RayHit& hit) {
     if (!worldQueryable(world)) {
         return false;
     }
@@ -480,6 +506,9 @@ bool raycastClosest(
         for (int32_t slot = 0; slot < slots; ++slot) {
             const Shape& shape = body.shapes[slot];
             if (!shapeValid(shape)) {
+                continue;
+            }
+            if (!queryShapePassesFilter(shape, categoryBits, maskBits)) {
                 continue;
             }
             RayHit candidate;
@@ -501,6 +530,17 @@ int32_t overlapSphere(
     float radius,
     int32_t* bodies,
     int32_t capacity) {
+    return overlapSphere(world, center, radius, 0, 0, bodies, capacity);
+}
+
+int32_t overlapSphere(
+    const World& world,
+    Vec3 center,
+    float radius,
+    int32_t categoryBits,
+    int32_t maskBits,
+    int32_t* bodies,
+    int32_t capacity) {
     if (capacity <= 0 || bodies == nullptr || !worldQueryable(world) || radius < 0.0f) {
         return 0;
     }
@@ -517,6 +557,9 @@ int32_t overlapSphere(
         for (int32_t slot = 0; slot < slots; ++slot) {
             const Shape& shape = body.shapes[slot];
             if (!shapeValid(shape)) {
+                continue;
+            }
+            if (!queryShapePassesFilter(shape, categoryBits, maskBits)) {
                 continue;
             }
             const Vec3 offset = center - shapeCenter(position, body.rotation, shape);
@@ -586,6 +629,199 @@ int32_t overlapSphere(
         }
     }
     return count;
+}
+
+namespace {
+
+bool boundsFinite(const AABB& bounds) {
+    return isFinite(bounds.minX) && isFinite(bounds.minY) && isFinite(bounds.minZ) &&
+           isFinite(bounds.maxX) && isFinite(bounds.maxY) && isFinite(bounds.maxZ);
+}
+
+}
+
+int32_t overlapBoxAll(
+    const World& world,
+    const AABB& bounds,
+    int32_t* bodies,
+    int32_t capacity) {
+    if (capacity <= 0 || bodies == nullptr || !worldQueryable(world)) {
+        return 0;
+    }
+    if (!boundsFinite(bounds) || bounds.minX > bounds.maxX ||
+        bounds.minY > bounds.maxY || bounds.minZ > bounds.maxZ) {
+        return 0;
+    }
+    int32_t count = 0;
+    for (int32_t id = 0; id < world.highWater; ++id) {
+        const Body& body = world.bodies[id];
+        if (!bodyQueryable(body)) {
+            continue;
+        }
+        const AABB& aabb = body.aabb;
+        if (bounds.minX > aabb.maxX || bounds.maxX < aabb.minX) {
+            continue;
+        }
+        if (bounds.minY > aabb.maxY || bounds.maxY < aabb.minY) {
+            continue;
+        }
+        if (bounds.minZ > aabb.maxZ || bounds.maxZ < aabb.minZ) {
+            continue;
+        }
+        bodies[count] = id;
+        ++count;
+        if (count >= capacity) {
+            break;
+        }
+    }
+    return count;
+}
+
+int32_t queryPointAll(
+    const World& world,
+    Vec3 point,
+    int32_t* bodies,
+    int32_t capacity) {
+    const AABB bounds = { point.x, point.y, point.z, point.x, point.y, point.z };
+    return overlapBoxAll(world, bounds, bodies, capacity);
+}
+
+namespace {
+
+float reciprocalDirectionLength(Vec3 direction) {
+    const float lenSq = lengthSq(direction);
+    if (lenSq < kRayDirEps) {
+        return 0.0f;
+    }
+    return 1.0f / sqrtf(lenSq);
+}
+
+}
+
+void applyFractionConvention(RayHit* hits, int32_t count, Vec3 direction) {
+    const float inv = reciprocalDirectionLength(direction);
+    if (inv == 0.0f) {
+        return;
+    }
+    for (int32_t index = 0; index < count; ++index) {
+        hits[index].t *= inv;
+    }
+}
+
+void applyFractionConvention(RayHit& hit, Vec3 direction) {
+    const float inv = reciprocalDirectionLength(direction);
+    if (inv == 0.0f) {
+        return;
+    }
+    hit.t *= inv;
+}
+
+namespace {
+
+int32_t clampIterationCount(int32_t value) {
+    if (value < 0) {
+        return 0;
+    }
+    return value > kMaxIterations ? kMaxIterations : value;
+}
+
+}
+
+void collectStepStatistics(
+    const World& world,
+    int32_t velocityIterations,
+    int32_t positionIterations,
+    StepStatistics& out) {
+    out.broadphasePairsTested = 0.0f;
+    out.shapePairsTested = 0.0f;
+    out.contactsGenerated = 0.0f;
+    out.sensorContacts = 0.0f;
+    out.velocityIterations = static_cast<float>(clampIterationCount(velocityIterations));
+    out.positionIterations = static_cast<float>(clampIterationCount(positionIterations));
+    out.sleepingBodies = 0.0f;
+    out.liveBodies = 0.0f;
+
+    if (!worldQueryable(world)) {
+        return;
+    }
+
+    int64_t broadphasePairs = 0;
+    int64_t shapePairs = 0;
+    for (int32_t a = 0; a < world.highWater; ++a) {
+        const Body& bodyA = world.bodies[a];
+        if (!bodyQueryable(bodyA)) {
+            continue;
+        }
+        const AABB& boundsA = bodyA.aabb;
+        const bool aDynamic = bodyA.state == kBodyDynamic;
+        const bool aKinematic = bodyA.state == kBodyKinematic;
+        const int32_t slotsA = shapeSlots(bodyA);
+
+        for (int32_t b = a + 1; b < world.highWater; ++b) {
+            const Body& bodyB = world.bodies[b];
+            if (!bodyQueryable(bodyB)) {
+                continue;
+            }
+            const AABB& boundsB = bodyB.aabb;
+            if (boundsB.minX > boundsA.maxX || boundsA.minX > boundsB.maxX) {
+                continue;
+            }
+            if (boundsB.minY > boundsA.maxY || boundsA.minY > boundsB.maxY) {
+                continue;
+            }
+            if (boundsB.minZ > boundsA.maxZ || boundsA.minZ > boundsB.maxZ) {
+                continue;
+            }
+            const bool bKinematic = bodyB.state == kBodyKinematic;
+            if (!aDynamic && bodyB.state != kBodyDynamic && aKinematic == bKinematic) {
+                continue;
+            }
+
+            ++broadphasePairs;
+
+            const int32_t slotsB = shapeSlots(bodyB);
+            for (int32_t slotA = 0; slotA < slotsA; ++slotA) {
+                if (!shapeValid(bodyA.shapes[slotA])) {
+                    continue;
+                }
+                for (int32_t slotB = 0; slotB < slotsB; ++slotB) {
+                    if (!shapeValid(bodyB.shapes[slotB])) {
+                        continue;
+                    }
+                    if (filtersCollide(bodyA.shapes[slotA], bodyB.shapes[slotB])) {
+                        ++shapePairs;
+                    }
+                }
+            }
+        }
+    }
+
+    int32_t sleeping = 0;
+    for (int32_t id = 0; id < world.highWater; ++id) {
+        const Body& body = world.bodies[id];
+        if (body.state == kBodyFree) {
+            continue;
+        }
+        if (body.state == kBodyDynamic && body.awake == 0) {
+            ++sleeping;
+        }
+    }
+
+    int32_t sensors = 0;
+    if (world.contacts != nullptr) {
+        for (int32_t k = 0; k < world.contactCount; ++k) {
+            if (world.contacts[k].sensor != 0) {
+                ++sensors;
+            }
+        }
+    }
+
+    out.broadphasePairsTested = static_cast<float>(broadphasePairs);
+    out.shapePairsTested = static_cast<float>(shapePairs);
+    out.contactsGenerated = static_cast<float>(world.contactCount);
+    out.sensorContacts = static_cast<float>(sensors);
+    out.sleepingBodies = static_cast<float>(sleeping);
+    out.liveBodies = static_cast<float>(world.liveCount);
 }
 
 }
