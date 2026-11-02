@@ -268,6 +268,7 @@ bool recomputeMass(Body& body) {
 void bumpSlotGeneration(World& world, int32_t bodyId, int32_t slot) {
     uint16_t& entry = world.slotGen[slotGenIndex(bodyId, slot)];
     entry = static_cast<uint16_t>(entry + 1);
+    world.invalidateStats();
 }
 
 int32_t firstFreeShapeSlot(const Body& body) {
@@ -299,6 +300,10 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     liveCount = 0;
     freeCount = 0;
     contactCount = 0;
+    stepSerial = 0;
+    statsSerial = -1;
+    statsBroadphasePairs = 0;
+    statsShapePairs = 0;
 
     cacheCapacity = 64;
     while (cacheCapacity < maxContacts * 2) {
@@ -314,6 +319,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     bodies = allocateArray<Body>(arena, maxBodies);
     slotGen = allocateArray<uint16_t>(arena, maxBodies * kMaxShapesPerBody);
     sweepOrder = allocateArray<int32_t>(arena, maxBodies);
+    sweepRecords = allocateArray<SweepRecord>(arena, maxBodies);
     freeIds = allocateArray<int32_t>(arena, maxBodies);
     contacts = allocateArray<Contact>(arena, maxContacts);
     int32_t constraintCapacity = maxBodies * 2;
@@ -332,6 +338,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
 
     if (transforms == nullptr || sleepTransforms == nullptr || velocities == nullptr || angularVelocities == nullptr ||
         packedContacts == nullptr || bodies == nullptr || slotGen == nullptr || sweepOrder == nullptr ||
+        sweepRecords == nullptr ||
         freeIds == nullptr || contacts == nullptr || constraints == nullptr || constraintFreeIds == nullptr ||
         cachePrev == nullptr || cacheNext == nullptr ||
         cachePrevUsed == nullptr || cacheNextUsed == nullptr) {
@@ -383,6 +390,7 @@ void World::reset() {
     liveCount = 0;
     freeCount = 0;
     contactCount = 0;
+    statsSerial = -1;
     if (constraints != nullptr && constraintFreeIds != nullptr) {
         for (int32_t i = 0; i < maxConstraints; ++i) {
             Constraint& constraint = constraints[i];
@@ -466,6 +474,7 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     }
 
     ++liveCount;
+    invalidateStats();
     return id;
 }
 
@@ -915,6 +924,7 @@ int32_t World::setShapeFilter(int32_t bodyId, int32_t slot, int32_t categoryBits
     shape.categoryBits = categoryBits;
     shape.maskBits = maskBits;
     shape.groupIndex = groupIndex;
+    invalidateStats();
     return 0;
 }
 
@@ -1158,6 +1168,7 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     velocityIterations = velocityIterations < 0 ? 0 : (velocityIterations > kMaxIterations ? kMaxIterations : velocityIterations);
     positionIterations = positionIterations < 0 ? 0 : (positionIterations > kMaxIterations ? kMaxIterations : positionIterations);
 
+    ++stepSerial;
     const Vec3 gravityStep = gravity * dt;
     const bool sleepEnabled = allowSleep != 0;
 

@@ -1018,26 +1018,12 @@ int32_t clampIterationCount(int32_t value) {
 
 }
 
-void collectStepStatistics(
-    const World& world,
-    int32_t velocityIterations,
-    int32_t positionIterations,
-    StepStatistics& out) {
-    out.broadphasePairsTested = 0.0f;
-    out.shapePairsTested = 0.0f;
-    out.contactsGenerated = 0.0f;
-    out.sensorContacts = 0.0f;
-    out.velocityIterations = static_cast<float>(clampIterationCount(velocityIterations));
-    out.positionIterations = static_cast<float>(clampIterationCount(positionIterations));
-    out.sleepingBodies = 0.0f;
-    out.liveBodies = 0.0f;
+namespace {
 
-    if (!worldQueryable(world)) {
-        return;
-    }
+void countPairStatsBrute(const World& world, int64_t& broadphasePairs, int64_t& shapePairs) {
+    broadphasePairs = 0;
+    shapePairs = 0;
 
-    int64_t broadphasePairs = 0;
-    int64_t shapePairs = 0;
     for (int32_t a = 0; a < world.highWater; ++a) {
         const Body& bodyA = world.bodies[a];
         if (!bodyQueryable(bodyA)) {
@@ -1085,6 +1071,36 @@ void collectStepStatistics(
                 }
             }
         }
+    }
+}
+
+}
+
+void collectStepStatistics(
+    const World& world,
+    int32_t velocityIterations,
+    int32_t positionIterations,
+    StepStatistics& out) {
+    out.broadphasePairsTested = 0.0f;
+    out.shapePairsTested = 0.0f;
+    out.contactsGenerated = 0.0f;
+    out.sensorContacts = 0.0f;
+    out.velocityIterations = static_cast<float>(clampIterationCount(velocityIterations));
+    out.positionIterations = static_cast<float>(clampIterationCount(positionIterations));
+    out.sleepingBodies = 0.0f;
+    out.liveBodies = 0.0f;
+
+    if (!worldQueryable(world)) {
+        return;
+    }
+
+    int64_t broadphasePairs = 0;
+    int64_t shapePairs = 0;
+    if (world.statsSerial == world.stepSerial) {
+        broadphasePairs = world.statsBroadphasePairs;
+        shapePairs = world.statsShapePairs;
+    } else {
+        countPairStatsBrute(world, broadphasePairs, shapePairs);
     }
 
     int32_t sleeping = 0;

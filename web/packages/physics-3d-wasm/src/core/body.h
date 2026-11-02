@@ -227,6 +227,35 @@ static_assert(alignof(Shape) == 16, "shape must stay vector aligned");
 static_assert(sizeof(Body) == 1072, "body size must stay fixed for arena sizing");
 static_assert(alignof(Body) == 16, "body must stay vector aligned");
 
+struct SweepRecord {
+    float minX;
+    float minY;
+    float minZ;
+    float maxX;
+    float maxY;
+    float maxZ;
+    int32_t filter;
+    int32_t pad;
+};
+
+static_assert(sizeof(SweepRecord) == 32, "sweep record must stay two per cache line");
+
+AXRONE_PHYSICS_INLINE int32_t sweepFilterCode(int32_t state, int32_t slots) {
+    return state | (slots << 2);
+}
+
+AXRONE_PHYSICS_INLINE int32_t sweepFilterState(int32_t filter) {
+    return filter & 3;
+}
+
+AXRONE_PHYSICS_INLINE int32_t sweepFilterSlots(int32_t filter) {
+    return filter >> 2;
+}
+
+AXRONE_PHYSICS_INLINE bool sweepQueryableFilter(int32_t filter) {
+    return sweepFilterState(filter) != kBodyFree && sweepFilterSlots(filter) > 0;
+}
+
 AXRONE_PHYSICS_INLINE int32_t shapeSlots(const Body& body) {
     if (body.shapeCount <= 0) {
         return 0;
