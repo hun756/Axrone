@@ -11,13 +11,16 @@ import type {
     HingeJointOptions,
     MutableQuat,
     MutableVec3,
+    QueryFilter,
     QuatTuple,
+    RaycastFractionHit,
     RaycastHit,
     ShapeFilter,
     ShapeMaterial,
     SliderJointOptions,
     SpringJointOptions,
     StepOptions,
+    StepStatistics,
     TransformSnapshot,
     Vec3Tuple,
     WorldOptions
@@ -36,10 +39,13 @@ const EVENT_RECORD_STRIDE = 10;
 const EVENT_CAPACITY = 4096;
 const RAY_HIT_STRIDE = 10;
 const DEFAULT_QUERY_CAPACITY = 256;
+const STEP_STATISTICS_BYTES = 32;
 const SHAPE_ID_MAX = 0x7fffffff;
 const SHAPE_MATERIAL_INHERIT = -1;
 const INT32_MIN = -2147483648;
 const INT32_MAX = 2147483647;
+
+const NO_FILTER: QueryFilter = Object.freeze({ categoryBits: 0, maskBits: 0 });
 
 const CONTACT_EVENT_KINDS: readonly ContactEventKind[] = [
     "begin",
@@ -120,6 +126,22 @@ function assertConstraintId(value: number): void {
     assertInteger(value, "constraintId");
     if (value < 0 || value > INT32_MAX) {
         throw new Error(`constraintId must be between 0 and ${INT32_MAX}`);
+    }
+}
+
+function assertQueryFilter(filter: QueryFilter): void {
+    assertInteger(filter.categoryBits, "filter.categoryBits");
+    assertInteger(filter.maskBits, "filter.maskBits");
+    if (filter.categoryBits < INT32_MIN || filter.categoryBits > INT32_MAX ||
+        filter.maskBits < INT32_MIN || filter.maskBits > INT32_MAX) {
+        throw new Error("filter bits must fit in int32");
+    }
+}
+
+function assertQueryCapacity(capacity: number, limit: number): void {
+    assertInteger(capacity, "capacity");
+    if (capacity < 1 || capacity > limit) {
+        throw new Error(`capacity must be between 1 and ${limit}`);
     }
 }
 
@@ -1288,6 +1310,191 @@ export class WasmPhysicsWorld3D {
             result[index] = ids[index];
         }
         return result;
+    }
+
+    raycastAllV2(
+        origin: Vec3Tuple,
+        direction: Vec3Tuple,
+        maxDistance = Number.POSITIVE_INFINITY,
+        filter: QueryFilter = NO_FILTER
+    ): RaycastFractionHit[] {
+        this.ensureAlive();
+        assertVec3(origin, "origin");
+        assertVec3(direction, "direction");
+        assertRayDistance(maxDistance);
+        assertQueryFilter(filter);
+
+        const hits = this.queryHits();
+        const ids = this.queryIds();
+        const count = this.wasm.raycastAllV2(
+            origin[0],
+            origin[1],
+            origin[2],
+            direction[0],
+            direction[1],
+            direction[2],
+            maxDistance,
+            filter.categoryBits,
+            filter.maskBits,
+            hits.byteOffset,
+            hits.length / RAY_HIT_STRIDE
+        );
+
+        const result: RaycastFractionHit[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            const base = index * RAY_HIT_STRIDE;
+            result[index] = {
+                body: ids[base],
+                shape: ids[base + 1],
+                fraction: hits[base + 2],
+                point: [hits[base + 3], hits[base + 4], hits[base + 5]],
+                normal: [hits[base + 6], hits[base + 7], hits[base + 8]]
+            };
+        }
+        return result;
+    }
+
+    raycastClosestV2(
+        origin: Vec3Tuple,
+        direction: Vec3Tuple,
+        maxDistance = Number.POSITIVE_INFINITY,
+        filter: QueryFilter = NO_FILTER
+    ): RaycastFractionHit | null {
+        this.ensureAlive();
+        assertVec3(origin, "origin");
+        assertVec3(direction, "direction");
+        assertRayDistance(maxDistance);
+        assertQueryFilter(filter);
+
+        const hits = this.queryHits();
+        const ids = this.queryIds();
+        const written = this.wasm.raycastClosestV2(
+            origin[0],
+            origin[1],
+            origin[2],
+            direction[0],
+            direction[1],
+            direction[2],
+            maxDistance,
+            filter.categoryBits,
+            filter.maskBits,
+            hits.byteOffset
+        );
+        if (written === 0) {
+            return null;
+        }
+        return {
+            body: ids[0],
+            shape: ids[1],
+            fraction: hits[2],
+            point: [hits[3], hits[4], hits[5]],
+            normal: [hits[6], hits[7], hits[8]]
+        };
+    }
+
+    overlapSphereV2(
+        center: Vec3Tuple,
+        radius: number,
+        filter: QueryFilter = NO_FILTER,
+        capacity = DEFAULT_QUERY_CAPACITY
+    ): number[] {
+        this.ensureAlive();
+        assertVec3(center, "center");
+        assertFinite(radius, "radius");
+        if (radius < 0) {
+            throw new Error("radius must be non-negative");
+        }
+        assertQueryFilter(filter);
+
+        const ids = this.queryIds();
+        assertQueryCapacity(capacity, ids.length);
+        const count = this.wasm.overlapSphereV2(
+            center[0],
+            center[1],
+            center[2],
+            radius,
+            filter.categoryBits,
+            filter.maskBits,
+            ids.byteOffset,
+            capacity
+        );
+
+        const result: number[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            result[index] = ids[index];
+        }
+        return result;
+    }
+
+    overlapBoxAll(
+        min: Vec3Tuple,
+        max: Vec3Tuple,
+        capacity = DEFAULT_QUERY_CAPACITY
+    ): number[] {
+        this.ensureAlive();
+        assertVec3(min, "min");
+        assertVec3(max, "max");
+
+        const ids = this.queryIds();
+        assertQueryCapacity(capacity, ids.length);
+        const count = this.wasm.overlapBoxAll(
+            ids.byteOffset,
+            capacity,
+            min[0],
+            min[1],
+            min[2],
+            max[0],
+            max[1],
+            max[2]
+        );
+
+        const result: number[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            result[index] = ids[index];
+        }
+        return result;
+    }
+
+    queryPointAll(point: Vec3Tuple, capacity = DEFAULT_QUERY_CAPACITY): number[] {
+        this.ensureAlive();
+        assertVec3(point, "point");
+
+        const ids = this.queryIds();
+        assertQueryCapacity(capacity, ids.length);
+        const count = this.wasm.queryPointAll(
+            ids.byteOffset,
+            capacity,
+            point[0],
+            point[1],
+            point[2]
+        );
+
+        const result: number[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            result[index] = ids[index];
+        }
+        return result;
+    }
+
+    getStepStatistics(): StepStatistics {
+        this.ensureAlive();
+        const packed = this.wasm.stepStatisticsView();
+        const pointer = Number(packed >> 32n);
+        const bytes = Number(packed & 0xffffffffn);
+        if (pointer === 0 || bytes < STEP_STATISTICS_BYTES || (pointer & 3) !== 0) {
+            throw new Error("step statistics are unavailable");
+        }
+        const view = new DataView(this.wasm.memory.buffer, pointer, STEP_STATISTICS_BYTES);
+        return {
+            broadphasePairsTested: view.getFloat32(0, true),
+            shapePairsTested: view.getFloat32(4, true),
+            contactsGenerated: view.getFloat32(8, true),
+            sensorContacts: view.getFloat32(12, true),
+            velocityIterations: view.getFloat32(16, true),
+            positionIterations: view.getFloat32(20, true),
+            sleepingBodies: view.getFloat32(24, true),
+            liveBodies: view.getFloat32(28, true)
+        };
     }
 
     dispose(): void {

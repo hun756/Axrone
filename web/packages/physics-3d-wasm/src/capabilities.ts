@@ -24,6 +24,8 @@ export interface WasmPhysicsCapabilities {
     readonly constraints: boolean;
     readonly queries: boolean;
     readonly raycast: boolean;
+    readonly overlapBox: boolean;
+    readonly queryPoint: boolean;
     readonly characterController: boolean;
 }
 
@@ -53,5 +55,7 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
     constraints: true,
     queries: true,
     raycast: true,
+    overlapBox: true,
+    queryPoint: true,
     characterController: false
 });

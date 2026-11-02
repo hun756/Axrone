@@ -1,7 +1,7 @@
 export { WasmPhysicsWorld3D } from "./world";
 export { WasmPhysicsWorld3DCompat } from "./compat";
 export { WASM_PHYSICS_CAPABILITIES } from "./capabilities";
-export { BODY_FLAGS } from "./types";
+export { BODY_FLAGS, WasmBodyType } from "./types";
 export type { WasmPhysicsCapabilities } from "./capabilities";
 export { decodeBase64, instantiateWasm, loadEmbeddedWasm } from "./loader";
 export type {
@@ -38,6 +38,8 @@ export type {
     MutableQuat,
     MutableVec3,
     QuatTuple,
+    QueryFilter,
+    RaycastFractionHit,
     RaycastHit,
     Shape,
     ShapeFilter,
@@ -46,7 +48,9 @@ export type {
     SphereShape,
     SpringJointOptions,
     StepOptions,
+    StepStatistics,
     TransformSnapshot,
     Vec3Tuple,
+    WasmProfilerSnapshot,
     WorldOptions
 } from "./types";
