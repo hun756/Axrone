@@ -3,8 +3,10 @@ import type {
     BodyType,
     ContactEventSnapshot,
     QuatTuple,
+    StepStatistics,
     TransformSnapshot,
-    Vec3Tuple
+    Vec3Tuple,
+    WasmProfilerSnapshot
 } from "./types";
 
 export interface CompatVec3 {
@@ -45,6 +47,10 @@ export interface CompatWorldConfig {
     readonly gravity?: Partial<CompatVec3>;
     readonly maxBodies?: number;
     readonly maxContacts?: number;
+    readonly maxConstraints?: number;
+    readonly allowSleep?: boolean;
+    readonly velocityIterations?: number;
+    readonly positionIterations?: number;
 }
 
 export interface CompatBodyHandle {
@@ -54,6 +60,7 @@ export interface CompatBodyHandle {
 export interface CompatStatistics {
     readonly bodyCount: number;
     readonly contactCount: number;
+    readonly ignoredConfigKeys: readonly string[];
 }
 
 export type CompatCollisionEventType = 0 | 1 | 2;
@@ -125,6 +132,39 @@ function eventTimestamp(): number {
     return globalThis.performance?.now() ?? Date.now();
 }
 
+function profilerNow(): number {
+    return globalThis.performance?.now() ?? 0;
+}
+
+const DEFAULT_COMPAT_VELOCITY_ITERATIONS = 10;
+const DEFAULT_COMPAT_POSITION_ITERATIONS = 4;
+const MAX_COMPAT_ITERATIONS = 64;
+const COMPAT_KNOWN_CONFIG_KEYS: readonly string[] = [
+    "gravity",
+    "maxBodies",
+    "maxContacts",
+    "maxConstraints",
+    "allowSleep",
+    "velocityIterations",
+    "positionIterations"
+];
+
+function assertConfigInteger(value: number | undefined, key: string): void {
+    if (value === undefined) {
+        return;
+    }
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+        throw new Error(`${key} must be an integer`);
+    }
+}
+
+function assertConfigIterations(value: number | undefined, key: string): void {
+    assertConfigInteger(value, key);
+    if (value !== undefined && (value < 0 || value > MAX_COMPAT_ITERATIONS)) {
+        throw new Error(`${key} must be between 0 and ${MAX_COMPAT_ITERATIONS}`);
+    }
+}
+
 function buildCollisionEvent(
     type: CompatCollisionEventType,
     event: ContactEventSnapshot,
@@ -170,11 +210,21 @@ export class WasmPhysicsWorld3DCompat {
     private readonly physics: WasmPhysicsWorld3D;
     private readonly bodyShapes = new Map<number, Set<number>>();
     private readonly shapeOwners = new Map<number, number>();
+    private readonly ignoredConfigKeys: string[] = [];
+    private readonly defaultVelocityIterations: number;
+    private readonly defaultPositionIterations: number;
+    private lastStepTime = 0;
     private listener: CompatContactListener | null = null;
     private disposed = false;
 
-    private constructor(physics: WasmPhysicsWorld3D) {
+    private constructor(
+        physics: WasmPhysicsWorld3D,
+        defaultVelocityIterations: number,
+        defaultPositionIterations: number
+    ) {
         this.physics = physics;
+        this.defaultVelocityIterations = defaultVelocityIterations;
+        this.defaultPositionIterations = defaultPositionIterations;
     }
 
     static async create(config: CompatWorldConfig = {}): Promise<WasmPhysicsWorld3DCompat> {
@@ -190,7 +240,12 @@ export class WasmPhysicsWorld3DCompat {
             maxContacts,
             gravity
         });
-        return new WasmPhysicsWorld3DCompat(physics);
+        const velocityIterations = config.velocityIterations ?? DEFAULT_COMPAT_VELOCITY_ITERATIONS;
+        const positionIterations = config.positionIterations ?? DEFAULT_COMPAT_POSITION_ITERATIONS;
+        const world = new WasmPhysicsWorld3DCompat(physics, velocityIterations, positionIterations);
+        world.collectUnknownConfigKeys(config);
+        world.applyConfig(config);
+        return world;
     }
 
     get bodyCount(): number {
@@ -208,6 +263,9 @@ export class WasmPhysicsWorld3DCompat {
         const type = def.type ?? 2;
         if (type !== 0 && type !== 1 && type !== 2) {
             throw new Error(`unsupported body type: ${type}`);
+        }
+        if (def.allowSleep !== undefined) {
+            this.noteIgnoredConfigKey("bodyDef.allowSleep");
         }
         const bodyType: BodyType = type === 0 ? "static" : type === 1 ? "kinematic" : "dynamic";
         return this.physics.createBody({
@@ -362,9 +420,16 @@ export class WasmPhysicsWorld3DCompat {
         return this.physics.readTransform(bodyId);
     }
 
-    step(dt: number, velocityIterations = 10, positionIterations = 4): number {
+    step(dt: number, velocityIterations?: number, positionIterations?: number): number {
         this.ensureAlive();
-        const contacts = this.physics.step(dt, { velocityIterations, positionIterations });
+        const iterations = velocityIterations ?? this.defaultVelocityIterations;
+        const relaxations = positionIterations ?? this.defaultPositionIterations;
+        const startedAt = profilerNow();
+        const contacts = this.physics.step(dt, {
+            velocityIterations: iterations,
+            positionIterations: relaxations
+        });
+        this.lastStepTime = profilerNow() - startedAt;
         this.dispatchContactEvents();
         return contacts;
     }
@@ -374,11 +439,31 @@ export class WasmPhysicsWorld3DCompat {
         this.listener = listener;
     }
 
+    getProfiler(): WasmProfilerSnapshot {
+        this.ensureAlive();
+        return {
+            stepTime: this.lastStepTime,
+            collisionTime: 0,
+            solveTime: 0,
+            broadphaseTime: 0,
+            narrowphaseTime: 0,
+            solveVelocityTime: 0,
+            solvePositionTime: 0,
+            sleepTime: 0
+        };
+    }
+
+    getStepStatistics(): StepStatistics {
+        this.ensureAlive();
+        return this.physics.getStepStatistics();
+    }
+
     getStatistics(): CompatStatistics {
         this.ensureAlive();
         return {
             bodyCount: this.physics.bodyCount,
-            contactCount: this.physics.contactCount
+            contactCount: this.physics.contactCount,
+            ignoredConfigKeys: this.ignoredConfigKeys.slice()
         };
     }
 
@@ -402,6 +487,37 @@ export class WasmPhysicsWorld3DCompat {
 
     [Symbol.dispose](): void {
         this.dispose();
+    }
+
+    private applyConfig(config: CompatWorldConfig): void {
+        assertConfigIterations(config.velocityIterations, "velocityIterations");
+        assertConfigIterations(config.positionIterations, "positionIterations");
+        assertConfigInteger(config.maxConstraints, "maxConstraints");
+        if (config.maxConstraints !== undefined && config.maxConstraints <= 0) {
+            throw new Error("maxConstraints must be positive");
+        }
+
+        if (config.allowSleep !== undefined) {
+            this.physics.setAllowSleep(config.allowSleep === true);
+        }
+        if (config.maxConstraints !== undefined) {
+            this.noteIgnoredConfigKey("maxConstraints");
+        }
+    }
+
+    private collectUnknownConfigKeys(config: CompatWorldConfig): void {
+        const known = new Set(COMPAT_KNOWN_CONFIG_KEYS);
+        for (const key of Object.keys(config)) {
+            if (!known.has(key)) {
+                this.noteIgnoredConfigKey(key);
+            }
+        }
+    }
+
+    private noteIgnoredConfigKey(key: string): void {
+        if (!this.ignoredConfigKeys.includes(key)) {
+            this.ignoredConfigKeys.push(key);
+        }
     }
 
     private registerShape(bodyId: number, shapeId: number): void {
