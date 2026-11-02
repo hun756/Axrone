@@ -63,6 +63,13 @@ const TYPE_CODES: Record<BodyType, number> = {
     kinematic: 2
 };
 
+function readContactEventKind(kindCode: number): ContactEventKind {
+    if (!Number.isInteger(kindCode) || kindCode < 0 || kindCode >= CONTACT_EVENT_KINDS.length) {
+        throw new Error(`unknown contact event kind code ${kindCode}`);
+    }
+    return CONTACT_EVENT_KINDS[kindCode];
+}
+
 function assertFinite(value: number, label: string): void {
     if (!Number.isFinite(value)) {
         throw new Error(`${label} must be finite`);
@@ -1092,7 +1099,7 @@ export class WasmPhysicsWorld3D {
                 const base = index * EVENT_RECORD_STRIDE;
                 const kindCode = ints[base];
                 events.push({
-                    kind: CONTACT_EVENT_KINDS[kindCode >= 0 && kindCode <= 5 ? kindCode : 1],
+                    kind: readContactEventKind(kindCode),
                     bodyA: ints[base + 1],
                     bodyB: ints[base + 2],
                     shapeA: ints[base + 3],
