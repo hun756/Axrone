@@ -24,7 +24,8 @@ const CONTACT_BYTES = 24;
 
 const TYPE_CODES: Record<BodyType, number> = {
     static: 0,
-    dynamic: 1
+    dynamic: 1,
+    kinematic: 2
 };
 
 function assertFinite(value: number, label: string): void {

@@ -31,7 +31,7 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
     bodyTypes: Object.freeze({
         static: true,
         dynamic: true,
-        kinematic: false
+        kinematic: true
     }),
     shapes: Object.freeze({
         sphere: true,

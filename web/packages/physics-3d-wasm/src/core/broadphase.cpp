@@ -88,6 +88,7 @@ void broadphase(World& world) {
         const int32_t a = world.sweepOrder[i];
         const AABB& boundsA = world.bodies[a].aabb;
         const bool aDynamic = world.bodies[a].state == kBodyDynamic;
+        const bool aKinematic = world.bodies[a].state == kBodyKinematic;
 
         for (int32_t j = i + 1; j < count; ++j) {
             const int32_t b = world.sweepOrder[j];
@@ -102,7 +103,8 @@ void broadphase(World& world) {
             if (boundsB.minZ > boundsA.maxZ || boundsB.maxZ < boundsA.minZ) {
                 continue;
             }
-            if (!aDynamic && world.bodies[b].state != kBodyDynamic) {
+            const bool bKinematic = world.bodies[b].state == kBodyKinematic;
+            if (!aDynamic && world.bodies[b].state != kBodyDynamic && aKinematic == bKinematic) {
                 continue;
             }
 

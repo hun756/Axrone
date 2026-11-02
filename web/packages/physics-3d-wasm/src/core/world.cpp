@@ -130,7 +130,7 @@ bool World::isActive(int32_t id) const {
 }
 
 int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, float qy, float qz, float qw) {
-    if (!initialized || (type != kBodyTypeStatic && type != kBodyTypeDynamic)) {
+    if (!initialized || (type != kBodyTypeStatic && type != kBodyTypeDynamic && type != kBodyTypeKinematic)) {
         return -1;
     }
     if (!isFinite(px) || !isFinite(py) || !isFinite(pz) ||
@@ -154,7 +154,7 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     angularVelocities[id] = Vec3();
 
     Body& body = bodies[id];
-    body.state = type == kBodyTypeStatic ? kBodyStatic : kBodyDynamic;
+    body.state = type == kBodyTypeStatic ? kBodyStatic : (type == kBodyTypeDynamic ? kBodyDynamic : kBodyKinematic);
     body.shape = kShapeNone;
     body.invMass = 0.0f;
     body.invInertia = Vec3();
@@ -333,11 +333,13 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     const Vec3 gravityStep = gravity * dt;
 
     for (int32_t i = 0; i < highWater; ++i) {
-        if (bodies[i].state != kBodyDynamic) {
+        const int32_t state = bodies[i].state;
+        if (state == kBodyDynamic) {
+            velocities[i] += gravityStep;
+        } else if (state != kBodyKinematic) {
             continue;
         }
 
-        velocities[i] += gravityStep;
         transforms[i].px += velocities[i].x * dt;
         transforms[i].py += velocities[i].y * dt;
         transforms[i].pz += velocities[i].z * dt;

@@ -40,9 +40,25 @@ describe('WasmPhysicsWorld3DCompat', () => {
         world.dispose();
     });
 
+    it('accepts kinematic bodies', async () => {
+        const world = await createCompat(8);
+        const platform = world.createBody({
+            type: 1,
+            position: { x: 0, y: 0, z: 0 },
+            allowSleep: false
+        });
+        expect(platform).toBe(0);
+        const shape = world.createBoxShape(platform, { halfExtents: { x: 1, y: 0.1, z: 1 } });
+        expect(shape).toBeGreaterThan(0);
+        world.step(1 / 60, 8, 3);
+        expect(world.bodyCount).toBe(1);
+        expect(world.contactCount).toBe(0);
+        expect(world.getStatistics().bodyCount).toBe(1);
+        world.dispose();
+    });
+
     it('rejects unsupported body and shape combinations', async () => {
         const world = await createCompat(8);
-        expect(() => world.createBody({ type: 1 })).toThrow(/kinematic/);
         const body = world.createBody({ type: 2 });
         expect(() => world.createBoxShape(body, {
             center: { x: 1, y: 0, z: 0 },

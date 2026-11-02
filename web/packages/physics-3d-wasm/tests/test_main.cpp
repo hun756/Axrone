@@ -276,6 +276,145 @@ void testRotatedBoxContact() {
     }
 }
 
+void testKinematicBodyCreation() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t platform = world.createBody(kBodyTypeKinematic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(platform >= 0);
+    CHECK(world.bodies[platform].state == kBodyKinematic);
+    CHECK(world.setBox(platform, 2.0f, 0.1f, 2.0f, 1.0f) == 0);
+    CHECK(world.bodies[platform].invMass == 0.0f);
+    CHECK(world.bodies[platform].invInertia.x == 0.0f);
+    CHECK(world.bodies[platform].invInertia.y == 0.0f);
+    CHECK(world.bodies[platform].invInertia.z == 0.0f);
+    CHECK(world.setSphere(platform, 0.5f, 1.0f) == 0);
+    CHECK(world.bodies[platform].invMass == 0.0f);
+    CHECK(world.bodies[platform].invInertia.x == 0.0f);
+
+    CHECK(world.createBody(3, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.destroyBody(platform) == 0);
+}
+
+void testKinematicIgnoresGravity() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeKinematic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.setBox(body, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(world.transforms[body].px == 0.0f);
+    CHECK(world.transforms[body].py == 3.0f);
+    CHECK(world.transforms[body].pz == 0.0f);
+    CHECK(world.velocities[body].x == 0.0f);
+    CHECK(world.velocities[body].y == 0.0f);
+
+    CHECK(world.setVelocity(body, 1.0f, 0.0f, 0.0f) == 0);
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(near(world.transforms[body].px, 1.0f, 0.01f));
+    CHECK(near(world.transforms[body].py, 3.0f, 0.01f));
+    CHECK(world.velocities[body].x == 1.0f);
+    CHECK(world.velocities[body].y == 0.0f);
+
+    CHECK(world.setAngularVelocity(body, 0.0f, 2.0f, 0.0f) == 0);
+    const float qyBefore = world.transforms[body].qy;
+    world.step(1.0f / 60.0f, 8, 3);
+    CHECK(fabsf(world.transforms[body].qy - qyBefore) > 1e-4f);
+    CHECK(near(world.transforms[body].px, 1.0f, 0.02f));
+    CHECK(world.angularVelocities[body].y == 2.0f);
+}
+
+void testKinematicCollidesWithStatic() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+
+    const int32_t drifter = world.createBody(kBodyTypeKinematic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(drifter >= 0);
+    CHECK(world.setBox(drifter, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+
+    CHECK(world.step(1.0f / 60.0f, 8, 3) >= 0);
+    CHECK(world.getContactCount() >= 1);
+    CHECK(world.transforms[ground].py == -0.5f);
+    CHECK(world.transforms[drifter].py == 0.0f);
+
+    const int32_t other = world.createBody(kBodyTypeKinematic, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(other >= 0);
+    CHECK(world.setBox(other, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.step(1.0f / 60.0f, 8, 3) >= 0);
+    CHECK(world.transforms[other].px == 3.0f);
+}
+
+void testKinematicPlatformCarriesBox() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t platform = world.createBody(kBodyTypeKinematic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(platform >= 0);
+    CHECK(world.setBox(platform, 2.0f, 0.1f, 2.0f, 1.0f) == 0);
+    CHECK(world.setMaterial(platform, 0.9f, 0.0f) == 0);
+    CHECK(world.setVelocity(platform, 0.0f, 1.0f, 0.0f) == 0);
+
+    const int32_t box = world.createBody(kBodyTypeDynamic, 0.0f, 0.6f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(box >= 0);
+    CHECK(world.setBox(box, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setMaterial(box, 0.9f, 0.0f) == 0);
+
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(near(world.transforms[platform].py, 2.0f, 0.01f));
+    CHECK(world.transforms[box].py > 2.2f);
+    CHECK(world.transforms[box].py < 2.9f);
+    CHECK(world.velocities[box].y > 0.4f);
+    CHECK(world.velocities[box].y < 1.6f);
+    CHECK(world.getContactCount() >= 1);
+}
+
+void testDynamicCannotPushKinematic() {
+    Arena arena;
+    World world;
+    arena.init(g_memoryA, 64 * 1024 * 1024);
+    CHECK(world.init(arena, 16, 256, Vec3(0.0f, 0.0f, 0.0f)));
+
+    const int32_t wall = world.createBody(kBodyTypeKinematic, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(wall >= 0);
+    CHECK(world.setBox(wall, 0.2f, 1.0f, 1.0f, 1.0f) == 0);
+    CHECK(world.setMaterial(wall, 0.5f, 0.0f) == 0);
+
+    const int32_t ram = world.createBody(kBodyTypeDynamic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ram >= 0);
+    CHECK(world.setBox(ram, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setMaterial(ram, 0.0f, 0.0f) == 0);
+    CHECK(world.setVelocity(ram, 5.0f, 0.0f, 0.0f) == 0);
+
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(world.transforms[wall].px == 2.0f);
+    CHECK(world.transforms[wall].py == 0.0f);
+    CHECK(world.velocities[wall].x == 0.0f);
+    CHECK(world.transforms[ram].px < 1.5f);
+    CHECK(isFinite(world.transforms[ram].px));
+}
+
 void testArenaExhaustion() {
     alignas(64) unsigned char small[8192];
     Arena arena;
@@ -324,6 +463,11 @@ int main() {
     testRestitution();
     testFriction();
     testRotatedBoxContact();
+    testKinematicBodyCreation();
+    testKinematicIgnoresGravity();
+    testKinematicCollidesWithStatic();
+    testKinematicPlatformCarriesBox();
+    testDynamicCannotPushKinematic();
     testArenaExhaustion();
     testStressDeterminism();
 

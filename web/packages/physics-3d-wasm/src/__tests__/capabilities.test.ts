@@ -6,7 +6,7 @@ describe('WASM physics capabilities', () => {
         expect(WASM_PHYSICS_CAPABILITIES.backend).toBe('wasm');
         expect(WASM_PHYSICS_CAPABILITIES.bodyTypes.static).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.bodyTypes.dynamic).toBe(true);
-        expect(WASM_PHYSICS_CAPABILITIES.bodyTypes.kinematic).toBe(false);
+        expect(WASM_PHYSICS_CAPABILITIES.bodyTypes.kinematic).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapes.box).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapes.sphere).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapes.capsule).toBe(false);

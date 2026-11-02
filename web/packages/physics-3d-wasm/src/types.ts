@@ -4,7 +4,7 @@ export type QuatTuple = readonly [number, number, number, number];
 export type MutableVec3 = [number, number, number];
 export type MutableQuat = [number, number, number, number];
 
-export type BodyType = "static" | "dynamic";
+export type BodyType = "static" | "dynamic" | "kinematic";
 
 export interface SphereShape {
     readonly kind: "sphere";

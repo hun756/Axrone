@@ -30,5 +30,6 @@ constexpr int32_t kKindBoxEdge = 4;
 
 constexpr int32_t kBodyTypeStatic = 0;
 constexpr int32_t kBodyTypeDynamic = 1;
+constexpr int32_t kBodyTypeKinematic = 2;
 
 }

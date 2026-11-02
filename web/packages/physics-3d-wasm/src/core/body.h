@@ -7,7 +7,8 @@ namespace axrone::physics {
 enum BodyState : int32_t {
     kBodyFree = 0,
     kBodyStatic = 1,
-    kBodyDynamic = 2
+    kBodyDynamic = 2,
+    kBodyKinematic = 3
 };
 
 enum ShapeKind : int32_t {

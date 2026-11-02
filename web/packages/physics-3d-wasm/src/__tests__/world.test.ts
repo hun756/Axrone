@@ -225,6 +225,118 @@ describe('WasmPhysicsWorld3D', () => {
         world.dispose();
     });
 
+    it('keeps a kinematic body immune to gravity while integrating its velocities', async () => {
+        const world = await createWorld();
+        const platform = world.createBody({
+            type: 'kinematic',
+            position: [0, 3, 0],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] },
+            friction: 0.7
+        });
+
+        for (let index = 0; index < 60; index += 1) {
+            world.step(DT);
+        }
+        expect(world.readTransform(platform).position).toEqual([0, 3, 0]);
+        expect(world.readVelocity(platform)).toEqual([0, 0, 0]);
+
+        world.setVelocity(platform, [1, 0, 0]);
+        for (let index = 0; index < 60; index += 1) {
+            world.step(DT);
+        }
+        expect(world.readTransform(platform).position[0]).toBeCloseTo(1, 2);
+        expect(world.readTransform(platform).position[1]).toBeCloseTo(3, 2);
+        expect(world.readVelocity(platform)).toEqual([1, 0, 0]);
+
+        world.setAngularVelocity(platform, [0, 2, 0]);
+        const spinBefore = world.readTransform(platform).rotation[1];
+        world.step(DT);
+        expect(Math.abs(world.readTransform(platform).rotation[1] - spinBefore)).toBeGreaterThan(1e-4);
+        expect(world.readAngularVelocity(platform)).toEqual([0, 2, 0]);
+        world.dispose();
+    });
+
+    it('carries a dynamic box on an upward-moving kinematic platform', async () => {
+        const world = await createWorld();
+        const platform = world.createBody({
+            type: 'kinematic',
+            position: [0, 0, 0],
+            shape: { kind: 'box', halfExtents: [2, 0.1, 2] },
+            friction: 0.9
+        });
+        world.setVelocity(platform, [0, 1, 0]);
+
+        const box = world.createBody({
+            position: [0, 0.6, 0],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] },
+            density: 1,
+            friction: 0.9
+        });
+
+        for (let index = 0; index < 120; index += 1) {
+            world.step(DT, { velocityIterations: 8, positionIterations: 3 });
+        }
+
+        expect(world.readTransform(platform).position[1]).toBeCloseTo(2, 1);
+        const raised = world.readTransform(box).position[1];
+        expect(raised).toBeGreaterThan(2.2);
+        expect(raised).toBeLessThan(2.9);
+        const velocity = world.readVelocity(box);
+        expect(velocity[1]).toBeGreaterThan(0.4);
+        expect(velocity[1]).toBeLessThan(1.6);
+        expect(world.contactCount).toBeGreaterThanOrEqual(1);
+        world.dispose();
+    });
+
+    it('does not let a dynamic body push a kinematic body', async () => {
+        const world = await WasmPhysicsWorld3D.create({
+            maxBodies: 16,
+            maxContacts: 256,
+            gravity: [0, 0, 0]
+        });
+        const wall = world.createBody({
+            type: 'kinematic',
+            position: [2, 0, 0],
+            shape: { kind: 'box', halfExtents: [0.2, 1, 1] },
+            friction: 0.5
+        });
+        const ram = world.createBody({
+            position: [0, 0, 0],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] },
+            density: 1,
+            friction: 0
+        });
+        world.setVelocity(ram, [5, 0, 0]);
+
+        let contacted = false;
+        for (let index = 0; index < 120; index += 1) {
+            world.step(DT, { velocityIterations: 8, positionIterations: 3 });
+            if (world.contactCount > 0) {
+                contacted = true;
+            }
+        }
+
+        expect(contacted).toBe(true);
+        expect(world.readTransform(wall).position).toEqual([2, 0, 0]);
+        expect(world.readVelocity(wall)).toEqual([0, 0, 0]);
+        expect(world.readTransform(ram).position[0]).toBeLessThan(1.5);
+        world.dispose();
+    });
+
+    it('collides kinematic bodies with the static ground', async () => {
+        const world = await createWorld();
+        addGround(world);
+        world.createBody({
+            type: 'kinematic',
+            position: [0, 0, 0],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] }
+        });
+
+        expect(world.step(DT)).toBeGreaterThanOrEqual(1);
+        expect(world.readTransform(1).position).toEqual([0, 0, 0]);
+        world.dispose();
+    });
+
     it('matches the native standard-scene fingerprint', async () => {
         const world = await WasmPhysicsWorld3D.create({
             maxBodies: 512,

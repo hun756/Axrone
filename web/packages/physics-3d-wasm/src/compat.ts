@@ -1,5 +1,5 @@
 import { WasmPhysicsWorld3D } from "./world";
-import type { QuatTuple, Vec3Tuple } from "./types";
+import type { BodyType, QuatTuple, Vec3Tuple } from "./types";
 
 export interface CompatVec3 {
     readonly x: number;
@@ -107,13 +107,10 @@ export class WasmPhysicsWorld3DCompat {
     createBody(def: CompatBodyDef = {}): number {
         this.ensureAlive();
         const type = def.type ?? 2;
-        if (type === 1) {
-            throw new Error("kinematic bodies are not supported by the wasm backend yet");
-        }
-        if (type !== 0 && type !== 2) {
+        if (type !== 0 && type !== 1 && type !== 2) {
             throw new Error(`unsupported body type: ${type}`);
         }
-        const bodyType = type === 0 ? "static" : "dynamic";
+        const bodyType: BodyType = type === 0 ? "static" : type === 1 ? "kinematic" : "dynamic";
         return this.physics.createBody({
             type: bodyType,
             position: vector(def.position, 0),
