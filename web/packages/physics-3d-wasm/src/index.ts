@@ -22,6 +22,7 @@ export type {
     MutableQuat,
     MutableVec3,
     QuatTuple,
+    RaycastHit,
     Shape,
     SphereShape,
     StepOptions,

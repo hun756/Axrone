@@ -6,6 +6,7 @@ import type {
     MutableQuat,
     MutableVec3,
     QuatTuple,
+    RaycastHit,
     StepOptions,
     TransformSnapshot,
     Vec3Tuple,
@@ -21,6 +22,8 @@ const MAX_CONTACTS = 262144;
 const TRANSFORM_STRIDE = 7;
 const VEC3_STRIDE = 4;
 const CONTACT_BYTES = 24;
+const RAY_HIT_STRIDE = 8;
+const DEFAULT_QUERY_CAPACITY = 256;
 
 const TYPE_CODES: Record<BodyType, number> = {
     static: 0,
@@ -61,6 +64,12 @@ function assertPositive(value: number, label: string): void {
     }
 }
 
+function assertRayDistance(value: number): void {
+    if (Number.isNaN(value) || value <= 0) {
+        throw new Error("maxDistance must be positive");
+    }
+}
+
 export class WasmPhysicsWorld3D {
     readonly maxBodies: number;
     readonly maxContacts: number;
@@ -73,6 +82,8 @@ export class WasmPhysicsWorld3D {
     private velocityView: Float32Array | null = null;
     private angularVelocityView: Float32Array | null = null;
     private contactView: DataView | null = null;
+    private queryHitsView: Float32Array | null = null;
+    private queryIdsView: Int32Array | null = null;
 
     private constructor(wasm: WasmPhysicsExports, maxBodies: number, maxContacts: number) {
         this.wasm = wasm;
@@ -496,6 +507,97 @@ export class WasmPhysicsWorld3D {
         return contacts;
     }
 
+    raycast(origin: Vec3Tuple, direction: Vec3Tuple, maxDistance = Number.POSITIVE_INFINITY): RaycastHit[] {
+        this.ensureAlive();
+        assertVec3(origin, "origin");
+        assertVec3(direction, "direction");
+        assertRayDistance(maxDistance);
+
+        const hits = this.queryHits();
+        const ids = this.queryIds();
+        const count = this.wasm.raycastAll(
+            origin[0],
+            origin[1],
+            origin[2],
+            direction[0],
+            direction[1],
+            direction[2],
+            maxDistance,
+            hits.byteOffset,
+            hits.length / RAY_HIT_STRIDE
+        );
+
+        const result: RaycastHit[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            const base = index * RAY_HIT_STRIDE;
+            result[index] = {
+                body: ids[base],
+                distance: hits[base + 1],
+                point: [hits[base + 2], hits[base + 3], hits[base + 4]],
+                normal: [hits[base + 5], hits[base + 6], hits[base + 7]]
+            };
+        }
+        return result;
+    }
+
+    raycastClosest(origin: Vec3Tuple, direction: Vec3Tuple, maxDistance = Number.POSITIVE_INFINITY): RaycastHit | null {
+        this.ensureAlive();
+        assertVec3(origin, "origin");
+        assertVec3(direction, "direction");
+        assertRayDistance(maxDistance);
+
+        const hits = this.queryHits();
+        const ids = this.queryIds();
+        const written = this.wasm.raycastClosest(
+            origin[0],
+            origin[1],
+            origin[2],
+            direction[0],
+            direction[1],
+            direction[2],
+            maxDistance,
+            hits.byteOffset
+        );
+        if (written === 0) {
+            return null;
+        }
+        return {
+            body: ids[0],
+            distance: hits[1],
+            point: [hits[2], hits[3], hits[4]],
+            normal: [hits[5], hits[6], hits[7]]
+        };
+    }
+
+    overlapSphere(center: Vec3Tuple, radius: number, capacity = DEFAULT_QUERY_CAPACITY): number[] {
+        this.ensureAlive();
+        assertVec3(center, "center");
+        assertFinite(radius, "radius");
+        if (radius < 0) {
+            throw new Error("radius must be non-negative");
+        }
+        assertInteger(capacity, "capacity");
+
+        const ids = this.queryIds();
+        if (capacity < 1 || capacity > ids.length) {
+            throw new Error(`capacity must be between 1 and ${ids.length}`);
+        }
+        const count = this.wasm.overlapSphere(
+            center[0],
+            center[1],
+            center[2],
+            radius,
+            ids.byteOffset,
+            capacity
+        );
+
+        const result: number[] = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+            result[index] = ids[index];
+        }
+        return result;
+    }
+
     dispose(): void {
         this.disposed = true;
         this.activeBodies.clear();
@@ -503,6 +605,8 @@ export class WasmPhysicsWorld3D {
         this.velocityView = null;
         this.angularVelocityView = null;
         this.contactView = null;
+        this.queryHitsView = null;
+        this.queryIdsView = null;
     }
 
     private readRotation(id: number): MutableQuat {
@@ -519,7 +623,36 @@ export class WasmPhysicsWorld3D {
             this.velocityView = null;
             this.angularVelocityView = null;
             this.contactView = null;
+            this.queryHitsView = null;
+            this.queryIdsView = null;
         }
+    }
+
+    private queryHits(): Float32Array {
+        this.refreshViews();
+        if (this.queryHitsView === null) {
+            const pointer = this.wasm.queryScratchPtr();
+            const capacity = this.wasm.queryScratchCapacity();
+            if (pointer === 0 || capacity <= 0 || (pointer & 15) !== 0) {
+                throw new Error("query scratch is unavailable");
+            }
+            const elements = capacity * RAY_HIT_STRIDE;
+            this.queryHitsView = new Float32Array(this.wasm.memory.buffer, pointer, elements);
+        }
+        return this.queryHitsView;
+    }
+
+    private queryIds(): Int32Array {
+        this.refreshViews();
+        if (this.queryIdsView === null) {
+            const pointer = this.wasm.queryScratchPtr();
+            const capacity = this.wasm.queryScratchCapacity();
+            if (pointer === 0 || capacity <= 0 || (pointer & 15) !== 0) {
+                throw new Error("query scratch is unavailable");
+            }
+            this.queryIdsView = new Int32Array(this.wasm.memory.buffer, pointer, capacity * RAY_HIT_STRIDE);
+        }
+        return this.queryIdsView;
     }
 
     private ensureAlive(): void {

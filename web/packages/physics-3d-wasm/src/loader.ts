@@ -16,6 +16,8 @@ export interface WasmPhysicsExports {
     body_destroy(id: number): number;
     bodySetSphere(id: number, radius: number, density: number): number;
     body_set_sphere(id: number, radius: number, density: number): number;
+    bodyAddSphere(id: number, radius: number, density: number, px: number, py: number, pz: number): number;
+    body_add_sphere(id: number, radius: number, density: number, px: number, py: number, pz: number): number;
     bodySetBox(id: number, hx: number, hy: number, hz: number, density: number): number;
     body_set_box(id: number, hx: number, hy: number, hz: number, density: number): number;
     bodySetTransform(id: number, px: number, py: number, pz: number, qx: number, qy: number, qz: number, qw: number): number;
@@ -51,6 +53,30 @@ export interface WasmPhysicsExports {
     getVelocitiesView(): bigint;
     getAngularVelocitiesView(): bigint;
     getContactsView(): bigint;
+    raycastAll(
+        ox: number,
+        oy: number,
+        oz: number,
+        dx: number,
+        dy: number,
+        dz: number,
+        maxDistance: number,
+        hits: number,
+        capacity: number
+    ): number;
+    raycastClosest(
+        ox: number,
+        oy: number,
+        oz: number,
+        dx: number,
+        dy: number,
+        dz: number,
+        maxDistance: number,
+        hit: number
+    ): number;
+    overlapSphere(cx: number, cy: number, cz: number, radius: number, ids: number, capacity: number): number;
+    queryScratchPtr(): number;
+    queryScratchCapacity(): number;
 }
 
 const REQUIRED_EXPORTS = [
@@ -61,6 +87,7 @@ const REQUIRED_EXPORTS = [
     "bodyCreate",
     "bodyDestroy",
     "bodySetSphere",
+    "bodyAddSphere",
     "bodySetBox",
     "bodySetTransform",
     "bodySetVelocity",
@@ -78,7 +105,12 @@ const REQUIRED_EXPORTS = [
     "get_transforms_view",
     "get_velocities_view",
     "get_angular_velocities_view",
-    "get_contacts_view"
+    "get_contacts_view",
+    "raycastAll",
+    "raycastClosest",
+    "overlapSphere",
+    "queryScratchPtr",
+    "queryScratchCapacity"
 ] as const;
 
 export function decodeBase64(base64: string): Uint8Array {

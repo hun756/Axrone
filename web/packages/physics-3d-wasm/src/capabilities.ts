@@ -23,6 +23,7 @@ export interface WasmPhysicsCapabilities {
     readonly contactEvents: boolean;
     readonly constraints: boolean;
     readonly queries: boolean;
+    readonly raycast: boolean;
     readonly characterController: boolean;
 }
 
@@ -50,6 +51,7 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
     sleeping: false,
     contactEvents: false,
     constraints: false,
-    queries: false,
+    queries: true,
+    raycast: true,
     characterController: false
 });

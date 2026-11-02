@@ -32,6 +32,8 @@ int32_t bodyDestroy(int32_t id);
 int32_t body_destroy(int32_t id);
 int32_t bodySetSphere(int32_t id, float radius, float density);
 int32_t body_set_sphere(int32_t id, float radius, float density);
+int32_t bodyAddSphere(int32_t id, float radius, float density, float px, float py, float pz);
+int32_t body_add_sphere(int32_t id, float radius, float density, float px, float py, float pz);
 int32_t bodySetBox(int32_t id, float hx, float hy, float hz, float density);
 int32_t body_set_box(int32_t id, float hx, float hy, float hz, float density);
 int32_t bodySetTransform(int32_t id, float px, float py, float pz, float qx, float qy, float qz, float qw);
@@ -67,6 +69,12 @@ uint64_t getTransformsView(void);
 uint64_t getVelocitiesView(void);
 uint64_t getAngularVelocitiesView(void);
 uint64_t getContactsView(void);
+
+int32_t raycastAll(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, uintptr_t hits, int32_t capacity);
+int32_t raycastClosest(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, uintptr_t hit);
+int32_t overlapSphere(float cx, float cy, float cz, float radius, uintptr_t ids, int32_t capacity);
+uintptr_t queryScratchPtr(void);
+int32_t queryScratchCapacity(void);
 
 #ifdef __cplusplus
 }

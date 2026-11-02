@@ -12,8 +12,12 @@ describe('WASM physics capabilities', () => {
         expect(WASM_PHYSICS_CAPABILITIES.shapes.capsule).toBe(false);
         expect(WASM_PHYSICS_CAPABILITIES.multiShape).toBe(false);
         expect(WASM_PHYSICS_CAPABILITIES.constraints).toBe(false);
-        expect(WASM_PHYSICS_CAPABILITIES.queries).toBe(false);
+        expect(WASM_PHYSICS_CAPABILITIES.queries).toBe(true);
+        expect(WASM_PHYSICS_CAPABILITIES.raycast).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.sleeping).toBe(false);
         expect(WASM_PHYSICS_CAPABILITIES.contactEvents).toBe(false);
+        expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES)).toBe(true);
+        expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES.bodyTypes)).toBe(true);
+        expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES.shapes)).toBe(true);
     });
 });

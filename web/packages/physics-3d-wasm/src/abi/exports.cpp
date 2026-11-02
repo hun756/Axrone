@@ -1,5 +1,6 @@
 #include "axrone/physics_wasm.h"
 
+#include "core/query.h"
 #include "core/world.h"
 #include "platform/wasm.h"
 #include "runtime/arena.h"
@@ -16,8 +17,29 @@ World g_world;
 alignas(64) unsigned char g_hostMemory[64 * 1024 * 1024];
 #endif
 
+constexpr int32_t kQueryScratchCapacity = 256;
+alignas(16) axrone::physics::RayHit g_queryScratch[kQueryScratchCapacity];
+
+static_assert(sizeof(axrone::physics::RayHit) == 32, "ray hit record must stay 32 bytes");
+
 uint64_t packView(uintptr_t pointer, size_t bytes) {
     return (static_cast<uint64_t>(pointer) << 32) | static_cast<uint64_t>(bytes);
+}
+
+bool queryOutputValid(uintptr_t pointer, size_t elementBytes, int32_t capacity) {
+    if (capacity <= 0 || (pointer & 3U) != 0) {
+        return false;
+    }
+#if AXRONE_PHYSICS_TARGET_WASM
+    const size_t limit = static_cast<size_t>(__builtin_wasm_memory_size(0)) * 65536;
+#else
+    const size_t limit = g_arena.capacity();
+#endif
+    const size_t start = static_cast<size_t>(pointer);
+    if (start == 0 || start >= limit) {
+        return false;
+    }
+    return static_cast<size_t>(capacity) <= (limit - start) / elementBytes;
 }
 
 }
@@ -57,6 +79,14 @@ AXRONE_PHYSICS_EXPORT(bodyDestroy) int32_t bodyDestroy(int32_t id) {
 
 AXRONE_PHYSICS_EXPORT(bodySetSphere) int32_t bodySetSphere(int32_t id, float radius, float density) {
     return g_world.setSphere(id, radius, density);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyAddSphere) int32_t bodyAddSphere(int32_t id, float radius, float density, float px, float py, float pz) {
+    return g_world.addSphere(id, radius, density, px, py, pz);
+}
+
+AXRONE_PHYSICS_EXPORT(body_add_sphere) int32_t body_add_sphere(int32_t id, float radius, float density, float px, float py, float pz) {
+    return bodyAddSphere(id, radius, density, px, py, pz);
 }
 
 AXRONE_PHYSICS_EXPORT(bodySetBox) int32_t bodySetBox(int32_t id, float hx, float hy, float hz, float density) {
@@ -245,4 +275,49 @@ AXRONE_PHYSICS_EXPORT(getAngularVelocitiesView) uint64_t getAngularVelocitiesVie
 
 AXRONE_PHYSICS_EXPORT(getContactsView) uint64_t getContactsView(void) {
     return get_contacts_view();
+}
+
+AXRONE_PHYSICS_EXPORT(raycastAll) int32_t raycastAll(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, uintptr_t hits, int32_t capacity) {
+    if (!queryOutputValid(hits, sizeof(axrone::physics::RayHit), capacity)) {
+        return 0;
+    }
+    return axrone::physics::raycastAll(
+        g_world,
+        Vec3(ox, oy, oz),
+        Vec3(dx, dy, dz),
+        maxDistance,
+        reinterpret_cast<axrone::physics::RayHit*>(hits),
+        capacity);
+}
+
+AXRONE_PHYSICS_EXPORT(raycastClosest) int32_t raycastClosest(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, uintptr_t hit) {
+    if (!queryOutputValid(hit, sizeof(axrone::physics::RayHit), 1)) {
+        return 0;
+    }
+    return axrone::physics::raycastClosest(
+        g_world,
+        Vec3(ox, oy, oz),
+        Vec3(dx, dy, dz),
+        maxDistance,
+        *reinterpret_cast<axrone::physics::RayHit*>(hit)) ? 1 : 0;
+}
+
+AXRONE_PHYSICS_EXPORT(overlapSphere) int32_t overlapSphere(float cx, float cy, float cz, float radius, uintptr_t ids, int32_t capacity) {
+    if (!queryOutputValid(ids, sizeof(int32_t), capacity)) {
+        return 0;
+    }
+    return axrone::physics::overlapSphere(
+        g_world,
+        Vec3(cx, cy, cz),
+        radius,
+        reinterpret_cast<int32_t*>(ids),
+        capacity);
+}
+
+AXRONE_PHYSICS_EXPORT(queryScratchPtr) uintptr_t queryScratchPtr(void) {
+    return reinterpret_cast<uintptr_t>(g_queryScratch);
+}
+
+AXRONE_PHYSICS_EXPORT(queryScratchCapacity) int32_t queryScratchCapacity(void) {
+    return kQueryScratchCapacity;
 }

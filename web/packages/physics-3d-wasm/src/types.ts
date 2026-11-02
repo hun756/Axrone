@@ -50,3 +50,10 @@ export interface ContactSnapshot {
     readonly normal: MutableVec3;
     readonly penetration: number;
 }
+
+export interface RaycastHit {
+    readonly body: number;
+    readonly distance: number;
+    readonly point: Vec3Tuple;
+    readonly normal: Vec3Tuple;
+}

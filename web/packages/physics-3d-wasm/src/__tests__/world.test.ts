@@ -426,3 +426,164 @@ describe('WasmPhysicsWorld3D', () => {
         world.dispose();
     });
 });
+
+function addStaticBox(world: WasmPhysicsWorld3D, position: readonly [number, number, number]): number {
+    return world.createBody({
+        type: 'static',
+        position,
+        shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] }
+    });
+}
+
+function addStaticSphere(world: WasmPhysicsWorld3D, position: readonly [number, number, number], radius: number): number {
+    return world.createBody({
+        type: 'static',
+        position,
+        shape: { kind: 'sphere', radius }
+    });
+}
+
+describe('query facade', () => {
+    it('hits a box along the ray', async () => {
+        const world = await createWorld(16);
+        const box = addStaticBox(world, [0, 0, 0]);
+
+        const hits = world.raycast([-5, 0, 0], [1, 0, 0], 20);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].body).toBe(box);
+        expect(hits[0].distance).toBeCloseTo(4.5, 4);
+        expect(hits[0].point[0]).toBeCloseTo(-0.5, 4);
+        expect(hits[0].point[1]).toBeCloseTo(0, 4);
+        expect(hits[0].normal[0]).toBeCloseTo(-1, 4);
+        expect(hits[0].normal[1]).toBeCloseTo(0, 4);
+
+        const infinite = world.raycast([-5, 0, 0], [1, 0, 0]);
+        expect(infinite).toHaveLength(1);
+        expect(infinite[0].body).toBe(box);
+
+        const closest = world.raycastClosest([-5, 0, 0], [1, 0, 0], 20);
+        expect(closest).not.toBeNull();
+        expect(closest?.body).toBe(box);
+        expect(closest?.distance).toBeCloseTo(4.5, 4);
+        world.dispose();
+    });
+
+    it('hits a sphere and reports the surface normal', async () => {
+        const world = await createWorld(16);
+        const sphere = addStaticSphere(world, [0, 0, 0], 0.5);
+
+        const hits = world.raycast([0, 0, -5], [0, 0, 1], 20);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].body).toBe(sphere);
+        expect(hits[0].distance).toBeCloseTo(4.5, 4);
+        expect(hits[0].point[2]).toBeCloseTo(-0.5, 4);
+        expect(hits[0].normal[2]).toBeCloseTo(-1, 4);
+        world.dispose();
+    });
+
+    it('returns empty results and null when nothing is hit', async () => {
+        const world = await createWorld(16);
+        addStaticBox(world, [0, 0, 0]);
+
+        expect(world.raycast([-5, 5, 0], [1, 0, 0], 20)).toEqual([]);
+        expect(world.raycastClosest([-5, 5, 0], [1, 0, 0], 20)).toBeNull();
+        expect(world.raycast([-5, 0, 0], [0, 0, 0], 20)).toEqual([]);
+        world.dispose();
+    });
+
+    it('cuts rays at maxDistance', async () => {
+        const world = await createWorld(16);
+        addStaticBox(world, [0, 0, 0]);
+
+        expect(world.raycast([-5, 0, 0], [1, 0, 0], 4)).toEqual([]);
+        expect(world.raycastClosest([-5, 0, 0], [1, 0, 0], 4)).toBeNull();
+        expect(world.raycast([-5, 0, 0], [1, 0, 0], 5)).toHaveLength(1);
+        expect(world.raycastClosest([-5, 0, 0], [1, 0, 0], 5)?.body).toBe(0);
+        expect(() => world.raycast([-5, 0, 0], [1, 0, 0], 0)).toThrow();
+        world.dispose();
+    });
+
+    it('reports sane normals for rotated bodies', async () => {
+        const world = await createWorld(16);
+        const angle = Math.PI / 4;
+        const box = world.createBody({
+            type: 'static',
+            position: [0, 0, 0],
+            rotation: [0, 0, Math.sin(angle / 2), Math.cos(angle / 2)],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] }
+        });
+
+        const hits = world.raycast([0.15, 3, 0], [0, -1, 0], 10);
+        expect(hits).toHaveLength(1);
+        const hit = hits[0];
+        expect(hit.body).toBe(box);
+        expect(Math.abs(hit.normal[0])).toBeCloseTo(Math.SQRT1_2, 4);
+        expect(hit.normal[1]).toBeCloseTo(Math.SQRT1_2, 4);
+        expect(hit.normal[2]).toBeCloseTo(0, 4);
+        expect(hit.distance).toBeCloseTo(3 - (Math.SQRT1_2 - 0.15), 3);
+        world.dispose();
+    });
+
+    it('returns overlapping body ids sorted by id', async () => {
+        const world = await createWorld(16);
+        const box = addStaticBox(world, [0, 0, 0]);
+        const near = addStaticSphere(world, [3, 0, 0], 0.5);
+        addStaticSphere(world, [10, 0, 0], 0.5);
+
+        expect(world.overlapSphere([0, 0, 0], 4)).toEqual([box, near]);
+        expect(world.overlapSphere([0, 0, 0], 0)).toEqual([box]);
+        expect(world.overlapSphere([100, 100, 100], 1)).toEqual([]);
+        expect(() => world.overlapSphere([0, 0, 0], 1, 0)).toThrow();
+        expect(() => world.overlapSphere([0, 0, 0], -1)).toThrow();
+        world.dispose();
+    });
+
+    it('hits the offset shape of a multi-shape body through the raw ABI', async () => {
+        const wasm = await loadEmbeddedWasm();
+        expect(wasm.worldInit(16, 256, 0, 0, 0)).toBe(0);
+        const body = wasm.bodyCreate(0, 0, 0, 0, 0, 0, 0, 1);
+        expect(body).toBe(0);
+        expect(wasm.bodySetSphere(body, 0.5, 0)).toBe(0);
+        expect(wasm.body_add_sphere(body, 0.5, 0, 0, 5, 0)).toBe(1);
+
+        const scratch = wasm.queryScratchPtr();
+        expect(scratch).not.toBe(0);
+        expect(scratch % 16).toBe(0);
+        expect(wasm.queryScratchCapacity()).toBe(256);
+
+        const hits = new Float32Array(wasm.memory.buffer, scratch, 8);
+        const ids = new Int32Array(wasm.memory.buffer, scratch, 8);
+
+        expect(wasm.raycastAll(0, 5, -10, 0, 0, 1, 30, scratch, 256)).toBe(1);
+        expect(ids[0]).toBe(body);
+        expect(hits[1]).toBeCloseTo(9.5, 4);
+        expect(hits[2]).toBeCloseTo(0, 4);
+        expect(hits[3]).toBeCloseTo(5, 4);
+        expect(hits[4]).toBeCloseTo(-0.5, 4);
+        expect(hits[7]).toBeCloseTo(-1, 4);
+
+        expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, scratch, 256)).toBe(1);
+        expect(wasm.raycastAll(0, 10, -10, 0, 0, 1, 30, scratch, 256)).toBe(0);
+        expect(wasm.overlapSphere(0, 5, 0, 0.5, scratch, 256)).toBe(1);
+        expect(ids[0]).toBe(body);
+    });
+
+    it('rejects invalid output pointers and capacities without growing memory', async () => {
+        const wasm = await loadEmbeddedWasm();
+        expect(wasm.worldInit(16, 256, 0, 0, 0)).toBe(0);
+        const body = wasm.bodyCreate(0, 0, 0, 0, 0, 0, 0, 1);
+        expect(wasm.bodySetSphere(body, 0.5, 0)).toBe(0);
+
+        const scratch = wasm.queryScratchPtr();
+        const memoryBefore = wasm.worldMemoryBytes();
+
+        expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, scratch, 256)).toBe(1);
+        expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, scratch, 1 << 26)).toBe(0);
+        expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, scratch + 1, 8)).toBe(0);
+        expect(wasm.raycastAll(0, 0, -10, 0, 0, 1, 30, 0, 8)).toBe(0);
+        expect(wasm.raycastClosest(0, 0, -10, 0, 0, 1, 30, scratch + 1)).toBe(0);
+        expect(wasm.overlapSphere(0, 0, 0, 100, scratch, -1)).toBe(0);
+        expect(wasm.overlapSphere(0, 0, 0, 100, 0, 8)).toBe(0);
+        expect(wasm.worldMemoryBytes()).toBe(memoryBefore);
+    });
+});
