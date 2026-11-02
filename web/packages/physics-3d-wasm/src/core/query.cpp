@@ -237,7 +237,7 @@ bool rayHullShape(
     const QueryRay& ray,
     const Vec3& center,
     const Mat3& rotation,
-    const Hull& hull,
+    const HullView& hull,
     LocalHit& out) {
     const Vec3 offset = ray.origin - center;
     const Vec3 ro = rotation.transposeTransform(offset);
@@ -299,7 +299,7 @@ bool rayCylinderShape(
     identity.setIdentity();
     Hull hull;
     buildPrismHull(Vec3(), identity, extents.x, extents.y, hull);
-    return rayHullShape(ray, center, rotation, hull, out);
+    return rayHullShape(ray, center, rotation, makeHullView(hull), out);
 }
 
 bool rayConeShape(
@@ -312,7 +312,7 @@ bool rayConeShape(
     identity.setIdentity();
     Hull hull;
     buildConeHull(Vec3(), identity, extents.x, extents.y, hull);
-    return rayHullShape(ray, center, rotation, hull, out);
+    return rayHullShape(ray, center, rotation, makeHullView(hull), out);
 }
 
 void hullLocalDistance(const Mat3& rotation, const Vec3& offset, int32_t kind, const Vec3& extents, float& distance) {
@@ -328,8 +328,225 @@ void hullLocalDistance(const Mat3& rotation, const Vec3& offset, int32_t kind, c
     Vec3 closest;
     float signedDistance;
     Vec3 hint;
-    hullClosestPoint(hull, local, closest, signedDistance, hint);
+    hullClosestPoint(makeHullView(hull), local, closest, signedDistance, hint);
     distance = signedDistance;
+}
+
+AXRONE_PHYSICS_INLINE Vec3 heightFieldVertex(const ShapeBulk& bulk, int32_t ix, int32_t iz) {
+    const float halfWidth = static_cast<float>(bulk.heightFieldWidth - 1) * 0.5f;
+    const float halfDepth = static_cast<float>(bulk.heightFieldDepth - 1) * 0.5f;
+    return Vec3(
+        (static_cast<float>(ix) - halfWidth) * bulk.heightFieldScale.x,
+        bulk.heights[iz * bulk.heightFieldWidth + ix] * bulk.heightFieldScale.y,
+        (static_cast<float>(iz) - halfDepth) * bulk.heightFieldScale.z
+    );
+}
+
+bool rayTriangleLocal(
+    const Vec3& ro,
+    const Vec3& rd,
+    float maxDistance,
+    const Vec3& a,
+    const Vec3& b,
+    const Vec3& c,
+    LocalHit& out
+) {
+    const Vec3 edge1 = b - a;
+    const Vec3 edge2 = c - a;
+    const Vec3 p = cross(rd, edge2);
+    const float determinant = dot(edge1, p);
+    if (determinant > -kSlabEps && determinant < kSlabEps) {
+        return false;
+    }
+    const float inverse = 1.0f / determinant;
+    const Vec3 s = ro - a;
+    const float u = dot(s, p) * inverse;
+    if (u < 0.0f || u > 1.0f) {
+        return false;
+    }
+    const Vec3 q = cross(s, edge1);
+    const float v = dot(rd, q) * inverse;
+    if (v < 0.0f || u + v > 1.0f) {
+        return false;
+    }
+    const float t = dot(edge2, q) * inverse;
+    if (t < 0.0f || t > maxDistance) {
+        return false;
+    }
+    const Vec3 geometricNormal = cross(edge1, edge2);
+    if (lengthSq(geometricNormal) <= kCrossEps) {
+        return false;
+    }
+    Vec3 normal = normalize(geometricNormal);
+    if (dot(normal, rd) > 0.0f) {
+        normal = -normal;
+    }
+    out.t = t;
+    out.normal = normal;
+    return true;
+}
+
+bool rayMeshShape(
+    const QueryRay& ray,
+    const Vec3& center,
+    const Mat3& rotation,
+    const Shape& shape,
+    LocalHit& out
+) {
+    const ShapeBulk* bulk = shape.bulk;
+    if (bulk == nullptr || bulk->triangleCount <= 0 || bulk->vertexCount <= 0) {
+        return false;
+    }
+    const Vec3 offset = ray.origin - center;
+    const Vec3 ro = rotation.transposeTransform(offset);
+    const Vec3 rd = rotation.transposeTransform(ray.dir);
+
+    const Vec3 localCenter = (bulk->localMin + bulk->localMax) * 0.5f;
+    const Vec3 half(
+        (bulk->localMax.x - bulk->localMin.x) * 0.5f,
+        (bulk->localMax.y - bulk->localMin.y) * 0.5f,
+        (bulk->localMax.z - bulk->localMin.z) * 0.5f
+    );
+    if (!rayBoxShape(ray, center + rotation.transform(localCenter), rotation, half, out)) {
+        return false;
+    }
+    const float slabT = out.t;
+
+    bool found = false;
+    LocalHit best;
+    const int32_t triangleCount = bulk->triangleCount;
+    for (int32_t t = 0; t < triangleCount; ++t) {
+        const Vec3& a = bulk->vertices[bulk->indices[t * 3 + 0]];
+        const Vec3& b = bulk->vertices[bulk->indices[t * 3 + 1]];
+        const Vec3& c = bulk->vertices[bulk->indices[t * 3 + 2]];
+        LocalHit candidate;
+        if (!rayTriangleLocal(ro, rd, ray.maxDistance, a, b, c, candidate)) {
+            continue;
+        }
+        if (!found || candidate.t < best.t) {
+            best = candidate;
+            found = true;
+        }
+    }
+    (void)slabT;
+    if (!found) {
+        return false;
+    }
+    out.t = best.t;
+    out.normal = normalize(rotation.transform(best.normal));
+    return true;
+}
+
+bool rayHeightFieldShape(
+    const QueryRay& ray,
+    const Vec3& center,
+    const Mat3& rotation,
+    const Shape& shape,
+    LocalHit& out
+) {
+    const ShapeBulk* bulk = shape.bulk;
+    if (bulk == nullptr || bulk->heightFieldWidth < 2 || bulk->heightFieldDepth < 2) {
+        return false;
+    }
+    const Vec3 ro = rotation.transposeTransform(ray.origin - center);
+    const Vec3 rd = rotation.transposeTransform(ray.dir);
+
+    const Vec3 localCenter = (bulk->localMin + bulk->localMax) * 0.5f;
+    const Vec3 half(
+        (bulk->localMax.x - bulk->localMin.x) * 0.5f,
+        (bulk->localMax.y - bulk->localMin.y) * 0.5f,
+        (bulk->localMax.z - bulk->localMin.z) * 0.5f
+    );
+    if (!rayBoxShape(ray, center + rotation.transform(localCenter), rotation, half, out)) {
+        return false;
+    }
+
+    bool found = false;
+    LocalHit best;
+    const int32_t width = bulk->heightFieldWidth;
+    const int32_t depth = bulk->heightFieldDepth;
+    for (int32_t iz = 0; iz < depth - 1; ++iz) {
+        for (int32_t ix = 0; ix < width - 1; ++ix) {
+            const Vec3 v00 = heightFieldVertex(*bulk, ix, iz);
+            const Vec3 v10 = heightFieldVertex(*bulk, ix + 1, iz);
+            const Vec3 v01 = heightFieldVertex(*bulk, ix, iz + 1);
+            const Vec3 v11 = heightFieldVertex(*bulk, ix + 1, iz + 1);
+            LocalHit candidate;
+            if (rayTriangleLocal(ro, rd, ray.maxDistance, v00, v10, v11, candidate)) {
+                if (!found || candidate.t < best.t) {
+                    best = candidate;
+                    found = true;
+                }
+            }
+            if (rayTriangleLocal(ro, rd, ray.maxDistance, v00, v11, v01, candidate)) {
+                if (!found || candidate.t < best.t) {
+                    best = candidate;
+                    found = true;
+                }
+            }
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    out.t = best.t;
+    out.normal = normalize(rotation.transform(best.normal));
+    return true;
+}
+
+AXRONE_PHYSICS_INLINE HullView bulkLocalHullView(const ShapeBulk& bulk) {
+    HullView view;
+    view.vertexCount = bulk.vertexCount;
+    view.vertices = bulk.vertices;
+    view.faceCount = bulk.faceCount;
+    view.faceStart = bulk.faceStart;
+    view.faceIndices = bulk.faceIndices;
+    view.faceNormals = bulk.faceNormals;
+    view.faceOffsets = bulk.faceOffsets;
+    return view;
+}
+
+bool pointTriangleDistanceSq(const Vec3& point, const Vec3& a, const Vec3& b, const Vec3& c, float& outDistanceSq) {
+    const Vec3 ab = b - a;
+    const Vec3 ac = c - a;
+    const Vec3 n = cross(ab, ac);
+    const float nLengthSq = lengthSq(n);
+    if (nLengthSq <= kCrossEps) {
+        return false;
+    }
+    const Vec3 ap = point - a;
+    const float dPlane = dot(n, ap);
+    const Vec3 projection = point - n * (dPlane / nLengthSq);
+    const Vec3 edges[3][2] = { { a, b }, { b, c }, { c, a } };
+    bool inside = true;
+    for (int32_t edge = 0; edge < 3; ++edge) {
+        const Vec3 e = edges[edge][1] - edges[edge][0];
+        const Vec3 side = cross(e, n);
+        if (dot(side, projection - edges[edge][0]) > 0.0f) {
+            inside = false;
+            break;
+        }
+    }
+    if (inside) {
+        const float planeDistance = fabsf(dPlane) / sqrtf(nLengthSq);
+        outDistanceSq = planeDistance * planeDistance;
+        return true;
+    }
+    float best = kBig;
+    for (int32_t edge = 0; edge < 3; ++edge) {
+        const Vec3& p0 = edges[edge][0];
+        const Vec3& p1 = edges[edge][1];
+        const Vec3 direction = p1 - p0;
+        const float span = lengthSq(direction);
+        const float t = span <= kEps ? 0.0f : clampf(dot(point - p0, direction) / span, 0.0f, 1.0f);
+        const Vec3 candidate = p0 + direction * t;
+        const float distanceSq = lengthSq(point - candidate);
+        if (distanceSq < best) {
+            best = distanceSq;
+        }
+    }
+    outDistanceSq = best;
+    return true;
 }
 
 bool testShape(
@@ -358,6 +575,20 @@ bool testShape(
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
         struck = rayConeShape(ray, center, rotation, shape.extents, local);
+    } else if (shape.kind == kShapeHull) {
+        if (shape.bulk != nullptr && shape.bulk->faceCount > 0) {
+            Mat3 rotation;
+            shapeWorldRotation(body.rotation, shape, rotation);
+            struck = rayHullShape(ray, center, rotation, bulkLocalHullView(*shape.bulk), local);
+        }
+    } else if (shape.kind == kShapeMesh) {
+        Mat3 rotation;
+        shapeWorldRotation(body.rotation, shape, rotation);
+        struck = rayMeshShape(ray, center, rotation, shape, local);
+    } else if (shape.kind == kShapeHeightField) {
+        Mat3 rotation;
+        shapeWorldRotation(body.rotation, shape, rotation);
+        struck = rayHeightFieldShape(ray, center, rotation, shape, local);
     } else {
         Mat3 rotation;
         shapeWorldRotation(body.rotation, shape, rotation);
@@ -607,6 +838,59 @@ int32_t overlapSphere(
             shapeWorldRotation(body.rotation, shape, rotation);
             const Vec3 local = rotation.transposeTransform(offset);
             Vec3 closest;
+            if (shape.kind == kShapeHull) {
+                if (shape.bulk == nullptr || shape.bulk->faceCount <= 0) {
+                    continue;
+                }
+                float distance = 0.0f;
+                Vec3 point;
+                Vec3 hint;
+                hullClosestPoint(bulkLocalHullView(*shape.bulk), local, point, distance, hint);
+                if (distance <= radius) {
+                    struck = true;
+                    break;
+                }
+                continue;
+            }
+            if (shape.kind == kShapeMesh) {
+                const ShapeBulk* bulk = shape.bulk;
+                if (bulk == nullptr || bulk->triangleCount <= 0 || bulk->vertexCount <= 0) {
+                    continue;
+                }
+                const float reachSq = radiusSq;
+                for (int32_t t = 0; t < bulk->triangleCount; ++t) {
+                    const Vec3& a = bulk->vertices[bulk->indices[t * 3 + 0]];
+                    const Vec3& b = bulk->vertices[bulk->indices[t * 3 + 1]];
+                    const Vec3& c = bulk->vertices[bulk->indices[t * 3 + 2]];
+                    float distanceSq = 0.0f;
+                    if (!pointTriangleDistanceSq(local, a, b, c, distanceSq)) {
+                        continue;
+                    }
+                    if (distanceSq <= reachSq) {
+                        struck = true;
+                        break;
+                    }
+                }
+                if (struck) {
+                    break;
+                }
+                continue;
+            }
+            if (shape.kind == kShapeHeightField) {
+                if (shape.bulk == nullptr || shape.bulk->heightFieldWidth < 2) {
+                    continue;
+                }
+                closest = Vec3(
+                    clampf(local.x, shape.bulk->localMin.x, shape.bulk->localMax.x),
+                    clampf(local.y, shape.bulk->localMin.y, shape.bulk->localMax.y),
+                    clampf(local.z, shape.bulk->localMin.z, shape.bulk->localMax.z)
+                );
+                if (lengthSq(local - closest) <= radiusSq) {
+                    struck = true;
+                    break;
+                }
+                continue;
+            }
             if (shape.kind == kShapeCylinder || shape.kind == kShapeCone) {
                 float distance = 0.0f;
                 hullLocalDistance(rotation, offset, shape.kind, shape.extents, distance);

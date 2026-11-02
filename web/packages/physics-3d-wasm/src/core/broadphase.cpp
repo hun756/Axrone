@@ -60,6 +60,43 @@ void updateBounds(World& world) {
                 ex = shape.extents.x;
                 ey = ex;
                 ez = ex;
+            } else if (shape.kind == kShapeMesh || shape.kind == kShapeHeightField) {
+                const ShapeBulk* bulk = shape.bulk;
+                if (bulk == nullptr) {
+                    continue;
+                }
+                Mat3 worldRotation;
+                shapeWorldRotation(rotation, shape, worldRotation);
+                const Vec3& localMin = bulk->localMin;
+                const Vec3& localMax = bulk->localMax;
+                for (int32_t corner = 0; corner < 8; ++corner) {
+                    const Vec3 localPoint(
+                        (corner & 1) != 0 ? localMax.x : localMin.x,
+                        (corner & 2) != 0 ? localMax.y : localMin.y,
+                        (corner & 4) != 0 ? localMax.z : localMin.z
+                    );
+                    const Vec3 worldPoint = center + worldRotation.transform(localPoint);
+                    if (worldPoint.x - bounds.minX < 0.0f) {
+                        bounds.minX = worldPoint.x;
+                    }
+                    if (worldPoint.y - bounds.minY < 0.0f) {
+                        bounds.minY = worldPoint.y;
+                    }
+                    if (worldPoint.z - bounds.minZ < 0.0f) {
+                        bounds.minZ = worldPoint.z;
+                    }
+                    if (worldPoint.x - bounds.maxX > 0.0f) {
+                        bounds.maxX = worldPoint.x;
+                    }
+                    if (worldPoint.y - bounds.maxY > 0.0f) {
+                        bounds.maxY = worldPoint.y;
+                    }
+                    if (worldPoint.z - bounds.maxZ > 0.0f) {
+                        bounds.maxZ = worldPoint.z;
+                    }
+                }
+                covered = true;
+                continue;
             } else if (shape.kind == kShapeCapsule) {
                 Mat3 worldRotation;
                 shapeWorldRotation(rotation, shape, worldRotation);

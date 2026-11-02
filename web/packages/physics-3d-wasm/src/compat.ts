@@ -36,6 +36,14 @@ export interface CompatShapeDef {
     readonly height?: number;
     readonly rotation?: Partial<CompatQuat>;
     readonly isSensor?: boolean;
+    readonly vertices?: readonly (Partial<CompatVec3> | undefined)[];
+    readonly indices?: readonly number[] | Uint32Array;
+    readonly heights?: readonly number[] | Float32Array;
+    readonly width?: number;
+    readonly depth?: number;
+    readonly scaleX?: number;
+    readonly scaleY?: number;
+    readonly scaleZ?: number;
 }
 
 export interface CompatMaterial {
@@ -126,6 +134,21 @@ function quaternion(value: Partial<CompatQuat> | undefined): QuatTuple {
         value?.z ?? 0,
         value?.w ?? 1
     ];
+}
+
+function flattenCompatVertices(vertices: CompatShapeDef["vertices"]): number[] {
+    if (vertices === undefined) {
+        throw new Error("shape requires vertices");
+    }
+    const flat: number[] = [];
+    for (let index = 0; index < vertices.length; index += 1) {
+        const vertex = vertices[index];
+        if (vertex === undefined) {
+            throw new Error(`vertex ${index} is missing`);
+        }
+        flat.push(vertex.x ?? 0, vertex.y ?? 0, vertex.z ?? 0);
+    }
+    return flat;
 }
 
 function eventTimestamp(): number {
@@ -400,6 +423,61 @@ export class WasmPhysicsWorld3DCompat {
             density: 1,
             offset: vector(def.center, 0),
             rotation: quaternion(def.rotation)
+        });
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
+    createHullShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        const vertices = flattenCompatVertices(def.vertices);
+        const shapeId = this.physics.attachHull(bodyId, {
+            vertices,
+            density: 1,
+            offset: vector(def.center, 0)
+        });
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
+    createTriangleMeshShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        const vertices = flattenCompatVertices(def.vertices);
+        if (def.indices === undefined) {
+            throw new Error("triangle mesh shape requires indices");
+        }
+        const shapeId = this.physics.attachMesh(bodyId, {
+            vertices,
+            indices: def.indices,
+            offset: vector(def.center, 0)
+        });
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
+    createHeightfieldShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        if (def.heights === undefined) {
+            throw new Error("heightfield shape requires heights");
+        }
+        const shapeId = this.physics.attachHeightField(bodyId, {
+            width: def.width ?? 0,
+            depth: def.depth ?? 0,
+            heights: def.heights,
+            scale: [def.scaleX ?? 1, def.scaleY ?? 1, def.scaleZ ?? 1],
+            offset: vector(def.center, 0)
         });
         this.registerShape(bodyId, shapeId);
         this.applyShapeMaterial(shapeId, material);

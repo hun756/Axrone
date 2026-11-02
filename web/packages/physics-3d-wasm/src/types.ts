@@ -49,7 +49,33 @@ export interface ConeShape {
     readonly halfHeight: number;
 }
 
-export type Shape = SphereShape | BoxShape | CapsuleShape | CylinderShape | ConeShape;
+export interface Float32ArrayLike {
+    readonly length: number;
+    readonly [index: number]: number;
+}
+
+export type VertexSource = readonly number[] | Float32ArrayLike;
+
+export interface HullShape {
+    readonly kind: "hull";
+    readonly vertices: VertexSource;
+}
+
+export interface TriangleMeshShape {
+    readonly kind: "mesh";
+    readonly vertices: VertexSource;
+    readonly indices: readonly number[] | Uint32Array;
+}
+
+export interface HeightFieldShape {
+    readonly kind: "heightField";
+    readonly width: number;
+    readonly depth: number;
+    readonly heights: readonly number[] | Float32Array;
+    readonly scale?: Vec3Tuple;
+}
+
+export type Shape = SphereShape | BoxShape | CapsuleShape | CylinderShape | ConeShape | HullShape | TriangleMeshShape | HeightFieldShape;
 
 export interface CapsuleAttachOptions {
     readonly radius: number;
@@ -73,6 +99,26 @@ export interface ConeAttachOptions {
     readonly density?: number;
     readonly offset?: Vec3Tuple;
     readonly rotation?: QuatTuple;
+}
+
+export interface HullAttachOptions {
+    readonly vertices: VertexSource;
+    readonly density?: number;
+    readonly offset?: Vec3Tuple;
+}
+
+export interface MeshAttachOptions {
+    readonly vertices: VertexSource;
+    readonly indices: readonly number[] | Uint32Array;
+    readonly offset?: Vec3Tuple;
+}
+
+export interface HeightFieldAttachOptions {
+    readonly width: number;
+    readonly depth: number;
+    readonly heights: readonly number[] | Float32Array;
+    readonly scale?: Vec3Tuple;
+    readonly offset?: Vec3Tuple;
 }
 
 export interface BodyOptions {

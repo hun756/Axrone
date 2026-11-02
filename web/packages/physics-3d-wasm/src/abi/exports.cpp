@@ -768,6 +768,137 @@ AXRONE_PHYSICS_EXPORT(shapeDestroy) int32_t shapeDestroy(int32_t shapeId) {
     return g_world.shapeDestroy(shapeId);
 }
 
+AXRONE_PHYSICS_EXPORT(shapeCreateHull) int32_t shapeCreateHull(int32_t bodyId, float density, float cx, float cy, float cz) {
+    const int32_t slot = g_world.addHull(bodyId, density, cx, cy, cz, 0.0f, 0.0f, 0.0f, 1.0f);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_hull) int32_t shape_create_hull(int32_t bodyId, float density, float cx, float cy, float cz) {
+    return shapeCreateHull(bodyId, density, cx, cy, cz);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeCreateMesh) int32_t shapeCreateMesh(int32_t bodyId, float density, float cx, float cy, float cz) {
+    const int32_t slot = g_world.addMesh(bodyId, density, cx, cy, cz, 0.0f, 0.0f, 0.0f, 1.0f);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_mesh) int32_t shape_create_mesh(int32_t bodyId, float density, float cx, float cy, float cz) {
+    return shapeCreateMesh(bodyId, density, cx, cy, cz);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeCreateHeightField) int32_t shapeCreateHeightField(
+    int32_t bodyId,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    int32_t width,
+    int32_t depth,
+    float scaleX,
+    float scaleY,
+    float scaleZ
+) {
+    using axrone::physics::isFinite;
+    if (width < 2 || depth < 2 ||
+        width > axrone::physics::kBulkMaxHeightFieldSide ||
+        depth > axrone::physics::kBulkMaxHeightFieldSide ||
+        !isFinite(scaleX) || !isFinite(scaleY) || !isFinite(scaleZ) ||
+        scaleX <= 0.0f || scaleY <= 0.0f || scaleZ <= 0.0f) {
+        return -1;
+    }
+    const int32_t slot = g_world.addHeightField(bodyId, density, cx, cy, cz, 0.0f, 0.0f, 0.0f, 1.0f);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_height_field) int32_t shape_create_height_field(
+    int32_t bodyId,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    int32_t width,
+    int32_t depth,
+    float scaleX,
+    float scaleY,
+    float scaleZ
+) {
+    return shapeCreateHeightField(bodyId, density, cx, cy, cz, width, depth, scaleX, scaleY, scaleZ);
+}
+
+AXRONE_PHYSICS_EXPORT(worldAlloc) uintptr_t worldAlloc(int32_t bytes) {
+    return g_world.initialized ? g_world.bulkAlloc(bytes) : 0;
+}
+
+AXRONE_PHYSICS_EXPORT(world_alloc) uintptr_t world_alloc(int32_t bytes) {
+    return worldAlloc(bytes);
+}
+
+AXRONE_PHYSICS_EXPORT(worldRelease) int32_t worldRelease(uintptr_t address) {
+    return g_world.initialized ? g_world.bulkRelease(address) : -1;
+}
+
+AXRONE_PHYSICS_EXPORT(world_release) int32_t world_release(uintptr_t address) {
+    return worldRelease(address);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetVertices) int32_t shapeSetVertices(int32_t shapeId, uintptr_t address, int32_t count) {
+    if (!g_world.initialized) {
+        return -1;
+    }
+    return g_world.setShapeVertices(shapeId, address, count);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_vertices) int32_t shape_set_vertices(int32_t shapeId, uintptr_t address, int32_t count) {
+    return shapeSetVertices(shapeId, address, count);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetIndices) int32_t shapeSetIndices(int32_t shapeId, uintptr_t address, int32_t count) {
+    if (!g_world.initialized) {
+        return -1;
+    }
+    return g_world.setShapeIndices(shapeId, address, count);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_indices) int32_t shape_set_indices(int32_t shapeId, uintptr_t address, int32_t count) {
+    return shapeSetIndices(shapeId, address, count);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetHeightField) int32_t shapeSetHeightField(
+    int32_t shapeId,
+    uintptr_t address,
+    int32_t width,
+    int32_t depth,
+    float scaleX,
+    float scaleY,
+    float scaleZ
+) {
+    if (!g_world.initialized) {
+        return -1;
+    }
+    return g_world.setShapeHeightField(shapeId, address, width, depth, scaleX, scaleY, scaleZ);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_height_field) int32_t shape_set_height_field(
+    int32_t shapeId,
+    uintptr_t address,
+    int32_t width,
+    int32_t depth,
+    float scaleX,
+    float scaleY,
+    float scaleZ
+) {
+    return shapeSetHeightField(shapeId, address, width, depth, scaleX, scaleY, scaleZ);
+}
+
 AXRONE_PHYSICS_EXPORT(shape_destroy) int32_t shape_destroy(int32_t shapeId) {
     return shapeDestroy(shapeId);
 }

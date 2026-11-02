@@ -165,6 +165,60 @@ export interface WasmPhysicsExports {
     ): number;
     shapeDestroy(shapeId: number): number;
     shape_destroy(shapeId: number): number;
+    shapeCreateHull(bodyId: number, density: number, cx: number, cy: number, cz: number): number;
+    shape_create_hull(bodyId: number, density: number, cx: number, cy: number, cz: number): number;
+    shapeCreateMesh(bodyId: number, density: number, cx: number, cy: number, cz: number): number;
+    shape_create_mesh(bodyId: number, density: number, cx: number, cy: number, cz: number): number;
+    shapeCreateHeightField(
+        bodyId: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        width: number,
+        depth: number,
+        scaleX: number,
+        scaleY: number,
+        scaleZ: number
+    ): number;
+    shape_create_height_field(
+        bodyId: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        width: number,
+        depth: number,
+        scaleX: number,
+        scaleY: number,
+        scaleZ: number
+    ): number;
+    worldAlloc(bytes: number): number;
+    world_alloc(bytes: number): number;
+    worldRelease(address: number): number;
+    world_release(address: number): number;
+    shapeSetVertices(shapeId: number, address: number, count: number): number;
+    shape_set_vertices(shapeId: number, address: number, count: number): number;
+    shapeSetIndices(shapeId: number, address: number, count: number): number;
+    shape_set_indices(shapeId: number, address: number, count: number): number;
+    shapeSetHeightField(
+        shapeId: number,
+        address: number,
+        width: number,
+        depth: number,
+        scaleX: number,
+        scaleY: number,
+        scaleZ: number
+    ): number;
+    shape_set_height_field(
+        shapeId: number,
+        address: number,
+        width: number,
+        depth: number,
+        scaleX: number,
+        scaleY: number,
+        scaleZ: number
+    ): number;
     shapeClear(bodyId: number): number;
     shape_clear(bodyId: number): number;
     shapeGetBody(shapeId: number): number;
@@ -467,6 +521,14 @@ const REQUIRED_EXPORTS = [
     "shapeCreateCapsule",
     "shapeCreateCylinder",
     "shapeCreateCone",
+    "shapeCreateHull",
+    "shapeCreateMesh",
+    "shapeCreateHeightField",
+    "worldAlloc",
+    "worldRelease",
+    "shapeSetVertices",
+    "shapeSetIndices",
+    "shapeSetHeightField",
     "shapeDestroy",
     "shapeClear",
     "shapeGetBody",

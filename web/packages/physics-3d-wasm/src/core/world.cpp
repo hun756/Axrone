@@ -41,6 +41,12 @@ bool accumulateMass(const Body& body, float& mass, float& inertiaX, float& inert
         if (!shapeValid(shape)) {
             continue;
         }
+        if (shape.kind == kShapeMesh || shape.kind == kShapeHeightField) {
+            continue;
+        }
+        if (shape.kind == kShapeHull && shape.bulk == nullptr) {
+            continue;
+        }
 
         float shapeMass = 0.0f;
         float shapeInertiaX = 0.0f;
@@ -106,48 +112,8 @@ bool accumulateMass(const Body& body, float& mass, float& inertiaX, float& inert
     return isFinite(mass) && isFinite(inertiaX) && isFinite(inertiaY) && isFinite(inertiaZ);
 }
 
-bool recomputeMass(Body& body) {
-    float mass = 0.0f;
-    float inertiaX = 0.0f;
-    float inertiaY = 0.0f;
-    float inertiaZ = 0.0f;
-    const bool finite = accumulateMass(body, mass, inertiaX, inertiaY, inertiaZ);
-
-    if (body.state != kBodyDynamic || !finite) {
-        zeroMass(body);
-        return finite;
-    }
-
-    const bool overridden = body.customMass > 0.0f;
-    if (mass <= 0.0f && !overridden) {
-        zeroMass(body);
-        return true;
-    }
-
-    const float effectiveMass = overridden ? body.customMass : mass;
-    float inverse[3];
-    inverse[0] = body.customInertia.x > 0.0f ? 1.0f / body.customInertia.x : (inertiaX > 0.0f ? 1.0f / inertiaX : 0.0f);
-    inverse[1] = body.customInertia.y > 0.0f ? 1.0f / body.customInertia.y : (inertiaY > 0.0f ? 1.0f / inertiaY : 0.0f);
-    inverse[2] = body.customInertia.z > 0.0f ? 1.0f / body.customInertia.z : (inertiaZ > 0.0f ? 1.0f / inertiaZ : 0.0f);
-
-    const float invMass = effectiveMass > 0.0f ? 1.0f / effectiveMass : 0.0f;
-    if (!isFinite(invMass) || !isFinite(inverse[0]) || !isFinite(inverse[1]) || !isFinite(inverse[2])) {
-        zeroMass(body);
-        return false;
-    }
-
-    body.invMass = invMass;
-    body.invInertia = Vec3(inverse[0], inverse[1], inverse[2]);
-    return true;
-}
-
 size_t slotGenIndex(int32_t bodyId, int32_t slot) {
     return static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot);
-}
-
-void bumpSlotGeneration(World& world, int32_t bodyId, int32_t slot) {
-    uint16_t& entry = world.slotGen[slotGenIndex(bodyId, slot)];
-    entry = static_cast<uint16_t>(entry + 1);
 }
 
 void invalidateSlot(World& world, int32_t bodyId, int32_t slot) {
@@ -169,19 +135,6 @@ int32_t shapeHighWater(const Body& body) {
         --count;
     }
     return count;
-}
-
-int32_t firstFreeShapeSlot(const Body& body) {
-    const int32_t limit = body.shapeCount > kMaxShapesPerBody ? kMaxShapesPerBody : body.shapeCount;
-    for (int32_t slot = 0; slot < limit; ++slot) {
-        if (!shapeValid(body.shapes[slot])) {
-            return slot;
-        }
-    }
-    if (body.shapeCount < kMaxShapesPerBody) {
-        return body.shapeCount;
-    }
-    return -1;
 }
 
 void addAngularResponse(World& world, Body& body, int32_t id, const Vec3& angularImpulse) {
@@ -277,6 +230,59 @@ struct Hasher {
 
 }
 
+bool recomputeMass(Body& body) {
+    float mass = 0.0f;
+    float inertiaX = 0.0f;
+    float inertiaY = 0.0f;
+    float inertiaZ = 0.0f;
+    const bool finite = accumulateMass(body, mass, inertiaX, inertiaY, inertiaZ);
+
+    if (body.state != kBodyDynamic || !finite) {
+        zeroMass(body);
+        return finite;
+    }
+
+    const bool overridden = body.customMass > 0.0f;
+    if (mass <= 0.0f && !overridden) {
+        zeroMass(body);
+        return true;
+    }
+
+    const float effectiveMass = overridden ? body.customMass : mass;
+    float inverse[3];
+    inverse[0] = body.customInertia.x > 0.0f ? 1.0f / body.customInertia.x : (inertiaX > 0.0f ? 1.0f / inertiaX : 0.0f);
+    inverse[1] = body.customInertia.y > 0.0f ? 1.0f / body.customInertia.y : (inertiaY > 0.0f ? 1.0f / inertiaY : 0.0f);
+    inverse[2] = body.customInertia.z > 0.0f ? 1.0f / body.customInertia.z : (inertiaZ > 0.0f ? 1.0f / inertiaZ : 0.0f);
+
+    const float invMass = effectiveMass > 0.0f ? 1.0f / effectiveMass : 0.0f;
+    if (!isFinite(invMass) || !isFinite(inverse[0]) || !isFinite(inverse[1]) || !isFinite(inverse[2])) {
+        zeroMass(body);
+        return false;
+    }
+
+    body.invMass = invMass;
+    body.invInertia = Vec3(inverse[0], inverse[1], inverse[2]);
+    return true;
+}
+
+void bumpSlotGeneration(World& world, int32_t bodyId, int32_t slot) {
+    uint16_t& entry = world.slotGen[slotGenIndex(bodyId, slot)];
+    entry = static_cast<uint16_t>(entry + 1);
+}
+
+int32_t firstFreeShapeSlot(const Body& body) {
+    const int32_t limit = body.shapeCount > kMaxShapesPerBody ? kMaxShapesPerBody : body.shapeCount;
+    for (int32_t slot = 0; slot < limit; ++slot) {
+        if (!shapeValid(body.shapes[slot])) {
+            return slot;
+        }
+    }
+    if (body.shapeCount < kMaxShapesPerBody) {
+        return body.shapeCount;
+    }
+    return -1;
+}
+
 bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Vec3 initialGravity) {
     initialized = false;
     if (bodyCapacity <= 0 || bodyCapacity > kMaxBodies ||
@@ -358,6 +364,19 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     cacheNextUsedCount = 0;
     memset(cachePrev, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
     memset(cacheNext, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
+
+    this->bulkArena = &arena;
+    void* scratch = arena.alloc(kBulkScratchBytes, 64);
+    if (scratch == nullptr) {
+        this->bulkArena = nullptr;
+        scratchBegin = 0;
+        scratchCursor = 0;
+        scratchEnd = 0;
+        return false;
+    }
+    scratchBegin = reinterpret_cast<uintptr_t>(scratch);
+    scratchCursor = scratchBegin;
+    scratchEnd = scratchBegin + static_cast<uintptr_t>(kBulkScratchBytes);
 
     initialized = true;
     return true;
@@ -451,6 +470,7 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     body.torqueAccum = Vec3();
     for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
         body.shapes[slot].kind = kShapeNone;
+        body.shapes[slot].clearBulk();
     }
 
     ++liveCount;
@@ -464,6 +484,9 @@ int32_t World::destroyBody(int32_t id) {
 
     releaseConstraintsForBody(*this, id);
     Body& body = bodies[id];
+    for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
+        clearShapeBulk(id, slot);
+    }
     body.state = kBodyFree;
     body.shapeCount = 0;
     invalidateAllSlots(*this, id);
@@ -794,6 +817,9 @@ int32_t World::clearShapes(int32_t id) {
     }
 
     Body& body = bodies[id];
+    for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
+        clearShapeBulk(id, slot);
+    }
     body.shapeCount = 0;
     invalidateAllSlots(*this, id);
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
@@ -813,6 +839,7 @@ int32_t World::shapeDestroy(int32_t shapeId) {
     }
 
     Body& body = bodies[bodyId];
+    clearShapeBulk(bodyId, slot);
     invalidateSlot(*this, bodyId, slot);
     body.shapeCount = shapeHighWater(body);
     recomputeMass(body);

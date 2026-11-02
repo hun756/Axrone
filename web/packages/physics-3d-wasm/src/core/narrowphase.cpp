@@ -12,6 +12,7 @@ struct ShapeWorld {
     Vec3 center;
     Vec3 half;
     Mat3 rotation;
+    const ShapeBulk* bulk;
 };
 
 struct SphereBoxContactData {
@@ -33,6 +34,7 @@ void loadShapeWorld(const World& world, int32_t id, int32_t slot, ShapeWorld& ou
     out.kind = shape.kind;
     out.half = shape.extents;
     out.center = shapeCenter(position, body.rotation, shape);
+    out.bulk = isBulkKind(shape.kind) ? shape.bulk : nullptr;
     if (shape.kind == kShapeSphere) {
         out.rotation = body.rotation;
     } else {
@@ -932,7 +934,7 @@ void collideBoxBox(World& world, int32_t a, int32_t indexA, const ShapeWorld& sh
 }
 
 bool isHullKind(int32_t kind) {
-    return kind == kShapeCylinder || kind == kShapeCone;
+    return kind == kShapeCylinder || kind == kShapeCone || kind == kShapeHull || kind == kShapeHeightField;
 }
 
 void buildShapeHull(const ShapeWorld& shape, Hull& hull) {
@@ -945,6 +947,113 @@ void buildShapeHull(const ShapeWorld& shape, Hull& hull) {
     }
 }
 
+void buildBulkHullWorldView(World& world, int32_t side, const ShapeWorld& shape, HullView& view) {
+    const ShapeBulk* bulk = shape.bulk;
+    Vec3* vertices = side == 0 ? world.hullVerticesA : world.hullVerticesB;
+    Vec3* normals = side == 0 ? world.hullNormalsA : world.hullNormalsB;
+    float* offsets = side == 0 ? world.hullOffsetsA : world.hullOffsetsB;
+    const int32_t vertexCount = bulk->vertexCount;
+    for (int32_t i = 0; i < vertexCount; ++i) {
+        vertices[i] = shape.center + shape.rotation.transform(bulk->vertices[i]);
+    }
+    const int32_t faceCount = bulk->faceCount;
+    for (int32_t f = 0; f < faceCount; ++f) {
+        const Vec3 worldNormal = shape.rotation.transform(bulk->faceNormals[f]);
+        normals[f] = worldNormal;
+        offsets[f] = dot(worldNormal, vertices[bulk->faceStart[f]]);
+    }
+    view.vertexCount = vertexCount;
+    view.vertices = vertices;
+    view.faceCount = faceCount;
+    view.faceStart = bulk->faceStart;
+    view.faceIndices = bulk->faceIndices;
+    view.faceNormals = normals;
+    view.faceOffsets = offsets;
+}
+
+void buildFieldHullWorldView(World& world, int32_t side, const ShapeWorld& shape, HullView& view) {
+    static const int32_t fieldFaces[6][4] = {
+        { 1, 3, 7, 5 },
+        { 4, 6, 2, 0 },
+        { 2, 6, 7, 3 },
+        { 1, 5, 4, 0 },
+        { 4, 5, 7, 6 },
+        { 2, 3, 1, 0 }
+    };
+
+    Vec3* vertices = side == 0 ? world.hullVerticesA : world.hullVerticesB;
+    Vec3* normals = side == 0 ? world.hullNormalsA : world.hullNormalsB;
+    float* offsets = side == 0 ? world.hullOffsetsA : world.hullOffsetsB;
+    int32_t* starts = side == 0 ? world.hullStartA : world.hullStartB;
+    int32_t* indices = side == 0 ? world.hullIndicesA : world.hullIndicesB;
+
+    Vec3 mn = shape.bulk->localMin;
+    Vec3 mx = shape.bulk->localMax;
+    if (mx.y - mn.y < 1e-4f) {
+        mn.y = mx.y - 1e-4f;
+    }
+    Vec3 centroid(0.0f, 0.0f, 0.0f);
+    for (int32_t i = 0; i < 8; ++i) {
+        const Vec3 corner(
+            (i & 1) != 0 ? mx.x : mn.x,
+            (i & 2) != 0 ? mx.y : mn.y,
+            (i & 4) != 0 ? mx.z : mn.z
+        );
+        vertices[i] = shape.center + shape.rotation.transform(corner);
+        centroid += vertices[i];
+    }
+    centroid *= 0.125f;
+
+    int32_t cursor = 0;
+    for (int32_t f = 0; f < 6; ++f) {
+        starts[f] = cursor;
+        for (int32_t i = 0; i < 4; ++i) {
+            indices[cursor++] = fieldFaces[f][i];
+        }
+    }
+    starts[6] = cursor;
+
+    for (int32_t f = 0; f < 6; ++f) {
+        const int32_t start = starts[f];
+        const Vec3& v0 = vertices[indices[start]];
+        const Vec3& v1 = vertices[indices[start + 1]];
+        const Vec3& v2 = vertices[indices[start + 2]];
+        Vec3 normal = normalize(cross(v1 - v0, v2 - v0));
+        if (dot(normal, v0 - centroid) < 0.0f) {
+            normal = -normal;
+            for (int32_t i = 0; i < 2; ++i) {
+                const int32_t low = indices[start + i];
+                const int32_t high = indices[start + 3 - i];
+                indices[start + i] = high;
+                indices[start + 3 - i] = low;
+            }
+        }
+        normals[f] = normal;
+        offsets[f] = dot(normal, vertices[indices[start]]);
+    }
+
+    view.vertexCount = 8;
+    view.vertices = vertices;
+    view.faceCount = 6;
+    view.faceStart = starts;
+    view.faceIndices = indices;
+    view.faceNormals = normals;
+    view.faceOffsets = offsets;
+}
+
+void resolveHullView(World& world, int32_t side, const ShapeWorld& shape, Hull& fallback, HullView& view) {
+    if (shape.kind == kShapeHull) {
+        buildBulkHullWorldView(world, side, shape, view);
+        return;
+    }
+    if (shape.kind == kShapeHeightField) {
+        buildFieldHullWorldView(world, side, shape, view);
+        return;
+    }
+    buildShapeHull(shape, fallback);
+    view = makeHullView(fallback);
+}
+
 void collideSphereHull(
     World& world,
     int32_t sphere,
@@ -952,8 +1061,9 @@ void collideSphereHull(
     const ShapeWorld& sphereShape,
     int32_t hull,
     int32_t hullIndex,
-    const Hull& hullShape,
-    bool sphereIsA
+    const HullView& hullShape,
+    bool sphereIsA,
+    int32_t baseFeature
 ) {
     Vec3 closest;
     float signedDistance;
@@ -979,9 +1089,9 @@ void collideSphereHull(
     const Vec3 point = closest - normal * (pen * 0.5f);
 
     if (sphereIsA) {
-        addContact(world, sphere, hull, -normal, pen, point, sphereSurface, closest, 0, Vec3(), sphereIndex, hullIndex, kKindHullSphere * 16);
+        addContact(world, sphere, hull, -normal, pen, point, sphereSurface, closest, 0, Vec3(), sphereIndex, hullIndex, baseFeature);
     } else {
-        addContact(world, hull, sphere, normal, pen, point, closest, sphereSurface, 0, Vec3(), hullIndex, sphereIndex, kKindHullSphere * 16);
+        addContact(world, hull, sphere, normal, pen, point, closest, sphereSurface, 0, Vec3(), hullIndex, sphereIndex, baseFeature);
     }
 }
 
@@ -992,8 +1102,9 @@ void collideCapsuleHull(
     const ShapeWorld& capsuleShape,
     int32_t hull,
     int32_t hullIndex,
-    const Hull& hullShape,
-    bool capsuleIsA
+    const HullView& hullShape,
+    bool capsuleIsA,
+    int32_t baseFeature
 ) {
     Vec3 p0;
     Vec3 p1;
@@ -1099,7 +1210,7 @@ void collideCapsuleHull(
                 Vec3(),
                 capsuleIndex,
                 hullIndex,
-                kKindCapsuleHull * 16 + k);
+                baseFeature + k);
         } else {
             addContact(
                 world,
@@ -1114,7 +1225,7 @@ void collideCapsuleHull(
                 Vec3(),
                 hullIndex,
                 capsuleIndex,
-                kKindCapsuleHull * 16 + k);
+                baseFeature + k);
         }
     }
 }
@@ -1123,15 +1234,15 @@ void addHullFaceContacts(
     World& world,
     int32_t a,
     int32_t indexA,
-    const Hull& hullA,
+    const HullView& hullA,
     int32_t b,
     int32_t indexB,
-    const Hull& hullB,
+    const HullView& hullB,
     const Vec3& normal,
     bool referenceIsA
 ) {
-    const Hull& referenceHull = referenceIsA ? hullA : hullB;
-    const Hull& incidentHull = referenceIsA ? hullB : hullA;
+    const HullView& referenceHull = referenceIsA ? hullA : hullB;
+    const HullView& incidentHull = referenceIsA ? hullB : hullA;
     const int32_t referenceBody = referenceIsA ? a : b;
     const Vec3 referenceNormal = referenceIsA ? normal : -normal;
 
@@ -1329,11 +1440,11 @@ void collideHullHull(
     int32_t a,
     int32_t indexA,
     const ShapeWorld& shapeA,
-    const Hull& hullA,
+    const HullView& hullA,
     int32_t b,
     int32_t indexB,
     const ShapeWorld& shapeB,
-    const Hull& hullB
+    const HullView& hullB
 ) {
     const Vec3 offset = shapeB.center - shapeA.center;
 
@@ -1389,6 +1500,247 @@ void collideHullHull(
         bestKind == 1);
 }
 
+float selectMeshExtent(const Vec3& half, int32_t axis) {
+    if (axis == 0) {
+        return half.x;
+    }
+    if (axis == 1) {
+        return half.y;
+    }
+    return half.z;
+}
+
+AXRONE_PHYSICS_INLINE Vec3 rotationComponent(const Mat3& rotation, int32_t column, float scale) {
+    return Vec3(rotation.m[column] * scale, rotation.m[column + 3] * scale, rotation.m[column + 6] * scale);
+}
+
+bool rotatedHalfAabb(const Vec3& center, const Mat3& rotation, const Vec3& half, AABB& out) {
+    const float ex = fabsf(rotation.m[0]) * selectMeshExtent(half, 0) +
+                     fabsf(rotation.m[1]) * selectMeshExtent(half, 1) +
+                     fabsf(rotation.m[2]) * selectMeshExtent(half, 2);
+    const float ey = fabsf(rotation.m[3]) * selectMeshExtent(half, 0) +
+                     fabsf(rotation.m[4]) * selectMeshExtent(half, 1) +
+                     fabsf(rotation.m[5]) * selectMeshExtent(half, 2);
+    const float ez = fabsf(rotation.m[6]) * selectMeshExtent(half, 0) +
+                     fabsf(rotation.m[7]) * selectMeshExtent(half, 1) +
+                     fabsf(rotation.m[8]) * selectMeshExtent(half, 2);
+    out = { center.x - ex, center.y - ey, center.z - ez, center.x + ex, center.y + ey, center.z + ez };
+    return true;
+}
+
+bool cornerAabb(const Vec3& center, const Mat3& rotation, const Vec3& mn, const Vec3& mx, AABB& out) {
+    Vec3 lo = center + rotation.transform(mn);
+    Vec3 hi = lo;
+    for (int32_t i = 1; i < 8; ++i) {
+        const Vec3 corner(
+            (i & 1) != 0 ? mx.x : mn.x,
+            (i & 2) != 0 ? mx.y : mn.y,
+            (i & 4) != 0 ? mx.z : mn.z
+        );
+        const Vec3 world = center + rotation.transform(corner);
+        if (world.x < lo.x) {
+            lo.x = world.x;
+        }
+        if (world.y < lo.y) {
+            lo.y = world.y;
+        }
+        if (world.z < lo.z) {
+            lo.z = world.z;
+        }
+        if (world.x > hi.x) {
+            hi.x = world.x;
+        }
+        if (world.y > hi.y) {
+            hi.y = world.y;
+        }
+        if (world.z > hi.z) {
+            hi.z = world.z;
+        }
+    }
+    out = { lo.x, lo.y, lo.z, hi.x, hi.y, hi.z };
+    return true;
+}
+
+bool shapeWorldAabbOf(const ShapeWorld& shape, AABB& out) {
+    if (shape.kind == kShapeSphere) {
+        const float r = shape.half.x;
+        out = { shape.center.x - r, shape.center.y - r, shape.center.z - r, shape.center.x + r, shape.center.y + r, shape.center.z + r };
+        return true;
+    }
+    if (shape.kind == kShapeCapsule) {
+        const Vec3 halfAxis(rotationComponent(shape.rotation, 1, shape.half.y));
+        const float radius = shape.half.x;
+        const float ex = fabsf(halfAxis.x) + radius;
+        const float ey = fabsf(halfAxis.y) + radius;
+        const float ez = fabsf(halfAxis.z) + radius;
+        out = { shape.center.x - ex, shape.center.y - ey, shape.center.z - ez, shape.center.x + ex, shape.center.y + ey, shape.center.z + ez };
+        return true;
+    }
+    if (shape.kind == kShapeCylinder || shape.kind == kShapeCone) {
+        const Vec3 half(shape.half.x, shape.half.y, shape.half.x);
+        return rotatedHalfAabb(shape.center, shape.rotation, half, out);
+    }
+    if (shape.kind == kShapeBox || shape.kind == kShapeHull) {
+        return rotatedHalfAabb(shape.center, shape.rotation, shape.half, out);
+    }
+    if (shape.bulk == nullptr) {
+        return false;
+    }
+    return cornerAabb(shape.center, shape.rotation, shape.bulk->localMin, shape.bulk->localMax, out);
+}
+
+bool aabbsOverlap(const AABB& a, const AABB& b) {
+    if (b.minX > a.maxX || a.minX > b.maxX) {
+        return false;
+    }
+    if (b.minY > a.maxY || a.minY > b.maxY) {
+        return false;
+    }
+    return !(b.minZ > a.maxZ || a.minZ > b.maxZ);
+}
+
+void collideMeshPair(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& shapeA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& shapeB
+) {
+    const bool meshIsA = shapeA.kind == kShapeMesh;
+    const ShapeWorld& meshShape = meshIsA ? shapeA : shapeB;
+    const ShapeWorld& otherShape = meshIsA ? shapeB : shapeA;
+    const int32_t meshBody = meshIsA ? a : b;
+    const int32_t otherBody = meshIsA ? b : a;
+    const int32_t meshIndex = meshIsA ? indexA : indexB;
+    const int32_t otherIndex = meshIsA ? indexB : indexA;
+
+    const ShapeBulk* bulk = meshShape.bulk;
+    if (bulk == nullptr || bulk->triangleCount <= 0 || bulk->vertexCount <= 0) {
+        return;
+    }
+    if (isBulkKind(otherShape.kind) && otherShape.bulk == nullptr) {
+        return;
+    }
+    if (otherShape.kind == kShapeMesh) {
+        return;
+    }
+
+    AABB otherBounds;
+    if (!shapeWorldAabbOf(otherShape, otherBounds)) {
+        return;
+    }
+
+    const int32_t triangleCount = bulk->triangleCount;
+    Hull hullOther;
+    HullView viewOther;
+    bool otherViewBuilt = false;
+
+    Vec3 triangleVertices[3];
+    int32_t triangleStart[3] = { 0, 3, 6 };
+    int32_t triangleIndices[6] = { 0, 1, 2, 0, 2, 1 };
+    Vec3 triangleNormals[2];
+    float triangleOffsets[2];
+    HullView triangleView;
+    triangleView.vertexCount = 3;
+    triangleView.vertices = triangleVertices;
+    triangleView.faceCount = 2;
+    triangleView.faceStart = triangleStart;
+    triangleView.faceIndices = triangleIndices;
+    triangleView.faceNormals = triangleNormals;
+    triangleView.faceOffsets = triangleOffsets;
+
+    for (int32_t t = 0; t < triangleCount; ++t) {
+        const Vec3 local0 = bulk->vertices[bulk->indices[t * 3 + 0]];
+        const Vec3 local1 = bulk->vertices[bulk->indices[t * 3 + 1]];
+        const Vec3 local2 = bulk->vertices[bulk->indices[t * 3 + 2]];
+        const Vec3 v0 = meshShape.center + meshShape.rotation.transform(local0);
+        const Vec3 v1 = meshShape.center + meshShape.rotation.transform(local1);
+        const Vec3 v2 = meshShape.center + meshShape.rotation.transform(local2);
+
+        Vec3 normal = cross(v1 - v0, v2 - v0);
+        const float normalLengthSq = lengthSq(normal);
+        if (normalLengthSq <= kCrossEps) {
+            continue;
+        }
+        normal = normal * (1.0f / sqrtf(normalLengthSq));
+
+        AABB triangleBounds = { v0.x, v0.y, v0.z, v0.x, v0.y, v0.z };
+        if (v1.x < triangleBounds.minX) {
+            triangleBounds.minX = v1.x;
+        }
+        if (v1.y < triangleBounds.minY) {
+            triangleBounds.minY = v1.y;
+        }
+        if (v1.z < triangleBounds.minZ) {
+            triangleBounds.minZ = v1.z;
+        }
+        if (v2.x < triangleBounds.minX) {
+            triangleBounds.minX = v2.x;
+        }
+        if (v2.y < triangleBounds.minY) {
+            triangleBounds.minY = v2.y;
+        }
+        if (v2.z < triangleBounds.minZ) {
+            triangleBounds.minZ = v2.z;
+        }
+        if (v1.x > triangleBounds.maxX) {
+            triangleBounds.maxX = v1.x;
+        }
+        if (v1.y > triangleBounds.maxY) {
+            triangleBounds.maxY = v1.y;
+        }
+        if (v1.z > triangleBounds.maxZ) {
+            triangleBounds.maxZ = v1.z;
+        }
+        if (v2.x > triangleBounds.maxX) {
+            triangleBounds.maxX = v2.x;
+        }
+        if (v2.y > triangleBounds.maxY) {
+            triangleBounds.maxY = v2.y;
+        }
+        if (v2.z > triangleBounds.maxZ) {
+            triangleBounds.maxZ = v2.z;
+        }
+        if (!aabbsOverlap(triangleBounds, otherBounds)) {
+            continue;
+        }
+
+        triangleVertices[0] = v0;
+        triangleVertices[1] = v1;
+        triangleVertices[2] = v2;
+        triangleNormals[0] = normal;
+        triangleNormals[1] = -normal;
+        const float planeOffset = dot(normal, v0);
+        triangleOffsets[0] = planeOffset;
+        triangleOffsets[1] = -planeOffset;
+
+        const int32_t baseFeature = kKindMeshTriangle * 16 + (t & 15);
+
+        if (otherShape.kind == kShapeSphere) {
+            collideSphereHull(world, otherBody, otherIndex, otherShape, meshBody, meshIndex, triangleView, otherBody == a, baseFeature);
+            continue;
+        }
+        if (otherShape.kind == kShapeCapsule) {
+            collideCapsuleHull(world, otherBody, otherIndex, otherShape, meshBody, meshIndex, triangleView, otherBody == a, baseFeature);
+            continue;
+        }
+
+        if (!otherViewBuilt) {
+            const int32_t otherSide = meshIsA ? 1 : 0;
+            resolveHullView(world, otherSide, otherShape, hullOther, viewOther);
+            otherViewBuilt = true;
+        }
+
+        if (meshIsA) {
+            collideHullHull(world, a, indexA, shapeA, triangleView, b, indexB, shapeB, viewOther);
+        } else {
+            collideHullHull(world, a, indexA, shapeA, viewOther, b, indexB, shapeB, triangleView);
+        }
+    }
+}
+
 AXRONE_PHYSICS_NOINLINE void collideHullPair(
     World& world,
     int32_t a,
@@ -1398,33 +1750,42 @@ AXRONE_PHYSICS_NOINLINE void collideHullPair(
     int32_t indexB,
     const ShapeWorld& shapeB
 ) {
+    Hull fallbackA;
+    Hull fallbackB;
+    HullView viewA;
+    HullView viewB;
     if (shapeA.kind == kShapeSphere) {
-        Hull hullB;
-        buildShapeHull(shapeB, hullB);
-        collideSphereHull(world, a, indexA, shapeA, b, indexB, hullB, true);
+        resolveHullView(world, 1, shapeB, fallbackB, viewB);
+        collideSphereHull(world, a, indexA, shapeA, b, indexB, viewB, true, kKindHullSphere * 16);
     } else if (shapeB.kind == kShapeSphere) {
-        Hull hullA;
-        buildShapeHull(shapeA, hullA);
-        collideSphereHull(world, b, indexB, shapeB, a, indexA, hullA, true);
+        resolveHullView(world, 0, shapeA, fallbackA, viewA);
+        collideSphereHull(world, b, indexB, shapeB, a, indexA, viewA, true, kKindHullSphere * 16);
     } else if (shapeA.kind == kShapeCapsule) {
-        Hull hullB;
-        buildShapeHull(shapeB, hullB);
-        collideCapsuleHull(world, a, indexA, shapeA, b, indexB, hullB, true);
+        resolveHullView(world, 1, shapeB, fallbackB, viewB);
+        collideCapsuleHull(world, a, indexA, shapeA, b, indexB, viewB, true, kKindCapsuleHull * 16);
     } else if (shapeB.kind == kShapeCapsule) {
-        Hull hullA;
-        buildShapeHull(shapeA, hullA);
-        collideCapsuleHull(world, b, indexB, shapeB, a, indexA, hullA, true);
+        resolveHullView(world, 0, shapeA, fallbackA, viewA);
+        collideCapsuleHull(world, b, indexB, shapeB, a, indexA, viewA, true, kKindCapsuleHull * 16);
     } else {
-        Hull hullA;
-        Hull hullB;
-        buildShapeHull(shapeA, hullA);
-        buildShapeHull(shapeB, hullB);
-        collideHullHull(world, a, indexA, shapeA, hullA, b, indexB, shapeB, hullB);
+        resolveHullView(world, 0, shapeA, fallbackA, viewA);
+        resolveHullView(world, 1, shapeB, fallbackB, viewB);
+        collideHullHull(world, a, indexA, shapeA, viewA, b, indexB, shapeB, viewB);
     }
 }
 
 void collideShapePair(World& world, int32_t a, int32_t indexA, const ShapeWorld& shapeA, int32_t b, int32_t indexB, const ShapeWorld& shapeB) {
+    if (shapeA.kind == kShapeMesh || shapeB.kind == kShapeMesh) {
+        collideMeshPair(world, a, indexA, shapeA, b, indexB, shapeB);
+        return;
+    }
+
     if (isHullKind(shapeA.kind) || isHullKind(shapeB.kind)) {
+        if (isBulkKind(shapeA.kind) && shapeA.bulk == nullptr) {
+            return;
+        }
+        if (isBulkKind(shapeB.kind) && shapeB.bulk == nullptr) {
+            return;
+        }
         collideHullPair(world, a, indexA, shapeA, b, indexB, shapeB);
         return;
     }
