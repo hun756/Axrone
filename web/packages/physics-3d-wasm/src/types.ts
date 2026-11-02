@@ -60,10 +60,24 @@ export interface ContactSnapshot {
     readonly penetration: number;
 }
 
+export type ShapeMaterial = readonly [friction: number, restitution: number];
+
+export type ShapeFilter = readonly [categoryBits: number, maskBits: number, groupIndex: number];
+
+export type ContactEventKind =
+    | "begin"
+    | "stay"
+    | "end"
+    | "sensorEnter"
+    | "sensorStay"
+    | "sensorExit";
+
 export interface ContactEventSnapshot {
-    readonly kind: "begin" | "stay" | "end";
-    readonly a: number;
-    readonly b: number;
+    readonly kind: ContactEventKind;
+    readonly bodyA: number;
+    readonly bodyB: number;
+    readonly shapeA: number;
+    readonly shapeB: number;
     readonly normal: Vec3Tuple;
     readonly penetration: number;
 }

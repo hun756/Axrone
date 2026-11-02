@@ -28,6 +28,8 @@ struct alignas(16) Contact {
     Vec3 localB;
     int32_t cacheSlot;
     int32_t sensor;
+    int32_t shapeA;
+    int32_t shapeB;
 };
 
 struct PackedContact {

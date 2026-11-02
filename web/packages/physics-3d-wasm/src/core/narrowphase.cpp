@@ -90,6 +90,8 @@ void addContact(
 
     contact.a = a;
     contact.b = b;
+    contact.shapeA = shapeIndexA;
+    contact.shapeB = shapeIndexB;
     contact.normal = normal;
     contact.pen = pen;
     contact.normalMode = normalMode;

@@ -27,14 +27,16 @@ static_assert(sizeof(axrone::physics::RayHit) == 32, "ray hit record must stay 3
 constexpr int32_t kEventCapacity = 4096;
 alignas(16) axrone::physics::ContactEvent g_events[kEventCapacity];
 alignas(16) uint64_t g_eventKeys[kEventCapacity];
+alignas(16) uint8_t g_eventSensors[kEventCapacity];
 axrone::physics::ContactEventState g_eventState;
 int32_t g_eventCount = 0;
 int32_t g_eventOverflow = 0;
 
-static_assert(sizeof(axrone::physics::ContactEvent) == 28, "contact event record must stay 28 bytes");
+static_assert(sizeof(axrone::physics::ContactEvent) == 40, "contact event record must stay 40 bytes");
 
 void resetContactEvents() {
     g_eventState.keys = g_eventKeys;
+    g_eventState.sensors = g_eventSensors;
     g_eventState.capacity = kEventCapacity;
     g_eventState.count = 0;
     g_eventCount = 0;
@@ -548,4 +550,97 @@ AXRONE_PHYSICS_EXPORT(shapeGetKind) int32_t shapeGetKind(int32_t shapeId) {
 
 AXRONE_PHYSICS_EXPORT(shape_get_kind) int32_t shape_get_kind(int32_t shapeId) {
     return shapeGetKind(shapeId);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetMaterial) int32_t shapeSetMaterial(int32_t shapeId, float friction, float restitution) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return g_world.setShapeMaterial(bodyId, slot, friction, restitution);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_material) int32_t shape_set_material(int32_t shapeId, float friction, float restitution) {
+    return shapeSetMaterial(shapeId, friction, restitution);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeGetMaterial) int32_t shapeGetMaterial(int32_t shapeId, uintptr_t out2f32) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    if (!queryOutputValid(out2f32, sizeof(float), 2)) {
+        return -1;
+    }
+    const axrone::physics::Shape& shape = g_world.bodies[bodyId].shapes[slot];
+    float* output = reinterpret_cast<float*>(out2f32);
+    output[0] = shape.friction;
+    output[1] = shape.restitution;
+    return 0;
+}
+
+AXRONE_PHYSICS_EXPORT(shape_get_material) int32_t shape_get_material(int32_t shapeId, uintptr_t out2f32) {
+    return shapeGetMaterial(shapeId, out2f32);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetSensor) int32_t shapeSetSensor(int32_t shapeId, int32_t on) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return g_world.setShapeSensor(bodyId, slot, on);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_sensor) int32_t shape_set_sensor(int32_t shapeId, int32_t on) {
+    return shapeSetSensor(shapeId, on);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeIsSensor) int32_t shapeIsSensor(int32_t shapeId) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return g_world.bodies[bodyId].shapes[slot].sensor != 0 ? 1 : 0;
+}
+
+AXRONE_PHYSICS_EXPORT(shape_is_sensor) int32_t shape_is_sensor(int32_t shapeId) {
+    return shapeIsSensor(shapeId);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeSetFilter) int32_t shapeSetFilter(int32_t shapeId, int32_t categoryBits, int32_t maskBits, int32_t groupIndex) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return g_world.setShapeFilter(bodyId, slot, categoryBits, maskBits, groupIndex);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_set_filter) int32_t shape_set_filter(int32_t shapeId, int32_t categoryBits, int32_t maskBits, int32_t groupIndex) {
+    return shapeSetFilter(shapeId, categoryBits, maskBits, groupIndex);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeGetFilter) int32_t shapeGetFilter(int32_t shapeId, uintptr_t out3i32) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    if (!queryOutputValid(out3i32, sizeof(int32_t), 3)) {
+        return -1;
+    }
+    const axrone::physics::Shape& shape = g_world.bodies[bodyId].shapes[slot];
+    int32_t* output = reinterpret_cast<int32_t*>(out3i32);
+    output[0] = shape.categoryBits;
+    output[1] = shape.maskBits;
+    output[2] = shape.groupIndex;
+    return 0;
+}
+
+AXRONE_PHYSICS_EXPORT(shape_get_filter) int32_t shape_get_filter(int32_t shapeId, uintptr_t out3i32) {
+    return shapeGetFilter(shapeId, out3i32);
 }

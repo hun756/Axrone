@@ -587,3 +587,152 @@ describe('query facade', () => {
         expect(wasm.worldMemoryBytes()).toBe(memoryBefore);
     });
 });
+
+async function createAttrShape(): Promise<{ wasm: Awaited<ReturnType<typeof loadEmbeddedWasm>>, shape: number }> {
+    const wasm = await loadEmbeddedWasm();
+    expect(wasm.worldInit(16, 256, 0, -9.81, 0)).toBe(0);
+    const body = wasm.bodyCreate(1, 0, 1, 0, 0, 0, 0, 1);
+    const shape = wasm.shapeCreateBox(body, 0.5, 0.5, 0.5, 1, 0, 0, 0, 0, 0, 0, 1);
+    expect(shape).toBeGreaterThanOrEqual(0);
+    expect(wasm.shapeGetBody(shape)).toBe(body);
+    return { wasm, shape };
+}
+
+describe('per-shape attributes', () => {
+    it('round-trips material through the ABI including the inherit sentinel', async () => {
+        const { wasm, shape } = await createAttrShape();
+        const out = new Float32Array(wasm.memory.buffer, wasm.queryScratchPtr(), 2);
+
+        expect(wasm.shapeGetMaterial(shape, out.byteOffset)).toBe(0);
+        expect(out[0]).toBe(-1);
+        expect(out[1]).toBe(-1);
+
+        expect(wasm.shape_set_material(shape, 0.3, 0.6)).toBe(0);
+        expect(wasm.shape_get_material(shape, out.byteOffset)).toBe(0);
+        expect(out[0]).toBe(Math.fround(0.3));
+        expect(out[1]).toBe(Math.fround(0.6));
+
+        expect(wasm.shapeSetMaterial(shape, -1, 0.4)).toBe(0);
+        expect(wasm.shapeGetMaterial(shape, out.byteOffset)).toBe(0);
+        expect(out[0]).toBe(-1);
+        expect(out[1]).toBe(Math.fround(0.4));
+
+        expect(wasm.shapeSetMaterial(shape, -0.5, 0)).toBe(-1);
+        expect(wasm.shapeSetMaterial(shape, 0, -2)).toBe(-1);
+        expect(wasm.shapeSetMaterial(shape, Number.NaN, 0)).toBe(-1);
+        expect(wasm.shapeSetMaterial(-1, 0, 0)).toBe(-1);
+        expect(wasm.shapeSetMaterial(shape + 1, 0, 0)).toBe(-1);
+        expect(wasm.shapeGetMaterial(shape, 0)).toBe(-1);
+        expect(wasm.shapeGetMaterial(shape, out.byteOffset + 1)).toBe(-1);
+    });
+
+    it('round-trips the sensor flag through the ABI', async () => {
+        const { wasm, shape } = await createAttrShape();
+        expect(wasm.shapeIsSensor(shape)).toBe(0);
+        expect(wasm.shape_set_sensor(shape, 1)).toBe(0);
+        expect(wasm.shape_is_sensor(shape)).toBe(1);
+        expect(wasm.shapeSetSensor(shape, 0)).toBe(0);
+        expect(wasm.shapeIsSensor(shape)).toBe(0);
+        expect(wasm.shapeSetSensor(shape, 2)).toBe(-1);
+        expect(wasm.shapeSetSensor(-1, 1)).toBe(-1);
+        expect(wasm.shapeIsSensor(-1)).toBe(-1);
+        expect(wasm.shapeIsSensor(shape + 1)).toBe(-1);
+    });
+
+    it('round-trips the collision filter through the ABI', async () => {
+        const { wasm, shape } = await createAttrShape();
+        const out = new Int32Array(wasm.memory.buffer, wasm.queryScratchPtr(), 3);
+
+        expect(wasm.shapeGetFilter(shape, out.byteOffset)).toBe(0);
+        expect(out[0]).toBe(1);
+        expect(out[1]).toBe(0xffff);
+        expect(out[2]).toBe(0);
+
+        expect(wasm.shape_set_filter(shape, 5, 2, -3)).toBe(0);
+        expect(wasm.shape_get_filter(shape, out.byteOffset)).toBe(0);
+        expect(out[0]).toBe(5);
+        expect(out[1]).toBe(2);
+        expect(out[2]).toBe(-3);
+
+        expect(wasm.shapeSetFilter(shape, 1, 0xffff, 0)).toBe(0);
+        expect(wasm.shapeSetFilter(-1, 1, 2, 3)).toBe(-1);
+        expect(wasm.shapeGetFilter(shape, 1)).toBe(-1);
+        expect(wasm.shapeGetFilter(-1, out.byteOffset)).toBe(-1);
+    });
+
+    async function slideDistance(pinned: boolean): Promise<number> {
+        const wasm = await loadEmbeddedWasm();
+        expect(wasm.worldInit(16, 256, 0, -9.81, 0)).toBe(0);
+
+        const floor = wasm.bodyCreate(0, 0, -0.5, 0, 0, 0, 0, 1);
+        const floorShape = wasm.shapeCreateBox(floor, 20, 0.5, 20, 0, 0, 0, 0, 0, 0, 0, 1);
+        expect(floorShape).toBeGreaterThanOrEqual(0);
+        const slider = wasm.bodyCreate(1, 0, 0.3, 0, 0, 0, 0, 1);
+        const sliderShape = wasm.shapeCreateBox(slider, 0.25, 0.25, 0.25, 1, 0, 0, 0, 0, 0, 0, 1);
+        expect(sliderShape).toBeGreaterThanOrEqual(0);
+
+        if (pinned) {
+            expect(wasm.shapeSetMaterial(floorShape, 2.0, 0.0)).toBe(0);
+            expect(wasm.shapeSetMaterial(sliderShape, 2.0, 0.0)).toBe(0);
+        }
+        expect(wasm.bodySetVelocity(slider, 2, 0, 0)).toBe(0);
+
+        for (let frame = 0; frame < 240; frame += 1) {
+            expect(wasm.step(DT, 8, 3)).toBeGreaterThanOrEqual(0);
+        }
+
+        const transforms = new Float32Array(wasm.memory.buffer, wasm.transformsPtr(), 16 * 7);
+        return transforms[slider * 7];
+    }
+
+    it('slides farther with inherited body friction than with shape-pinned friction', async () => {
+        const inherited = await slideDistance(false);
+        const pinned = await slideDistance(true);
+        expect(inherited).toBeGreaterThan(0.1);
+        expect(pinned).toBeGreaterThan(0);
+        expect(inherited - pinned).toBeGreaterThan(0.05);
+    });
+
+    it('validates facade shape attribute arguments and ids', async () => {
+        const world = await createWorld(16);
+        expect(() => world.setShapeMaterial(1.5, 0.3, 0.3)).toThrow();
+        expect(() => world.setShapeMaterial(0, Number.NaN, 0.3)).toThrow();
+        expect(() => world.setShapeMaterial(0, -0.5, 0.3)).toThrow();
+        expect(() => world.setShapeMaterial(0, 0.3, -2)).toThrow();
+        expect(() => world.setShapeMaterial(0, 0.3, 0.3)).toThrow();
+        expect(() => world.getShapeMaterial(0)).toThrow();
+        expect(() => world.getShapeMaterial(-1)).toThrow();
+        expect(() => world.setShapeSensor(0, true)).toThrow();
+        expect(() => world.isShapeSensor(0)).toThrow();
+        expect(() => world.setShapeFilter(0, 1, 2, 3)).toThrow();
+        expect(() => world.setShapeFilter(0, 1, 2.5, 3)).toThrow();
+        expect(() => world.setShapeFilter(0, 1, 2, 4294967296)).toThrow();
+        expect(() => world.getShapeFilter(0)).toThrow();
+        world.dispose();
+    });
+
+    it('reads and writes shape attributes through the typed facade views', async () => {
+        const world = await createWorld(16);
+        const body = world.createBody({
+            position: [0, 2, 0],
+            shape: { kind: 'box', halfExtents: [0.5, 0.5, 0.5] },
+            density: 1
+        });
+        const initialGen = 1;
+        const shapeId = (initialGen << 21) | (body << 3) | 0;
+
+        expect(() => world.setShapeSensor(shapeId, true)).not.toThrow();
+        expect(world.isShapeSensor(shapeId)).toBe(true);
+        world.setShapeSensor(shapeId, false);
+        expect(world.isShapeSensor(shapeId)).toBe(false);
+
+        expect(() => world.setShapeMaterial(shapeId, 0.9, -1)).not.toThrow();
+        const material = world.getShapeMaterial(shapeId);
+        expect(material[0]).toBe(Math.fround(0.9));
+        expect(material[1]).toBe(-1);
+
+        expect(() => world.setShapeFilter(shapeId, 2, 4, 1)).not.toThrow();
+        expect(world.getShapeFilter(shapeId)).toEqual([2, 4, 1]);
+        world.dispose();
+    });
+});

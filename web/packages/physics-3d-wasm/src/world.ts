@@ -2,12 +2,15 @@ import { instantiateWasm, loadEmbeddedWasm, WasmPhysicsExports } from "./loader"
 import type {
     BodyOptions,
     BodyType,
+    ContactEventKind,
     ContactEventSnapshot,
     ContactSnapshot,
     MutableQuat,
     MutableVec3,
     QuatTuple,
     RaycastHit,
+    ShapeFilter,
+    ShapeMaterial,
     StepOptions,
     TransformSnapshot,
     Vec3Tuple,
@@ -23,10 +26,23 @@ const MAX_CONTACTS = 262144;
 const TRANSFORM_STRIDE = 7;
 const VEC3_STRIDE = 4;
 const CONTACT_BYTES = 24;
-const EVENT_RECORD_STRIDE = 7;
+const EVENT_RECORD_STRIDE = 10;
 const EVENT_CAPACITY = 4096;
 const RAY_HIT_STRIDE = 8;
 const DEFAULT_QUERY_CAPACITY = 256;
+const SHAPE_ID_MAX = 0x7fffffff;
+const SHAPE_MATERIAL_INHERIT = -1;
+const INT32_MIN = -2147483648;
+const INT32_MAX = 2147483647;
+
+const CONTACT_EVENT_KINDS: readonly ContactEventKind[] = [
+    "begin",
+    "stay",
+    "end",
+    "sensorEnter",
+    "sensorStay",
+    "sensorExit"
+];
 
 const TYPE_CODES: Record<BodyType, number> = {
     static: 0,
@@ -70,6 +86,20 @@ function assertPositive(value: number, label: string): void {
 function assertRayDistance(value: number): void {
     if (Number.isNaN(value) || value <= 0) {
         throw new Error("maxDistance must be positive");
+    }
+}
+
+function assertShapeId(value: number): void {
+    assertInteger(value, "shapeId");
+    if (value < 0 || value > SHAPE_ID_MAX) {
+        throw new Error(`shapeId must be between 0 and ${SHAPE_ID_MAX}`);
+    }
+}
+
+function assertShapeMaterialValue(value: number, label: string): void {
+    assertFinite(value, label);
+    if (value !== SHAPE_MATERIAL_INHERIT && value < 0) {
+        throw new Error(`${label} must be non-negative or the inherit sentinel -1`);
     }
 }
 
@@ -456,6 +486,70 @@ export class WasmPhysicsWorld3D {
         return state === 1;
     }
 
+    setShapeMaterial(shapeId: number, friction: number, restitution: number): void {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        assertShapeMaterialValue(friction, "friction");
+        assertShapeMaterialValue(restitution, "restitution");
+        if (this.wasm.shapeSetMaterial(shapeId, friction, restitution) !== 0) {
+            throw new Error(`shape ${shapeId} material failed`);
+        }
+    }
+
+    getShapeMaterial(shapeId: number): ShapeMaterial {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        const scratch = this.queryHits();
+        if (this.wasm.shapeGetMaterial(shapeId, scratch.byteOffset) !== 0) {
+            throw new Error(`shape ${shapeId} material query failed`);
+        }
+        return [scratch[0], scratch[1]];
+    }
+
+    setShapeSensor(shapeId: number, on: boolean): void {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        if (this.wasm.shapeSetSensor(shapeId, on ? 1 : 0) !== 0) {
+            throw new Error(`shape ${shapeId} sensor flag failed`);
+        }
+    }
+
+    isShapeSensor(shapeId: number): boolean {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        const state = this.wasm.shapeIsSensor(shapeId);
+        if (state < 0) {
+            throw new Error(`shape ${shapeId} sensor query failed`);
+        }
+        return state === 1;
+    }
+
+    setShapeFilter(shapeId: number, categoryBits: number, maskBits: number, groupIndex: number): void {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        assertInteger(categoryBits, "categoryBits");
+        assertInteger(maskBits, "maskBits");
+        assertInteger(groupIndex, "groupIndex");
+        if (categoryBits < INT32_MIN || categoryBits > INT32_MAX ||
+            maskBits < INT32_MIN || maskBits > INT32_MAX ||
+            groupIndex < INT32_MIN || groupIndex > INT32_MAX) {
+            throw new Error("filter values must fit in int32");
+        }
+        if (this.wasm.shapeSetFilter(shapeId, categoryBits, maskBits, groupIndex) !== 0) {
+            throw new Error(`shape ${shapeId} filter failed`);
+        }
+    }
+
+    getShapeFilter(shapeId: number): ShapeFilter {
+        this.ensureAlive();
+        assertShapeId(shapeId);
+        const scratch = this.queryIds();
+        if (this.wasm.shapeGetFilter(shapeId, scratch.byteOffset) !== 0) {
+            throw new Error(`shape ${shapeId} filter query failed`);
+        }
+        return [scratch[0], scratch[1], scratch[2]];
+    }
+
     drainEvents(): ContactEventSnapshot[] {
         this.ensureAlive();
         const count = this.wasm.eventCount();
@@ -467,11 +561,13 @@ export class WasmPhysicsWorld3D {
                 const base = index * EVENT_RECORD_STRIDE;
                 const kindCode = ints[base];
                 events.push({
-                    kind: kindCode === 0 ? "begin" : kindCode === 2 ? "end" : "stay",
-                    a: ints[base + 1],
-                    b: ints[base + 2],
-                    normal: [floats[base + 3], floats[base + 4], floats[base + 5]],
-                    penetration: floats[base + 6]
+                    kind: CONTACT_EVENT_KINDS[kindCode >= 0 && kindCode <= 5 ? kindCode : 1],
+                    bodyA: ints[base + 1],
+                    bodyB: ints[base + 2],
+                    shapeA: ints[base + 3],
+                    shapeB: ints[base + 4],
+                    normal: [floats[base + 5], floats[base + 6], floats[base + 7]],
+                    penetration: floats[base + 8]
                 });
             }
         }

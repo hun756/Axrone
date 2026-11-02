@@ -93,6 +93,18 @@ export interface WasmPhysicsExports {
     shape_get_body(shapeId: number): number;
     shapeGetKind(shapeId: number): number;
     shape_get_kind(shapeId: number): number;
+    shapeSetMaterial(shapeId: number, friction: number, restitution: number): number;
+    shape_set_material(shapeId: number, friction: number, restitution: number): number;
+    shapeGetMaterial(shapeId: number, out2f32: number): number;
+    shape_get_material(shapeId: number, out2f32: number): number;
+    shapeSetSensor(shapeId: number, on: number): number;
+    shape_set_sensor(shapeId: number, on: number): number;
+    shapeIsSensor(shapeId: number): number;
+    shape_is_sensor(shapeId: number): number;
+    shapeSetFilter(shapeId: number, categoryBits: number, maskBits: number, groupIndex: number): number;
+    shape_set_filter(shapeId: number, categoryBits: number, maskBits: number, groupIndex: number): number;
+    shapeGetFilter(shapeId: number, out3i32: number): number;
+    shape_get_filter(shapeId: number, out3i32: number): number;
     bodyCount(): number;
     body_count(): number;
     contactCount(): number;
@@ -179,6 +191,12 @@ const REQUIRED_EXPORTS = [
     "shapeClear",
     "shapeGetBody",
     "shapeGetKind",
+    "shapeSetMaterial",
+    "shapeGetMaterial",
+    "shapeSetSensor",
+    "shapeIsSensor",
+    "shapeSetFilter",
+    "shapeGetFilter",
     "bodyCount",
     "contactCount",
     "transformsPtr",
