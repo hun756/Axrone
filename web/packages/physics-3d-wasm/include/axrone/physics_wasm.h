@@ -175,6 +175,13 @@ int32_t overlapSphere(float cx, float cy, float cz, float radius, uintptr_t ids,
 uintptr_t queryScratchPtr(void);
 int32_t queryScratchCapacity(void);
 
+int32_t raycastAllV2(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, int32_t categoryBits, int32_t maskBits, uintptr_t hits, int32_t capacity);
+int32_t raycastClosestV2(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, int32_t categoryBits, int32_t maskBits, uintptr_t hit);
+int32_t overlapSphereV2(float cx, float cy, float cz, float radius, int32_t categoryBits, int32_t maskBits, uintptr_t ids, int32_t capacity);
+int32_t overlapBoxAll(uintptr_t outBodyIds, int32_t capacity, float minX, float minY, float minZ, float maxX, float maxY, float maxZ);
+int32_t queryPointAll(uintptr_t outBodyIds, int32_t capacity, float x, float y, float z);
+uint64_t stepStatisticsView(void);
+
 #ifdef __cplusplus
 }
 #endif
