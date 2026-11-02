@@ -302,6 +302,8 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     sweepOrder = allocateArray<int32_t>(arena, maxBodies);
     freeIds = allocateArray<int32_t>(arena, maxBodies);
     contacts = allocateArray<Contact>(arena, maxContacts);
+    constraints = allocateArray<Constraint>(arena, kMaxConstraints);
+    constraintFreeIds = allocateArray<int32_t>(arena, kMaxConstraints);
     cachePrev = allocateArray<CacheEntry>(arena, cacheCapacity);
     cacheNext = allocateArray<CacheEntry>(arena, cacheCapacity);
     cachePrevUsed = allocateArray<int32_t>(arena, maxContacts);
@@ -309,12 +311,34 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
 
     if (transforms == nullptr || sleepTransforms == nullptr || velocities == nullptr || angularVelocities == nullptr ||
         packedContacts == nullptr || bodies == nullptr || slotGen == nullptr || sweepOrder == nullptr ||
-        freeIds == nullptr || contacts == nullptr || cachePrev == nullptr || cacheNext == nullptr ||
+        freeIds == nullptr || contacts == nullptr || constraints == nullptr || constraintFreeIds == nullptr ||
+        cachePrev == nullptr || cacheNext == nullptr ||
         cachePrevUsed == nullptr || cacheNextUsed == nullptr) {
         return false;
     }
 
     memset(slotGen, 0, sizeof(uint16_t) * static_cast<size_t>(maxBodies) * kMaxShapesPerBody);
+    maxConstraints = kMaxConstraints;
+    constraintCount = 0;
+    constraintFreeCount = maxConstraints;
+    for (int32_t i = 0; i < maxConstraints; ++i) {
+        Constraint& constraint = constraints[i];
+        constraint.kind = kConstraintFree;
+        constraint.bodyA = -1;
+        constraint.bodyB = -1;
+        constraint.enabled = 0;
+        constraint.collideConnected = 1;
+        constraint.cacheSlotA = -1;
+        constraint.cacheSlotB = -1;
+        constraint.feature = 0;
+        constraint.enableLimit = 0;
+        constraint.enableMotor = 0;
+        constraint.nextFree = -1;
+        for (int32_t row = 0; row < kMaxJointRows; ++row) {
+            constraint.impulses[row] = 0.0f;
+        }
+        constraintFreeIds[i] = maxConstraints - 1 - i;
+    }
     cachePrevUsedCount = 0;
     cacheNextUsedCount = 0;
     memset(cachePrev, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
@@ -336,6 +360,27 @@ void World::reset() {
     liveCount = 0;
     freeCount = 0;
     contactCount = 0;
+    if (constraints != nullptr && constraintFreeIds != nullptr) {
+        for (int32_t i = 0; i < maxConstraints; ++i) {
+            Constraint& constraint = constraints[i];
+            if (constraint.kind != kConstraintFree) {
+                constraint.feature = (constraint.feature + 1) & kConstraintIdGenMask;
+            }
+            constraint.kind = kConstraintFree;
+            constraint.bodyA = -1;
+            constraint.bodyB = -1;
+            constraint.enabled = 0;
+            constraint.cacheSlotA = -1;
+            constraint.cacheSlotB = -1;
+            for (int32_t row = 0; row < kMaxJointRows; ++row) {
+                constraint.impulses[row] = 0.0f;
+            }
+            constraintFreeIds[i] = maxConstraints - 1 - i;
+        }
+    }
+    constraintCount = 0;
+    maxConstraints = kMaxConstraints;
+    constraintFreeCount = kMaxConstraints;
     cachePrevUsedCount = 0;
     cacheNextUsedCount = 0;
     memset(cachePrev, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
@@ -403,6 +448,7 @@ int32_t World::destroyBody(int32_t id) {
         return -1;
     }
 
+    releaseConstraintsForBody(*this, id);
     Body& body = bodies[id];
     body.state = kBodyFree;
     body.shapeCount = 0;
@@ -1120,6 +1166,7 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     cacheNextUsedCount = 0;
     broadphase(*this);
     prepareContacts(*this);
+    prepareConstraints(*this, dt);
     if (sleepEnabled) {
         wakeSleepingOnContacts(*this);
     }

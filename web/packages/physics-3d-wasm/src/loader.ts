@@ -203,6 +203,158 @@ export interface WasmPhysicsExports {
         hit: number
     ): number;
     overlapSphere(cx: number, cy: number, cz: number, radius: number, ids: number, capacity: number): number;
+    constraintCreateFixed(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        collideConnected: number
+    ): number;
+    constraint_create_fixed(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        collideConnected: number
+    ): number;
+    constraintCreateHinge(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        axisAx: number,
+        axisAy: number,
+        axisAz: number,
+        axisBx: number,
+        axisBy: number,
+        axisBz: number,
+        enableLimit: number,
+        lower: number,
+        upper: number,
+        enableMotor: number,
+        motorSpeed: number,
+        maxMotorTorque: number,
+        collideConnected: number
+    ): number;
+    constraint_create_hinge(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        axisAx: number,
+        axisAy: number,
+        axisAz: number,
+        axisBx: number,
+        axisBy: number,
+        axisBz: number,
+        enableLimit: number,
+        lower: number,
+        upper: number,
+        enableMotor: number,
+        motorSpeed: number,
+        maxMotorTorque: number,
+        collideConnected: number
+    ): number;
+    constraintCreateSlider(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        axisAx: number,
+        axisAy: number,
+        axisAz: number,
+        enableLimit: number,
+        lower: number,
+        upper: number,
+        enableMotor: number,
+        motorSpeed: number,
+        maxMotorForce: number,
+        collideConnected: number
+    ): number;
+    constraint_create_slider(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        axisAx: number,
+        axisAy: number,
+        axisAz: number,
+        enableLimit: number,
+        lower: number,
+        upper: number,
+        enableMotor: number,
+        motorSpeed: number,
+        maxMotorForce: number,
+        collideConnected: number
+    ): number;
+    constraintCreateSpring(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        restLength: number,
+        stiffness: number,
+        damping: number,
+        collideConnected: number
+    ): number;
+    constraint_create_spring(
+        bodyA: number,
+        bodyB: number,
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        restLength: number,
+        stiffness: number,
+        damping: number,
+        collideConnected: number
+    ): number;
+    constraintDestroy(id: number): number;
+    constraint_destroy(id: number): number;
+    constraintSetEnabled(id: number, enabled: number): number;
+    constraint_set_enabled(id: number, enabled: number): number;
+    constraintSetHingeMotor(id: number, speed: number, maxTorque: number): number;
+    constraint_set_hinge_motor(id: number, speed: number, maxTorque: number): number;
+    constraintSetHingeLimit(id: number, enable: number, lower: number, upper: number): number;
+    constraint_set_hinge_limit(id: number, enable: number, lower: number, upper: number): number;
+    constraintSetSliderMotor(id: number, speed: number, maxForce: number): number;
+    constraint_set_slider_motor(id: number, speed: number, maxForce: number): number;
+    constraintSetSliderLimit(id: number, enable: number, lower: number, upper: number): number;
+    constraint_set_slider_limit(id: number, enable: number, lower: number, upper: number): number;
+    constraintCount(): number;
+    constraint_count(): number;
+    constraintGetKind(id: number): number;
+    constraint_get_kind(id: number): number;
     queryScratchPtr(): number;
     queryScratchCapacity(): number;
 }
@@ -267,7 +419,19 @@ const REQUIRED_EXPORTS = [
     "raycastClosest",
     "overlapSphere",
     "queryScratchPtr",
-    "queryScratchCapacity"
+    "queryScratchCapacity",
+    "constraintCreateFixed",
+    "constraintCreateHinge",
+    "constraintCreateSlider",
+    "constraintCreateSpring",
+    "constraintDestroy",
+    "constraintSetEnabled",
+    "constraintSetHingeMotor",
+    "constraintSetHingeLimit",
+    "constraintSetSliderMotor",
+    "constraintSetSliderLimit",
+    "constraintCount",
+    "constraintGetKind"
 ] as const;
 
 export function decodeBase64(base64: string): Uint8Array {

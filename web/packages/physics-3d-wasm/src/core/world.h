@@ -4,6 +4,7 @@
 
 #include "core/body.h"
 #include "core/contact.h"
+#include "core/constraints.h"
 #include "core/math.h"
 
 namespace axrone::physics {
@@ -20,6 +21,9 @@ struct World {
     int32_t liveCount;
     int32_t freeCount;
     int32_t contactCount;
+    int32_t maxConstraints;
+    int32_t constraintCount;
+    int32_t constraintFreeCount;
     Vec3 gravity;
     int32_t allowSleep;
 
@@ -33,6 +37,8 @@ struct World {
     int32_t* sweepOrder;
     int32_t* freeIds;
     Contact* contacts;
+    Constraint* constraints;
+    int32_t* constraintFreeIds;
     CacheEntry* cachePrev;
     CacheEntry* cacheNext;
     int32_t* cachePrevUsed;
@@ -115,6 +121,51 @@ struct World {
     int32_t setAwake(int32_t id, int32_t awake);
     int32_t isSleeping(int32_t id) const;
     int32_t step(float dt, int32_t velocityIterations, int32_t positionIterations);
+
+    int32_t createFixed(int32_t bodyA, int32_t bodyB, Vec3 anchorA, Vec3 anchorB, int32_t collideConnected);
+    int32_t createHinge(
+        int32_t bodyA,
+        int32_t bodyB,
+        Vec3 anchorA,
+        Vec3 anchorB,
+        Vec3 axisA,
+        Vec3 axisB,
+        int32_t enableLimit,
+        float lower,
+        float upper,
+        int32_t enableMotor,
+        float motorSpeed,
+        float maxMotorTorque,
+        int32_t collideConnected);
+    int32_t createSlider(
+        int32_t bodyA,
+        int32_t bodyB,
+        Vec3 anchorA,
+        Vec3 anchorB,
+        Vec3 axisA,
+        int32_t enableLimit,
+        float lower,
+        float upper,
+        int32_t enableMotor,
+        float motorSpeed,
+        float maxMotorForce,
+        int32_t collideConnected);
+    int32_t createSpring(
+        int32_t bodyA,
+        int32_t bodyB,
+        Vec3 anchorA,
+        Vec3 anchorB,
+        float restLength,
+        float stiffness,
+        float damping,
+        int32_t collideConnected);
+    int32_t destroyConstraint(int32_t id);
+    int32_t setConstraintEnabled(int32_t id, int32_t enabled);
+    int32_t setHingeMotor(int32_t id, float speed, float maxTorque);
+    int32_t setHingeLimit(int32_t id, int32_t enable, float lower, float upper);
+    int32_t setSliderMotor(int32_t id, float speed, float maxForce);
+    int32_t setSliderLimit(int32_t id, int32_t enable, float lower, float upper);
+    bool constraintResolve(int32_t id, Constraint*& out) const;
 
     int32_t bodyCount() const;
     int32_t getContactCount() const;

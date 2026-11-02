@@ -7,12 +7,16 @@ import type {
     ContactEventSnapshot,
     ContactSnapshot,
     CylinderAttachOptions,
+    FixedJointOptions,
+    HingeJointOptions,
     MutableQuat,
     MutableVec3,
     QuatTuple,
     RaycastHit,
     ShapeFilter,
     ShapeMaterial,
+    SliderJointOptions,
+    SpringJointOptions,
     StepOptions,
     TransformSnapshot,
     Vec3Tuple,
@@ -109,6 +113,13 @@ function assertShapeMaterialValue(value: number, label: string): void {
     assertFinite(value, label);
     if (value !== SHAPE_MATERIAL_INHERIT && value < 0) {
         throw new Error(`${label} must be non-negative or the inherit sentinel -1`);
+    }
+}
+
+function assertConstraintId(value: number): void {
+    assertInteger(value, "constraintId");
+    if (value < 0 || value > INT32_MAX) {
+        throw new Error(`constraintId must be between 0 and ${INT32_MAX}`);
     }
 }
 
@@ -645,6 +656,261 @@ export class WasmPhysicsWorld3D {
             throw new Error("physics step failed");
         }
         return contacts;
+    }
+
+    createFixedJoint(bodyA: number, bodyB: number, options: FixedJointOptions): number {
+        this.ensureAlive();
+        this.assertActive(bodyA);
+        this.assertActive(bodyB);
+        assertVec3(options.localAnchorA, "localAnchorA");
+        assertVec3(options.localAnchorB, "localAnchorB");
+        const id = this.wasm.constraintCreateFixed(
+            bodyA,
+            bodyB,
+            options.localAnchorA[0],
+            options.localAnchorA[1],
+            options.localAnchorA[2],
+            options.localAnchorB[0],
+            options.localAnchorB[1],
+            options.localAnchorB[2],
+            options.collideConnected ? 1 : 0
+        );
+        if (id < 0) {
+            throw new Error("fixed joint creation failed");
+        }
+        return id;
+    }
+
+    createHingeJoint(bodyA: number, bodyB: number, options: HingeJointOptions): number {
+        this.ensureAlive();
+        this.assertActive(bodyA);
+        this.assertActive(bodyB);
+        assertVec3(options.localAnchorA, "localAnchorA");
+        assertVec3(options.localAnchorB, "localAnchorB");
+        assertVec3(options.localAxisA, "localAxisA");
+        assertVec3(options.localAxisB, "localAxisB");
+        const lowerLimit = options.lowerLimit ?? 0;
+        const upperLimit = options.upperLimit ?? 0;
+        assertFinite(lowerLimit, "lowerLimit");
+        assertFinite(upperLimit, "upperLimit");
+        if (options.enableLimit && lowerLimit > upperLimit) {
+            throw new Error("lowerLimit must not exceed upperLimit");
+        }
+        const motorSpeed = options.motorSpeed ?? 0;
+        const maxMotorTorque = options.maxMotorTorque ?? 0;
+        assertFinite(motorSpeed, "motorSpeed");
+        assertFinite(maxMotorTorque, "maxMotorTorque");
+        if (maxMotorTorque < 0) {
+            throw new Error("maxMotorTorque must be non-negative");
+        }
+        const id = this.wasm.constraintCreateHinge(
+            bodyA,
+            bodyB,
+            options.localAnchorA[0],
+            options.localAnchorA[1],
+            options.localAnchorA[2],
+            options.localAnchorB[0],
+            options.localAnchorB[1],
+            options.localAnchorB[2],
+            options.localAxisA[0],
+            options.localAxisA[1],
+            options.localAxisA[2],
+            options.localAxisB[0],
+            options.localAxisB[1],
+            options.localAxisB[2],
+            options.enableLimit ? 1 : 0,
+            lowerLimit,
+            upperLimit,
+            options.enableMotor ? 1 : 0,
+            motorSpeed,
+            maxMotorTorque,
+            options.collideConnected ? 1 : 0
+        );
+        if (id < 0) {
+            throw new Error("hinge joint creation failed");
+        }
+        return id;
+    }
+
+    createSliderJoint(bodyA: number, bodyB: number, options: SliderJointOptions): number {
+        this.ensureAlive();
+        this.assertActive(bodyA);
+        this.assertActive(bodyB);
+        assertVec3(options.localAnchorA, "localAnchorA");
+        assertVec3(options.localAnchorB, "localAnchorB");
+        assertVec3(options.localAxisA, "localAxisA");
+        const lowerLimit = options.lowerLimit ?? 0;
+        const upperLimit = options.upperLimit ?? 0;
+        assertFinite(lowerLimit, "lowerLimit");
+        assertFinite(upperLimit, "upperLimit");
+        if (options.enableLimit && lowerLimit > upperLimit) {
+            throw new Error("lowerLimit must not exceed upperLimit");
+        }
+        const motorSpeed = options.motorSpeed ?? 0;
+        const maxMotorForce = options.maxMotorForce ?? 0;
+        assertFinite(motorSpeed, "motorSpeed");
+        assertFinite(maxMotorForce, "maxMotorForce");
+        if (maxMotorForce < 0) {
+            throw new Error("maxMotorForce must be non-negative");
+        }
+        const id = this.wasm.constraintCreateSlider(
+            bodyA,
+            bodyB,
+            options.localAnchorA[0],
+            options.localAnchorA[1],
+            options.localAnchorA[2],
+            options.localAnchorB[0],
+            options.localAnchorB[1],
+            options.localAnchorB[2],
+            options.localAxisA[0],
+            options.localAxisA[1],
+            options.localAxisA[2],
+            options.enableLimit ? 1 : 0,
+            lowerLimit,
+            upperLimit,
+            options.enableMotor ? 1 : 0,
+            motorSpeed,
+            maxMotorForce,
+            options.collideConnected ? 1 : 0
+        );
+        if (id < 0) {
+            throw new Error("slider joint creation failed");
+        }
+        return id;
+    }
+
+    createSpringJoint(bodyA: number, bodyB: number, options: SpringJointOptions): number {
+        this.ensureAlive();
+        this.assertActive(bodyA);
+        this.assertActive(bodyB);
+        assertVec3(options.localAnchorA, "localAnchorA");
+        assertVec3(options.localAnchorB, "localAnchorB");
+        const restLength = options.restLength ?? 1;
+        const stiffness = options.stiffness ?? 10;
+        const damping = options.damping ?? 0.5;
+        assertFinite(restLength, "restLength");
+        assertFinite(stiffness, "stiffness");
+        assertFinite(damping, "damping");
+        if (restLength < 0 || stiffness < 0 || damping < 0) {
+            throw new Error("spring parameters must be non-negative");
+        }
+        const id = this.wasm.constraintCreateSpring(
+            bodyA,
+            bodyB,
+            options.localAnchorA[0],
+            options.localAnchorA[1],
+            options.localAnchorA[2],
+            options.localAnchorB[0],
+            options.localAnchorB[1],
+            options.localAnchorB[2],
+            restLength,
+            stiffness,
+            damping,
+            options.collideConnected ? 1 : 0
+        );
+        if (id < 0) {
+            throw new Error("spring joint creation failed");
+        }
+        return id;
+    }
+
+    destroyConstraint(id: number): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        if (this.wasm.constraintDestroy(id) !== 0) {
+            throw new Error(`constraint ${id} destruction failed`);
+        }
+    }
+
+    setConstraintEnabled(id: number, enabled: boolean): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        if (this.wasm.constraintSetEnabled(id, enabled ? 1 : 0) !== 0) {
+            throw new Error(`constraint ${id} enabled state failed`);
+        }
+    }
+
+    setHingeMotor(id: number, speed: number, maxTorque: number): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        assertFinite(speed, "motorSpeed");
+        assertFinite(maxTorque, "maxMotorTorque");
+        if (maxTorque < 0) {
+            throw new Error("maxMotorTorque must be non-negative");
+        }
+        if (this.wasm.constraintSetHingeMotor(id, speed, maxTorque) !== 0) {
+            throw new Error(`constraint ${id} hinge motor failed`);
+        }
+    }
+
+    setHingeLimit(id: number, enable: boolean, lower: number, upper: number): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        assertFinite(lower, "lowerLimit");
+        assertFinite(upper, "upperLimit");
+        if (enable && lower > upper) {
+            throw new Error("lowerLimit must not exceed upperLimit");
+        }
+        if (this.wasm.constraintSetHingeLimit(id, enable ? 1 : 0, lower, upper) !== 0) {
+            throw new Error(`constraint ${id} hinge limit failed`);
+        }
+    }
+
+    setSliderMotor(id: number, speed: number, maxForce: number): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        assertFinite(speed, "motorSpeed");
+        assertFinite(maxForce, "maxMotorForce");
+        if (maxForce < 0) {
+            throw new Error("maxMotorForce must be non-negative");
+        }
+        if (this.wasm.constraintSetSliderMotor(id, speed, maxForce) !== 0) {
+            throw new Error(`constraint ${id} slider motor failed`);
+        }
+    }
+
+    setSliderLimit(id: number, enable: boolean, lower: number, upper: number): void {
+        this.ensureAlive();
+        assertConstraintId(id);
+        assertFinite(lower, "lowerLimit");
+        assertFinite(upper, "upperLimit");
+        if (enable && lower > upper) {
+            throw new Error("lowerLimit must not exceed upperLimit");
+        }
+        if (this.wasm.constraintSetSliderLimit(id, enable ? 1 : 0, lower, upper) !== 0) {
+            throw new Error(`constraint ${id} slider limit failed`);
+        }
+    }
+
+    constraintCount(): number {
+        this.ensureAlive();
+        const count = this.wasm.constraintCount();
+        if (count < 0) {
+            throw new Error("constraint count query failed");
+        }
+        return count;
+    }
+
+    constraintKind(id: number): number {
+        this.ensureAlive();
+        assertConstraintId(id);
+        const kind = this.wasm.constraintGetKind(id);
+        if (kind < 0) {
+            throw new Error(`constraint ${id} kind query failed`);
+        }
+        return kind;
+    }
+
+    getJointReactionForce(id: number): MutableVec3 {
+        this.ensureAlive();
+        assertConstraintId(id);
+        return [0, 0, 0];
+    }
+
+    getJointReactionTorque(id: number): number {
+        this.ensureAlive();
+        assertConstraintId(id);
+        return 0;
     }
 
     reset(): void {

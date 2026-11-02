@@ -76,6 +76,48 @@ export interface StepOptions {
     readonly positionIterations?: number;
 }
 
+export interface FixedJointOptions {
+    readonly localAnchorA: Vec3Tuple;
+    readonly localAnchorB: Vec3Tuple;
+    readonly collideConnected?: boolean;
+}
+
+export interface HingeJointOptions {
+    readonly localAnchorA: Vec3Tuple;
+    readonly localAnchorB: Vec3Tuple;
+    readonly localAxisA: Vec3Tuple;
+    readonly localAxisB: Vec3Tuple;
+    readonly enableLimit?: boolean;
+    readonly lowerLimit?: number;
+    readonly upperLimit?: number;
+    readonly enableMotor?: boolean;
+    readonly motorSpeed?: number;
+    readonly maxMotorTorque?: number;
+    readonly collideConnected?: boolean;
+}
+
+export interface SliderJointOptions {
+    readonly localAnchorA: Vec3Tuple;
+    readonly localAnchorB: Vec3Tuple;
+    readonly localAxisA: Vec3Tuple;
+    readonly enableLimit?: boolean;
+    readonly lowerLimit?: number;
+    readonly upperLimit?: number;
+    readonly enableMotor?: boolean;
+    readonly motorSpeed?: number;
+    readonly maxMotorForce?: number;
+    readonly collideConnected?: boolean;
+}
+
+export interface SpringJointOptions {
+    readonly localAnchorA: Vec3Tuple;
+    readonly localAnchorB: Vec3Tuple;
+    readonly restLength?: number;
+    readonly stiffness?: number;
+    readonly damping?: number;
+    readonly collideConnected?: boolean;
+}
+
 export interface TransformSnapshot {
     readonly position: MutableVec3;
     readonly rotation: MutableQuat;

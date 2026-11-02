@@ -716,3 +716,290 @@ AXRONE_PHYSICS_EXPORT(shapeGetFilter) int32_t shapeGetFilter(int32_t shapeId, ui
 AXRONE_PHYSICS_EXPORT(shape_get_filter) int32_t shape_get_filter(int32_t shapeId, uintptr_t out3i32) {
     return shapeGetFilter(shapeId, out3i32);
 }
+
+AXRONE_PHYSICS_EXPORT(constraintCreateFixed) int32_t constraintCreateFixed(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    int32_t collideConnected
+) {
+    return g_world.createFixed(bodyA, bodyB, Vec3(ax, ay, az), Vec3(bx, by, bz), collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_create_fixed) int32_t constraint_create_fixed(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    int32_t collideConnected
+) {
+    return constraintCreateFixed(bodyA, bodyB, ax, ay, az, bx, by, bz, collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintCreateHinge) int32_t constraintCreateHinge(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float aax,
+    float aay,
+    float aaz,
+    float abx,
+    float aby,
+    float abz,
+    int32_t enableLimit,
+    float lower,
+    float upper,
+    int32_t enableMotor,
+    float motorSpeed,
+    float maxMotorTorque,
+    int32_t collideConnected
+) {
+    return g_world.createHinge(
+        bodyA,
+        bodyB,
+        Vec3(ax, ay, az),
+        Vec3(bx, by, bz),
+        Vec3(aax, aay, aaz),
+        Vec3(abx, aby, abz),
+        enableLimit,
+        lower,
+        upper,
+        enableMotor,
+        motorSpeed,
+        maxMotorTorque,
+        collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_create_hinge) int32_t constraint_create_hinge(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float aax,
+    float aay,
+    float aaz,
+    float abx,
+    float aby,
+    float abz,
+    int32_t enableLimit,
+    float lower,
+    float upper,
+    int32_t enableMotor,
+    float motorSpeed,
+    float maxMotorTorque,
+    int32_t collideConnected
+) {
+    return constraintCreateHinge(
+        bodyA,
+        bodyB,
+        ax, ay, az,
+        bx, by, bz,
+        aax, aay, aaz,
+        abx, aby, abz,
+        enableLimit,
+        lower,
+        upper,
+        enableMotor,
+        motorSpeed,
+        maxMotorTorque,
+        collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintCreateSlider) int32_t constraintCreateSlider(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float aax,
+    float aay,
+    float aaz,
+    int32_t enableLimit,
+    float lower,
+    float upper,
+    int32_t enableMotor,
+    float motorSpeed,
+    float maxMotorForce,
+    int32_t collideConnected
+) {
+    return g_world.createSlider(
+        bodyA,
+        bodyB,
+        Vec3(ax, ay, az),
+        Vec3(bx, by, bz),
+        Vec3(aax, aay, aaz),
+        enableLimit,
+        lower,
+        upper,
+        enableMotor,
+        motorSpeed,
+        maxMotorForce,
+        collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_create_slider) int32_t constraint_create_slider(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float aax,
+    float aay,
+    float aaz,
+    int32_t enableLimit,
+    float lower,
+    float upper,
+    int32_t enableMotor,
+    float motorSpeed,
+    float maxMotorForce,
+    int32_t collideConnected
+) {
+    return constraintCreateSlider(
+        bodyA,
+        bodyB,
+        ax, ay, az,
+        bx, by, bz,
+        aax, aay, aaz,
+        enableLimit,
+        lower,
+        upper,
+        enableMotor,
+        motorSpeed,
+        maxMotorForce,
+        collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintCreateSpring) int32_t constraintCreateSpring(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float restLength,
+    float stiffness,
+    float damping,
+    int32_t collideConnected
+) {
+    return g_world.createSpring(
+        bodyA,
+        bodyB,
+        Vec3(ax, ay, az),
+        Vec3(bx, by, bz),
+        restLength,
+        stiffness,
+        damping,
+        collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_create_spring) int32_t constraint_create_spring(
+    int32_t bodyA,
+    int32_t bodyB,
+    float ax,
+    float ay,
+    float az,
+    float bx,
+    float by,
+    float bz,
+    float restLength,
+    float stiffness,
+    float damping,
+    int32_t collideConnected
+) {
+    return constraintCreateSpring(bodyA, bodyB, ax, ay, az, bx, by, bz, restLength, stiffness, damping, collideConnected);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintDestroy) int32_t constraintDestroy(int32_t id) {
+    return g_world.destroyConstraint(id);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_destroy) int32_t constraint_destroy(int32_t id) {
+    return constraintDestroy(id);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintSetEnabled) int32_t constraintSetEnabled(int32_t id, int32_t enabled) {
+    return g_world.setConstraintEnabled(id, enabled);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_set_enabled) int32_t constraint_set_enabled(int32_t id, int32_t enabled) {
+    return constraintSetEnabled(id, enabled);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintSetHingeMotor) int32_t constraintSetHingeMotor(int32_t id, float speed, float maxTorque) {
+    return g_world.setHingeMotor(id, speed, maxTorque);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_set_hinge_motor) int32_t constraint_set_hinge_motor(int32_t id, float speed, float maxTorque) {
+    return constraintSetHingeMotor(id, speed, maxTorque);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintSetHingeLimit) int32_t constraintSetHingeLimit(int32_t id, int32_t enable, float lower, float upper) {
+    return g_world.setHingeLimit(id, enable, lower, upper);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_set_hinge_limit) int32_t constraint_set_hinge_limit(int32_t id, int32_t enable, float lower, float upper) {
+    return constraintSetHingeLimit(id, enable, lower, upper);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintSetSliderMotor) int32_t constraintSetSliderMotor(int32_t id, float speed, float maxForce) {
+    return g_world.setSliderMotor(id, speed, maxForce);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_set_slider_motor) int32_t constraint_set_slider_motor(int32_t id, float speed, float maxForce) {
+    return constraintSetSliderMotor(id, speed, maxForce);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintSetSliderLimit) int32_t constraintSetSliderLimit(int32_t id, int32_t enable, float lower, float upper) {
+    return g_world.setSliderLimit(id, enable, lower, upper);
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_set_slider_limit) int32_t constraint_set_slider_limit(int32_t id, int32_t enable, float lower, float upper) {
+    return constraintSetSliderLimit(id, enable, lower, upper);
+}
+
+AXRONE_PHYSICS_EXPORT(constraintCount) int32_t constraintCount(void) {
+    return g_world.initialized ? g_world.constraintCount : -1;
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_count) int32_t constraint_count(void) {
+    return constraintCount();
+}
+
+AXRONE_PHYSICS_EXPORT(constraintGetKind) int32_t constraintGetKind(int32_t id) {
+    axrone::physics::Constraint* constraint = nullptr;
+    if (!g_world.constraintResolve(id, constraint)) {
+        return -1;
+    }
+    return constraint->kind;
+}
+
+AXRONE_PHYSICS_EXPORT(constraint_get_kind) int32_t constraint_get_kind(int32_t id) {
+    return constraintGetKind(id);
+}
+

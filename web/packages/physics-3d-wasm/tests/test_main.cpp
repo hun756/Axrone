@@ -1931,6 +1931,471 @@ void testShapeIdLifecycleNewKinds() {
     CHECK(shapeValid(world.bodies[body].shapes[0]));
 }
 
+float testSin(float angle) {
+    const float square = angle * angle;
+    return angle * (1.0f + square * (-0.16666667f + square * (0.00833333f + square * -0.00019841f)));
+}
+
+float testCos(float angle) {
+    const float square = angle * angle;
+    return 1.0f + square * (-0.5f + square * (0.04166667f + square * (-0.00138889f + square * 0.0000248f)));
+}
+
+float testAtan(float value) {
+    const float reduced = value / (1.0f + sqrtf(1.0f + value * value));
+    const float square = reduced * reduced;
+    return 2.0f * reduced * (1.0f + square * (-0.33333333f + square * (0.2f + square * -0.14285714f)));
+}
+
+float testAtan2(float y, float x) {
+    if (x == 0.0f && y == 0.0f) {
+        return 0.0f;
+    }
+    if (fabsf(x) >= fabsf(y)) {
+        return testAtan(y / x);
+    }
+    const float halfPi = 0.5f * kPi;
+    return (y > 0.0f ? halfPi : -halfPi) - testAtan(x / y);
+}
+
+float makeNan() {
+    const uint32_t bits = 0x7FC00000u;
+    float value = 0.0f;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+Vec3 jointWorldAnchor(const World& world, int32_t id, const Vec3& localAnchor) {
+    return transformPosition(world.transforms[id]) + world.bodies[id].rotation.transform(localAnchor);
+}
+
+float hingeAngleZ(const World& world, int32_t id) {
+    const Transform& transform = world.transforms[id];
+    return 2.0f * testAtan2(transform.qz, transform.qw);
+}
+
+bool initJointWorld(World& world, Arena& arena, unsigned char* memory, Vec3 gravity) {
+    return initWorld(world, arena, memory, 64, 4096) && world.setGravity(gravity.x, gravity.y, gravity.z) == 0;
+}
+
+void testFixedJointHoldsRigid() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t support = world.createBody(kBodyTypeStatic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t payload = world.createBody(kBodyTypeDynamic, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(support >= 0);
+    CHECK(payload >= 0);
+    CHECK(world.setSphere(payload, 0.3f, 1.0f) == 0);
+
+    const Vec3 supportAnchor(0.0f, -1.0f, 0.0f);
+    const Vec3 payloadAnchor(0.0f, 0.0f, 0.0f);
+    const int32_t joint = world.createFixed(support, payload, supportAnchor, payloadAnchor, 1);
+    CHECK(joint >= 0);
+
+    Vec3 settled(0.0f, 0.0f, 0.0f);
+    for (int32_t i = 0; i < 300; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        if (i == 60) {
+            settled = jointWorldAnchor(world, payload, payloadAnchor) -
+                      jointWorldAnchor(world, support, supportAnchor);
+        }
+    }
+
+    const Vec3 mismatch = jointWorldAnchor(world, payload, payloadAnchor) -
+                          jointWorldAnchor(world, support, supportAnchor);
+    CHECK(isFinite(mismatch.x) && isFinite(mismatch.y) && isFinite(mismatch.z));
+    CHECK(length(mismatch) < 1e-3f);
+    CHECK(length(mismatch - settled) < 1e-5f);
+    CHECK(world.constraintCount == 1);
+}
+
+void testHingeDoorSwingsAndClampsAtLimit() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t frame = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const float half = 0.025f;
+    const float qz = testSin(half);
+    const float qw = testCos(half);
+    Mat3 rotation;
+    rotation.fromQuaternion(0.0f, 0.0f, qz, qw);
+    const Vec3 doorAnchor(0.4f, 0.0f, 0.0f);
+    const Vec3 lever = rotation.transform(doorAnchor);
+    const int32_t door = world.createBody(kBodyTypeDynamic, -lever.x, 3.0f - lever.y, 0.0f, 0.0f, 0.0f, qz, qw);
+    CHECK(frame >= 0);
+    CHECK(door >= 0);
+    CHECK(world.setBox(door, 0.4f, 0.08f, 0.2f, 1.0f) == 0);
+
+    const int32_t joint = world.createHinge(
+        frame, door, Vec3(0.0f, 0.0f, 0.0f), doorAnchor,
+        Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f),
+        1, 0.0f, 0.35f, 0, 0.0f, 0.0f, 1);
+    CHECK(joint >= 0);
+
+    float startAngle = hingeAngleZ(world, door);
+    CHECK(startAngle < 0.15f);
+
+    for (int32_t i = 0; i < 300; ++i) {
+        world.step(1.0f / 60.0f, 10, 4);
+        const float angle = hingeAngleZ(world, door);
+        CHECK(isFinite(angle));
+    }
+
+    const float settled = hingeAngleZ(world, door);
+    const float expected = 0.35f + kJointAngularSlop;
+    CHECK(settled < 0.5f);
+    CHECK(settled > 0.3f);
+    CHECK(near(settled, expected, 0.03f));
+}
+
+void testHingeMotorReachesTargetSpeed() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, 0.0f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t rotor = world.createBody(kBodyTypeDynamic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(rotor, 0.2f, 0.2f, 0.2f, 1.0f) == 0);
+
+    const int32_t joint = world.createHinge(
+        mount, rotor, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f),
+        Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f),
+        0, 0.0f, 0.0f, 1, 2.0f, 50.0f, 1);
+    CHECK(joint >= 0);
+
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(1.0f / 60.0f, 10, 4);
+    }
+
+    const float relativeSpeed = world.angularVelocities[rotor].y - world.angularVelocities[mount].y;
+    CHECK(isFinite(relativeSpeed));
+    CHECK(near(relativeSpeed, 2.0f, 0.06f));
+}
+
+void testSliderMovesOnlyAlongAxis() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t carriage = world.createBody(kBodyTypeDynamic, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setSphere(carriage, 0.2f, 1.0f) == 0);
+
+    const int32_t joint = world.createSlider(
+        mount, carriage, Vec3(0.0f, -1.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f),
+        Vec3(0.0f, -1.0f, 0.0f), 0, 0.0f, 0.0f, 0, 0.0f, 0.0f, 1);
+    CHECK(joint >= 0);
+
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 10, 4);
+    }
+
+    const Transform& transform = world.transforms[carriage];
+    CHECK(isFinite(transform.px) && isFinite(transform.py) && isFinite(transform.pz));
+    CHECK(fabsf(transform.px) < 1e-4f);
+    CHECK(fabsf(transform.pz) < 1e-4f);
+    CHECK(transform.py < -10.0f);
+}
+
+void testSliderLimitClamps() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t carriage = world.createBody(kBodyTypeDynamic, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(carriage, 0.2f, 0.2f, 0.2f, 1.0f) == 0);
+
+    const int32_t joint = world.createSlider(
+        mount, carriage, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f),
+        Vec3(0.0f, -1.0f, 0.0f), 1, 0.0f, 1.0f, 0, 0.0f, 0.0f, 1);
+    CHECK(joint >= 0);
+
+    for (int32_t i = 0; i < 300; ++i) {
+        world.step(1.0f / 60.0f, 10, 4);
+        const float angle = hingeAngleZ(world, carriage);
+        CHECK(isFinite(angle));
+    }
+
+    const Transform& transform = world.transforms[carriage];
+    CHECK(near(transform.py, 1.0f, 0.08f));
+    CHECK(transform.py < 1.1f);
+    CHECK(fabsf(transform.px) < 0.05f);
+    CHECK(fabsf(transform.pz) < 0.05f);
+}
+
+void testSpringPendulumPeriod() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, 0.0f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t bob = world.createBody(kBodyTypeDynamic, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setSphere(bob, 0.2f, 1.0f) == 0);
+    CHECK(world.setMassData(bob, 1.0f, 0.0f, 0.0f, 0.0f) == 0);
+
+    const int32_t joint = world.createSpring(
+        mount, bob, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f),
+        1.0f, 10.0f, 0.0f, 1);
+    CHECK(joint >= 0);
+
+    int32_t crossings[8];
+    int32_t crossingCount = 0;
+    float previousVelocity = 0.0f;
+    for (int32_t i = 0; i < 800; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        const float velocity = world.velocities[bob].y;
+        CHECK(isFinite(velocity));
+        CHECK(isFinite(world.transforms[bob].py));
+        if (i > 2 && crossingCount < 8 && previousVelocity < 0.0f && velocity >= 0.0f) {
+            crossings[crossingCount++] = i;
+        }
+        previousVelocity = velocity;
+    }
+
+    CHECK(crossingCount >= 3);
+    if (crossingCount >= 3) {
+        const float period = static_cast<float>(crossings[crossingCount - 1] - crossings[0]) /
+                             static_cast<float>(crossingCount - 1);
+        const float expected = 2.0f * kPi * sqrtf(1.0f / 10.0f) * 60.0f;
+        CHECK(near(period, expected, expected * 0.05f));
+    }
+}
+
+void testCollideConnectedSuppressesContacts() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t left = world.createBody(kBodyTypeDynamic, 0.0f, 1.2f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t right = world.createBody(kBodyTypeDynamic, 1.2f, 1.2f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(left, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setBox(right, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+
+    const int32_t joint = world.createFixed(left, right, Vec3(0.1f, 0.0f, 0.0f), Vec3(-0.1f, 0.0f, 0.0f), 0);
+    CHECK(joint >= 0);
+
+    int32_t pairContacts = 0;
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        for (int32_t k = 0; k < world.contactCount; ++k) {
+            const Contact& contact = world.contacts[k];
+            if ((contact.a == left && contact.b == right) || (contact.a == right && contact.b == left)) {
+                ++pairContacts;
+            }
+        }
+    }
+    CHECK(pairContacts == 0);
+
+    CHECK(world.setConstraintEnabled(joint, 0) == 0);
+    CHECK(world.destroyConstraint(joint) == 0);
+
+    int32_t controlContacts = 0;
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+        for (int32_t k = 0; k < world.contactCount; ++k) {
+            const Contact& contact = world.contacts[k];
+            if ((contact.a == left && contact.b == right) || (contact.a == right && contact.b == left)) {
+                ++controlContacts;
+            }
+        }
+    }
+    CHECK(controlContacts > 0);
+}
+
+void testConstraintIdsStableAndStaleRejected() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t payload = world.createBody(kBodyTypeDynamic, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setSphere(payload, 0.3f, 1.0f) == 0);
+
+    const int32_t first = world.createFixed(mount, payload, Vec3(0.0f, -1.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), 1);
+    CHECK(constraintDecodeSlot(first) == 0);
+    CHECK(constraintDecodeGeneration(first) == 0);
+    CHECK(world.constraintCount == 1);
+    CHECK(world.destroyConstraint(first) == 0);
+    CHECK(world.constraintCount == 0);
+
+    const int32_t second = world.createFixed(mount, payload, Vec3(0.0f, -1.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), 1);
+    CHECK(constraintDecodeSlot(second) == 0);
+    CHECK(constraintDecodeGeneration(second) == 1);
+    CHECK(second != first);
+
+    axrone::physics::Constraint* resolved = nullptr;
+    CHECK(!world.constraintResolve(first, resolved));
+    CHECK(world.setConstraintEnabled(first, 1) == -1);
+    CHECK(world.destroyConstraint(first) == -1);
+    CHECK(world.setHingeMotor(first, 1.0f, 1.0f) == -1);
+    CHECK(world.constraintResolve(second, resolved));
+    CHECK(resolved != nullptr);
+    CHECK(resolved->kind == kConstraintFixed);
+    CHECK(world.setConstraintEnabled(second, 1) == 0);
+    CHECK(world.setConstraintEnabled(second, 0) == 0);
+    CHECK(world.setConstraintEnabled(second, 2) == -1);
+
+    CHECK(world.destroyBody(payload) == 0);
+    CHECK(world.constraintCount == 0);
+    CHECK(!world.constraintResolve(second, resolved));
+
+    const int32_t third = world.createFixed(
+        mount, world.createBody(kBodyTypeDynamic, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f),
+        Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), 1);
+    CHECK(third >= 0);
+    CHECK(constraintDecodeGeneration(third) == 2);
+
+    world.reset();
+    CHECK(world.constraintCount == 0);
+    CHECK(!world.constraintResolve(third, resolved));
+    CHECK(world.constraintCount == 0);
+}
+
+void testConstraintDisablingReleasesSolverState() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t rotor = world.createBody(kBodyTypeDynamic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(rotor, 0.4f, 0.08f, 0.2f, 1.0f) == 0);
+
+    const float half = 0.025f;
+    Mat3 rotation;
+    rotation.fromQuaternion(0.0f, 0.0f, testSin(half), testCos(half));
+    const Vec3 doorAnchor(0.4f, 0.0f, 0.0f);
+    const Vec3 lever = rotation.transform(doorAnchor);
+    CHECK(world.setTransform(rotor, -lever.x, -lever.y, 0.0f, 0.0f, 0.0f, testSin(half), testCos(half)) == 0);
+
+    const int32_t joint = world.createHinge(
+        mount, rotor, Vec3(0.0f, 0.0f, 0.0f), doorAnchor,
+        Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f),
+        1, 0.0f, 0.35f, 1, 2.0f, 50.0f, 1);
+    CHECK(joint >= 0);
+
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 10, 4);
+    }
+
+    axrone::physics::Constraint* constraint = nullptr;
+    CHECK(world.constraintResolve(joint, constraint));
+    CHECK(fabsf(constraint->impulses[2]) > 1e-4f);
+    CHECK(constraint->impulses[3] < -0.05f);
+
+    CHECK(world.setConstraintEnabled(joint, 0) == 0);
+    CHECK(constraint->impulses[0] == 0.0f);
+    CHECK(constraint->impulses[2] == 0.0f);
+    CHECK(constraint->impulses[3] == 0.0f);
+
+    CHECK(world.setConstraintEnabled(joint, 1) == 0);
+    CHECK(world.setHingeMotor(joint, 0.0f, 0.0f) == 0);
+    CHECK(constraint->impulses[2] == 0.0f);
+    CHECK(constraint->enableMotor == 0);
+    CHECK(world.setHingeMotor(joint, makeNan(), 1.0f) == -1);
+    CHECK(world.setHingeLimit(joint, 1, 1.0f, -1.0f) == -1);
+}
+
+void testConstraintInputValidation() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setSphere(body, 0.3f, 1.0f) == 0);
+
+    const float nan = makeNan();
+    CHECK(world.createFixed(mount, -1, Vec3(), Vec3(), 1) == -1);
+    CHECK(world.createFixed(mount, body, Vec3(nan, 0.0f, 0.0f), Vec3(), 1) == -1);
+    CHECK(world.createFixed(mount, mount, Vec3(), Vec3(), 1) == -1);
+    CHECK(world.createFixed(mount, body, Vec3(), Vec3(), 2) == -1);
+    CHECK(world.createHinge(
+        mount, body, Vec3(), Vec3(), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f),
+        0, 0.0f, 0.0f, 0, 0.0f, 0.0f, 1) == -1);
+    CHECK(world.createHinge(
+        mount, body, Vec3(), Vec3(), Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f),
+        1, 0.5f, 0.25f, 0, 0.0f, 0.0f, 1) == -1);
+    CHECK(world.createHinge(
+        mount, body, Vec3(), Vec3(), Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f),
+        0, 0.0f, 0.0f, 0, 0.0f, -1.0f, 1) == -1);
+    CHECK(world.createSlider(
+        mount, body, Vec3(), Vec3(), Vec3(0.0f, 0.0f, 0.0f),
+        0, 0.0f, 0.0f, 0, 0.0f, 0.0f, 1) == -1);
+    CHECK(world.createSpring(
+        mount, body, Vec3(), Vec3(), 1.0f, -10.0f, 0.0f, 1) == -1);
+    CHECK(world.createSpring(
+        mount, body, Vec3(), Vec3(), -1.0f, 10.0f, 0.0f, 1) == -1);
+    CHECK(world.constraintCount == 0);
+    CHECK(world.destroyConstraint(12345) == -1);
+    CHECK(world.setSliderMotor(12345, 1.0f, 1.0f) == -1);
+    CHECK(world.setSliderLimit(12345, 1, 0.0f, 1.0f) == -1);
+}
+
+void testConstraintCapacityRejection() {
+    Arena arena;
+    World world;
+    CHECK(initJointWorld(world, arena, g_memoryA, Vec3(0.0f, -9.81f, 0.0f)));
+
+    const int32_t mount = world.createBody(kBodyTypeStatic, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+
+    int32_t created = 0;
+    int32_t lastId = -1;
+    for (int32_t i = 0; i < kMaxConstraints; ++i) {
+        const int32_t id = world.createFixed(mount, body, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), 1);
+        if (id < 0) {
+            break;
+        }
+        lastId = id;
+        ++created;
+    }
+    CHECK(created == kMaxConstraints);
+    CHECK(world.constraintCount == kMaxConstraints);
+    CHECK(world.createFixed(mount, body, Vec3(), Vec3(), 1) == -1);
+    CHECK(world.destroyConstraint(lastId) == 0);
+    CHECK(world.createFixed(mount, body, Vec3(), Vec3(), 1) >= 0);
+}
+
+void testConstraintSceneDeterminism() {
+    Arena arenaA;
+    Arena arenaB;
+    World worldA;
+    World worldB;
+    CHECK(initWorld(worldA, arenaA, g_memoryA, 64, 4096));
+    CHECK(initWorld(worldB, arenaB, g_memoryB, 64, 4096));
+    CHECK(worldA.setGravity(0.0f, -9.81f, 0.0f) == 0);
+    CHECK(worldB.setGravity(0.0f, -9.81f, 0.0f) == 0);
+
+    const int32_t supportA = worldA.createBody(kBodyTypeStatic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t supportB = worldB.createBody(kBodyTypeStatic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t payloadA = worldA.createBody(kBodyTypeDynamic, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t payloadB = worldB.createBody(kBodyTypeDynamic, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(worldA.setBox(payloadA, 0.3f, 0.3f, 0.3f, 1.0f) == 0);
+    CHECK(worldB.setBox(payloadB, 0.3f, 0.3f, 0.3f, 1.0f) == 0);
+    CHECK(worldA.createHinge(
+        supportA, payloadA, Vec3(0.0f, -1.0f, 0.0f), Vec3(-0.3f, 0.0f, 0.0f),
+        Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f), 1, -0.5f, 0.5f, 1, 0.5f, 2.0f, 1) >= 0);
+    CHECK(worldB.createHinge(
+        supportB, payloadB, Vec3(0.0f, -1.0f, 0.0f), Vec3(-0.3f, 0.0f, 0.0f),
+        Vec3(0.0f, 0.0f, 1.0f), Vec3(0.0f, 0.0f, 1.0f), 1, -0.5f, 0.5f, 1, 0.5f, 2.0f, 1) >= 0);
+    CHECK(worldA.createSpring(
+        supportA, payloadA, Vec3(0.0f, -1.0f, 0.5f), Vec3(0.0f, 0.3f, 0.0f), 1.0f, 10.0f, 0.5f, 1) >= 0);
+    CHECK(worldB.createSpring(
+        supportB, payloadB, Vec3(0.0f, -1.0f, 0.5f), Vec3(0.0f, 0.3f, 0.0f), 1.0f, 10.0f, 0.5f, 1) >= 0);
+
+    for (int32_t i = 0; i < 200; ++i) {
+        worldA.step(1.0f / 60.0f, 10, 4);
+        worldB.step(1.0f / 60.0f, 10, 4);
+    }
+
+    CHECK(worldA.fingerprint() == worldB.fingerprint());
+    CHECK(worldA.constraintCount == worldB.constraintCount);
+}
+
 int main() {
     testInitValidation();
     testSphereRest();
@@ -1993,6 +2458,18 @@ int main() {
     testCylinderSphereContact();
     testCylinderCapsuleContact();
     testShapeIdLifecycleNewKinds();
+    testFixedJointHoldsRigid();
+    testHingeDoorSwingsAndClampsAtLimit();
+    testHingeMotorReachesTargetSpeed();
+    testSliderMovesOnlyAlongAxis();
+    testSliderLimitClamps();
+    testSpringPendulumPeriod();
+    testCollideConnectedSuppressesContacts();
+    testConstraintIdsStableAndStaleRejected();
+    testConstraintDisablingReleasesSolverState();
+    testConstraintInputValidation();
+    testConstraintCapacityRejection();
+    testConstraintSceneDeterminism();
 
     if (g_failures == 0) {
         std::printf("PASS\n");

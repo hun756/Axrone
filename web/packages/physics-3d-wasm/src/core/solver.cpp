@@ -1,5 +1,6 @@
 #include "core/solver.h"
 
+#include "core/constraints.h"
 #include "platform/math.h"
 
 namespace axrone::physics {
@@ -162,6 +163,7 @@ void solveVelocities(World& world, int32_t iterations) {
             applyImpulse(world, a, -tangent2Impulse, contact.ra);
             applyImpulse(world, b, tangent2Impulse, contact.rb);
         }
+        solveConstraintVelocityPass(world);
     }
 }
 
@@ -209,6 +211,7 @@ void solvePositions(World& world, int32_t iterations) {
             applyPositionImpulse(world, a, -impulse, ra);
             applyPositionImpulse(world, b, impulse, rb);
         }
+        solveConstraintPositionPass(world);
     }
 }
 

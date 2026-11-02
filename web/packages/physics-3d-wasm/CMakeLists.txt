@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(PHYSICS_CORE_SOURCES
     src/core/world.cpp
     src/core/broadphase.cpp
+    src/core/constraints.cpp
     src/core/narrowphase.cpp
     src/core/solver.cpp
     src/core/query.cpp

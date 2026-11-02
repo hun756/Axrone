@@ -798,6 +798,9 @@ void collideShapePair(World& world, int32_t a, int32_t indexA, const ShapeWorld&
 }
 
 void collidePair(World& world, int32_t a, int32_t b) {
+    if (pairSuppressedByConstraints(world, a, b)) {
+        return;
+    }
     const Body& bodyA = world.bodies[a];
     const Body& bodyB = world.bodies[b];
     const int32_t countA = shapeSlots(bodyA);

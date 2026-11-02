@@ -22,6 +22,16 @@ constexpr int32_t kMaxIterations = 64;
 constexpr int32_t kMaxBodies = 262144;
 constexpr int32_t kMaxContacts = 262144;
 constexpr int32_t kMaxShapesPerBody = 8;
+constexpr int32_t kMaxConstraints = 4096;
+constexpr int32_t kMaxJointRows = 4;
+constexpr int32_t kConstraintIdSlotBits = 12;
+constexpr int32_t kConstraintIdSlotMask = 0xFFF;
+constexpr int32_t kConstraintIdGenMask = 0x3FF;
+constexpr int32_t kConstraintIdGenShift = 12;
+constexpr float kJointBaumgarte = 0.2f;
+constexpr float kJointPositionFactor = 0.8f;
+constexpr float kJointLinearSlop = 0.005f;
+constexpr float kJointAngularSlop = 0.0349f;
 constexpr float kBig = 1e30f;
 constexpr float kRestitutionThreshold = 1.0f;
 

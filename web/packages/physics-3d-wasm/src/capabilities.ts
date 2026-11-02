@@ -50,7 +50,7 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
     restitution: true,
     sleeping: true,
     contactEvents: true,
-    constraints: false,
+    constraints: true,
     queries: true,
     raycast: true,
     characterController: false
