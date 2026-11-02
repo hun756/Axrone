@@ -1024,7 +1024,6 @@ export class PhysicsWorld3D implements Disposable {
         }
 
         let totalMass = 0;
-        let center = { x: 0, y: 0, z: 0 };
         const shapeMassData: IMassData3D[] = [];
 
         for (const shapeId of shapes) {
@@ -1035,7 +1034,6 @@ export class PhysicsWorld3D implements Disposable {
             const massData = computeShapeMassData(descriptor, descriptor.material.density);
             shapeMassData.push(massData);
             totalMass += massData.mass;
-            center = Vec3.add(center, Vec3.multiplyScalar(massData.center, massData.mass));
         }
 
         if (totalMass <= 1e-10) {
@@ -1048,11 +1046,9 @@ export class PhysicsWorld3D implements Disposable {
             };
         }
 
-        center = Vec3.multiplyScalar(center, 1 / totalMass);
-
         let inertiaTensor = { x: 0, y: 0, z: 0 };
         for (const massData of shapeMassData) {
-            const offset = Vec3.subtract(massData.center, center);
+            const offset = massData.center;
             inertiaTensor = {
                 x:
                     inertiaTensor.x +
@@ -1074,7 +1070,7 @@ export class PhysicsWorld3D implements Disposable {
             inverseMass: totalMass > 0 ? 1 / totalMass : 0,
             inertiaTensor,
             inverseInertiaTensor: inverseVec3(inertiaTensor),
-            center,
+            center: { x: 0, y: 0, z: 0 },
         };
     }
 
