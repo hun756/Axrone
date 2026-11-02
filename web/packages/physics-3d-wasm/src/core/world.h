@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "core/body.h"
@@ -12,45 +13,62 @@ namespace axrone::physics {
 class Arena;
 
 struct World {
-    bool initialized;
-    int32_t maxBodies;
-    int32_t maxContacts;
-    int32_t cacheCapacity;
-    uint32_t cacheMask;
-    int32_t highWater;
-    int32_t liveCount;
-    int32_t freeCount;
-    int32_t contactCount;
-    int32_t maxConstraints;
-    int32_t constraintCount;
-    int32_t constraintFreeCount;
-    Vec3 gravity;
-    int32_t allowSleep;
+    bool initialized = false;
+    int32_t maxBodies = 0;
+    int32_t maxContacts = 0;
+    int32_t cacheCapacity = 0;
+    uint32_t cacheMask = 0;
+    int32_t highWater = 0;
+    int32_t liveCount = 0;
+    int32_t freeCount = 0;
+    int32_t contactCount = 0;
+    int32_t maxConstraints = 0;
+    int32_t constraintCount = 0;
+    int32_t constraintFreeCount = 0;
+    Vec3 gravity = {};
+    int32_t allowSleep = 0;
 
-    Transform* transforms;
-    Transform* sleepTransforms;
-    Vec3* velocities;
-    Vec3* angularVelocities;
-    PackedContact* packedContacts;
-    Body* bodies;
-    uint16_t* slotGen;
-    int32_t* sweepOrder;
-    int32_t* freeIds;
-    Contact* contacts;
-    Constraint* constraints;
-    int32_t* constraintFreeIds;
-    CacheEntry* cachePrev;
-    CacheEntry* cacheNext;
-    int32_t* cachePrevUsed;
-    int32_t* cacheNextUsed;
-    int32_t cachePrevUsedCount;
-    int32_t cacheNextUsedCount;
+    Arena* bulkArena = nullptr;
+    uintptr_t scratchBegin = 0;
+    uintptr_t scratchCursor = 0;
+    uintptr_t scratchEnd = 0;
 
-    Vec3 axesA[3];
-    Vec3 axesB[3];
-    Vec3 faceVertices[4];
-    Vec3 clipA[8];
-    Vec3 clipB[8];
+    Transform* transforms = nullptr;
+    Transform* sleepTransforms = nullptr;
+    Vec3* velocities = nullptr;
+    Vec3* angularVelocities = nullptr;
+    PackedContact* packedContacts = nullptr;
+    Body* bodies = nullptr;
+    uint16_t* slotGen = nullptr;
+    ShapeBulk** shapeBulks = nullptr;
+    int32_t* sweepOrder = nullptr;
+    int32_t* freeIds = nullptr;
+    Contact* contacts = nullptr;
+    Constraint* constraints = nullptr;
+    int32_t* constraintFreeIds = nullptr;
+    CacheEntry* cachePrev = nullptr;
+    CacheEntry* cacheNext = nullptr;
+    int32_t* cachePrevUsed = nullptr;
+    int32_t* cacheNextUsed = nullptr;
+    int32_t cachePrevUsedCount = 0;
+    int32_t cacheNextUsedCount = 0;
+
+    Vec3 axesA[3] = {};
+    Vec3 axesB[3] = {};
+    Vec3 faceVertices[4] = {};
+    Vec3 clipA[8] = {};
+    Vec3 clipB[8] = {};
+
+    Vec3 hullVerticesA[kBulkMaxVertices] = {};
+    Vec3 hullVerticesB[kBulkMaxVertices] = {};
+    Vec3 hullNormalsA[kBulkMaxFaces] = {};
+    Vec3 hullNormalsB[kBulkMaxFaces] = {};
+    float hullOffsetsA[kBulkMaxFaces] = {};
+    float hullOffsetsB[kBulkMaxFaces] = {};
+    int32_t hullStartA[kBulkMaxFaces + 1] = {};
+    int32_t hullStartB[kBulkMaxFaces + 1] = {};
+    int32_t hullIndicesA[kBulkMaxFaceIndices] = {};
+    int32_t hullIndicesB[kBulkMaxFaceIndices] = {};
 
     bool init(Arena& arena, int32_t maxBodies, int32_t maxContacts, Vec3 gravity);
     void reset();
@@ -111,6 +129,74 @@ struct World {
     int32_t clearShapes(int32_t id);
     int32_t shapeDestroy(int32_t shapeId);
     int32_t shapeClear(int32_t bodyId);
+    int32_t addHull(
+        int32_t id,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
+    int32_t addMesh(
+        int32_t id,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
+    int32_t addHeightField(
+        int32_t id,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
+    int32_t setShapeVertices(int32_t shapeId, uintptr_t address, int32_t count);
+    int32_t setShapeIndices(int32_t shapeId, uintptr_t address, int32_t count);
+    int32_t setShapeHeightField(
+        int32_t shapeId,
+        uintptr_t address,
+        int32_t width,
+        int32_t depth,
+        float scaleX,
+        float scaleY,
+        float scaleZ);
+    uintptr_t bulkAlloc(int32_t bytes);
+    int32_t bulkRelease(uintptr_t address);
+    size_t bulkScratchUsed() const;
+    size_t bulkArenaUsed() const;
+    void clearShapeBulk(int32_t bodyId, int32_t slot);
+    bool ensureBulkPool();
+
+    ShapeBulk* bulkOf(int32_t bodyId, int32_t slot) const {
+        if (shapeBulks == nullptr || bodyId < 0 || slot < 0 || slot >= kMaxShapesPerBody) {
+            return nullptr;
+        }
+        return shapeBulks[static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot)];
+    }
+
+    void setBulkAt(int32_t bodyId, int32_t slot, ShapeBulk* bulk) {
+        shapeBulks[static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot)] = bulk;
+    }
+    int32_t addBulkShape(
+        int32_t kind,
+        int32_t id,
+        float density,
+        float px,
+        float py,
+        float pz,
+        float qx,
+        float qy,
+        float qz,
+        float qw);
     int32_t shapeMakeId(int32_t bodyId, int32_t slot) const;
     bool shapeIdResolve(int32_t shapeId, int32_t& bodyId, int32_t& slot) const;
     int32_t setShapeMaterial(int32_t bodyId, int32_t slot, float friction, float restitution);
@@ -187,5 +273,9 @@ struct World {
     int32_t cacheLookup(int32_t a, int32_t b, int32_t feature) const;
     int32_t cacheStore(int32_t a, int32_t b, int32_t feature, float impN, float impT1, float impT2);
 };
+
+bool recomputeMass(Body& body);
+int32_t firstFreeShapeSlot(const Body& body);
+void bumpSlotGeneration(World& world, int32_t bodyId, int32_t slot);;
 
 }

@@ -1,4 +1,5 @@
-import { instantiateWasm, loadEmbeddedWasm, WasmPhysicsExports } from "./loader";
+import { instantiateWasm, loadEmbeddedWasm } from "./loader";
+import type { WasmPhysicsExports } from "./loader";
 import type {
     BodyOptions,
     BodyType,
@@ -9,7 +10,10 @@ import type {
     CylinderAttachOptions,
     ConeAttachOptions,
     FixedJointOptions,
+    HeightFieldAttachOptions,
     HingeJointOptions,
+    HullAttachOptions,
+    MeshAttachOptions,
     MutableQuat,
     MutableVec3,
     QueryFilter,
@@ -24,6 +28,7 @@ import type {
     StepStatistics,
     TransformSnapshot,
     Vec3Tuple,
+    VertexSource,
     WorldOptions
 } from "./types";
 
@@ -45,6 +50,9 @@ const SHAPE_ID_MAX = 0x7fffffff;
 const SHAPE_MATERIAL_INHERIT = -1;
 const INT32_MIN = -2147483648;
 const INT32_MAX = 2147483647;
+const BULK_MAX_VERTICES = 256;
+const BULK_MAX_TRIANGLES = 4096;
+const BULK_MAX_HEIGHT_FIELD_SIDE = 128;
 
 const NO_FILTER: QueryFilter = Object.freeze({ categoryBits: 0, maskBits: 0 });
 
@@ -250,7 +258,7 @@ export class WasmPhysicsWorld3D {
                 assertPositive(options.shape.radius, "shape.radius");
                 assertPositive(options.shape.halfHeight, "shape.halfHeight");
             } else {
-                throw new Error(`unsupported shape: ${String((options.shape as { kind?: unknown }).kind)}`);
+                throw new Error("hull, mesh and height field shapes must be attached with attachHull, attachMesh or attachHeightField");
             }
         }
 
@@ -479,6 +487,159 @@ export class WasmPhysicsWorld3D {
         );
         if (shapeId < 0) {
             throw new Error(`body ${id} cone attachment failed`);
+        }
+        return shapeId;
+    }
+
+    attachHull(id: number, options: HullAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        const vertexCount = this.assertVertexSource(options.vertices);
+        const density = options.density ?? 1;
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        const offset = options.offset ?? [0, 0, 0];
+        assertVec3(offset, "offset");
+        const floats = vertexCount * 3;
+        const address = this.bulkWriteFloat32(options.vertices, floats);
+        let shapeId = -1;
+        try {
+            shapeId = this.wasm.shapeCreateHull(id, density, offset[0], offset[1], offset[2]);
+            if (shapeId < 0) {
+                throw new Error(`body ${id} hull creation failed`);
+            }
+            if (this.wasm.shapeSetVertices(shapeId, address, vertexCount) !== 0) {
+                throw new Error(`body ${id} hull vertex upload failed`);
+            }
+        } catch (error) {
+            if (shapeId >= 0) {
+                this.wasm.shapeDestroy(shapeId);
+            }
+            throw error;
+        } finally {
+            this.wasm.worldRelease(address);
+        }
+        return shapeId;
+    }
+
+    attachMesh(id: number, options: MeshAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        const vertexCount = this.assertVertexSource(options.vertices);
+        const indices = options.indices;
+        if (!Array.isArray(indices) && !(indices instanceof Uint32Array)) {
+            throw new Error("indices must be a number array or Uint32Array");
+        }
+        const indexLength = indices.length;
+        if (indexLength % 3 !== 0) {
+            throw new Error("indices length must be a multiple of 3");
+        }
+        const triangleCount = indexLength / 3;
+        if (triangleCount < 1 || triangleCount > BULK_MAX_TRIANGLES) {
+            throw new Error(`indices must describe between 1 and ${BULK_MAX_TRIANGLES} triangles`);
+        }
+        for (let index = 0; index < indexLength; index += 1) {
+            const value = indices[index];
+            assertInteger(value, `indices[${index}]`);
+            if (value < 0 || value >= 0x100000000 || value >= vertexCount) {
+                throw new Error(`indices[${index}] must reference a vertex`);
+            }
+        }
+        const offset = options.offset ?? [0, 0, 0];
+        assertVec3(offset, "offset");
+        const vertexAddress = this.bulkWriteFloat32(options.vertices, vertexCount * 3);
+        let indexAddress = 0;
+        let shapeId = -1;
+        try {
+            indexAddress = this.wasm.worldAlloc(indexLength * 4);
+            if (indexAddress === 0) {
+                throw new Error("physics scratch exhausted");
+            }
+            const indexView = new Uint32Array(this.wasm.memory.buffer, indexAddress, indexLength);
+            for (let index = 0; index < indexLength; index += 1) {
+                indexView[index] = indices[index];
+            }
+            shapeId = this.wasm.shapeCreateMesh(id, 0, offset[0], offset[1], offset[2]);
+            if (shapeId < 0) {
+                throw new Error(`body ${id} mesh creation failed (triangle meshes require static bodies)`);
+            }
+            if (this.wasm.shapeSetVertices(shapeId, vertexAddress, vertexCount) !== 0) {
+                throw new Error(`body ${id} mesh vertex upload failed`);
+            }
+            if (this.wasm.shapeSetIndices(shapeId, indexAddress, triangleCount) !== 0) {
+                throw new Error(`body ${id} mesh index upload failed`);
+            }
+        } catch (error) {
+            if (shapeId >= 0) {
+                this.wasm.shapeDestroy(shapeId);
+            }
+            throw error;
+        } finally {
+            if (indexAddress !== 0) {
+                this.wasm.worldRelease(indexAddress);
+            }
+            this.wasm.worldRelease(vertexAddress);
+        }
+        return shapeId;
+    }
+
+    attachHeightField(id: number, options: HeightFieldAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertInteger(options.width, "width");
+        assertInteger(options.depth, "depth");
+        if (options.width < 2 || options.width > BULK_MAX_HEIGHT_FIELD_SIDE ||
+            options.depth < 2 || options.depth > BULK_MAX_HEIGHT_FIELD_SIDE) {
+            throw new Error(`width and depth must be between 2 and ${BULK_MAX_HEIGHT_FIELD_SIDE}`);
+        }
+        const heights = options.heights;
+        const cellCount = options.width * options.depth;
+        if (heights.length !== cellCount) {
+            throw new Error("heights length must equal width * depth");
+        }
+        for (let index = 0; index < cellCount; index += 1) {
+            assertFinite(heights[index], `heights[${index}]`);
+        }
+        const scale = options.scale ?? [1, 1, 1];
+        assertVec3(scale, "scale");
+        assertPositive(scale[0], "scale[0]");
+        assertPositive(scale[1], "scale[1]");
+        assertPositive(scale[2], "scale[2]");
+        const offset = options.offset ?? [0, 0, 0];
+        assertVec3(offset, "offset");
+        const shapeId = this.wasm.shapeCreateHeightField(
+            id,
+            0,
+            offset[0],
+            offset[1],
+            offset[2],
+            options.width,
+            options.depth,
+            scale[0],
+            scale[1],
+            scale[2]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} height field creation failed (height fields require static bodies)`);
+        }
+        const address = this.bulkWriteFloat32(heights, cellCount);
+        try {
+            if (this.wasm.shapeSetHeightField(
+                shapeId,
+                address,
+                options.width,
+                options.depth,
+                scale[0],
+                scale[1],
+                scale[2]
+            ) !== 0) {
+                this.wasm.shapeDestroy(shapeId);
+                throw new Error(`body ${id} height field upload failed`);
+            }
+        } finally {
+            this.wasm.worldRelease(address);
         }
         return shapeId;
     }
@@ -1566,6 +1727,36 @@ export class WasmPhysicsWorld3D {
         this.eventFloatView = null;
         this.queryHitsView = null;
         this.queryIdsView = null;
+    }
+
+    private assertVertexSource(vertices: VertexSource): number {
+        if (!Array.isArray(vertices) && !(vertices instanceof Float32Array)) {
+            throw new Error("vertices must be a number array or Float32Array");
+        }
+        const length = vertices.length;
+        if (length % 3 !== 0) {
+            throw new Error("vertices length must be a multiple of 3");
+        }
+        const count = length / 3;
+        if (count < 3 || count > BULK_MAX_VERTICES) {
+            throw new Error(`vertices must describe between 3 and ${BULK_MAX_VERTICES} points`);
+        }
+        for (let index = 0; index < length; index += 1) {
+            assertFinite(vertices[index], `vertices[${index}]`);
+        }
+        return count;
+    }
+
+    private bulkWriteFloat32(source: VertexSource, floats: number): number {
+        const address = this.wasm.worldAlloc(floats * 4);
+        if (address === 0) {
+            throw new Error("physics scratch exhausted");
+        }
+        const view = new Float32Array(this.wasm.memory.buffer, address, floats);
+        for (let index = 0; index < floats; index += 1) {
+            view[index] = source[index];
+        }
+        return address;
     }
 
     private readRotation(id: number): MutableQuat {

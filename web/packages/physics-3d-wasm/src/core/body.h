@@ -17,7 +17,30 @@ enum ShapeKind : int32_t {
     kShapeBox = 2,
     kShapeCapsule = 3,
     kShapeCylinder = 4,
-    kShapeCone = 5
+    kShapeCone = 5,
+    kShapeHull = 8,
+    kShapeMesh = 9,
+    kShapeHeightField = 10
+};
+
+struct ShapeBulk {
+    uintptr_t blockStart;
+    int32_t blockBytes;
+    int32_t vertexCount;
+    int32_t faceCount;
+    Vec3* vertices;
+    int32_t* faceStart;
+    int32_t* faceIndices;
+    Vec3* faceNormals;
+    float* faceOffsets;
+    int32_t triangleCount;
+    uint32_t* indices;
+    int32_t heightFieldWidth;
+    int32_t heightFieldDepth;
+    Vec3 heightFieldScale;
+    float* heights;
+    Vec3 localMin;
+    Vec3 localMax;
 };
 
 struct Shape {
@@ -123,6 +146,58 @@ struct Shape {
         density = shapeDensity;
         applyDefaults();
     }
+
+    AXRONE_PHYSICS_INLINE void resetBulkFields() {
+        extents = Vec3();
+    }
+
+    AXRONE_PHYSICS_INLINE void setHull(
+        float shapeDensity,
+        const Vec3& shapeOffset,
+        float qx,
+        float qy,
+        float qz,
+        float qw
+    ) {
+        kind = kShapeHull;
+        resetBulkFields();
+        offset = shapeOffset;
+        rotation.fromQuaternion(qx, qy, qz, qw);
+        density = shapeDensity;
+        applyDefaults();
+    }
+
+    AXRONE_PHYSICS_INLINE void setMesh(
+        float shapeDensity,
+        const Vec3& shapeOffset,
+        float qx,
+        float qy,
+        float qz,
+        float qw
+    ) {
+        kind = kShapeMesh;
+        resetBulkFields();
+        offset = shapeOffset;
+        rotation.fromQuaternion(qx, qy, qz, qw);
+        density = shapeDensity;
+        applyDefaults();
+    }
+
+    AXRONE_PHYSICS_INLINE void setHeightField(
+        float shapeDensity,
+        const Vec3& shapeOffset,
+        float qx,
+        float qy,
+        float qz,
+        float qw
+    ) {
+        kind = kShapeHeightField;
+        resetBulkFields();
+        offset = shapeOffset;
+        rotation.fromQuaternion(qx, qy, qz, qw);
+        density = shapeDensity;
+        applyDefaults();
+    }
 };
 
 struct Body {
@@ -159,6 +234,30 @@ AXRONE_PHYSICS_INLINE int32_t shapeSlots(const Body& body) {
     return body.shapeCount < kMaxShapesPerBody ? body.shapeCount : kMaxShapesPerBody;
 }
 
+AXRONE_PHYSICS_INLINE bool isBulkKind(int32_t kind) {
+    return kind == kShapeHull || kind == kShapeMesh || kind == kShapeHeightField;
+}
+
+AXRONE_PHYSICS_INLINE bool isHullBackedKind(int32_t kind) {
+    return kind == kShapeCylinder || kind == kShapeCone || kind == kShapeHull || kind == kShapeHeightField;
+}
+
+AXRONE_PHYSICS_INLINE bool shapeBulkReady(const Shape& shape, const ShapeBulk* bulk) {
+    if (!isBulkKind(shape.kind)) {
+        return false;
+    }
+    if (bulk == nullptr) {
+        return false;
+    }
+    if (shape.kind == kShapeHull) {
+        return bulk->faceCount > 0 && bulk->vertexCount >= 4;
+    }
+    if (shape.kind == kShapeMesh) {
+        return bulk->triangleCount > 0 && bulk->vertexCount > 0;
+    }
+    return bulk->heightFieldWidth >= 2 && bulk->heightFieldDepth >= 2;
+}
+
 AXRONE_PHYSICS_INLINE bool shapeValid(const Shape& shape) {
     if (shape.kind == kShapeSphere) {
         return shape.extents.x > 0.0f;
@@ -174,6 +273,9 @@ AXRONE_PHYSICS_INLINE bool shapeValid(const Shape& shape) {
     }
     if (shape.kind == kShapeCone) {
         return shape.extents.x > 0.0f && shape.extents.y > 0.0f;
+    }
+    if (shape.kind == kShapeHull || shape.kind == kShapeMesh || shape.kind == kShapeHeightField) {
+        return true;
     }
     return false;
 }
@@ -226,6 +328,15 @@ AXRONE_PHYSICS_INLINE int32_t shapeTypeCode(int32_t kind) {
     }
     if (kind == kShapeCone) {
         return kShapeTypeCodeCone;
+    }
+    if (kind == kShapeHull) {
+        return kShapeTypeCodeHull;
+    }
+    if (kind == kShapeMesh) {
+        return kShapeTypeCodeMesh;
+    }
+    if (kind == kShapeHeightField) {
+        return kShapeTypeCodeHeightField;
     }
     return -1;
 }

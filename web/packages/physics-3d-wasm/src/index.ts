@@ -41,7 +41,12 @@ export type {
     ConeAttachOptions,
     ConeShape,
     FixedJointOptions,
+    HeightFieldAttachOptions,
+    HeightFieldShape,
     HingeJointOptions,
+    HullAttachOptions,
+    HullShape,
+    MeshAttachOptions,
     MutableQuat,
     MutableVec3,
     QuatTuple,
@@ -57,7 +62,9 @@ export type {
     StepOptions,
     StepStatistics,
     TransformSnapshot,
+    TriangleMeshShape,
     Vec3Tuple,
+    VertexSource,
     WasmProfilerSnapshot,
     WorldOptions
 } from "./types";

@@ -12,8 +12,8 @@ struct alignas(16) Vec3 {
     float z;
     float pad;
 
-    AXRONE_PHYSICS_INLINE Vec3() : x(0.0f), y(0.0f), z(0.0f), pad(0.0f) {}
-    AXRONE_PHYSICS_INLINE Vec3(float xv, float yv, float zv) : x(xv), y(yv), z(zv), pad(0.0f) {}
+    AXRONE_PHYSICS_INLINE constexpr Vec3() : x(0.0f), y(0.0f), z(0.0f), pad(0.0f) {}
+    AXRONE_PHYSICS_INLINE constexpr Vec3(float xv, float yv, float zv) : x(xv), y(yv), z(zv), pad(0.0f) {}
 
     AXRONE_PHYSICS_INLINE Vec3 operator+(const Vec3& other) const {
         return Vec3(x + other.x, y + other.y, z + other.z);

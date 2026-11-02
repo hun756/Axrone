@@ -42,12 +42,22 @@ void* Arena::alloc(size_t size, size_t alignment) {
     return reinterpret_cast<void*>(aligned);
 }
 
+unsigned char* Arena::base() const {
+    return base_;
+}
+
 size_t Arena::used() const {
     return offset_;
 }
 
 size_t Arena::capacity() const {
     return capacity_;
+}
+
+void Arena::shrinkTo(size_t offset) {
+    if (offset < offset_) {
+        offset_ = offset;
+    }
 }
 
 bool Arena::growTo(size_t requiredBytes) {
