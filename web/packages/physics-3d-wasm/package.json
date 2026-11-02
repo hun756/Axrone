@@ -20,6 +20,7 @@
     "build:wasm": "node scripts/build.mjs wasm-release",
     "clean": "rimraf dist",
     "test": "vitest run",
+    "test:memory": "node tests/memory_test.mjs",
     "parity": "node scripts/parity.mjs",
     "bench": "node bench/run.mjs"
   }
