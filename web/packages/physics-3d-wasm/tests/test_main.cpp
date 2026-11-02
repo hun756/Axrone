@@ -1895,11 +1895,13 @@ void testShapeIdLifecycleNewKinds() {
     CHECK(body >= 0);
     CHECK(world.addCapsule(body, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
     CHECK(world.addCylinder(body, 0.4f, 0.6f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
-    CHECK(world.addSphere(body, 0.2f, 1.0f, -1.0f, 0.0f, 0.0f) == 2);
+    CHECK(world.addCone(body, 0.3f, 0.5f, 1.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 2);
+    CHECK(world.addSphere(body, 0.2f, 1.0f, -1.0f, 0.0f, 0.0f) == 3);
 
     const int32_t capsuleId = world.shapeMakeId(body, 0);
     const int32_t cylinderId = world.shapeMakeId(body, 1);
-    CHECK(capsuleId >= 0 && cylinderId >= 0 && capsuleId != cylinderId);
+    const int32_t coneId = world.shapeMakeId(body, 2);
+    CHECK(capsuleId >= 0 && cylinderId >= 0 && coneId >= 0 && capsuleId != cylinderId && cylinderId != coneId);
 
     int32_t resolvedBody = -1;
     int32_t resolvedSlot = -1;
@@ -1907,12 +1909,16 @@ void testShapeIdLifecycleNewKinds() {
     CHECK(resolvedBody == body && resolvedSlot == 0);
     CHECK(world.shapeIdResolve(cylinderId, resolvedBody, resolvedSlot));
     CHECK(resolvedBody == body && resolvedSlot == 1);
+    CHECK(world.shapeIdResolve(coneId, resolvedBody, resolvedSlot));
+    CHECK(resolvedBody == body && resolvedSlot == 2);
 
     CHECK(shapeTypeCode(world.bodies[body].shapes[0].kind) == kShapeTypeCodeCapsule);
     CHECK(shapeTypeCode(world.bodies[body].shapes[1].kind) == kShapeTypeCodeCylinder);
-    CHECK(shapeTypeCode(world.bodies[body].shapes[2].kind) == kShapeTypeCodeSphere);
+    CHECK(shapeTypeCode(world.bodies[body].shapes[2].kind) == kShapeTypeCodeCone);
+    CHECK(shapeTypeCode(world.bodies[body].shapes[3].kind) == kShapeTypeCodeSphere);
     CHECK(world.bodies[body].shapes[0].kind == kShapeCapsule);
     CHECK(world.bodies[body].shapes[1].kind == kShapeCylinder);
+    CHECK(world.bodies[body].shapes[2].kind == kShapeCone);
 
     CHECK(world.setShapeSensor(body, 0, 1) == 0);
     CHECK(world.bodies[body].shapes[0].sensor == 1);
@@ -1921,7 +1927,9 @@ void testShapeIdLifecycleNewKinds() {
 
     CHECK(world.shapeDestroy(capsuleId) == 0);
     CHECK(!world.shapeIdResolve(capsuleId, resolvedBody, resolvedSlot));
-    CHECK(world.shapeIdResolve(cylinderId, resolvedBody, resolvedSlot));
+    CHECK(world.shapeIdResolve(coneId, resolvedBody, resolvedSlot));
+    CHECK(world.shapeDestroy(coneId) == 0);
+    CHECK(!world.shapeIdResolve(coneId, resolvedBody, resolvedSlot));
 
     const int32_t refilledSlot = world.addCapsule(body, 0.25f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
     CHECK(refilledSlot == 0);
@@ -1929,6 +1937,163 @@ void testShapeIdLifecycleNewKinds() {
     CHECK(freshCapsuleId != capsuleId);
     CHECK(world.shapeIdResolve(freshCapsuleId, resolvedBody, resolvedSlot));
     CHECK(shapeValid(world.bodies[body].shapes[0]));
+}
+
+void testConeMassAndAabb() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    const float radius = 0.4f;
+    const float halfHeight = 0.6f;
+    const float density = 2.0f;
+    CHECK(world.addCone(body, radius, halfHeight, density, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+
+    const float mass = density * (1.0f / 3.0f) * kPi * radius * radius * (2.0f * halfHeight);
+    const float inertiaY = 0.3f * mass * radius * radius;
+    const float inertiaX = 0.15f * mass * (radius * radius + halfHeight * halfHeight * (4.0f / 3.0f));
+
+    CHECK(near(1.0f / world.bodies[body].invMass, mass, mass * 1e-4f));
+    CHECK(near(1.0f / world.bodies[body].invInertia.y, inertiaY, inertiaY * 1e-4f));
+    CHECK(near(1.0f / world.bodies[body].invInertia.x, inertiaX, inertiaX * 1e-4f));
+    CHECK(near(1.0f / world.bodies[body].invInertia.z, inertiaX, inertiaX * 1e-4f));
+
+    CHECK(world.step(1.0f / 60.0f, 1, 1) >= 0);
+    CHECK(near(world.bodies[body].aabb.minX, -radius, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxX, radius, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.minY, 5.0f - halfHeight, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxY, 5.0f + halfHeight, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.minZ, -radius, 1e-5f));
+    CHECK(near(world.bodies[body].aabb.maxZ, radius, 1e-5f));
+
+    CHECK(world.addCone(body, radius, 0.0f, density, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.addCone(body, 0.0f, halfHeight, density, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.addCone(body, radius, halfHeight, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.addCone(999, radius, halfHeight, density, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+}
+
+void testConeRestsOnBox() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 64, 2048));
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+
+    const int32_t cone = world.createBody(kBodyTypeDynamic, 0.0f, 1.2f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(cone >= 0);
+    CHECK(world.addCone(cone, 0.3f, 0.4f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    CHECK(world.setMaterial(cone, 0.7f, 0.0f) == 0);
+
+    for (int32_t i = 0; i < 240; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    const float py = world.transforms[cone].py;
+    CHECK(isFinite(py));
+    CHECK(py > 0.375f && py < 0.415f);
+    CHECK(lengthSq(world.velocities[cone]) < 0.01f);
+    CHECK(world.getContactCount() >= 1);
+}
+
+void testCylinderCylinderStacking() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 64, 2048));
+    world.setAllowSleep(1);
+
+    const int32_t ground = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(ground >= 0);
+    CHECK(world.setBox(ground, 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+
+    const float radius = 0.3f;
+    const float halfHeight = 0.5f;
+    const float columnY[3] = { 0.496f, 1.492f, 2.488f };
+    int32_t stack[3];
+    for (int32_t i = 0; i < 3; ++i) {
+        stack[i] = world.createBody(kBodyTypeDynamic, 0.0f, columnY[i], 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        CHECK(stack[i] >= 0);
+        CHECK(world.addCylinder(stack[i], radius, halfHeight, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+        CHECK(world.setMaterial(stack[i], 0.7f, 0.0f) == 0);
+        CHECK(world.setDamping(stack[i], 6.0f, 6.0f) == 0);
+    }
+
+    for (int32_t i = 0; i < 600; ++i) {
+        world.step(1.0f / 60.0f, 8, 3);
+    }
+
+    for (int32_t i = 0; i < 3; ++i) {
+        const Transform& transform = world.transforms[stack[i]];
+        CHECK(isFinite(transform.px) && isFinite(transform.py) && isFinite(transform.pz));
+        CHECK(fabsf(transform.px) < 1e-3f);
+        CHECK(fabsf(transform.pz) < 1e-3f);
+        CHECK(fabsf(transform.qx) < 5e-3f);
+        CHECK(fabsf(transform.qz) < 5e-3f);
+    }
+
+    const float lowerPy = world.transforms[stack[0]].py;
+    const float middlePy = world.transforms[stack[1]].py;
+    const float upperPy = world.transforms[stack[2]].py;
+    CHECK(middlePy > lowerPy && upperPy > middlePy);
+    CHECK(middlePy - lowerPy > 0.98f && middlePy - lowerPy < 0.995f);
+    CHECK(upperPy - middlePy > 0.98f && upperPy - middlePy < 0.995f);
+    CHECK(fabsf((upperPy - middlePy) - (middlePy - lowerPy)) < 2e-3f);
+    CHECK(world.isSleeping(stack[2]) == 1);
+}
+
+
+void testCylinderBoxEdgeContact() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const float turn = 0.70710678f;
+    const int32_t cylinder = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, turn, turn);
+    CHECK(cylinder >= 0);
+    CHECK(world.addCylinder(cylinder, 0.3f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+
+    const int32_t box = world.createBody(kBodyTypeDynamic, 0.0f, 0.365f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(box >= 0);
+    CHECK(world.setBox(box, 0.4f, 0.15f, 0.15f, 1.0f) == 0);
+
+    CHECK(world.step(1.0f / 60.0f, 4, 2) >= 2);
+    int32_t pairContacts = 0;
+    for (int32_t i = 0; i < world.getContactCount(); ++i) {
+        const Contact& contact = world.contacts[i];
+        if ((contact.a == cylinder && contact.b == box) || (contact.a == box && contact.b == cylinder)) {
+            ++pairContacts;
+        }
+    }
+    CHECK(pairContacts >= 2);
+}
+
+void testCapsuleCylinderTwoPointManifold() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const float turn = 0.70710678f;
+    const int32_t cylinder = world.createBody(kBodyTypeStatic, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, turn, turn);
+    CHECK(cylinder >= 0);
+    CHECK(world.addCylinder(cylinder, 0.3f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+
+    const int32_t capsule = world.createBody(kBodyTypeDynamic, 0.0f, 0.46f, 0.0f, 0.0f, 0.0f, turn, turn);
+    CHECK(capsule >= 0);
+    CHECK(world.addCapsule(capsule, 0.2f, 0.4f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+
+    CHECK(world.step(1.0f / 60.0f, 4, 2) >= 2);
+    int32_t pairContacts = 0;
+    for (int32_t i = 0; i < world.getContactCount(); ++i) {
+        const Contact& contact = world.contacts[i];
+        if ((contact.a == cylinder && contact.b == capsule) || (contact.a == capsule && contact.b == cylinder)) {
+            ++pairContacts;
+        }
+    }
+    CHECK(pairContacts >= 2);
+    CHECK(pairContacts <= 4);
 }
 
 float testSin(float angle) {
@@ -2458,6 +2623,11 @@ int main() {
     testCylinderSphereContact();
     testCylinderCapsuleContact();
     testShapeIdLifecycleNewKinds();
+    testConeMassAndAabb();
+    testConeRestsOnBox();
+    testCylinderCylinderStacking();
+    testCylinderBoxEdgeContact();
+    testCapsuleCylinderTwoPointManifold();
     testFixedJointHoldsRigid();
     testHingeDoorSwingsAndClampsAtLimit();
     testHingeMotorReachesTargetSpeed();

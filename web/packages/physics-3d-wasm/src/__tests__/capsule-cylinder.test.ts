@@ -99,7 +99,7 @@ describe('capsule and cylinder shapes', () => {
         world.dispose();
     });
 
-    it('raycasts against capsule and cylinder analytically', async () => {
+    it('raycasts against capsule surface and cylinder polytope', async () => {
         const world = await createGravitylessWorld();
         const capsuleBody = world.createBody({ type: 'static' });
         world.attachCapsule(capsuleBody, { radius: 0.2, halfSegment: 0.5, density: 0 });
@@ -124,7 +124,8 @@ describe('capsule and cylinder shapes', () => {
         expect(cylinderHits).toHaveLength(1);
         expect(cylinderHits[0].body).toBe(cylinderBody);
         expect(cylinderHits[0].distance).toBeCloseTo(2.7, 3);
-        expect(cylinderHits[0].normal[0]).toBeCloseTo(-1, 4);
+        expect(cylinderHits[0].normal[0]).toBeCloseTo(-0.9239, 3);
+        expect(Math.abs(cylinderHits[0].normal[2])).toBeCloseTo(0.3827, 3);
         world.dispose();
     });
 

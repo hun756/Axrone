@@ -33,6 +33,8 @@ export type {
     ContactSnapshot,
     CylinderAttachOptions,
     CylinderShape,
+    ConeAttachOptions,
+    ConeShape,
     FixedJointOptions,
     HingeJointOptions,
     MutableQuat,

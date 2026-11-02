@@ -137,6 +137,32 @@ export interface WasmPhysicsExports {
         qz: number,
         qw: number
     ): number;
+    shapeCreateCone(
+        bodyId: number,
+        radius: number,
+        halfHeight: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shape_create_cone(
+        bodyId: number,
+        radius: number,
+        halfHeight: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
     shapeDestroy(shapeId: number): number;
     shape_destroy(shapeId: number): number;
     shapeClear(bodyId: number): number;
@@ -393,6 +419,7 @@ const REQUIRED_EXPORTS = [
     "shapeCreateBox",
     "shapeCreateCapsule",
     "shapeCreateCylinder",
+    "shapeCreateCone",
     "shapeDestroy",
     "shapeClear",
     "shapeGetBody",

@@ -39,7 +39,7 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
         box: true,
         capsule: true,
         cylinder: true,
-        cone: false,
+        cone: true,
         convexHull: false,
         triangleMesh: false,
         heightField: false

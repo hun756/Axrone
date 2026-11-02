@@ -42,6 +42,18 @@ constexpr int32_t kKindBoxEdge = 4;
 constexpr int32_t kKindCapsuleSphere = 5;
 constexpr int32_t kKindCapsuleCapsule = 6;
 constexpr int32_t kKindCapsuleBox = 7;
+constexpr int32_t kKindHullFace = 8;
+constexpr int32_t kKindHullSphere = 9;
+constexpr int32_t kKindCapsuleHull = 10;
+
+constexpr int32_t kHullRingVertices = 8;
+constexpr int32_t kHullMaxVertices = 16;
+constexpr int32_t kHullMaxFaces = 10;
+constexpr int32_t kHullMaxIndices = 48;
+constexpr int32_t kHullMaxFaceVertices = 8;
+constexpr int32_t kHullClipCapacity = 24;
+constexpr int32_t kHullManifoldCapacity = 4;
+constexpr int32_t kCapsuleManifoldCapacity = 4;
 
 constexpr int32_t kCapsuleBoxSamples = 16;
 
@@ -53,6 +65,7 @@ constexpr int32_t kShapeTypeCodeSphere = 5;
 constexpr int32_t kShapeTypeCodeBox = 3;
 constexpr int32_t kShapeTypeCodeCapsule = 1;
 constexpr int32_t kShapeTypeCodeCylinder = 6;
+constexpr int32_t kShapeTypeCodeCone = 7;
 
 constexpr int32_t kShapeIdSlotBits = 3;
 constexpr int32_t kShapeIdSlotMask = 7;

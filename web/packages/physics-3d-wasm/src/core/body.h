@@ -16,7 +16,8 @@ enum ShapeKind : int32_t {
     kShapeSphere = 1,
     kShapeBox = 2,
     kShapeCapsule = 3,
-    kShapeCylinder = 4
+    kShapeCylinder = 4,
+    kShapeCone = 5
 };
 
 struct Shape {
@@ -104,6 +105,24 @@ struct Shape {
         density = shapeDensity;
         applyDefaults();
     }
+
+    AXRONE_PHYSICS_INLINE void setCone(
+        float radius,
+        float halfHeight,
+        float shapeDensity,
+        const Vec3& shapeOffset,
+        float qx,
+        float qy,
+        float qz,
+        float qw
+    ) {
+        kind = kShapeCone;
+        extents = Vec3(radius, halfHeight, 0.0f);
+        offset = shapeOffset;
+        rotation.fromQuaternion(qx, qy, qz, qw);
+        density = shapeDensity;
+        applyDefaults();
+    }
 };
 
 struct Body {
@@ -151,6 +170,9 @@ AXRONE_PHYSICS_INLINE bool shapeValid(const Shape& shape) {
         return shape.extents.x > 0.0f && shape.extents.y >= 0.0f;
     }
     if (shape.kind == kShapeCylinder) {
+        return shape.extents.x > 0.0f && shape.extents.y > 0.0f;
+    }
+    if (shape.kind == kShapeCone) {
         return shape.extents.x > 0.0f && shape.extents.y > 0.0f;
     }
     return false;
@@ -201,6 +223,9 @@ AXRONE_PHYSICS_INLINE int32_t shapeTypeCode(int32_t kind) {
     }
     if (kind == kShapeCylinder) {
         return kShapeTypeCodeCylinder;
+    }
+    if (kind == kShapeCone) {
+        return kShapeTypeCodeCone;
     }
     return -1;
 }

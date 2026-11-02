@@ -72,7 +72,7 @@ void updateBounds(World& world) {
                 ez = fabsf(halfAxis.z) + radius;
             } else {
                 Vec3 half = shape.extents;
-                if (shape.kind == kShapeCylinder) {
+                if (shape.kind == kShapeCylinder || shape.kind == kShapeCone) {
                     half.z = shape.extents.x;
                 }
                 Mat3 worldRotation;

@@ -322,6 +322,35 @@ export class WasmPhysicsWorld3DCompat {
         return shapeId;
     }
 
+    createConeShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number {
+        this.ensureAlive();
+        if (def.radius === undefined) {
+            throw new Error("cone shape requires radius");
+        }
+        if (def.height === undefined) {
+            throw new Error("cone shape requires height");
+        }
+        if (!Number.isFinite(def.radius) || def.radius <= 0) {
+            throw new Error("cone radius must be a positive finite number");
+        }
+        if (!Number.isFinite(def.height) || def.height <= 0) {
+            throw new Error("cone height must be a positive finite number");
+        }
+        const shapeId = this.physics.attachCone(bodyId, {
+            radius: def.radius,
+            halfHeight: def.height / 2,
+            density: 1,
+            offset: vector(def.center, 0),
+            rotation: quaternion(def.rotation)
+        });
+        this.registerShape(bodyId, shapeId);
+        this.applyShapeMaterial(shapeId, material);
+        if (def.isSensor === true) {
+            this.physics.setShapeSensor(shapeId, true);
+        }
+        return shapeId;
+    }
+
     destroyShape(shapeId: number): void {
         this.ensureAlive();
         this.physics.destroyShape(shapeId);

@@ -11,6 +11,7 @@ describe('WASM physics capabilities', () => {
         expect(WASM_PHYSICS_CAPABILITIES.shapes.sphere).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapes.capsule).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapes.cylinder).toBe(true);
+        expect(WASM_PHYSICS_CAPABILITIES.shapes.cone).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.multiShape).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.shapeOffsets).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.constraints).toBe(true);

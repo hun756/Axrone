@@ -7,6 +7,7 @@ import type {
     ContactEventSnapshot,
     ContactSnapshot,
     CylinderAttachOptions,
+    ConeAttachOptions,
     FixedJointOptions,
     HingeJointOptions,
     MutableQuat,
@@ -216,6 +217,9 @@ export class WasmPhysicsWorld3D {
             } else if (options.shape.kind === "cylinder") {
                 assertPositive(options.shape.radius, "shape.radius");
                 assertPositive(options.shape.halfHeight, "shape.halfHeight");
+            } else if (options.shape.kind === "cone") {
+                assertPositive(options.shape.radius, "shape.radius");
+                assertPositive(options.shape.halfHeight, "shape.halfHeight");
             } else {
                 throw new Error(`unsupported shape: ${String((options.shape as { kind?: unknown }).kind)}`);
             }
@@ -280,6 +284,20 @@ export class WasmPhysicsWorld3D {
                 );
             } else if (options.shape.kind === "cylinder") {
                 shapeStatus = this.wasm.shapeCreateCylinder(
+                    id,
+                    options.shape.radius,
+                    options.shape.halfHeight,
+                    density,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1
+                );
+            } else if (options.shape.kind === "cone") {
+                shapeStatus = this.wasm.shapeCreateCone(
                     id,
                     options.shape.radius,
                     options.shape.halfHeight,
@@ -399,6 +417,39 @@ export class WasmPhysicsWorld3D {
         );
         if (shapeId < 0) {
             throw new Error(`body ${id} cylinder attachment failed`);
+        }
+        return shapeId;
+    }
+
+    attachCone(id: number, options: ConeAttachOptions): number {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertPositive(options.radius, "radius");
+        assertPositive(options.halfHeight, "halfHeight");
+        const density = options.density ?? 1;
+        assertFinite(density, "density");
+        if (density < 0) {
+            throw new Error("density must be non-negative");
+        }
+        const offset = options.offset ?? [0, 0, 0];
+        const rotation = options.rotation ?? [0, 0, 0, 1];
+        assertVec3(offset, "offset");
+        assertQuat(rotation, "rotation");
+        const shapeId = this.wasm.shapeCreateCone(
+            id,
+            options.radius,
+            options.halfHeight,
+            density,
+            offset[0],
+            offset[1],
+            offset[2],
+            rotation[0],
+            rotation[1],
+            rotation[2],
+            rotation[3]
+        );
+        if (shapeId < 0) {
+            throw new Error(`body ${id} cone attachment failed`);
         }
         return shapeId;
     }

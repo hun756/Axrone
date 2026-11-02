@@ -4,12 +4,18 @@
 
 #include "core/query.h"
 
+#include "core/polytope.h"
+
 using axrone::physics::AABB;
 using axrone::physics::Body;
+using axrone::physics::buildConeHull;
+using axrone::physics::dot;
+using axrone::physics::Hull;
 using axrone::physics::kBodyDynamic;
 using axrone::physics::kBodyFree;
 using axrone::physics::kBodyStatic;
 using axrone::physics::kMaxShapesPerBody;
+using axrone::physics::Mat3;
 using axrone::physics::overlapSphere;
 using axrone::physics::raycastAll;
 using axrone::physics::raycastClosest;
@@ -143,6 +149,16 @@ struct Fixture {
         return slot;
     }
 
+    int32_t addConeShape(int32_t id, float radius, float halfHeight, Vec3 offset) {
+        const int32_t slot = bodies[id].shapeCount;
+        if (slot >= kMaxShapesPerBody) {
+            return -1;
+        }
+        bodies[id].shapes[slot].setCone(radius, halfHeight, 0.0f, offset, 0.0f, 0.0f, 0.0f, 1.0f);
+        bodies[id].shapeCount = slot + 1;
+        return slot;
+    }
+
     int32_t addCapsule(Vec3 position, float radius, float halfSegment, int32_t state = kBodyStatic) {
         const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
         addCapsuleShape(id, radius, halfSegment, Vec3());
@@ -152,6 +168,12 @@ struct Fixture {
     int32_t addCylinder(Vec3 position, float radius, float halfHeight, int32_t state = kBodyStatic) {
         const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
         addCylinderShape(id, radius, halfHeight, Vec3());
+        return id;
+    }
+
+    int32_t addCone(Vec3 position, float radius, float halfHeight, int32_t state = kBodyStatic) {
+        const int32_t id = reserve(position, 0.0f, 0.0f, 0.0f, 1.0f, state);
+        addConeShape(id, radius, halfHeight, Vec3());
         return id;
     }
 };
@@ -836,8 +858,14 @@ void testRayHitsCylinderSide() {
     CHECK(hit.body == cylinder);
     CHECK(hit.shape == fixture.world.shapeMakeId(cylinder, 0));
     CHECK(near(hit.t, 2.7f));
-    CHECK(near(hit.nx, -1.0f));
+    CHECK(near(hit.nx, -0.92387953f));
     CHECK(near(hit.ny, 0.0f));
+    CHECK(near(hit.nz, 0.38268343f) || near(hit.nz, -0.38268343f));
+
+    RayHit planar;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.0f, 0.12f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, planar));
+    CHECK(planar.px < -0.24f && planar.px > -0.26f);
 }
 
 void testRayHitsCylinderCap() {
@@ -872,6 +900,65 @@ void testRayInsideCylinder() {
         fixture.world, Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
     CHECK(near(hit.t, 0.0f));
     CHECK(near(hit.nx, -1.0f));
+}
+
+void testRayHitsConeSlantedFace() {
+    Fixture fixture;
+    const int32_t cone = fixture.addCone(Vec3(0.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+
+    RayHit hit;
+    CHECK(raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.0f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, hit));
+    CHECK(hit.body == cone);
+    CHECK(hit.t > 2.8f && hit.t < 2.9f);
+    CHECK(hit.nx < -0.5f);
+    CHECK(hit.ny > 0.1f);
+
+    Hull hull;
+    Mat3 identity;
+    identity.setIdentity();
+    buildConeHull(Vec3(), identity, 0.3f, 0.5f, hull);
+
+    bool matchedFace = false;
+    int32_t matchedIndex = -1;
+    for (int32_t f = 0; f < hull.faceCount; ++f) {
+        if (near(hit.nx, hull.faceNormals[f].x) && near(hit.ny, hull.faceNormals[f].y) &&
+            near(hit.nz, hull.faceNormals[f].z)) {
+            matchedFace = true;
+            matchedIndex = f;
+            break;
+        }
+    }
+    CHECK(matchedFace);
+    if (matchedIndex >= 0) {
+        const Vec3 point(hit.px, hit.py, hit.pz);
+        const float separation = dot(hull.faceNormals[matchedIndex], point) - hull.faceOffsets[matchedIndex];
+        CHECK(near(separation, 0.0f));
+    }
+
+    RayHit miss;
+    CHECK(!raycastClosest(
+        fixture.world, Vec3(-3.0f, 0.8f, 0.0f), Vec3(1.0f, 0.0f, 0.0f), 100.0f, miss));
+}
+
+void testOverlapUsesConePolytope() {
+    Fixture fixture;
+    const int32_t cone = fixture.addCone(Vec3(3.0f, 0.0f, 0.0f), 0.3f, 0.5f);
+    fixture.addSphere(Vec3(-4.0f, 0.0f, 0.0f), 0.2f);
+
+    int32_t ids[8];
+    const int32_t nearHits = overlapSphere(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), 2.85f, ids, 8);
+    bool sawCone = false;
+    for (int32_t i = 0; i < nearHits; ++i) {
+        sawCone = sawCone || ids[i] == cone;
+    }
+    CHECK(nearHits == 1);
+    CHECK(sawCone);
+
+    const int32_t tight = overlapSphere(
+        fixture.world, Vec3(0.0f, 0.0f, 0.0f), 2.72f, ids, 8);
+    CHECK(tight == 0);
 }
 
 void testOverlapReturnsCapsuleAndCylinder() {
@@ -938,6 +1025,8 @@ int main() {
     testRayHitsCylinderCap();
     testRayMissesCylinder();
     testRayInsideCylinder();
+    testRayHitsConeSlantedFace();
+    testOverlapUsesConePolytope();
     testOverlapReturnsCapsuleAndCylinder();
 
     printf("query_test: %d checks, %d failures\n", gChecks, gFailures);

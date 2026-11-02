@@ -18,6 +18,7 @@ set(PHYSICS_CORE_SOURCES
     src/core/broadphase.cpp
     src/core/constraints.cpp
     src/core/narrowphase.cpp
+    src/core/polytope.cpp
     src/core/solver.cpp
     src/core/query.cpp
     src/core/events.cpp

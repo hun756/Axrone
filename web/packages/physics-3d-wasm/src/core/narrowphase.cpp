@@ -1,5 +1,6 @@
 #include "core/narrowphase.h"
 
+#include "core/polytope.h"
 #include "platform/math.h"
 
 namespace axrone::physics {
@@ -11,6 +12,13 @@ struct ShapeWorld {
     Vec3 center;
     Vec3 half;
     Mat3 rotation;
+};
+
+struct SphereBoxContactData {
+    float pen;
+    Vec3 worldNormal;
+    Vec3 point;
+    Vec3 sphereSurface;
 };
 
 Vec3 worldPosition(const World& world, int32_t id) {
@@ -305,19 +313,99 @@ void collideCapsuleCapsule(
         pointB,
         shapeRadius(capsuleB),
         kKindCapsuleCapsule * 16);
+
+    const float radiusA = shapeRadius(capsuleA);
+    const float radiusB = shapeRadius(capsuleB);
+    const float radiusSum = radiusA + radiusB;
+
+    Vec3 accepted[kCapsuleManifoldCapacity];
+    int32_t acceptedCount = 0;
+    accepted[acceptedCount++] = (pointA + pointB) * 0.5f;
+
+    for (int32_t i = 0; i < 2 && acceptedCount < kCapsuleManifoldCapacity; ++i) {
+        const Vec3& endpoint = i == 0 ? a0 : a1;
+        const Vec3 anchor = closestPointOnSegment(endpoint, b0, b1);
+        const Vec3 delta = anchor - endpoint;
+        const float distanceSq = lengthSq(delta);
+        if (distanceSq >= radiusSum * radiusSum || distanceSq <= kEps) {
+            continue;
+        }
+        const float distance = sqrtf(distanceSq);
+        const float pen = radiusSum - distance;
+        const Vec3 normal = delta * (1.0f / distance);
+        const Vec3 point = endpoint + normal * (radiusA - pen * 0.5f);
+
+        bool duplicate = false;
+        for (int32_t j = 0; j < acceptedCount; ++j) {
+            if (lengthSq(point - accepted[j]) < kCrossEps) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            continue;
+        }
+
+        addContact(
+            world,
+            a,
+            b,
+            normal,
+            pen,
+            point,
+            endpoint + normal * radiusA,
+            anchor - normal * radiusB,
+            0,
+            Vec3(),
+            indexA,
+            indexB,
+            kKindCapsuleCapsule * 16 + acceptedCount);
+        accepted[acceptedCount++] = point;
+    }
+
+    for (int32_t i = 0; i < 2 && acceptedCount < kCapsuleManifoldCapacity; ++i) {
+        const Vec3& endpoint = i == 0 ? b0 : b1;
+        const Vec3 anchor = closestPointOnSegment(endpoint, a0, a1);
+        const Vec3 delta = anchor - endpoint;
+        const float distanceSq = lengthSq(delta);
+        if (distanceSq >= radiusSum * radiusSum || distanceSq <= kEps) {
+            continue;
+        }
+        const float distance = sqrtf(distanceSq);
+        const float pen = radiusSum - distance;
+        const Vec3 normal = delta * (-1.0f / distance);
+        const Vec3 point = anchor + normal * (radiusA - pen * 0.5f);
+
+        bool duplicate = false;
+        for (int32_t j = 0; j < acceptedCount; ++j) {
+            if (lengthSq(point - accepted[j]) < kCrossEps) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            continue;
+        }
+
+        addContact(
+            world,
+            a,
+            b,
+            normal,
+            pen,
+            point,
+            anchor + normal * radiusA,
+            endpoint - normal * radiusB,
+            0,
+            Vec3(),
+            indexA,
+            indexB,
+            kKindCapsuleCapsule * 16 + acceptedCount);
+        accepted[acceptedCount++] = point;
+    }
 }
 
-void collideSphereBox(
-    World& world,
-    int32_t sphere,
-    int32_t sphereIndex,
-    const ShapeWorld& sphereShape,
-    int32_t box,
-    int32_t boxIndex,
-    const ShapeWorld& boxShape,
-    bool sphereIsA,
-    int32_t baseFeature
-) {
+bool sphereBoxTest(const ShapeWorld& sphereShape, const ShapeWorld& boxShape, SphereBoxContactData& data) {
     const Vec3 delta = sphereShape.center - boxShape.center;
 
     const Vec3 localSphere = boxShape.rotation.transposeTransform(delta);
@@ -333,7 +421,7 @@ void collideSphereBox(
     const float distanceSq = lengthSq(difference);
     const float radius = shapeRadius(sphereShape);
     if (distanceSq > radius * radius) {
-        return;
+        return false;
     }
 
     Vec3 localNormal(0.0f, 0.0f, 0.0f);
@@ -366,12 +454,34 @@ void collideSphereBox(
 
     const Vec3 worldNormal = boxShape.rotation.transform(localNormal);
     const Vec3 point = boxShape.center + boxShape.rotation.transform(localPoint);
-    const Vec3 sphereSurface = sphereShape.center - worldNormal * radius;
+
+    data.pen = pen;
+    data.worldNormal = worldNormal;
+    data.point = point;
+    data.sphereSurface = sphereShape.center - worldNormal * radius;
+    return true;
+}
+
+void collideSphereBox(
+    World& world,
+    int32_t sphere,
+    int32_t sphereIndex,
+    const ShapeWorld& sphereShape,
+    int32_t box,
+    int32_t boxIndex,
+    const ShapeWorld& boxShape,
+    bool sphereIsA,
+    int32_t baseFeature
+) {
+    SphereBoxContactData data;
+    if (!sphereBoxTest(sphereShape, boxShape, data)) {
+        return;
+    }
 
     if (sphereIsA) {
-        addContact(world, sphere, box, -worldNormal, pen, point, sphereSurface, point, 0, Vec3(), sphereIndex, boxIndex, baseFeature);
+        addContact(world, sphere, box, -data.worldNormal, data.pen, data.point, data.sphereSurface, data.point, 0, Vec3(), sphereIndex, boxIndex, baseFeature);
     } else {
-        addContact(world, box, sphere, worldNormal, pen, point, point, sphereSurface, 0, Vec3(), boxIndex, sphereIndex, baseFeature);
+        addContact(world, box, sphere, data.worldNormal, data.pen, data.point, data.point, data.sphereSurface, 0, Vec3(), boxIndex, sphereIndex, baseFeature);
     }
 }
 
@@ -446,22 +556,87 @@ void collideCapsuleBox(
     const Vec3 localAnchor = l0 + (l1 - l0) * t;
     const Vec3 worldAnchor = boxShape.center + boxShape.rotation.transform(localAnchor);
 
+    const float radius = shapeRadius(capsuleShape);
+
     ShapeWorld anchorSphere;
     anchorSphere.kind = kShapeSphere;
     anchorSphere.center = worldAnchor;
-    anchorSphere.half = Vec3(capsuleShape.half.x, 0.0f, 0.0f);
+    anchorSphere.half = Vec3(radius, 0.0f, 0.0f);
     anchorSphere.rotation = boxShape.rotation;
 
-    collideSphereBox(
-        world,
-        capsule,
-        capsuleIndex,
-        anchorSphere,
-        box,
-        boxIndex,
-        boxShape,
-        capsuleIsA,
-        kKindCapsuleBox * 16);
+    SphereBoxContactData candidates[kCapsuleManifoldCapacity];
+    int32_t candidateCount = 0;
+
+    SphereBoxContactData anchorData;
+    if (sphereBoxTest(anchorSphere, boxShape, anchorData)) {
+        candidates[candidateCount++] = anchorData;
+    }
+
+    ShapeWorld probeSphere;
+    probeSphere.kind = kShapeSphere;
+    probeSphere.half = anchorSphere.half;
+    probeSphere.rotation = boxShape.rotation;
+
+    for (int32_t i = 0; i < 2 && candidateCount < kCapsuleManifoldCapacity; ++i) {
+        probeSphere.center = i == 0 ? p0 : p1;
+        SphereBoxContactData probeData;
+        if (!sphereBoxTest(probeSphere, boxShape, probeData)) {
+            continue;
+        }
+        bool duplicate = false;
+        for (int32_t j = 0; j < candidateCount; ++j) {
+            if (lengthSq(probeData.point - candidates[j].point) < kCrossEps) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            candidates[candidateCount++] = probeData;
+        }
+    }
+
+    for (int32_t k = 1; k < candidateCount; ++k) {
+        for (int32_t j = k; j > 0 && candidates[j].pen > candidates[j - 1].pen; --j) {
+            const SphereBoxContactData swap = candidates[j];
+            candidates[j] = candidates[j - 1];
+            candidates[j - 1] = swap;
+        }
+    }
+
+    for (int32_t k = 0; k < candidateCount; ++k) {
+        const SphereBoxContactData& data = candidates[k];
+        if (capsuleIsA) {
+            addContact(
+                world,
+                capsule,
+                box,
+                -data.worldNormal,
+                data.pen,
+                data.point,
+                data.sphereSurface,
+                data.point,
+                0,
+                Vec3(),
+                capsuleIndex,
+                boxIndex,
+                kKindCapsuleBox * 16 + k);
+        } else {
+            addContact(
+                world,
+                box,
+                capsule,
+                data.worldNormal,
+                data.pen,
+                data.point,
+                data.point,
+                data.sphereSurface,
+                0,
+                Vec3(),
+                boxIndex,
+                capsuleIndex,
+                kKindCapsuleBox * 16 + k);
+        }
+    }
 }
 
 void buildFace(const Vec3& center, const Vec3 axes[3], const Vec3& half, int32_t axisIndex, float sign, Vec3 out[4]) {
@@ -756,18 +931,504 @@ void collideBoxBox(World& world, int32_t a, int32_t indexA, const ShapeWorld& sh
     }
 }
 
-void cylinderProxy(const ShapeWorld& shape, ShapeWorld& out) {
-    if (shape.kind != kShapeCylinder) {
-        out = shape;
+bool isHullKind(int32_t kind) {
+    return kind == kShapeCylinder || kind == kShapeCone;
+}
+
+void buildShapeHull(const ShapeWorld& shape, Hull& hull) {
+    if (shape.kind == kShapeCone) {
+        buildConeHull(shape.center, shape.rotation, shape.half.x, shape.half.y, hull);
+    } else if (shape.kind == kShapeCylinder) {
+        buildPrismHull(shape.center, shape.rotation, shape.half.x, shape.half.y, hull);
+    } else {
+        buildBoxHull(shape.center, shape.rotation, shape.half, hull);
+    }
+}
+
+void collideSphereHull(
+    World& world,
+    int32_t sphere,
+    int32_t sphereIndex,
+    const ShapeWorld& sphereShape,
+    int32_t hull,
+    int32_t hullIndex,
+    const Hull& hullShape,
+    bool sphereIsA
+) {
+    Vec3 closest;
+    float signedDistance;
+    Vec3 faceHint;
+    hullClosestPoint(hullShape, sphereShape.center, closest, signedDistance, faceHint);
+
+    const float radius = shapeRadius(sphereShape);
+    if (signedDistance > radius) {
         return;
     }
-    out.kind = kShapeBox;
-    out.center = shape.center;
-    out.half = Vec3(shape.half.x, shape.half.y, shape.half.x);
-    out.rotation = shape.rotation;
+
+    const float pen = radius - signedDistance;
+    Vec3 normal = faceHint;
+    if (signedDistance > 0.0f) {
+        const Vec3 delta = sphereShape.center - closest;
+        const float distanceSq = lengthSq(delta);
+        if (distanceSq > kEps) {
+            normal = delta * (1.0f / sqrtf(distanceSq));
+        }
+    }
+
+    const Vec3 sphereSurface = sphereShape.center - normal * radius;
+    const Vec3 point = closest - normal * (pen * 0.5f);
+
+    if (sphereIsA) {
+        addContact(world, sphere, hull, -normal, pen, point, sphereSurface, closest, 0, Vec3(), sphereIndex, hullIndex, kKindHullSphere * 16);
+    } else {
+        addContact(world, hull, sphere, normal, pen, point, closest, sphereSurface, 0, Vec3(), hullIndex, sphereIndex, kKindHullSphere * 16);
+    }
+}
+
+void collideCapsuleHull(
+    World& world,
+    int32_t capsule,
+    int32_t capsuleIndex,
+    const ShapeWorld& capsuleShape,
+    int32_t hull,
+    int32_t hullIndex,
+    const Hull& hullShape,
+    bool capsuleIsA
+) {
+    Vec3 p0;
+    Vec3 p1;
+    capsuleSegment(capsuleShape, p0, p1);
+
+    const float radius = shapeRadius(capsuleShape);
+    const Vec3 span = p1 - p0;
+    const float spanSq = lengthSq(span);
+
+    Vec3 samples[kCapsuleManifoldCapacity];
+    int32_t sampleCount = 0;
+
+    Vec3 probe = (p0 + p1) * 0.5f;
+    if (spanSq > kEps) {
+        for (int32_t iter = 0; iter < 8; ++iter) {
+            Vec3 closest;
+            float signedDistance;
+            Vec3 faceHint;
+            hullClosestPoint(hullShape, probe, closest, signedDistance, faceHint);
+            const float t = clampf(dot(closest - p0, span) / spanSq, 0.0f, 1.0f);
+            probe = p0 + span * t;
+        }
+    }
+    samples[sampleCount++] = probe;
+    samples[sampleCount++] = p0;
+    samples[sampleCount++] = p1;
+
+    struct CapsuleHullCandidate {
+        Vec3 normal;
+        float pen;
+        Vec3 point;
+        Vec3 capsuleSurface;
+        Vec3 hullSurface;
+    };
+
+    CapsuleHullCandidate candidates[kCapsuleManifoldCapacity];
+    int32_t candidateCount = 0;
+
+    for (int32_t i = 0; i < sampleCount; ++i) {
+        Vec3 closest;
+        float signedDistance;
+        Vec3 faceHint;
+        hullClosestPoint(hullShape, samples[i], closest, signedDistance, faceHint);
+        if (signedDistance >= radius) {
+            continue;
+        }
+
+        Vec3 normal = faceHint;
+        if (signedDistance > 0.0f) {
+            const Vec3 delta = samples[i] - closest;
+            const float distanceSq = lengthSq(delta);
+            if (distanceSq > kEps) {
+                normal = delta * (1.0f / sqrtf(distanceSq));
+            }
+        }
+
+        const float pen = radius - signedDistance;
+        const Vec3 point = closest - normal * (pen * 0.5f);
+
+        bool duplicate = false;
+        for (int32_t j = 0; j < candidateCount; ++j) {
+            if (lengthSq(point - candidates[j].point) < kCrossEps) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            continue;
+        }
+        if (candidateCount >= kCapsuleManifoldCapacity) {
+            break;
+        }
+
+        CapsuleHullCandidate& candidate = candidates[candidateCount++];
+        candidate.normal = normal;
+        candidate.pen = pen;
+        candidate.point = point;
+        candidate.capsuleSurface = samples[i] - normal * radius;
+        candidate.hullSurface = closest;
+    }
+
+    for (int32_t k = 1; k < candidateCount; ++k) {
+        for (int32_t j = k; j > 0 && candidates[j].pen > candidates[j - 1].pen; --j) {
+            const CapsuleHullCandidate swap = candidates[j];
+            candidates[j] = candidates[j - 1];
+            candidates[j - 1] = swap;
+        }
+    }
+
+    for (int32_t k = 0; k < candidateCount; ++k) {
+        const CapsuleHullCandidate& candidate = candidates[k];
+        if (capsuleIsA) {
+            addContact(
+                world,
+                capsule,
+                hull,
+                -candidate.normal,
+                candidate.pen,
+                candidate.point,
+                candidate.capsuleSurface,
+                candidate.hullSurface,
+                0,
+                Vec3(),
+                capsuleIndex,
+                hullIndex,
+                kKindCapsuleHull * 16 + k);
+        } else {
+            addContact(
+                world,
+                hull,
+                capsule,
+                candidate.normal,
+                candidate.pen,
+                candidate.point,
+                candidate.hullSurface,
+                candidate.capsuleSurface,
+                0,
+                Vec3(),
+                hullIndex,
+                capsuleIndex,
+                kKindCapsuleHull * 16 + k);
+        }
+    }
+}
+
+void addHullFaceContacts(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const Hull& hullA,
+    int32_t b,
+    int32_t indexB,
+    const Hull& hullB,
+    const Vec3& normal,
+    bool referenceIsA
+) {
+    const Hull& referenceHull = referenceIsA ? hullA : hullB;
+    const Hull& incidentHull = referenceIsA ? hullB : hullA;
+    const int32_t referenceBody = referenceIsA ? a : b;
+    const Vec3 referenceNormal = referenceIsA ? normal : -normal;
+
+    int32_t referenceFace = 0;
+    float referenceBest = -2.0f;
+    for (int32_t f = 0; f < referenceHull.faceCount; ++f) {
+        const float d = dot(referenceHull.faceNormals[f], referenceNormal);
+        if (d > referenceBest) {
+            referenceBest = d;
+            referenceFace = f;
+        }
+    }
+
+    const int32_t referenceStart = referenceHull.faceStart[referenceFace];
+    const int32_t referenceCount = referenceHull.faceStart[referenceFace + 1] - referenceStart;
+    Vec3 referenceVertices[kHullMaxFaceVertices];
+    for (int32_t i = 0; i < referenceCount; ++i) {
+        referenceVertices[i] = referenceHull.vertices[referenceHull.faceIndices[referenceStart + i]];
+    }
+    const float planeOffset = dot(referenceNormal, referenceVertices[0]);
+
+    int32_t incidentFace = 0;
+    float incidentBest = 2.0f;
+    for (int32_t f = 0; f < incidentHull.faceCount; ++f) {
+        const float d = dot(incidentHull.faceNormals[f], referenceNormal);
+        if (d < incidentBest) {
+            incidentBest = d;
+            incidentFace = f;
+        }
+    }
+
+    const int32_t incidentStart = incidentHull.faceStart[incidentFace];
+    const int32_t incidentCount = incidentHull.faceStart[incidentFace + 1] - incidentStart;
+
+    Vec3 clipSource[kHullClipCapacity];
+    Vec3 clipTarget[kHullClipCapacity];
+    int32_t clipCount = 0;
+    for (int32_t i = 0; i < incidentCount && clipCount < kHullClipCapacity; ++i) {
+        clipSource[clipCount++] = incidentHull.vertices[incidentHull.faceIndices[incidentStart + i]];
+    }
+
+    for (int32_t i = 0; i < referenceCount && clipCount > 0; ++i) {
+        const Vec3& from = referenceVertices[i];
+        const Vec3& to = referenceVertices[(i + 1) % referenceCount];
+        const Vec3 edge = to - from;
+        Vec3 side = cross(edge, referenceNormal);
+        const float sideLengthSq = lengthSq(side);
+        if (sideLengthSq < kCrossEps) {
+            continue;
+        }
+        side = side * (1.0f / sqrtf(sideLengthSq));
+        clipCount = clipPlane(clipSource, clipCount, clipTarget, from, side, 0.0f);
+        for (int32_t j = 0; j < clipCount; ++j) {
+            clipSource[j] = clipTarget[j];
+        }
+    }
+
+    struct HullManifoldPoint {
+        Vec3 point;
+        float pen;
+    };
+
+    HullManifoldPoint manifold[kHullClipCapacity];
+    int32_t manifoldCount = 0;
+    for (int32_t i = 0; i < clipCount; ++i) {
+        const float separation = dot(referenceNormal, clipSource[i]) - planeOffset;
+        if (separation > 0.0f) {
+            continue;
+        }
+        HullManifoldPoint& entry = manifold[manifoldCount++];
+        entry.point = clipSource[i];
+        entry.pen = -separation;
+    }
+
+    const Vec3 localNormal = world.bodies[referenceBody].rotation.transposeTransform(referenceNormal);
+    const int32_t start = world.contactCount;
+    int32_t added = 0;
+
+    if (manifoldCount > 0) {
+        int32_t bestIndex = 0;
+        float bestPen = -1.0f;
+        for (int32_t i = 0; i < manifoldCount; ++i) {
+            if (manifold[i].pen > bestPen) {
+                bestPen = manifold[i].pen;
+                bestIndex = i;
+            }
+        }
+
+        int32_t selected[kHullManifoldCapacity];
+        int32_t selectedCount = 0;
+        selected[selectedCount++] = bestIndex;
+        manifold[bestIndex].pen = -1.0f;
+
+        while (selectedCount < kHullManifoldCapacity) {
+            int32_t spreadIndex = -1;
+            float bestMinDistanceSq = kCrossEps;
+            for (int32_t i = 0; i < manifoldCount; ++i) {
+                if (manifold[i].pen < 0.0f) {
+                    continue;
+                }
+                float minDistanceSq = kBig;
+                for (int32_t j = 0; j < selectedCount; ++j) {
+                    const float d = lengthSq(manifold[i].point - manifold[selected[j]].point);
+                    if (d < minDistanceSq) {
+                        minDistanceSq = d;
+                    }
+                }
+                if (minDistanceSq > bestMinDistanceSq) {
+                    bestMinDistanceSq = minDistanceSq;
+                    spreadIndex = i;
+                }
+            }
+            if (spreadIndex < 0) {
+                break;
+            }
+            selected[selectedCount++] = spreadIndex;
+            manifold[spreadIndex].pen = -1.0f;
+        }
+
+        for (int32_t k = 1; k < selectedCount; ++k) {
+            for (int32_t j = k; j > 0 && selected[j] < selected[j - 1]; --j) {
+                const int32_t swap = selected[j];
+                selected[j] = selected[j - 1];
+                selected[j - 1] = swap;
+            }
+        }
+
+        for (int32_t k = 0; k < selectedCount; ++k) {
+            const HullManifoldPoint& entry = manifold[selected[k]];
+            const Vec3 point = entry.point;
+            const float pen = -dot(referenceNormal, point) + planeOffset;
+
+            bool duplicate = false;
+            for (int32_t j = start; j < world.contactCount; ++j) {
+                const Contact& existing = world.contacts[j];
+                const Vec3 existingPoint = transformPosition(world.transforms[existing.a]) + existing.ra;
+                if (lengthSq(point - existingPoint) < kCrossEps) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                continue;
+            }
+
+            const Vec3 referencePoint = point + referenceNormal * pen;
+            if (referenceIsA) {
+                addContact(world, a, b, normal, pen, point, referencePoint, point, 1, localNormal, indexA, indexB, kKindHullFace * 16 + added);
+            } else {
+                addContact(world, a, b, normal, pen, point, point, referencePoint, 2, localNormal, indexA, indexB, kKindHullFace * 16 + added);
+            }
+            ++added;
+        }
+    }
+
+    if (added == 0) {
+        float bestDepth = 0.0f;
+        int32_t bestVertex = -1;
+        int32_t bestPlane = 0;
+        for (int32_t v = 0; v < incidentHull.vertexCount; ++v) {
+            const Vec3& vertex = incidentHull.vertices[v];
+            float depth = kBig;
+            int32_t plane = 0;
+            for (int32_t f = 0; f < referenceHull.faceCount; ++f) {
+                const float candidateDepth = referenceHull.faceOffsets[f] - dot(referenceHull.faceNormals[f], vertex);
+                if (candidateDepth < depth) {
+                    depth = candidateDepth;
+                    plane = f;
+                }
+            }
+            if (depth > bestDepth) {
+                bestDepth = depth;
+                bestVertex = v;
+                bestPlane = plane;
+            }
+        }
+
+        if (bestVertex >= 0) {
+            const Vec3& vertex = incidentHull.vertices[bestVertex];
+            const Vec3 planeNormal = referenceHull.faceNormals[bestPlane];
+            const Vec3 referencePoint = vertex + planeNormal * bestDepth;
+            const Vec3 emissionNormal = referenceIsA ? planeNormal : -planeNormal;
+            const float pen = bestDepth;
+            if (referenceIsA) {
+                addContact(world, a, b, emissionNormal, pen, vertex, referencePoint, vertex, 1, localNormal, indexA, indexB, kKindHullFace * 16);
+            } else {
+                addContact(world, a, b, emissionNormal, pen, vertex, vertex, referencePoint, 2, localNormal, indexA, indexB, kKindHullFace * 16);
+            }
+        }
+    }
+}
+
+void collideHullHull(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& shapeA,
+    const Hull& hullA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& shapeB,
+    const Hull& hullB
+) {
+    const Vec3 offset = shapeB.center - shapeA.center;
+
+    float bestSeparation = -kBig;
+    int32_t bestKind = 0;
+    Vec3 bestNormal(1.0f, 0.0f, 0.0f);
+
+    for (int32_t f = 0; f < hullA.faceCount; ++f) {
+        Vec3 axis = hullA.faceNormals[f];
+        if (dot(offset, axis) < 0.0f) {
+            axis = -axis;
+        }
+        const float separation = hullMinProjection(hullB, axis) - hullMaxProjection(hullA, axis);
+        if (separation > 0.0f) {
+            return;
+        }
+        if (separation > bestSeparation) {
+            bestSeparation = separation;
+            bestKind = 1;
+            bestNormal = axis;
+        }
+    }
+
+    for (int32_t f = 0; f < hullB.faceCount; ++f) {
+        Vec3 axis = hullB.faceNormals[f];
+        if (dot(offset, axis) < 0.0f) {
+            axis = -axis;
+        }
+        const float separation = hullMinProjection(hullB, axis) - hullMaxProjection(hullA, axis);
+        if (separation > 0.0f) {
+            return;
+        }
+        if (separation > bestSeparation) {
+            bestSeparation = separation;
+            bestKind = 2;
+            bestNormal = axis;
+        }
+    }
+
+    if (bestKind == 0) {
+        return;
+    }
+
+    addHullFaceContacts(
+        world,
+        a,
+        indexA,
+        hullA,
+        b,
+        indexB,
+        hullB,
+        bestNormal,
+        bestKind == 1);
+}
+
+AXRONE_PHYSICS_NOINLINE void collideHullPair(
+    World& world,
+    int32_t a,
+    int32_t indexA,
+    const ShapeWorld& shapeA,
+    int32_t b,
+    int32_t indexB,
+    const ShapeWorld& shapeB
+) {
+    if (shapeA.kind == kShapeSphere) {
+        Hull hullB;
+        buildShapeHull(shapeB, hullB);
+        collideSphereHull(world, a, indexA, shapeA, b, indexB, hullB, true);
+    } else if (shapeB.kind == kShapeSphere) {
+        Hull hullA;
+        buildShapeHull(shapeA, hullA);
+        collideSphereHull(world, b, indexB, shapeB, a, indexA, hullA, true);
+    } else if (shapeA.kind == kShapeCapsule) {
+        Hull hullB;
+        buildShapeHull(shapeB, hullB);
+        collideCapsuleHull(world, a, indexA, shapeA, b, indexB, hullB, true);
+    } else if (shapeB.kind == kShapeCapsule) {
+        Hull hullA;
+        buildShapeHull(shapeA, hullA);
+        collideCapsuleHull(world, b, indexB, shapeB, a, indexA, hullA, true);
+    } else {
+        Hull hullA;
+        Hull hullB;
+        buildShapeHull(shapeA, hullA);
+        buildShapeHull(shapeB, hullB);
+        collideHullHull(world, a, indexA, shapeA, hullA, b, indexB, shapeB, hullB);
+    }
 }
 
 void collideShapePair(World& world, int32_t a, int32_t indexA, const ShapeWorld& shapeA, int32_t b, int32_t indexB, const ShapeWorld& shapeB) {
+    if (isHullKind(shapeA.kind) || isHullKind(shapeB.kind)) {
+        collideHullPair(world, a, indexA, shapeA, b, indexB, shapeB);
+        return;
+    }
+
     if (shapeA.kind == kShapeSphere) {
         if (shapeB.kind == kShapeSphere) {
             collideSphereSphere(world, a, indexA, shapeA, b, indexB, shapeB);
@@ -808,15 +1469,12 @@ void collidePair(World& world, int32_t a, int32_t b) {
 
     ShapeWorld stateA;
     ShapeWorld stateB;
-    ShapeWorld proxyA;
-    ShapeWorld proxyB;
 
     for (int32_t indexA = 0; indexA < countA; ++indexA) {
         if (!shapeValid(bodyA.shapes[indexA])) {
             continue;
         }
         loadShapeWorld(world, a, indexA, stateA);
-        cylinderProxy(stateA, proxyA);
 
         for (int32_t indexB = 0; indexB < countB; ++indexB) {
             if (!shapeValid(bodyB.shapes[indexB])) {
@@ -826,8 +1484,7 @@ void collidePair(World& world, int32_t a, int32_t b) {
                 continue;
             }
             loadShapeWorld(world, b, indexB, stateB);
-            cylinderProxy(stateB, proxyB);
-            collideShapePair(world, a, indexA, proxyA, b, indexB, proxyB);
+            collideShapePair(world, a, indexA, stateA, b, indexB, stateB);
         }
     }
 }

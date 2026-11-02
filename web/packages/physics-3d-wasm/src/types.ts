@@ -37,7 +37,13 @@ export interface CylinderShape {
     readonly halfHeight: number;
 }
 
-export type Shape = SphereShape | BoxShape | CapsuleShape | CylinderShape;
+export interface ConeShape {
+    readonly kind: "cone";
+    readonly radius: number;
+    readonly halfHeight: number;
+}
+
+export type Shape = SphereShape | BoxShape | CapsuleShape | CylinderShape | ConeShape;
 
 export interface CapsuleAttachOptions {
     readonly radius: number;
@@ -48,6 +54,14 @@ export interface CapsuleAttachOptions {
 }
 
 export interface CylinderAttachOptions {
+    readonly radius: number;
+    readonly halfHeight: number;
+    readonly density?: number;
+    readonly offset?: Vec3Tuple;
+    readonly rotation?: QuatTuple;
+}
+
+export interface ConeAttachOptions {
     readonly radius: number;
     readonly halfHeight: number;
     readonly density?: number;

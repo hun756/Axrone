@@ -596,6 +596,42 @@ AXRONE_PHYSICS_EXPORT(shape_create_cylinder) int32_t shape_create_cylinder(
     return shapeCreateCylinder(bodyId, radius, halfHeight, density, cx, cy, cz, qx, qy, qz, qw);
 }
 
+AXRONE_PHYSICS_EXPORT(shapeCreateCone) int32_t shapeCreateCone(
+    int32_t bodyId,
+    float radius,
+    float halfHeight,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    const int32_t slot = g_world.addCone(bodyId, radius, halfHeight, density, cx, cy, cz, qx, qy, qz, qw);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_cone) int32_t shape_create_cone(
+    int32_t bodyId,
+    float radius,
+    float halfHeight,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    return shapeCreateCone(bodyId, radius, halfHeight, density, cx, cy, cz, qx, qy, qz, qw);
+}
+
 AXRONE_PHYSICS_EXPORT(shapeDestroy) int32_t shapeDestroy(int32_t shapeId) {
     return g_world.shapeDestroy(shapeId);
 }
