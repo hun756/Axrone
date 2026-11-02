@@ -11,6 +11,75 @@ function makeGround(world: PhysicsWorld3D): number {
     return ground;
 }
 
+function firstBeginByPair(
+    world: PhysicsWorld3D,
+    steps: number
+): Map<string, number> {
+    const firsts = new Map<string, number>();
+    let currentStep = 0;
+    world.setContactListener({
+        onCollisionBegin: (event: any) => {
+            const a = Number(event.bodyIdA);
+            const b = Number(event.bodyIdB);
+            const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+            if (!firsts.has(key)) firsts.set(key, currentStep);
+        },
+    });
+    for (let i = 0; i < steps; i++) {
+        currentStep = i + 1;
+        world.step(STEP);
+    }
+    return firsts;
+}
+
+describe('D1 — contact detection order (post-integration manifolds)', () => {
+    it('single sphere bounce on a plane: first begin at step 65', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -G, z: 0 } });
+        const ground = makeGround(world);
+        const ball = world.createBody({ type: 2, position: { x: 0, y: 6, z: 0 }, allowSleep: false });
+        world.createSphereShape(ball, { center: ZERO, radius: 0.3 }, { friction: 0.4, restitution: 0.2 });
+        const firsts = firstBeginByPair(world, 200);
+        expect(firsts.get(`${ground}-${ball}`)).toBe(65);
+    });
+
+    it('two falling boxes stacked laterally: first begins at step 9 and 13', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -G, z: 0 } });
+        const ground = makeGround(world);
+        const b1 = world.createBody({ type: 2, position: { x: 0, y: 0.6, z: 0 }, allowSleep: false });
+        world.createBoxShape(b1, { center: ZERO, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } }, { friction: 0.4, restitution: 0 });
+        const b2 = world.createBody({ type: 2, position: { x: 0.01, y: 1.7, z: 0 }, allowSleep: false });
+        world.createBoxShape(b2, { center: ZERO, halfExtents: { x: 0.5, y: 0.5, z: 0.5 } }, { friction: 0.4, restitution: 0 });
+        const firsts = firstBeginByPair(world, 180);
+        expect(firsts.get(`${ground}-${b1}`)).toBe(9);
+        expect(firsts.get(`${b1}-${b2}`)).toBe(13);
+
+        const p1 = world.getBodyManager().getPosition(b1);
+        const groundPen = 0 - (p1.y - 0.5);
+        expect(groundPen).toBeLessThanOrEqual(0.023);
+    });
+
+    it('sensor passage with no ground: enter/exit window exactly steps 38..61', () => {
+        const world = new PhysicsWorld3D({ gravity: { x: 0, y: -G, z: 0 } });
+        const sensor = world.createBody({ type: 0, position: { x: 0, y: 2.5, z: 0 } });
+        world.createSphereShape(sensor, { center: ZERO, radius: 1.2 }, { friction: 0.4, restitution: 0 }, undefined, { isSensor: true });
+        const ball = world.createBody({ type: 2, position: { x: 0, y: 6, z: 0 }, allowSleep: false });
+        world.createSphereShape(ball, { center: ZERO, radius: 0.3 }, { friction: 0.4, restitution: 0.2 });
+        let enter = -1;
+        let exit = -1;
+        let currentStep = 0;
+        world.setContactListener({
+            onSensorEnter: () => { if (enter < 0) enter = currentStep; },
+            onSensorExit: () => { if (exit < 0) exit = currentStep; },
+        });
+        for (let i = 0; i < 120; i++) {
+            currentStep = i + 1;
+            world.step(STEP);
+        }
+        expect(enter).toBe(38);
+        expect(exit).toBe(61);
+    });
+});
+
 describe('D6 — one mass policy: inertia about the body origin', () => {
     it('L-shaped compound converges to the slop band instead of sinking', () => {
         const world = new PhysicsWorld3D({ gravity: { x: 0, y: -G, z: 0 } });

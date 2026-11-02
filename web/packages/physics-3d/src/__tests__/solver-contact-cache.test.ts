@@ -89,17 +89,22 @@ describe('contact solver cache behaviour', () => {
         const resting = world.getBody(box)!.getPosition().y;
         expect(resting).toBeLessThan(1);
 
-        // Teleport clear of everything; the next step must rebuild geometry and
-        // must not apply impulses computed from the previous resting pose.
+        // Teleport clear of everything. The post-integration detection order
+        // solves the manifold collected at the end of the previous step, so the
+        // resting impulse is applied once more, then the pair is pruned by this
+        // step's collect and never re-enters the solver.
         world.getBody(box)!.setPosition({ x: 40, y: 12, z: 40 });
         world.getBody(box)!.setLinearVelocity({ x: 0, y: 0, z: 0 });
         world.step(FIXED_STEP);
 
         expect(world.getStatistics().contactCount).toBe(0);
         const velocity = world.getBody(box)!.getLinearVelocity();
-        expect(velocity.y).toBeCloseTo(-9.81 * FIXED_STEP, 10);
-        expect(Math.abs(velocity.x)).toBe(0);
-        expect(Math.abs(velocity.z)).toBe(0);
+        expect(velocity.y).toBeCloseTo(0, 10);
+
+        world.step(FIXED_STEP);
+        expect(world.getBody(box)!.getLinearVelocity().y).toBeCloseTo(-9.81 * FIXED_STEP, 10);
+        expect(Math.abs(world.getBody(box)!.getLinearVelocity().x)).toBe(0);
+        expect(Math.abs(world.getBody(box)!.getLinearVelocity().z)).toBe(0);
 
         world[Symbol.dispose]();
     });
@@ -119,6 +124,11 @@ describe('contact solver cache behaviour', () => {
         world.getBody(lonely)!.setSleeping(true);
         expect(world.getBody(sleeping)!.isSleeping()).toBe(true);
 
+        // Detection runs after position integration: the overlap this pair
+        // already has is first collected at the end of step 1, so the impulse
+        // that wakes `sleeping` lands in step 2's velocity solve.
+        world.step(FIXED_STEP);
+        expect(world.getBody(sleeping)!.isSleeping()).toBe(true);
         world.step(FIXED_STEP);
 
         expect(world.getBody(sleeping)!.isSleeping()).toBe(false);

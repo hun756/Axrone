@@ -488,25 +488,28 @@ export class PhysicsWorld3D implements Disposable {
         // 1. Integrate forces → velocities (gravity, damping, force accumulators)
         this._integrateVelocities(deltaTime);
 
-        // 2. Broadphase + narrowphase → collect contact manifolds
+        // 2-5. Warm start, velocity solve and position solve run on the
+        // manifolds collected at the end of the previous step (their positions
+        // equal the start-of-step transforms). Position integration then moves
+        // the bodies exactly one integration against those anchors, which the
+        // position pass corrects — the same drift relation the old order had.
+        this._contactRuntime.warmStart();
+        this._contactRuntime.solveVelocity(velocityIterations, deltaTime);
+        this._integratePositions(deltaTime);
+        this._contactRuntime.solvePosition(positionIterations);
+
+        // 6. Persist warm impulses for next frame (after full solve, before events)
+        this._contactRuntime.persistWarmImpulses();
+
+        // 7. Broadphase + narrowphase AFTER position integration: manifolds are
+        // detected against the transforms the step actually produced, so a pair
+        // begins contact on the step it starts overlapping (WASM core order:
+        // integrate, update bounds, broadphase, narrowphase, solve). Warm-start
+        // keeps working because these fresh manifolds carry the impulses just
+        // persisted in step 6 and are solved by the next step's phase-2-5 block.
         // Shape transform frames are valid only for this step.
         this._frameGeneration += 1;
         this._contactRuntime.collectManifolds();
-
-        // 3. Warm start: apply cached impulses from previous frame
-        this._contactRuntime.warmStart();
-
-        // 4. Velocity solve: sequential impulse iterations
-        this._contactRuntime.solveVelocity(velocityIterations, deltaTime);
-
-        // 5. Integrate positions: position += velocity * dt
-        this._integratePositions(deltaTime);
-
-        // 6. Position solve: Baumgarte correction
-        this._contactRuntime.solvePosition(positionIterations);
-
-        // 7. Persist warm impulses for next frame (after full solve, before events)
-        this._contactRuntime.persistWarmImpulses();
 
         // 8. Fire contact events
         this._contactRuntime.dispatchEvents();
