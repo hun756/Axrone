@@ -33,6 +33,20 @@ constexpr int32_t kBodyTypeStatic = 0;
 constexpr int32_t kBodyTypeDynamic = 1;
 constexpr int32_t kBodyTypeKinematic = 2;
 
+constexpr int32_t kShapeTypeCodeSphere = 5;
+constexpr int32_t kShapeTypeCodeBox = 3;
+
+constexpr int32_t kShapeIdSlotBits = 3;
+constexpr int32_t kShapeIdSlotMask = 7;
+constexpr int32_t kShapeIdBodyMask = 0x3FFFF;
+constexpr int32_t kShapeIdGenMask = 0x3FF;
+constexpr int32_t kShapeIdGenShift = 21;
+constexpr int32_t kShapeIdMax = 0x7FFFFFFF;
+
+constexpr float kShapeMaterialInherit = -1.0f;
+constexpr int32_t kDefaultCategoryBits = 1;
+constexpr int32_t kDefaultMaskBits = 0xFFFF;
+
 constexpr int32_t kBodyFreezeRotationX = 1;
 constexpr int32_t kBodyFreezeRotationY = 2;
 constexpr int32_t kBodyFreezeRotationZ = 4;

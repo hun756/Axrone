@@ -106,22 +106,28 @@ void addContact(
     contact.impT2 = 0.0f;
     contact.velocityBias = 0.0f;
 
-    const float frictionA = world.bodies[a].friction;
-    const float frictionB = world.bodies[b].friction;
+    const Shape& shapeA = world.bodies[a].shapes[shapeIndexA];
+    const Shape& shapeB = world.bodies[b].shapes[shapeIndexB];
+    const float frictionA = shapeEffectiveFriction(shapeA, world.bodies[a].friction);
+    const float frictionB = shapeEffectiveFriction(shapeB, world.bodies[b].friction);
     contact.friction = sqrtf(frictionA * frictionB);
-    contact.restitution = world.bodies[a].restitution > world.bodies[b].restitution
-        ? world.bodies[a].restitution
-        : world.bodies[b].restitution;
+    const float restitutionA = shapeEffectiveRestitution(shapeA, world.bodies[a].restitution);
+    const float restitutionB = shapeEffectiveRestitution(shapeB, world.bodies[b].restitution);
+    contact.restitution = restitutionA > restitutionB ? restitutionA : restitutionB;
+    contact.sensor = (shapeA.sensor != 0 || shapeB.sensor != 0) ? 1 : 0;
 
-    const int32_t cached = world.cacheLookup(a, b, feature);
-    if (cached >= 0) {
-        const CacheEntry& entry = world.cachePrev[cached];
-        contact.impN = entry.impN;
-        contact.impT1 = entry.impT1;
-        contact.impT2 = entry.impT2;
+    if (contact.sensor != 0) {
+        contact.cacheSlot = -1;
+    } else {
+        const int32_t cached = world.cacheLookup(a, b, feature);
+        if (cached >= 0) {
+            const CacheEntry& entry = world.cachePrev[cached];
+            contact.impN = entry.impN;
+            contact.impT1 = entry.impT1;
+            contact.impT2 = entry.impT2;
+        }
+        contact.cacheSlot = world.cacheStore(a, b, feature, contact.impN, contact.impT1, contact.impT2);
     }
-
-    contact.cacheSlot = world.cacheStore(a, b, feature, contact.impN, contact.impT1, contact.impT2);
 
     const Vec3 posA = worldPosition(world, a);
     const Vec3 posB = worldPosition(world, b);
@@ -535,6 +541,9 @@ void collidePair(World& world, int32_t a, int32_t b) {
 
         for (int32_t indexB = 0; indexB < countB; ++indexB) {
             if (!shapeValid(bodyB.shapes[indexB])) {
+                continue;
+            }
+            if (!filtersCollide(bodyA.shapes[indexA], bodyB.shapes[indexB])) {
                 continue;
             }
             loadShapeWorld(world, b, indexB, stateB);

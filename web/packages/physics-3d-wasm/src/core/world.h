@@ -29,6 +29,7 @@ struct World {
     Vec3* angularVelocities;
     PackedContact* packedContacts;
     Body* bodies;
+    uint16_t* slotGen;
     int32_t* sweepOrder;
     int32_t* freeIds;
     Contact* contacts;
@@ -66,6 +67,13 @@ struct World {
         float qz,
         float qw);
     int32_t clearShapes(int32_t id);
+    int32_t shapeDestroy(int32_t shapeId);
+    int32_t shapeClear(int32_t bodyId);
+    int32_t shapeMakeId(int32_t bodyId, int32_t slot) const;
+    bool shapeIdResolve(int32_t shapeId, int32_t& bodyId, int32_t& slot) const;
+    int32_t setShapeMaterial(int32_t bodyId, int32_t slot, float friction, float restitution);
+    int32_t setShapeSensor(int32_t bodyId, int32_t slot, int32_t on);
+    int32_t setShapeFilter(int32_t bodyId, int32_t slot, int32_t categoryBits, int32_t maskBits, int32_t groupIndex);
     int32_t setTransform(int32_t id, float px, float py, float pz, float qx, float qy, float qz, float qw);
     int32_t setVelocity(int32_t id, float vx, float vy, float vz);
     int32_t setAngularVelocity(int32_t id, float vx, float vy, float vz);

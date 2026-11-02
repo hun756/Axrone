@@ -55,6 +55,44 @@ export interface WasmPhysicsExports {
     eventCount(): number;
     eventsOverflow(): number;
     eventsClear(): void;
+    shapeCreateSphere(bodyId: number, radius: number, density: number, cx: number, cy: number, cz: number): number;
+    shape_create_sphere(bodyId: number, radius: number, density: number, cx: number, cy: number, cz: number): number;
+    shapeCreateBox(
+        bodyId: number,
+        hx: number,
+        hy: number,
+        hz: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shape_create_box(
+        bodyId: number,
+        hx: number,
+        hy: number,
+        hz: number,
+        density: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        qx: number,
+        qy: number,
+        qz: number,
+        qw: number
+    ): number;
+    shapeDestroy(shapeId: number): number;
+    shape_destroy(shapeId: number): number;
+    shapeClear(bodyId: number): number;
+    shape_clear(bodyId: number): number;
+    shapeGetBody(shapeId: number): number;
+    shape_get_body(shapeId: number): number;
+    shapeGetKind(shapeId: number): number;
+    shape_get_kind(shapeId: number): number;
     bodyCount(): number;
     body_count(): number;
     contactCount(): number;
@@ -135,6 +173,12 @@ const REQUIRED_EXPORTS = [
     "eventCount",
     "eventsOverflow",
     "eventsClear",
+    "shapeCreateSphere",
+    "shapeCreateBox",
+    "shapeDestroy",
+    "shapeClear",
+    "shapeGetBody",
+    "shapeGetKind",
     "bodyCount",
     "contactCount",
     "transformsPtr",

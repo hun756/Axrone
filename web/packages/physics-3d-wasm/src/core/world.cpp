@@ -113,6 +113,49 @@ bool recomputeMass(Body& body) {
     return true;
 }
 
+size_t slotGenIndex(int32_t bodyId, int32_t slot) {
+    return static_cast<size_t>(bodyId) * kMaxShapesPerBody + static_cast<size_t>(slot);
+}
+
+void bumpSlotGeneration(World& world, int32_t bodyId, int32_t slot) {
+    uint16_t& entry = world.slotGen[slotGenIndex(bodyId, slot)];
+    entry = static_cast<uint16_t>(entry + 1);
+}
+
+void invalidateSlot(World& world, int32_t bodyId, int32_t slot) {
+    world.bodies[bodyId].shapes[slot].kind = kShapeNone;
+    bumpSlotGeneration(world, bodyId, slot);
+}
+
+void invalidateAllSlots(World& world, int32_t bodyId) {
+    Body& body = world.bodies[bodyId];
+    for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
+        body.shapes[slot].kind = kShapeNone;
+        bumpSlotGeneration(world, bodyId, slot);
+    }
+}
+
+int32_t shapeHighWater(const Body& body) {
+    int32_t count = body.shapeCount;
+    while (count > 0 && !shapeValid(body.shapes[count - 1])) {
+        --count;
+    }
+    return count;
+}
+
+int32_t firstFreeShapeSlot(const Body& body) {
+    const int32_t limit = body.shapeCount > kMaxShapesPerBody ? kMaxShapesPerBody : body.shapeCount;
+    for (int32_t slot = 0; slot < limit; ++slot) {
+        if (!shapeValid(body.shapes[slot])) {
+            return slot;
+        }
+    }
+    if (body.shapeCount < kMaxShapesPerBody) {
+        return body.shapeCount;
+    }
+    return -1;
+}
+
 void addAngularResponse(World& world, Body& body, int32_t id, const Vec3& angularImpulse) {
     const Vec3 inertia = body.invInertia;
     if (inertia.x == 0.0f && inertia.y == 0.0f && inertia.z == 0.0f) {
@@ -235,6 +278,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     angularVelocities = allocateArray<Vec3>(arena, maxBodies);
     packedContacts = allocateArray<PackedContact>(arena, maxContacts);
     bodies = allocateArray<Body>(arena, maxBodies);
+    slotGen = allocateArray<uint16_t>(arena, maxBodies * kMaxShapesPerBody);
     sweepOrder = allocateArray<int32_t>(arena, maxBodies);
     freeIds = allocateArray<int32_t>(arena, maxBodies);
     contacts = allocateArray<Contact>(arena, maxContacts);
@@ -244,12 +288,13 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     cacheNextUsed = allocateArray<int32_t>(arena, maxContacts);
 
     if (transforms == nullptr || sleepTransforms == nullptr || velocities == nullptr || angularVelocities == nullptr ||
-        packedContacts == nullptr || bodies == nullptr || sweepOrder == nullptr ||
+        packedContacts == nullptr || bodies == nullptr || slotGen == nullptr || sweepOrder == nullptr ||
         freeIds == nullptr || contacts == nullptr || cachePrev == nullptr || cacheNext == nullptr ||
         cachePrevUsed == nullptr || cacheNextUsed == nullptr) {
         return false;
     }
 
+    memset(slotGen, 0, sizeof(uint16_t) * static_cast<size_t>(maxBodies) * kMaxShapesPerBody);
     cachePrevUsedCount = 0;
     cacheNextUsedCount = 0;
     memset(cachePrev, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));
@@ -325,6 +370,9 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     body.customInertia = Vec3();
     body.forceAccum = Vec3();
     body.torqueAccum = Vec3();
+    for (int32_t slot = 0; slot < kMaxShapesPerBody; ++slot) {
+        body.shapes[slot].kind = kShapeNone;
+    }
 
     ++liveCount;
     return id;
@@ -338,6 +386,7 @@ int32_t World::destroyBody(int32_t id) {
     Body& body = bodies[id];
     body.state = kBodyFree;
     body.shapeCount = 0;
+    invalidateAllSlots(*this, id);
     body.invMass = 0.0f;
     body.invInertia = Vec3();
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
@@ -381,6 +430,7 @@ int32_t World::setSphere(int32_t id, float radius, float density) {
     }
 
     body.shapeCount = 1;
+    invalidateAllSlots(*this, id);
     body.shapes[0].setSphere(radius, density, Vec3());
     recomputeMass(body);
     return 0;
@@ -426,6 +476,7 @@ int32_t World::setBox(int32_t id, float hx, float hy, float hz, float density) {
     }
 
     body.shapeCount = 1;
+    invalidateAllSlots(*this, id);
     body.shapes[0].setBox(hx, hy, hz, density, Vec3(), 0.0f, 0.0f, 0.0f, 1.0f);
     recomputeMass(body);
     return 0;
@@ -439,16 +490,21 @@ int32_t World::addSphere(int32_t id, float radius, float density, float px, floa
     }
 
     Body& body = bodies[id];
-    if (body.shapeCount >= kMaxShapesPerBody) {
+    const int32_t slot = firstFreeShapeSlot(body);
+    if (slot < 0) {
         return -1;
     }
 
-    const int32_t slot = body.shapeCount;
+    const int32_t previousCount = body.shapeCount;
     body.shapes[slot].setSphere(radius, density, Vec3(px, py, pz));
-    body.shapeCount = slot + 1;
+    bumpSlotGeneration(*this, id, slot);
+    if (slot + 1 > body.shapeCount) {
+        body.shapeCount = slot + 1;
+    }
 
     if (!recomputeMass(body)) {
-        body.shapeCount = slot;
+        body.shapes[slot].kind = kShapeNone;
+        body.shapeCount = previousCount;
         recomputeMass(body);
         return -1;
     }
@@ -484,12 +540,21 @@ int32_t World::addBox(
     Transform local = { 0.0f, 0.0f, 0.0f, qx, qy, qz, qw };
     normalizeQuaternion(local);
 
-    const int32_t slot = body.shapeCount;
+    const int32_t slot = firstFreeShapeSlot(body);
+    if (slot < 0) {
+        return -1;
+    }
+
+    const int32_t previousCount = body.shapeCount;
     body.shapes[slot].setBox(hx, hy, hz, density, Vec3(px, py, pz), local.qx, local.qy, local.qz, local.qw);
-    body.shapeCount = slot + 1;
+    bumpSlotGeneration(*this, id, slot);
+    if (slot + 1 > body.shapeCount) {
+        body.shapeCount = slot + 1;
+    }
 
     if (!recomputeMass(body)) {
-        body.shapeCount = slot;
+        body.shapes[slot].kind = kShapeNone;
+        body.shapeCount = previousCount;
         recomputeMass(body);
         return -1;
     }
@@ -503,8 +568,107 @@ int32_t World::clearShapes(int32_t id) {
 
     Body& body = bodies[id];
     body.shapeCount = 0;
+    invalidateAllSlots(*this, id);
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     recomputeMass(body);
+    return 0;
+}
+
+int32_t World::shapeClear(int32_t bodyId) {
+    return clearShapes(bodyId);
+}
+
+int32_t World::shapeDestroy(int32_t shapeId) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+
+    Body& body = bodies[bodyId];
+    invalidateSlot(*this, bodyId, slot);
+    body.shapeCount = shapeHighWater(body);
+    recomputeMass(body);
+    return 0;
+}
+
+int32_t World::shapeMakeId(int32_t bodyId, int32_t slot) const {
+    if (!initialized || bodyId < 0 || bodyId >= highWater || slot < 0 || slot >= kMaxShapesPerBody || slotGen == nullptr) {
+        return -1;
+    }
+    const int32_t generation = static_cast<int32_t>(slotGen[slotGenIndex(bodyId, slot)] & kShapeIdGenMask);
+    return shapeEncodeId(generation, bodyId, slot);
+}
+
+bool World::shapeIdResolve(int32_t shapeId, int32_t& bodyId, int32_t& slot) const {
+    if (!initialized || slotGen == nullptr || !shapeIdInRange(shapeId)) {
+        return false;
+    }
+    const int32_t decodedBody = shapeDecodeBodyId(shapeId);
+    if (decodedBody >= highWater) {
+        return false;
+    }
+    if (bodies[decodedBody].state == kBodyFree) {
+        return false;
+    }
+    const int32_t decodedSlot = shapeDecodeSlot(shapeId);
+    if (decodedSlot >= kMaxShapesPerBody) {
+        return false;
+    }
+    if (!shapeValid(bodies[decodedBody].shapes[decodedSlot])) {
+        return false;
+    }
+    const int32_t generation = static_cast<int32_t>(slotGen[slotGenIndex(decodedBody, decodedSlot)] & kShapeIdGenMask);
+    if (generation != shapeDecodeGeneration(shapeId)) {
+        return false;
+    }
+    bodyId = decodedBody;
+    slot = decodedSlot;
+    return true;
+}
+
+namespace {
+
+bool shapeSlotAddressable(const World& world, int32_t bodyId, int32_t slot) {
+    if (!world.isActive(bodyId) || slot < 0 || slot >= kMaxShapesPerBody) {
+        return false;
+    }
+    return shapeValid(world.bodies[bodyId].shapes[slot]);
+}
+
+bool shapeMaterialValueAccepted(float value) {
+    return isFinite(value) && (value == kShapeMaterialInherit || value >= 0.0f);
+}
+
+}
+
+int32_t World::setShapeMaterial(int32_t bodyId, int32_t slot, float friction, float restitution) {
+    if (!shapeSlotAddressable(*this, bodyId, slot) ||
+        !shapeMaterialValueAccepted(friction) || !shapeMaterialValueAccepted(restitution)) {
+        return -1;
+    }
+    Shape& shape = bodies[bodyId].shapes[slot];
+    shape.friction = friction;
+    shape.restitution = restitution >= 0.0f ? clampf(restitution, 0.0f, 1.0f) : restitution;
+    return 0;
+}
+
+int32_t World::setShapeSensor(int32_t bodyId, int32_t slot, int32_t on) {
+    if (!shapeSlotAddressable(*this, bodyId, slot) || (on != 0 && on != 1)) {
+        return -1;
+    }
+    bodies[bodyId].shapes[slot].sensor = on;
+    return 0;
+}
+
+int32_t World::setShapeFilter(int32_t bodyId, int32_t slot, int32_t categoryBits, int32_t maskBits, int32_t groupIndex) {
+    if (!shapeSlotAddressable(*this, bodyId, slot)) {
+        return -1;
+    }
+    Shape& shape = bodies[bodyId].shapes[slot];
+    shape.categoryBits = categoryBits;
+    shape.maskBits = maskBits;
+    shape.groupIndex = groupIndex;
     return 0;
 }
 

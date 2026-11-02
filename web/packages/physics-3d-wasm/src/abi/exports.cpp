@@ -457,3 +457,95 @@ AXRONE_PHYSICS_EXPORT(eventsOverflow) int32_t eventsOverflow(void) {
 AXRONE_PHYSICS_EXPORT(eventsClear) void eventsClear(void) {
     g_eventCount = 0;
 }
+
+AXRONE_PHYSICS_EXPORT(shapeCreateSphere) int32_t shapeCreateSphere(int32_t bodyId, float radius, float density, float cx, float cy, float cz) {
+    const int32_t slot = g_world.addSphere(bodyId, radius, density, cx, cy, cz);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_sphere) int32_t shape_create_sphere(int32_t bodyId, float radius, float density, float cx, float cy, float cz) {
+    return shapeCreateSphere(bodyId, radius, density, cx, cy, cz);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeCreateBox) int32_t shapeCreateBox(
+    int32_t bodyId,
+    float hx,
+    float hy,
+    float hz,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    const int32_t slot = g_world.addBox(bodyId, hx, hy, hz, density, cx, cy, cz, qx, qy, qz, qw);
+    if (slot < 0) {
+        return -1;
+    }
+    return g_world.shapeMakeId(bodyId, slot);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_create_box) int32_t shape_create_box(
+    int32_t bodyId,
+    float hx,
+    float hy,
+    float hz,
+    float density,
+    float cx,
+    float cy,
+    float cz,
+    float qx,
+    float qy,
+    float qz,
+    float qw
+) {
+    return shapeCreateBox(bodyId, hx, hy, hz, density, cx, cy, cz, qx, qy, qz, qw);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeDestroy) int32_t shapeDestroy(int32_t shapeId) {
+    return g_world.shapeDestroy(shapeId);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_destroy) int32_t shape_destroy(int32_t shapeId) {
+    return shapeDestroy(shapeId);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeClear) int32_t shapeClear(int32_t bodyId) {
+    return g_world.shapeClear(bodyId);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_clear) int32_t shape_clear(int32_t bodyId) {
+    return shapeClear(bodyId);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeGetBody) int32_t shapeGetBody(int32_t shapeId) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return bodyId;
+}
+
+AXRONE_PHYSICS_EXPORT(shape_get_body) int32_t shape_get_body(int32_t shapeId) {
+    return shapeGetBody(shapeId);
+}
+
+AXRONE_PHYSICS_EXPORT(shapeGetKind) int32_t shapeGetKind(int32_t shapeId) {
+    int32_t bodyId = 0;
+    int32_t slot = 0;
+    if (!g_world.shapeIdResolve(shapeId, bodyId, slot)) {
+        return -1;
+    }
+    return axrone::physics::shapeTypeCode(g_world.bodies[bodyId].shapes[slot].kind);
+}
+
+AXRONE_PHYSICS_EXPORT(shape_get_kind) int32_t shape_get_kind(int32_t shapeId) {
+    return shapeGetKind(shapeId);
+}

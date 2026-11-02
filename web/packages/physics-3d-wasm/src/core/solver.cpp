@@ -116,6 +116,9 @@ void solveVelocities(World& world, int32_t iterations) {
     for (int32_t iteration = 0; iteration < iterations; ++iteration) {
         for (int32_t k = 0; k < world.contactCount; ++k) {
             Contact& contact = world.contacts[k];
+            if (contact.sensor != 0) {
+                continue;
+            }
             const int32_t a = contact.a;
             const int32_t b = contact.b;
 
@@ -166,6 +169,9 @@ void solvePositions(World& world, int32_t iterations) {
     for (int32_t iteration = 0; iteration < iterations; ++iteration) {
         for (int32_t k = 0; k < world.contactCount; ++k) {
             const Contact& contact = world.contacts[k];
+            if (contact.sensor != 0) {
+                continue;
+            }
             const int32_t a = contact.a;
             const int32_t b = contact.b;
 

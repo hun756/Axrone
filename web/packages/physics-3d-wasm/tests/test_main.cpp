@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 
 #include "core/world.h"
 #include "runtime/arena.h"
@@ -1296,6 +1297,326 @@ void testSleepDisableWakesEverything() {
     CHECK(world.bodies[box].sleepTime == 0.0f);
 }
 
+void testShapeMaterialParity() {
+    Arena arenaA;
+    Arena arenaB;
+    World worldA;
+    World worldB;
+    CHECK(initWorld(worldA, arenaA, g_memoryA, 16, 256));
+    CHECK(initWorld(worldB, arenaB, g_memoryB, 16, 256));
+
+    World* const worlds[2] = { &worldA, &worldB };
+    int32_t grounds[2];
+    int32_t boxes[2];
+    for (int32_t w = 0; w < 2; ++w) {
+        World& world = *worlds[w];
+        grounds[w] = world.createBody(kBodyTypeStatic, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        CHECK(grounds[w] >= 0);
+        CHECK(world.setBox(grounds[w], 10.0f, 0.5f, 10.0f, 0.0f) == 0);
+        boxes[w] = world.createBody(kBodyTypeDynamic, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        CHECK(boxes[w] >= 0);
+        CHECK(world.setBox(boxes[w], 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    }
+
+    CHECK(worldA.bodies[boxes[0]].shapes[0].friction == kShapeMaterialInherit);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].restitution == kShapeMaterialInherit);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].categoryBits == kDefaultCategoryBits);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].maskBits == kDefaultMaskBits);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].groupIndex == 0);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].sensor == 0);
+
+    CHECK(worldA.setShapeMaterial(grounds[0], 0, 1.0f, kShapeMaterialInherit) == 0);
+    CHECK(worldA.setShapeMaterial(boxes[0], 0, 0.4f, 0.0f) == 0);
+    CHECK(worldB.setMaterial(grounds[1], 1.0f, 0.0f) == 0);
+    CHECK(worldB.setMaterial(boxes[1], 0.4f, 0.0f) == 0);
+
+    CHECK(worldA.setShapeMaterial(boxes[0], 8, 0.5f, 0.5f) == -1);
+    CHECK(worldA.setShapeMaterial(boxes[0], -1, 0.5f, 0.5f) == -1);
+    CHECK(worldA.setShapeMaterial(999, 0, 0.5f, 0.5f) == -1);
+    CHECK(worldA.setShapeMaterial(boxes[0], 0, -2.0f, 0.5f) == -1);
+    CHECK(worldA.setShapeMaterial(boxes[0], 0, kFloatMax * 10.0f, 0.5f) == -1);
+
+    CHECK(worldA.setVelocity(boxes[0], 2.0f, 0.0f, 0.0f) == 0);
+    CHECK(worldB.setVelocity(boxes[1], 2.0f, 0.0f, 0.0f) == 0);
+
+    for (int32_t i = 0; i < 120; ++i) {
+        worldA.step(1.0f / 60.0f, 8, 3);
+        worldB.step(1.0f / 60.0f, 8, 3);
+    }
+
+    CHECK(near(worldA.transforms[boxes[0]].px, 0.3389f, 0.010f));
+    CHECK(worldA.transforms[boxes[0]].px == worldB.transforms[boxes[1]].px);
+    CHECK(worldA.transforms[boxes[0]].py == worldB.transforms[boxes[1]].py);
+    CHECK(worldA.velocities[boxes[0]].x == worldB.velocities[boxes[1]].x);
+    CHECK(worldA.velocities[boxes[0]].y == worldB.velocities[boxes[1]].y);
+    CHECK(memcmp(&worldA.velocities[boxes[0]], &worldB.velocities[boxes[1]], sizeof(Vec3)) == 0);
+
+    CHECK(worldA.setShapeSensor(boxes[0], 0, 2) == -1);
+    CHECK(worldA.setShapeSensor(boxes[0], 0, 1) == 0);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].sensor == 1);
+    CHECK(worldA.setShapeSensor(boxes[0], 0, 0) == 0);
+    CHECK(worldA.bodies[boxes[0]].shapes[0].sensor == 0);
+
+    const float invMassBefore = worldA.bodies[boxes[0]].invMass;
+    CHECK(worldA.setShapeSensor(boxes[0], 0, 1) == 0);
+    CHECK(worldA.bodies[boxes[0]].invMass == invMassBefore);
+}
+
+void setupFilterPair(World& world, int32_t& first, int32_t& second) {
+    first = world.createBody(kBodyTypeDynamic, -0.05f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    second = world.createBody(kBodyTypeDynamic, 0.05f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(first >= 0 && second >= 0);
+    CHECK(world.setSphere(first, 0.1f, 1.0f) == 0);
+    CHECK(world.setSphere(second, 0.1f, 1.0f) == 0);
+}
+
+void testShapeFilterReject() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    int32_t first = -1;
+    int32_t second = -1;
+    setupFilterPair(world, first, second);
+
+    world.step(1.0f / 60.0f, 4, 2);
+    CHECK(world.getContactCount() >= 1);
+    for (int32_t i = 0; i < 120; ++i) {
+        world.step(1.0f / 60.0f, 4, 2);
+    }
+
+    CHECK(world.setShapeFilter(first, 0, 1, 0x0002, 0) == 0);
+    CHECK(world.setShapeFilter(second, 0, 4, 1, 0) == 0);
+    CHECK(world.setShapeFilter(first, 8, 1, 1, 0) == -1);
+    CHECK(world.setShapeFilter(999, 0, 1, 1, 0) == -1);
+    CHECK(world.setShapeFilter(second, 1, 1, 1, 0) == -1);
+
+    const float firstXBefore = world.transforms[first].px;
+    const float secondXBefore = world.transforms[second].px;
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(1.0f / 60.0f, 4, 2);
+        CHECK(world.getContactCount() == 0);
+    }
+    CHECK(world.transforms[first].px == firstXBefore);
+    CHECK(world.transforms[second].px == secondXBefore);
+    CHECK(world.velocities[first].x == 0.0f);
+    CHECK(world.velocities[second].x == 0.0f);
+
+    CHECK(world.setShapeFilter(first, 0, 1, 4, 0) == 0);
+    CHECK(world.setShapeFilter(second, 0, 1, 0, 0) == 0);
+    world.step(1.0f / 60.0f, 4, 2);
+    CHECK(world.getContactCount() == 0);
+}
+
+void testShapeFilterGroups() {
+    struct GroupCase {
+        int32_t groupFirst;
+        int32_t groupSecond;
+        int32_t maskBits;
+        int32_t expectContacts;
+    };
+
+    const GroupCase cases[3] = {
+        { 2, 2, 0, 1 },
+        { -2, -2, 0, 0 },
+        { 2, -2, kDefaultMaskBits, 1 },
+    };
+
+    unsigned char* memories[3] = { g_memoryA, g_memoryB, g_memoryA };
+    for (int32_t c = 0; c < 3; ++c) {
+        Arena arena;
+        World world;
+        CHECK(initGravitylessWorld(world, arena, memories[c], 16, 256));
+
+        int32_t first = -1;
+        int32_t second = -1;
+        setupFilterPair(world, first, second);
+        CHECK(world.setShapeFilter(first, 0, 1, cases[c].maskBits, cases[c].groupFirst) == 0);
+        CHECK(world.setShapeFilter(second, 0, 1, cases[c].maskBits, cases[c].groupSecond) == 0);
+
+        world.step(1.0f / 60.0f, 4, 2);
+        if (cases[c].expectContacts != 0) {
+            CHECK(world.getContactCount() >= 1);
+        } else {
+            CHECK(world.getContactCount() == 0);
+            CHECK(world.transforms[first].px == -0.05f);
+            CHECK(world.transforms[second].px == 0.05f);
+        }
+    }
+}
+
+void testSensorContactTransfersNoImpulse() {
+    Arena arenaA;
+    Arena arenaB;
+    World worldA;
+    World worldB;
+    CHECK(initGravitylessWorld(worldA, arenaA, g_memoryA, 16, 256));
+    CHECK(initGravitylessWorld(worldB, arenaB, g_memoryB, 16, 256));
+
+    const int32_t visitorA = worldA.createBody(kBodyTypeDynamic, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t visitorB = worldB.createBody(kBodyTypeDynamic, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(visitorA >= 0 && visitorB >= 0);
+    CHECK(worldA.setSphere(visitorA, 0.5f, 1.0f) == 0);
+    CHECK(worldB.setSphere(visitorB, 0.5f, 1.0f) == 0);
+
+    const int32_t trigger = worldB.createBody(kBodyTypeStatic, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(trigger >= 0);
+    CHECK(worldB.setSphere(trigger, 0.5f, 0.0f) == 0);
+    CHECK(worldB.setShapeSensor(trigger, 0, 1) == 0);
+    CHECK(worldB.bodies[trigger].invMass == 0.0f);
+
+    CHECK(worldA.setVelocity(visitorA, 1.0f, 0.0f, 0.0f) == 0);
+    CHECK(worldB.setVelocity(visitorB, 1.0f, 0.0f, 0.0f) == 0);
+
+    bool generated = false;
+    for (int32_t i = 0; i < 240; ++i) {
+        worldA.step(1.0f / 60.0f, 8, 3);
+        worldB.step(1.0f / 60.0f, 8, 3);
+        if (worldB.getContactCount() > 0) {
+            generated = true;
+        }
+    }
+
+    CHECK(generated);
+    CHECK(worldB.getContactCount() == 0);
+    CHECK(worldB.transforms[visitorB].px > 2.5f);
+    CHECK(memcmp(&worldA.velocities[visitorA], &worldB.velocities[visitorB], sizeof(Vec3)) == 0);
+    CHECK(memcmp(&worldA.angularVelocities[visitorA], &worldB.angularVelocities[visitorB], sizeof(Vec3)) == 0);
+    CHECK(worldA.transforms[visitorA].px == worldB.transforms[visitorB].px);
+    CHECK(worldB.transforms[trigger].px == 1.0f);
+
+    const float visitorMassBefore = worldB.bodies[visitorB].invMass;
+    CHECK(worldB.setShapeSensor(visitorB, 0, 1) == 0);
+    CHECK(worldB.bodies[visitorB].invMass == visitorMassBefore);
+}
+
+void testShapeIdLifecycle() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+    CHECK(world.addSphere(body, 0.25f, 1.0f, -1.0f, 0.0f, 0.0f) == 2);
+
+    const int32_t id0 = world.shapeMakeId(body, 0);
+    const int32_t id1 = world.shapeMakeId(body, 1);
+    const int32_t id2 = world.shapeMakeId(body, 2);
+    CHECK(id0 >= 0 && id1 >= 0 && id2 >= 0);
+    CHECK(id0 <= kShapeIdMax && id1 <= kShapeIdMax && id2 <= kShapeIdMax);
+    CHECK(shapeDecodeSlot(id0) == 0 && shapeDecodeSlot(id1) == 1 && shapeDecodeSlot(id2) == 2);
+    CHECK(shapeDecodeBodyId(id0) == body && shapeDecodeBodyId(id2) == body);
+
+    int32_t resolvedBody = -1;
+    int32_t resolvedSlot = -1;
+    CHECK(world.shapeIdResolve(id1, resolvedBody, resolvedSlot));
+    CHECK(resolvedBody == body && resolvedSlot == 1);
+    CHECK(shapeTypeCode(world.bodies[body].shapes[0].kind) == 5);
+    CHECK(shapeTypeCode(world.bodies[body].shapes[1].kind) == 3);
+    CHECK(shapeTypeCode(world.bodies[body].shapes[2].kind) == 5);
+
+    CHECK(world.shapeDestroy(id1) == 0);
+    CHECK(world.shapeIdResolve(id1, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(id0, resolvedBody, resolvedSlot));
+    CHECK(world.shapeIdResolve(id2, resolvedBody, resolvedSlot));
+    CHECK(world.shapeDestroy(id1) == -1);
+    CHECK(world.setShapeSensor(body, 1, 1) == -1);
+    CHECK(world.bodies[body].shapeCount == 3);
+
+    const int32_t reusedSlot = world.addSphere(body, 0.5f, 1.0f, 0.0f, 1.0f, 0.0f);
+    CHECK(reusedSlot == 1);
+    const int32_t freshId = world.shapeMakeId(body, 1);
+    CHECK(freshId != id1);
+    CHECK(world.shapeIdResolve(freshId, resolvedBody, resolvedSlot));
+    CHECK(shapeDecodeGeneration(freshId) != shapeDecodeGeneration(id1));
+
+    const int32_t forged = shapeEncodeId(shapeDecodeGeneration(id0) ^ 0x1FF, shapeDecodeBodyId(id0), shapeDecodeSlot(id0));
+    CHECK(world.shapeIdResolve(forged, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(-1, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(-2, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(0x7FFFFFFF, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeMakeId(999, 0) == -1);
+    CHECK(world.shapeMakeId(body, 8) == -1);
+
+    CHECK(world.setSphere(body, 0.4f, 1.0f) == 0);
+    CHECK(world.shapeIdResolve(id0, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(freshId, resolvedBody, resolvedSlot) == false);
+    CHECK(world.shapeIdResolve(id2, resolvedBody, resolvedSlot) == false);
+    CHECK(world.bodies[body].shapeCount == 1);
+
+    const int32_t slot0Id = world.shapeMakeId(body, 0);
+    CHECK(world.shapeIdResolve(slot0Id, resolvedBody, resolvedSlot));
+    CHECK(world.destroyBody(body) == 0);
+    CHECK(world.shapeIdResolve(slot0Id, resolvedBody, resolvedSlot) == false);
+
+    const int32_t recreated = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(recreated == body);
+    CHECK(world.shapeIdResolve(slot0Id, resolvedBody, resolvedSlot) == false);
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f) == 0);
+    const int32_t newId0 = world.shapeMakeId(body, 0);
+    CHECK(newId0 != slot0Id);
+    CHECK(world.shapeIdResolve(newId0, resolvedBody, resolvedSlot));
+
+    CHECK(world.shapeClear(body) == 0);
+    CHECK(world.bodies[body].shapeCount == 0);
+    CHECK(world.shapeIdResolve(newId0, resolvedBody, resolvedSlot) == false);
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 0);
+    const int32_t afterClearId = world.shapeMakeId(body, 0);
+    CHECK(afterClearId != newId0);
+    CHECK(world.shapeIdResolve(afterClearId, resolvedBody, resolvedSlot));
+    CHECK(world.shapeClear(999) == -1);
+
+    int32_t lastValidId = -1;
+    for (int32_t slot = 1; slot < kMaxShapesPerBody; ++slot) {
+        CHECK(world.addSphere(body, 0.1f, 1.0f, 0.0f, 0.0f, 0.0f) == slot);
+        lastValidId = world.shapeMakeId(body, slot);
+    }
+    CHECK(world.bodies[body].shapeCount == kMaxShapesPerBody);
+    CHECK(world.addSphere(body, 0.1f, 1.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.shapeDestroy(lastValidId) == 0);
+    CHECK(world.bodies[body].shapeCount == kMaxShapesPerBody - 1);
+    CHECK(world.shapeDestroy(lastValidId) == -1);
+}
+
+void testAddRollbackKeepsHighWater() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeDynamic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f) == 1);
+    const int32_t holedId = world.shapeMakeId(body, 1);
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 2.0f, 0.0f, 0.0f) == 2);
+    const int32_t tailId = world.shapeMakeId(body, 2);
+    CHECK(world.shapeDestroy(holedId) == 0);
+    CHECK(world.bodies[body].shapeCount == 3);
+
+    const float invMassBefore = world.bodies[body].invMass;
+    CHECK(world.addSphere(body, 1.0e20f, 1.0e10f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.bodies[body].shapeCount == 3);
+    CHECK(world.bodies[body].invMass == invMassBefore);
+    CHECK(shapeValid(world.bodies[body].shapes[0]));
+    CHECK(!shapeValid(world.bodies[body].shapes[1]));
+    CHECK(shapeValid(world.bodies[body].shapes[2]));
+    int32_t resolvedBody = -1;
+    int32_t resolvedSlot = -1;
+    CHECK(world.shapeIdResolve(tailId, resolvedBody, resolvedSlot));
+
+    CHECK(world.addBox(body, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 1);
+    CHECK(world.bodies[body].shapeCount == 3);
+    CHECK(!world.shapeIdResolve(holedId, resolvedBody, resolvedSlot));
+
+    const float refilledMass = world.bodies[body].invMass;
+    CHECK(world.addBox(body, 1.0e20f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == -1);
+    CHECK(world.bodies[body].shapeCount == 3);
+    CHECK(world.bodies[body].invMass == refilledMass);
+    CHECK(shapeValid(world.bodies[body].shapes[1]));
+}
+
 }
 
 int main() {
@@ -1343,6 +1664,12 @@ int main() {
     testSleepResetClearsState();
     testSleepingBodiesSkipIntegration();
     testSleepDisableWakesEverything();
+    testShapeMaterialParity();
+    testShapeFilterReject();
+    testShapeFilterGroups();
+    testSensorContactTransfersNoImpulse();
+    testShapeIdLifecycle();
+    testAddRollbackKeepsHighWater();
 
     if (g_failures == 0) {
         std::printf("PASS\n");

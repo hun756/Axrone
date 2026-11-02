@@ -23,6 +23,21 @@ struct Shape {
     Vec3 offset;
     Mat3 rotation;
     float density;
+    float friction;
+    float restitution;
+    int32_t categoryBits;
+    int32_t maskBits;
+    int32_t groupIndex;
+    int32_t sensor;
+
+    AXRONE_PHYSICS_INLINE void applyDefaults() {
+        friction = kShapeMaterialInherit;
+        restitution = kShapeMaterialInherit;
+        categoryBits = kDefaultCategoryBits;
+        maskBits = kDefaultMaskBits;
+        groupIndex = 0;
+        sensor = 0;
+    }
 
     AXRONE_PHYSICS_INLINE void setSphere(float radius, float shapeDensity, const Vec3& shapeOffset) {
         kind = kShapeSphere;
@@ -30,6 +45,7 @@ struct Shape {
         offset = shapeOffset;
         rotation.setIdentity();
         density = shapeDensity;
+        applyDefaults();
     }
 
     AXRONE_PHYSICS_INLINE void setBox(
@@ -48,6 +64,7 @@ struct Shape {
         offset = shapeOffset;
         rotation.fromQuaternion(qx, qy, qz, qw);
         density = shapeDensity;
+        applyDefaults();
     }
 };
 
@@ -73,9 +90,9 @@ struct Body {
     Shape shapes[kMaxShapesPerBody];
 };
 
-static_assert(sizeof(Shape) == 96, "shape size must stay fixed for arena sizing");
+static_assert(sizeof(Shape) == 112, "shape size must stay fixed for arena sizing");
 static_assert(alignof(Shape) == 16, "shape must stay vector aligned");
-static_assert(sizeof(Body) == 96 * kMaxShapesPerBody + 176, "body size must stay fixed for arena sizing");
+static_assert(sizeof(Body) == 1072, "body size must stay fixed for arena sizing");
 static_assert(alignof(Body) == 16, "body must stay vector aligned");
 
 AXRONE_PHYSICS_INLINE int32_t shapeSlots(const Body& body) {
@@ -97,6 +114,53 @@ AXRONE_PHYSICS_INLINE bool shapeValid(const Shape& shape) {
 
 AXRONE_PHYSICS_INLINE bool bodyQueryable(const Body& body) {
     return body.state != kBodyFree && shapeSlots(body) > 0;
+}
+
+AXRONE_PHYSICS_INLINE int32_t shapeEncodeId(int32_t generation, int32_t bodyId, int32_t slot) {
+    return ((generation & kShapeIdGenMask) << kShapeIdGenShift) |
+           ((bodyId & kShapeIdBodyMask) << kShapeIdSlotBits) |
+           (slot & kShapeIdSlotMask);
+}
+
+AXRONE_PHYSICS_INLINE int32_t shapeDecodeSlot(int32_t shapeId) {
+    return shapeId & kShapeIdSlotMask;
+}
+
+AXRONE_PHYSICS_INLINE int32_t shapeDecodeBodyId(int32_t shapeId) {
+    return (shapeId >> kShapeIdSlotBits) & kShapeIdBodyMask;
+}
+
+AXRONE_PHYSICS_INLINE int32_t shapeDecodeGeneration(int32_t shapeId) {
+    return (shapeId >> kShapeIdGenShift) & kShapeIdGenMask;
+}
+
+AXRONE_PHYSICS_INLINE bool shapeIdInRange(int32_t shapeId) {
+    return shapeId >= 0 && shapeId <= kShapeIdMax;
+}
+
+AXRONE_PHYSICS_INLINE bool filtersCollide(const Shape& left, const Shape& right) {
+    if (left.groupIndex != 0 && left.groupIndex == right.groupIndex) {
+        return left.groupIndex > 0;
+    }
+    return (left.maskBits & right.categoryBits) != 0 && (right.maskBits & left.categoryBits) != 0;
+}
+
+AXRONE_PHYSICS_INLINE int32_t shapeTypeCode(int32_t kind) {
+    if (kind == kShapeSphere) {
+        return kShapeTypeCodeSphere;
+    }
+    if (kind == kShapeBox) {
+        return kShapeTypeCodeBox;
+    }
+    return -1;
+}
+
+AXRONE_PHYSICS_INLINE float shapeEffectiveFriction(const Shape& shape, float bodyFriction) {
+    return shape.friction >= 0.0f ? shape.friction : bodyFriction;
+}
+
+AXRONE_PHYSICS_INLINE float shapeEffectiveRestitution(const Shape& shape, float bodyRestitution) {
+    return shape.restitution >= 0.0f ? shape.restitution : bodyRestitution;
 }
 
 AXRONE_PHYSICS_INLINE Vec3 shapeCenter(const Vec3& bodyPosition, const Mat3& bodyRotation, const Shape& shape) {

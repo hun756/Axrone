@@ -27,6 +27,7 @@ struct alignas(16) Contact {
     Vec3 localA;
     Vec3 localB;
     int32_t cacheSlot;
+    int32_t sensor;
 };
 
 struct PackedContact {
@@ -46,5 +47,10 @@ struct CacheEntry {
     float impT1;
     float impT2;
 };
+
+static_assert(sizeof(Contact) == 224, "contact record size must stay fixed");
+static_assert(alignof(Contact) == 16, "contact record must stay vector aligned");
+static_assert(sizeof(PackedContact) == 24, "packed contact record must stay 24 bytes");
+static_assert(sizeof(CacheEntry) == 24, "warm start cache entry size must stay fixed");
 
 }
