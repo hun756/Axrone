@@ -302,8 +302,15 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     sweepOrder = allocateArray<int32_t>(arena, maxBodies);
     freeIds = allocateArray<int32_t>(arena, maxBodies);
     contacts = allocateArray<Contact>(arena, maxContacts);
-    constraints = allocateArray<Constraint>(arena, kMaxConstraints);
-    constraintFreeIds = allocateArray<int32_t>(arena, kMaxConstraints);
+    int32_t constraintCapacity = maxBodies * 2;
+    if (constraintCapacity < 256) {
+        constraintCapacity = 256;
+    }
+    if (constraintCapacity > kMaxConstraints) {
+        constraintCapacity = kMaxConstraints;
+    }
+    constraints = allocateArray<Constraint>(arena, constraintCapacity);
+    constraintFreeIds = allocateArray<int32_t>(arena, constraintCapacity);
     cachePrev = allocateArray<CacheEntry>(arena, cacheCapacity);
     cacheNext = allocateArray<CacheEntry>(arena, cacheCapacity);
     cachePrevUsed = allocateArray<int32_t>(arena, maxContacts);
@@ -318,7 +325,7 @@ bool World::init(Arena& arena, int32_t bodyCapacity, int32_t contactCapacity, Ve
     }
 
     memset(slotGen, 0, sizeof(uint16_t) * static_cast<size_t>(maxBodies) * kMaxShapesPerBody);
-    maxConstraints = kMaxConstraints;
+    maxConstraints = constraintCapacity;
     constraintCount = 0;
     constraintFreeCount = maxConstraints;
     for (int32_t i = 0; i < maxConstraints; ++i) {
@@ -379,8 +386,7 @@ void World::reset() {
         }
     }
     constraintCount = 0;
-    maxConstraints = kMaxConstraints;
-    constraintFreeCount = kMaxConstraints;
+    constraintFreeCount = maxConstraints;
     cachePrevUsedCount = 0;
     cacheNextUsedCount = 0;
     memset(cachePrev, 0, sizeof(CacheEntry) * static_cast<size_t>(cacheCapacity));

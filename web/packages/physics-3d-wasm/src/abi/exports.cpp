@@ -31,6 +31,7 @@ alignas(16) uint8_t g_eventSensors[kEventCapacity];
 axrone::physics::ContactEventState g_eventState;
 int32_t g_eventCount = 0;
 int32_t g_eventOverflow = 0;
+bool g_eventsDirty = false;
 
 static_assert(sizeof(axrone::physics::ContactEvent) == 40, "contact event record must stay 40 bytes");
 
@@ -41,6 +42,21 @@ void resetContactEvents() {
     g_eventState.count = 0;
     g_eventCount = 0;
     g_eventOverflow = 0;
+    g_eventsDirty = false;
+}
+
+void ensureContactEvents() {
+    if (!g_eventsDirty) {
+        return;
+    }
+    g_eventsDirty = false;
+    const int32_t written = axrone::physics::collectContactEvents(g_world, g_eventState, g_events, kEventCapacity);
+    if (written < 0) {
+        g_eventCount = 0;
+        g_eventOverflow += 1;
+    } else {
+        g_eventCount = written;
+    }
 }
 
 uint64_t packView(uintptr_t pointer, size_t bytes) {
@@ -168,13 +184,8 @@ AXRONE_PHYSICS_EXPORT(step) int32_t step(float dt, int32_t velocityIterations, i
     if (contacts < 0) {
         return contacts;
     }
-    const int32_t written = axrone::physics::collectContactEvents(g_world, g_eventState, g_events, kEventCapacity);
-    if (written < 0) {
-        g_eventCount = 0;
-        g_eventOverflow += 1;
-    } else {
-        g_eventCount = written;
-    }
+    g_eventCount = 0;
+    g_eventsDirty = true;
     return contacts;
 }
 
@@ -445,10 +456,12 @@ AXRONE_PHYSICS_EXPORT(world_set_allow_sleep) int32_t world_set_allow_sleep(int32
 }
 
 AXRONE_PHYSICS_EXPORT(eventsPtr) uintptr_t eventsPtr(void) {
+    ensureContactEvents();
     return reinterpret_cast<uintptr_t>(g_events);
 }
 
 AXRONE_PHYSICS_EXPORT(eventCount) int32_t eventCount(void) {
+    ensureContactEvents();
     return g_eventCount;
 }
 
@@ -458,6 +471,7 @@ AXRONE_PHYSICS_EXPORT(eventsOverflow) int32_t eventsOverflow(void) {
 
 AXRONE_PHYSICS_EXPORT(eventsClear) void eventsClear(void) {
     g_eventCount = 0;
+    g_eventsDirty = false;
 }
 
 AXRONE_PHYSICS_EXPORT(shapeCreateSphere) int32_t shapeCreateSphere(int32_t bodyId, float radius, float density, float cx, float cy, float cz) {

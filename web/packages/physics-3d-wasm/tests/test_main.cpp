@@ -2345,7 +2345,7 @@ void testConstraintCapacityRejection() {
 
     int32_t created = 0;
     int32_t lastId = -1;
-    for (int32_t i = 0; i < kMaxConstraints; ++i) {
+    for (int32_t i = 0; i < world.maxConstraints; ++i) {
         const int32_t id = world.createFixed(mount, body, Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), 1);
         if (id < 0) {
             break;
@@ -2353,8 +2353,8 @@ void testConstraintCapacityRejection() {
         lastId = id;
         ++created;
     }
-    CHECK(created == kMaxConstraints);
-    CHECK(world.constraintCount == kMaxConstraints);
+    CHECK(created == world.maxConstraints);
+    CHECK(world.constraintCount == world.maxConstraints);
     CHECK(world.createFixed(mount, body, Vec3(), Vec3(), 1) == -1);
     CHECK(world.destroyConstraint(lastId) == 0);
     CHECK(world.createFixed(mount, body, Vec3(), Vec3(), 1) >= 0);
