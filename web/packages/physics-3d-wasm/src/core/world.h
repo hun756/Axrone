@@ -68,6 +68,14 @@ struct World {
     int32_t setVelocity(int32_t id, float vx, float vy, float vz);
     int32_t setAngularVelocity(int32_t id, float vx, float vy, float vz);
     int32_t setMaterial(int32_t id, float friction, float restitution);
+    int32_t setDamping(int32_t id, float linear, float angular);
+    int32_t setGravityScale(int32_t id, float scale);
+    int32_t setFlags(int32_t id, int32_t setMask, int32_t clearMask);
+    int32_t applyForce(int32_t id, float fx, float fy, float fz, float px, float py, float pz);
+    int32_t applyImpulse(int32_t id, float ix, float iy, float iz, float px, float py, float pz);
+    int32_t applyTorque(int32_t id, float tx, float ty, float tz);
+    int32_t applyAngularImpulse(int32_t id, float ix, float iy, float iz);
+    int32_t setMassData(int32_t id, float mass, float ix, float iy, float iz);
     int32_t setGravity(float gx, float gy, float gz);
     int32_t step(float dt, int32_t velocityIterations, int32_t positionIterations);
 

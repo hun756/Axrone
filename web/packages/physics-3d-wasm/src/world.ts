@@ -307,6 +307,89 @@ export class WasmPhysicsWorld3D {
         }
     }
 
+    setDamping(id: number, linear: number, angular: number): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertFinite(linear, "linearDamping");
+        assertFinite(angular, "angularDamping");
+        if (linear < 0 || angular < 0) {
+            throw new Error("damping must be non-negative");
+        }
+        if (this.wasm.bodySetDamping(id, linear, angular) !== 0) {
+            throw new Error(`body ${id} damping failed`);
+        }
+    }
+
+    setGravityScale(id: number, scale: number): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertFinite(scale, "gravityScale");
+        if (this.wasm.bodySetGravityScale(id, scale) !== 0) {
+            throw new Error(`body ${id} gravity scale failed`);
+        }
+    }
+
+    setFlags(id: number, setMask: number, clearMask = 0): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertInteger(setMask, "setMask");
+        assertInteger(clearMask, "clearMask");
+        if (setMask < 0 || clearMask < 0) {
+            throw new Error("flag masks must be non-negative");
+        }
+        if (this.wasm.bodySetFlags(id, setMask, clearMask) !== 0) {
+            throw new Error(`body ${id} flags failed`);
+        }
+    }
+
+    applyForce(id: number, force: Vec3Tuple, point: Vec3Tuple = [0, 0, 0]): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertVec3(force, "force");
+        assertVec3(point, "point");
+        if (this.wasm.bodyApplyForce(id, force[0], force[1], force[2], point[0], point[1], point[2]) !== 0) {
+            throw new Error(`body ${id} force application failed`);
+        }
+    }
+
+    applyImpulse(id: number, impulse: Vec3Tuple, point: Vec3Tuple = [0, 0, 0]): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertVec3(impulse, "impulse");
+        assertVec3(point, "point");
+        if (this.wasm.bodyApplyImpulse(id, impulse[0], impulse[1], impulse[2], point[0], point[1], point[2]) !== 0) {
+            throw new Error(`body ${id} impulse application failed`);
+        }
+    }
+
+    applyTorque(id: number, torque: Vec3Tuple): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertVec3(torque, "torque");
+        if (this.wasm.bodyApplyTorque(id, torque[0], torque[1], torque[2]) !== 0) {
+            throw new Error(`body ${id} torque application failed`);
+        }
+    }
+
+    applyAngularImpulse(id: number, impulse: Vec3Tuple): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertVec3(impulse, "angularImpulse");
+        if (this.wasm.bodyApplyAngularImpulse(id, impulse[0], impulse[1], impulse[2]) !== 0) {
+            throw new Error(`body ${id} angular impulse application failed`);
+        }
+    }
+
+    setMassData(id: number, mass: number, inertia: Vec3Tuple = [0, 0, 0]): void {
+        this.ensureAlive();
+        this.assertActive(id);
+        assertFinite(mass, "mass");
+        assertVec3(inertia, "inertia");
+        if (this.wasm.bodySetMassData(id, mass, inertia[0], inertia[1], inertia[2]) !== 0) {
+            throw new Error(`body ${id} mass data failed`);
+        }
+    }
+
     setGravity(gravity: Vec3Tuple): void {
         this.ensureAlive();
         assertVec3(gravity, "gravity");

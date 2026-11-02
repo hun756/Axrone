@@ -166,8 +166,10 @@ export class WasmPhysicsWorld3DCompat {
         if (!this.physics.hasBody(bodyId)) {
             return null;
         }
+        const physics = this.physics;
         return {
             resetMassData(): void {
+                physics.setMassData(bodyId, 0);
             }
         };
     }

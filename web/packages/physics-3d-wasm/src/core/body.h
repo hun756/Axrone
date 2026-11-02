@@ -55,17 +55,25 @@ struct Body {
     int32_t state;
     int32_t shapeCount;
     float invMass;
+    float gravityScale;
+    float linearDamping;
+    float angularDamping;
+    float customMass;
+    int32_t flags;
     Vec3 invInertia;
     Mat3 rotation;
     AABB aabb;
     float friction;
     float restitution;
+    Vec3 customInertia;
+    Vec3 forceAccum;
+    Vec3 torqueAccum;
     Shape shapes[kMaxShapesPerBody];
 };
 
 static_assert(sizeof(Shape) == 96, "shape size must stay fixed for arena sizing");
 static_assert(alignof(Shape) == 16, "shape must stay vector aligned");
-static_assert(sizeof(Body) == 96 * kMaxShapesPerBody + 112, "body size must stay fixed for arena sizing");
+static_assert(sizeof(Body) == 96 * kMaxShapesPerBody + 176, "body size must stay fixed for arena sizing");
 static_assert(alignof(Body) == 16, "body must stay vector aligned");
 
 AXRONE_PHYSICS_INLINE int32_t shapeSlots(const Body& body) {

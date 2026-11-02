@@ -28,6 +28,22 @@ export interface WasmPhysicsExports {
     body_set_angular_velocity(id: number, vx: number, vy: number, vz: number): number;
     bodySetMaterial(id: number, friction: number, restitution: number): number;
     body_set_material(id: number, friction: number, restitution: number): number;
+    bodySetDamping(id: number, linear: number, angular: number): number;
+    body_set_damping(id: number, linear: number, angular: number): number;
+    bodySetGravityScale(id: number, scale: number): number;
+    body_set_gravity_scale(id: number, scale: number): number;
+    bodySetFlags(id: number, setMask: number, clearMask: number): number;
+    body_set_flags(id: number, setMask: number, clearMask: number): number;
+    bodyApplyForce(id: number, fx: number, fy: number, fz: number, px: number, py: number, pz: number): number;
+    body_apply_force(id: number, fx: number, fy: number, fz: number, px: number, py: number, pz: number): number;
+    bodyApplyImpulse(id: number, ix: number, iy: number, iz: number, px: number, py: number, pz: number): number;
+    body_apply_impulse(id: number, ix: number, iy: number, iz: number, px: number, py: number, pz: number): number;
+    bodyApplyTorque(id: number, tx: number, ty: number, tz: number): number;
+    body_apply_torque(id: number, tx: number, ty: number, tz: number): number;
+    bodyApplyAngularImpulse(id: number, ix: number, iy: number, iz: number): number;
+    body_apply_angular_impulse(id: number, ix: number, iy: number, iz: number): number;
+    bodySetMassData(id: number, mass: number, ix: number, iy: number, iz: number): number;
+    body_set_mass_data(id: number, mass: number, ix: number, iy: number, iz: number): number;
     step(dt: number, velocityIterations: number, positionIterations: number): number;
     bodyCount(): number;
     body_count(): number;
@@ -93,6 +109,14 @@ const REQUIRED_EXPORTS = [
     "bodySetVelocity",
     "bodySetAngularVelocity",
     "bodySetMaterial",
+    "bodySetDamping",
+    "bodySetGravityScale",
+    "bodySetFlags",
+    "bodyApplyForce",
+    "bodyApplyImpulse",
+    "bodyApplyTorque",
+    "bodyApplyAngularImpulse",
+    "bodySetMassData",
     "step",
     "bodyCount",
     "contactCount",

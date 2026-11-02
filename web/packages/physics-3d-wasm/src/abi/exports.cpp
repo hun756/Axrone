@@ -109,6 +109,38 @@ AXRONE_PHYSICS_EXPORT(bodySetMaterial) int32_t bodySetMaterial(int32_t id, float
     return g_world.setMaterial(id, friction, restitution);
 }
 
+AXRONE_PHYSICS_EXPORT(bodySetDamping) int32_t bodySetDamping(int32_t id, float linear, float angular) {
+    return g_world.setDamping(id, linear, angular);
+}
+
+AXRONE_PHYSICS_EXPORT(bodySetGravityScale) int32_t bodySetGravityScale(int32_t id, float scale) {
+    return g_world.setGravityScale(id, scale);
+}
+
+AXRONE_PHYSICS_EXPORT(bodySetFlags) int32_t bodySetFlags(int32_t id, int32_t setMask, int32_t clearMask) {
+    return g_world.setFlags(id, setMask, clearMask);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyApplyForce) int32_t bodyApplyForce(int32_t id, float fx, float fy, float fz, float px, float py, float pz) {
+    return g_world.applyForce(id, fx, fy, fz, px, py, pz);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyApplyImpulse) int32_t bodyApplyImpulse(int32_t id, float ix, float iy, float iz, float px, float py, float pz) {
+    return g_world.applyImpulse(id, ix, iy, iz, px, py, pz);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyApplyTorque) int32_t bodyApplyTorque(int32_t id, float tx, float ty, float tz) {
+    return g_world.applyTorque(id, tx, ty, tz);
+}
+
+AXRONE_PHYSICS_EXPORT(bodyApplyAngularImpulse) int32_t bodyApplyAngularImpulse(int32_t id, float ix, float iy, float iz) {
+    return g_world.applyAngularImpulse(id, ix, iy, iz);
+}
+
+AXRONE_PHYSICS_EXPORT(bodySetMassData) int32_t bodySetMassData(int32_t id, float mass, float ix, float iy, float iz) {
+    return g_world.setMassData(id, mass, ix, iy, iz);
+}
+
 AXRONE_PHYSICS_EXPORT(step) int32_t step(float dt, int32_t velocityIterations, int32_t positionIterations) {
     return g_world.step(dt, velocityIterations, positionIterations);
 }
@@ -203,6 +235,38 @@ AXRONE_PHYSICS_EXPORT(body_set_angular_velocity) int32_t body_set_angular_veloci
 
 AXRONE_PHYSICS_EXPORT(body_set_material) int32_t body_set_material(int32_t id, float friction, float restitution) {
     return bodySetMaterial(id, friction, restitution);
+}
+
+AXRONE_PHYSICS_EXPORT(body_set_damping) int32_t body_set_damping(int32_t id, float linear, float angular) {
+    return bodySetDamping(id, linear, angular);
+}
+
+AXRONE_PHYSICS_EXPORT(body_set_gravity_scale) int32_t body_set_gravity_scale(int32_t id, float scale) {
+    return bodySetGravityScale(id, scale);
+}
+
+AXRONE_PHYSICS_EXPORT(body_set_flags) int32_t body_set_flags(int32_t id, int32_t setMask, int32_t clearMask) {
+    return bodySetFlags(id, setMask, clearMask);
+}
+
+AXRONE_PHYSICS_EXPORT(body_apply_force) int32_t body_apply_force(int32_t id, float fx, float fy, float fz, float px, float py, float pz) {
+    return bodyApplyForce(id, fx, fy, fz, px, py, pz);
+}
+
+AXRONE_PHYSICS_EXPORT(body_apply_impulse) int32_t body_apply_impulse(int32_t id, float ix, float iy, float iz, float px, float py, float pz) {
+    return bodyApplyImpulse(id, ix, iy, iz, px, py, pz);
+}
+
+AXRONE_PHYSICS_EXPORT(body_apply_torque) int32_t body_apply_torque(int32_t id, float tx, float ty, float tz) {
+    return bodyApplyTorque(id, tx, ty, tz);
+}
+
+AXRONE_PHYSICS_EXPORT(body_apply_angular_impulse) int32_t body_apply_angular_impulse(int32_t id, float ix, float iy, float iz) {
+    return bodyApplyAngularImpulse(id, ix, iy, iz);
+}
+
+AXRONE_PHYSICS_EXPORT(body_set_mass_data) int32_t body_set_mass_data(int32_t id, float mass, float ix, float iy, float iz) {
+    return bodySetMassData(id, mass, ix, iy, iz);
 }
 
 AXRONE_PHYSICS_EXPORT(body_count) int32_t body_count(void) {

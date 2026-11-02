@@ -90,17 +90,19 @@ bool recomputeMass(Body& body) {
         return finite;
     }
 
-    if (mass <= 0.0f) {
+    const bool overridden = body.customMass > 0.0f;
+    if (mass <= 0.0f && !overridden) {
         zeroMass(body);
         return true;
     }
 
-    const float invMass = 1.0f / mass;
+    const float effectiveMass = overridden ? body.customMass : mass;
     float inverse[3];
-    inverse[0] = inertiaX > 0.0f ? 1.0f / inertiaX : 0.0f;
-    inverse[1] = inertiaY > 0.0f ? 1.0f / inertiaY : 0.0f;
-    inverse[2] = inertiaZ > 0.0f ? 1.0f / inertiaZ : 0.0f;
+    inverse[0] = body.customInertia.x > 0.0f ? 1.0f / body.customInertia.x : (inertiaX > 0.0f ? 1.0f / inertiaX : 0.0f);
+    inverse[1] = body.customInertia.y > 0.0f ? 1.0f / body.customInertia.y : (inertiaY > 0.0f ? 1.0f / inertiaY : 0.0f);
+    inverse[2] = body.customInertia.z > 0.0f ? 1.0f / body.customInertia.z : (inertiaZ > 0.0f ? 1.0f / inertiaZ : 0.0f);
 
+    const float invMass = effectiveMass > 0.0f ? 1.0f / effectiveMass : 0.0f;
     if (!isFinite(invMass) || !isFinite(inverse[0]) || !isFinite(inverse[1]) || !isFinite(inverse[2])) {
         zeroMass(body);
         return false;
@@ -109,6 +111,19 @@ bool recomputeMass(Body& body) {
     body.invMass = invMass;
     body.invInertia = Vec3(inverse[0], inverse[1], inverse[2]);
     return true;
+}
+
+void addAngularResponse(World& world, Body& body, int32_t id, const Vec3& angularImpulse) {
+    const Vec3 inertia = body.invInertia;
+    if (inertia.x == 0.0f && inertia.y == 0.0f && inertia.z == 0.0f) {
+        return;
+    }
+
+    Vec3 local = body.rotation.transposeTransform(angularImpulse);
+    local.x *= inertia.x;
+    local.y *= inertia.y;
+    local.z *= inertia.z;
+    world.angularVelocities[id] += body.rotation.transform(local);
 }
 
 int32_t shapeSignature(const Body& body) {
@@ -255,12 +270,20 @@ int32_t World::createBody(int32_t type, float px, float py, float pz, float qx, 
     body.state = type == kBodyTypeStatic ? kBodyStatic : (type == kBodyTypeDynamic ? kBodyDynamic : kBodyKinematic);
     body.shapeCount = 0;
     body.invMass = 0.0f;
+    body.gravityScale = 1.0f;
+    body.linearDamping = 0.0f;
+    body.angularDamping = 0.0f;
+    body.customMass = 0.0f;
+    body.flags = 0;
     body.invInertia = Vec3();
     body.rotation.setIdentity();
     body.rotation.fromQuaternion(transform.qx, transform.qy, transform.qz, transform.qw);
     body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     body.friction = kDefaultFriction;
     body.restitution = 0.0f;
+    body.customInertia = Vec3();
+    body.forceAccum = Vec3();
+    body.torqueAccum = Vec3();
 
     ++liveCount;
     return id;
@@ -316,8 +339,7 @@ int32_t World::setSphere(int32_t id, float radius, float density) {
 
     body.shapeCount = 1;
     body.shapes[0].setSphere(radius, density, Vec3());
-    body.invMass = invMass;
-    body.invInertia = Vec3(invInertia, invInertia, invInertia);
+    recomputeMass(body);
     return 0;
 }
 
@@ -362,8 +384,7 @@ int32_t World::setBox(int32_t id, float hx, float hy, float hz, float density) {
 
     body.shapeCount = 1;
     body.shapes[0].setBox(hx, hy, hz, density, Vec3(), 0.0f, 0.0f, 0.0f, 1.0f);
-    body.invMass = invMass;
-    body.invInertia = Vec3(invInertiaX, invInertiaY, invInertiaZ);
+    recomputeMass(body);
     return 0;
 }
 
@@ -482,6 +503,139 @@ int32_t World::setMaterial(int32_t id, float friction, float restitution) {
     return 0;
 }
 
+int32_t World::setDamping(int32_t id, float linear, float angular) {
+    if (!isActive(id) || !isFinite(linear) || !isFinite(angular) || linear < 0.0f || angular < 0.0f) {
+        return -1;
+    }
+    bodies[id].linearDamping = linear;
+    bodies[id].angularDamping = angular;
+    return 0;
+}
+
+int32_t World::setGravityScale(int32_t id, float scale) {
+    if (!isActive(id) || !isFinite(scale)) {
+        return -1;
+    }
+    bodies[id].gravityScale = scale;
+    return 0;
+}
+
+int32_t World::setFlags(int32_t id, int32_t setMask, int32_t clearMask) {
+    if (!isActive(id) || setMask < 0 || clearMask < 0) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    body.flags = (body.flags | setMask) & ~clearMask;
+    return 0;
+}
+
+int32_t World::applyForce(int32_t id, float fx, float fy, float fz, float px, float py, float pz) {
+    if (!isActive(id)) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    if (body.state != kBodyDynamic) {
+        return -1;
+    }
+    if (!isFinite(fx) || !isFinite(fy) || !isFinite(fz) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz)) {
+        return -1;
+    }
+    const Vec3 force(fx, fy, fz);
+    body.forceAccum += force;
+    body.torqueAccum += cross(Vec3(px, py, pz), force);
+    return 0;
+}
+
+int32_t World::applyImpulse(int32_t id, float ix, float iy, float iz, float px, float py, float pz) {
+    if (!isActive(id)) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    if (body.state != kBodyDynamic) {
+        return -1;
+    }
+    if (!isFinite(ix) || !isFinite(iy) || !isFinite(iz) ||
+        !isFinite(px) || !isFinite(py) || !isFinite(pz)) {
+        return -1;
+    }
+    const Vec3 impulse(ix, iy, iz);
+    velocities[id] += impulse * body.invMass;
+    addAngularResponse(*this, body, id, cross(Vec3(px, py, pz), impulse));
+    return 0;
+}
+
+int32_t World::applyTorque(int32_t id, float tx, float ty, float tz) {
+    if (!isActive(id)) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    if (body.state != kBodyDynamic) {
+        return -1;
+    }
+    if (!isFinite(tx) || !isFinite(ty) || !isFinite(tz)) {
+        return -1;
+    }
+    body.torqueAccum += Vec3(tx, ty, tz);
+    return 0;
+}
+
+int32_t World::applyAngularImpulse(int32_t id, float ix, float iy, float iz) {
+    if (!isActive(id)) {
+        return -1;
+    }
+    Body& body = bodies[id];
+    if (body.state != kBodyDynamic) {
+        return -1;
+    }
+    if (!isFinite(ix) || !isFinite(iy) || !isFinite(iz)) {
+        return -1;
+    }
+    addAngularResponse(*this, body, id, Vec3(ix, iy, iz));
+    return 0;
+}
+
+int32_t World::setMassData(int32_t id, float mass, float ix, float iy, float iz) {
+    if (!isActive(id) || !isFinite(mass) || !isFinite(ix) || !isFinite(iy) || !isFinite(iz)) {
+        return -1;
+    }
+
+    Body& body = bodies[id];
+    if (body.state != kBodyDynamic) {
+        return 0;
+    }
+
+    if (mass <= 0.0f) {
+        body.customMass = 0.0f;
+        body.customInertia = Vec3();
+        recomputeMass(body);
+        return 0;
+    }
+
+    if (!isFinite(1.0f / mass)) {
+        return -1;
+    }
+
+    const Vec3 requested(ix > 0.0f ? ix : 0.0f, iy > 0.0f ? iy : 0.0f, iz > 0.0f ? iz : 0.0f);
+    if ((requested.x > 0.0f && !isFinite(1.0f / requested.x)) ||
+        (requested.y > 0.0f && !isFinite(1.0f / requested.y)) ||
+        (requested.z > 0.0f && !isFinite(1.0f / requested.z))) {
+        return -1;
+    }
+
+    const float previousMass = body.customMass;
+    const Vec3 previousInertia = body.customInertia;
+    body.customMass = mass;
+    body.customInertia = requested;
+    if (!recomputeMass(body)) {
+        body.customMass = previousMass;
+        body.customInertia = previousInertia;
+        recomputeMass(body);
+        return -1;
+    }
+    return 0;
+}
+
 int32_t World::setGravity(float gx, float gy, float gz) {
     if (!initialized || !isFinite(gx) || !isFinite(gy) || !isFinite(gz)) {
         return -1;
@@ -506,18 +660,71 @@ int32_t World::step(float dt, int32_t velocityIterations, int32_t positionIterat
     const Vec3 gravityStep = gravity * dt;
 
     for (int32_t i = 0; i < highWater; ++i) {
-        const int32_t state = bodies[i].state;
-        if (state == kBodyDynamic) {
-            velocities[i] += gravityStep;
-        } else if (state != kBodyKinematic) {
+        Body& body = bodies[i];
+        const int32_t state = body.state;
+        if (state != kBodyDynamic && state != kBodyKinematic) {
             continue;
         }
 
-        transforms[i].px += velocities[i].x * dt;
-        transforms[i].py += velocities[i].y * dt;
-        transforms[i].pz += velocities[i].z * dt;
-        integrateRotation(transforms[i], angularVelocities[i], dt);
-        bodies[i].rotation.fromQuaternion(transforms[i].qx, transforms[i].qy, transforms[i].qz, transforms[i].qw);
+        Vec3& velocity = velocities[i];
+        Vec3& angularVelocity = angularVelocities[i];
+
+        if (state == kBodyDynamic) {
+            if (body.forceAccum.x != 0.0f || body.forceAccum.y != 0.0f || body.forceAccum.z != 0.0f) {
+                velocity += (body.forceAccum * dt) * body.invMass;
+            }
+            if (body.torqueAccum.x != 0.0f || body.torqueAccum.y != 0.0f || body.torqueAccum.z != 0.0f) {
+                addAngularResponse(*this, body, i, body.torqueAccum * dt);
+            }
+            body.forceAccum = Vec3();
+            body.torqueAccum = Vec3();
+            velocity += gravityStep * body.gravityScale;
+        }
+
+        float linearFactor = 1.0f - body.linearDamping * dt;
+        if (linearFactor < 0.0f) {
+            linearFactor = 0.0f;
+        }
+        velocity *= linearFactor;
+
+        float angularFactor = 1.0f - body.angularDamping * dt;
+        if (angularFactor < 0.0f) {
+            angularFactor = 0.0f;
+        }
+        angularVelocity *= angularFactor;
+
+        const int32_t flags = body.flags;
+        if ((flags & kBodyFreezePositionX) != 0) {
+            velocity.x = 0.0f;
+        }
+        if ((flags & kBodyFreezePositionY) != 0) {
+            velocity.y = 0.0f;
+        }
+        if ((flags & kBodyFreezePositionZ) != 0) {
+            velocity.z = 0.0f;
+        }
+        if ((flags & kBodyFreezeRotationX) != 0) {
+            angularVelocity.x = 0.0f;
+        }
+        if ((flags & kBodyFreezeRotationY) != 0) {
+            angularVelocity.y = 0.0f;
+        }
+        if ((flags & kBodyFreezeRotationZ) != 0) {
+            angularVelocity.z = 0.0f;
+        }
+
+        Transform& transform = transforms[i];
+        if ((flags & kBodyFreezePositionX) == 0) {
+            transform.px += velocity.x * dt;
+        }
+        if ((flags & kBodyFreezePositionY) == 0) {
+            transform.py += velocity.y * dt;
+        }
+        if ((flags & kBodyFreezePositionZ) == 0) {
+            transform.pz += velocity.z * dt;
+        }
+        integrateRotation(transform, angularVelocity, dt);
+        body.rotation.fromQuaternion(transform.qx, transform.qy, transform.qz, transform.qw);
     }
 
     updateBounds(*this);

@@ -698,6 +698,326 @@ void testStressDeterminism() {
     CHECK(world.fingerprint() != first);
 }
 
+bool initGravitylessWorld(World& world, Arena& arena, unsigned char* memory, int32_t bodies, int32_t contacts) {
+    arena.init(memory, 64 * 1024 * 1024);
+    return world.init(arena, bodies, contacts, Vec3(0.0f, 0.0f, 0.0f));
+}
+
+int32_t addFreeBox(World& world, float x, float y, float z) {
+    const int32_t id = world.createBody(kBodyTypeDynamic, x, y, z, 0.0f, 0.0f, 0.0f, 1.0f);
+    if (id < 0) {
+        return id;
+    }
+    if (world.setBox(id, 0.5f, 0.5f, 0.5f, 1.0f) != 0) {
+        return -1;
+    }
+    return id;
+}
+
+void testDampingDecay() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.setDamping(body, 0.1f, 0.2f) == 0);
+    CHECK(world.setVelocity(body, 1.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.setAngularVelocity(body, 0.0f, 1.0f, 0.0f) == 0);
+    CHECK(world.bodies[body].linearDamping == 0.1f);
+    CHECK(world.bodies[body].angularDamping == 0.2f);
+
+    const float dt = 1.0f / 60.0f;
+    for (int32_t i = 0; i < 10; ++i) {
+        world.step(dt, 4, 2);
+    }
+
+    const double factor = 1.0 - 0.1 * static_cast<double>(dt);
+    const double expectedLinear = factor * factor * factor * factor * factor *
+                                  factor * factor * factor * factor * factor;
+    const double expectedAngular = (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt)) *
+                                   (1.0 - 0.2 * static_cast<double>(dt));
+
+    const float relative = 1e-4f;
+    CHECK(fabsf(world.velocities[body].x - static_cast<float>(expectedLinear)) <=
+          relative * static_cast<float>(expectedLinear));
+    CHECK(fabsf(world.angularVelocities[body].y - static_cast<float>(expectedAngular)) <=
+          relative * static_cast<float>(expectedAngular));
+
+    CHECK(world.setDamping(body, -0.1f, 0.0f) == -1);
+    CHECK(world.setDamping(body, 0.0f, kFloatMax * 10.0f) == -1);
+    CHECK(world.setDamping(-1, 0.0f, 0.0f) == -1);
+
+    const int32_t blocker = addFreeBox(world, 5.0f, 10.0f, 0.0f);
+    CHECK(blocker >= 0);
+    CHECK(world.setDamping(blocker, 10000.0f, 0.0f) == 0);
+    CHECK(world.setVelocity(blocker, 3.0f, 0.0f, 0.0f) == 0);
+    world.step(dt, 4, 2);
+    CHECK(world.velocities[blocker].x == 0.0f);
+}
+
+void testGravityScale() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t floater = addFreeBox(world, -4.0f, 100.0f, 0.0f);
+    const int32_t normal = addFreeBox(world, 0.0f, 100.0f, 0.0f);
+    const int32_t doublePull = addFreeBox(world, 4.0f, 100.0f, 0.0f);
+    CHECK(floater >= 0 && normal >= 0 && doublePull >= 0);
+
+    CHECK(world.setGravityScale(floater, 0.0f) == 0);
+    CHECK(world.setGravityScale(doublePull, 2.0f) == 0);
+    CHECK(world.setGravityScale(normal, kFloatMax * 10.0f) == -1);
+
+    const float dt = 1.0f / 60.0f;
+    for (int32_t i = 0; i < 60; ++i) {
+        world.step(dt, 4, 2);
+    }
+
+    CHECK(world.transforms[floater].py == 100.0f);
+    CHECK(world.velocities[floater].y == 0.0f);
+
+    const float normalDrop = 100.0f - world.transforms[normal].py;
+    const float doubleDrop = 100.0f - world.transforms[doublePull].py;
+    CHECK(normalDrop > 0.1f);
+    CHECK(fabsf(doubleDrop - 2.0f * normalDrop) < 0.02f);
+    CHECK(fabsf(world.velocities[doublePull].y - 2.0f * world.velocities[normal].y) < 0.02f);
+
+    CHECK(world.setGravityScale(-1, 1.0f) == -1);
+}
+
+void testFrozenPositionAxes() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.setFlags(body, kBodyFreezePositionY | kBodyFreezePositionZ, 0) == 0);
+    CHECK(world.bodies[body].flags == (kBodyFreezePositionY | kBodyFreezePositionZ));
+    CHECK(world.setVelocity(body, 1.0f, 1.0f, 1.0f) == 0);
+
+    const float dt = 1.0f / 60.0f;
+    for (int32_t i = 0; i < 10; ++i) {
+        world.step(dt, 4, 2);
+    }
+
+    CHECK(near(world.transforms[body].px, 10.0f * dt, 1e-4f));
+    CHECK(world.transforms[body].py == 10.0f);
+    CHECK(world.transforms[body].pz == 0.0f);
+    CHECK(world.velocities[body].x == 1.0f);
+    CHECK(world.velocities[body].y == 0.0f);
+    CHECK(world.velocities[body].z == 0.0f);
+
+    CHECK(world.setFlags(body, 0, kBodyFreezePositionY) == 0);
+    CHECK(world.bodies[body].flags == kBodyFreezePositionZ);
+    CHECK(world.setFlags(body, 64 | 128, 0) == 0);
+    CHECK(world.bodies[body].flags == (64 | 128 | kBodyFreezePositionZ));
+    CHECK(world.setFlags(body, -1, 0) == -1);
+    CHECK(world.setFlags(body, 0, -1) == -1);
+    CHECK(world.setFlags(999, 1, 0) == -1);
+}
+
+void testFrozenRotationAxes() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.setFlags(body, kBodyFreezeRotationX | kBodyFreezeRotationZ, 0) == 0);
+    CHECK(world.setAngularVelocity(body, 1.0f, 2.0f, 1.0f) == 0);
+
+    for (int32_t i = 0; i < 10; ++i) {
+        world.step(1.0f / 60.0f, 4, 2);
+    }
+
+    CHECK(world.angularVelocities[body].x == 0.0f);
+    CHECK(world.angularVelocities[body].y == 2.0f);
+    CHECK(world.angularVelocities[body].z == 0.0f);
+
+    const Transform& transform = world.transforms[body];
+    CHECK(transform.qx == 0.0f);
+    CHECK(transform.qz == 0.0f);
+    CHECK(fabsf(transform.qy) > 1e-4f);
+    CHECK(near(transform.qy * transform.qy + transform.qw * transform.qw, 1.0f, 1e-4f));
+
+    CHECK(world.setFlags(body, 0, kBodyFreezeRotationX | kBodyFreezeRotationY | kBodyFreezeRotationZ) == 0);
+    CHECK(world.bodies[body].flags == 0);
+}
+
+void testForceAppliedPerStep() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.bodies[body].invMass == 1.0f);
+    CHECK(world.applyForce(body, 60.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[body].forceAccum.x == 60.0f);
+    CHECK(world.applyForce(body, 0.0f, kFloatMax * 10.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.applyForce(body, kFloatMax * 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+
+    const float dt = 1.0f / 60.0f;
+    world.step(dt, 4, 2);
+    CHECK(near(world.velocities[body].x, 60.0f * dt * 1.0f, 1e-5f));
+    CHECK(world.bodies[body].forceAccum.x == 0.0f);
+    CHECK(world.bodies[body].forceAccum.y == 0.0f);
+    CHECK(world.bodies[body].torqueAccum.y == 0.0f);
+
+    world.step(dt, 4, 2);
+    CHECK(near(world.velocities[body].x, 1.0f, 1e-6f));
+
+    const int32_t staticBody = world.createBody(kBodyTypeStatic, 8.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t kinematicBody = world.createBody(kBodyTypeKinematic, 9.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(staticBody >= 0);
+    CHECK(kinematicBody >= 0);
+    CHECK(world.setBox(staticBody, 0.5f, 0.5f, 0.5f, 0.0f) == 0);
+    CHECK(world.setBox(kinematicBody, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.applyForce(staticBody, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.applyForce(kinematicBody, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.applyTorque(kinematicBody, 0.0f, 1.0f, 0.0f) == -1);
+    CHECK(world.applyImpulse(kinematicBody, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.applyAngularImpulse(staticBody, 0.0f, 1.0f, 0.0f) == -1);
+    CHECK(world.applyForce(999, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+
+    CHECK(world.applyTorque(body, 0.0f, 0.0f, 6.0f) == 0);
+    CHECK(world.bodies[body].torqueAccum.z == 6.0f);
+    world.step(dt, 4, 2);
+    CHECK(near(world.angularVelocities[body].z, 6.0f * dt * world.bodies[body].invInertia.z, 1e-5f));
+    CHECK(world.bodies[body].torqueAccum.z == 0.0f);
+}
+
+void testImpulseAtOffset() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.applyImpulse(body, 0.0f, 0.0f, 10.0f, 1.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.velocities[body].z == 10.0f);
+    CHECK(near(world.angularVelocities[body].y, -10.0f * world.bodies[body].invInertia.y, 1e-3f));
+
+    CHECK(world.applyAngularImpulse(body, 0.0f, 10.0f, 0.0f) == 0);
+    CHECK(near(world.angularVelocities[body].y, 0.0f, 1e-3f));
+    CHECK(world.applyImpulse(body, kFloatMax * 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.applyAngularImpulse(body, 0.0f, kFloatMax * 10.0f, 0.0f) == -1);
+}
+
+void testMassOverride() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    const int32_t reference = addFreeBox(world, 3.0f, 10.0f, 0.0f);
+    CHECK(body >= 0 && reference >= 0);
+    CHECK(world.bodies[body].invMass == 1.0f);
+
+    CHECK(world.setMassData(body, 2.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[body].customMass == 2.0f);
+    CHECK(world.bodies[body].invMass == 0.5f);
+
+    CHECK(world.addSphere(body, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f) == 1);
+    CHECK(world.bodies[body].invMass == 0.5f);
+
+    CHECK(world.setMassData(body, 4.0f, 1.0f, 0.0f, 2.0f) == 0);
+    CHECK(world.bodies[body].invMass == 0.25f);
+    CHECK(world.bodies[body].invInertia.x == 1.0f);
+    CHECK(world.bodies[body].invInertia.z == 0.5f);
+    CHECK(world.bodies[body].invInertia.y > 0.0f);
+
+    CHECK(world.addBox(body, 0.25f, 0.25f, 0.25f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 2);
+    CHECK(world.bodies[body].invMass == 0.25f);
+    CHECK(world.bodies[body].invInertia.x == 1.0f);
+    CHECK(world.bodies[body].invInertia.z == 0.5f);
+
+    CHECK(world.setMassData(body, kFloatMax * 10.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.setMassData(body, 1.0f, kFloatMax * 10.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.bodies[body].invMass == 0.25f);
+    CHECK(world.setMassData(body, 0.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[body].customMass == 0.0f);
+    CHECK(world.bodies[body].invMass > 0.0f);
+
+    CHECK(world.addSphere(reference, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f) == 1);
+    CHECK(world.addBox(reference, 0.25f, 0.25f, 0.25f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f) == 2);
+    CHECK(world.bodies[body].invMass == world.bodies[reference].invMass);
+    CHECK(world.bodies[body].invInertia.x == world.bodies[reference].invInertia.x);
+    CHECK(world.bodies[body].invInertia.y == world.bodies[reference].invInertia.y);
+    CHECK(world.bodies[body].invInertia.z == world.bodies[reference].invInertia.z);
+
+    const int32_t staticBody = world.createBody(kBodyTypeStatic, 6.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    const int32_t kinematicBody = world.createBody(kBodyTypeKinematic, 7.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(world.setBox(staticBody, 0.5f, 0.5f, 0.5f, 0.0f) == 0);
+    CHECK(world.setBox(kinematicBody, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setMassData(staticBody, 5.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.setMassData(kinematicBody, 5.0f, 0.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[staticBody].invMass == 0.0f);
+    CHECK(world.bodies[kinematicBody].invMass == 0.0f);
+    CHECK(world.bodies[staticBody].customMass == 0.0f);
+    CHECK(world.bodies[kinematicBody].customMass == 0.0f);
+    CHECK(world.setMassData(999, 1.0f, 0.0f, 0.0f, 0.0f) == -1);
+    CHECK(world.setMassData(body, kFloatMax, kFloatMax, 0.0f, 0.0f) == 0);
+    CHECK(world.bodies[body].invMass > 0.0f);
+}
+
+void testKinematicDampingKeepsMotion() {
+    Arena arena;
+    World world;
+    CHECK(initWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = world.createBody(kBodyTypeKinematic, 0.0f, 10.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK(body >= 0);
+    CHECK(world.setBox(body, 0.5f, 0.5f, 0.5f, 1.0f) == 0);
+    CHECK(world.setDamping(body, 0.5f, 0.0f) == 0);
+    CHECK(world.setVelocity(body, 1.0f, 0.0f, 0.0f) == 0);
+    CHECK(world.setGravityScale(body, 3.0f) == 0);
+
+    const float dt = 1.0f / 60.0f;
+    world.step(dt, 4, 2);
+    CHECK(near(world.velocities[body].x, 1.0f - 0.5f * dt, 1e-6f));
+    CHECK(world.transforms[body].py == 10.0f);
+    CHECK(world.velocities[body].y == 0.0f);
+}
+
+void testDynamicsDefaultsAndReset() {
+    Arena arena;
+    World world;
+    CHECK(initGravitylessWorld(world, arena, g_memoryA, 16, 256));
+
+    const int32_t body = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(body >= 0);
+    CHECK(world.bodies[body].linearDamping == 0.0f);
+    CHECK(world.bodies[body].angularDamping == 0.0f);
+    CHECK(world.bodies[body].gravityScale == 1.0f);
+    CHECK(world.bodies[body].flags == 0);
+    CHECK(world.bodies[body].customMass == 0.0f);
+
+    CHECK(world.setMassData(body, 3.0f, 2.0f, 2.0f, 2.0f) == 0);
+    CHECK(world.applyForce(body, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f) == 0);
+    CHECK(world.destroyBody(body) == 0);
+
+    const int32_t reused = addFreeBox(world, 0.0f, 10.0f, 0.0f);
+    CHECK(reused == body);
+    CHECK(world.bodies[reused].customMass == 0.0f);
+    CHECK(world.bodies[reused].gravityScale == 1.0f);
+    CHECK(world.bodies[reused].flags == 0);
+    CHECK(world.bodies[reused].forceAccum.x == 0.0f);
+    CHECK(world.bodies[reused].torqueAccum.x == 0.0f);
+    CHECK(world.bodies[reused].invMass == 1.0f);
+}
+
 }
 
 int main() {
@@ -726,6 +1046,15 @@ int main() {
     testMultiShapeDeterminism();
     testArenaExhaustion();
     testStressDeterminism();
+    testDampingDecay();
+    testGravityScale();
+    testFrozenPositionAxes();
+    testFrozenRotationAxes();
+    testForceAppliedPerStep();
+    testImpulseAtOffset();
+    testMassOverride();
+    testKinematicDampingKeepsMotion();
+    testDynamicsDefaultsAndReset();
 
     if (g_failures == 0) {
         std::printf("PASS\n");

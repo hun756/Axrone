@@ -6,6 +6,15 @@ export type MutableQuat = [number, number, number, number];
 
 export type BodyType = "static" | "dynamic" | "kinematic";
 
+export const BODY_FLAGS = Object.freeze({
+    freezeRotationX: 1,
+    freezeRotationY: 2,
+    freezeRotationZ: 4,
+    freezePositionX: 8,
+    freezePositionY: 16,
+    freezePositionZ: 32
+});
+
 export interface SphereShape {
     readonly kind: "sphere";
     readonly radius: number;
