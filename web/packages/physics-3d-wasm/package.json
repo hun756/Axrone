@@ -21,6 +21,8 @@
     "clean": "rimraf dist",
     "test": "vitest run",
     "test:memory": "node tests/memory_test.mjs",
+    "test:parity": "vitest run --config vitest.parity.config.mjs",
+    "test:parity:strict": "vitest run --config vitest.parity-strict.config.mjs",
     "parity": "node scripts/parity.mjs",
     "bench": "node bench/run.mjs"
   }
