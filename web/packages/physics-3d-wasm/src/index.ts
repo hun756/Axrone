@@ -1,4 +1,9 @@
 export { WasmPhysicsWorld3D } from "./world";
+export { CollisionFlags, WasmCharacterController } from "./character-controller";
+export type {
+    CollisionFlagsValue,
+    WasmCharacterControllerOptions
+} from "./character-controller";
 export { WasmPhysicsWorld3DCompat } from "./compat";
 export { WASM_PHYSICS_CAPABILITIES } from "./capabilities";
 export { BODY_FLAGS, WasmBodyType } from "./types";

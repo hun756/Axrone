@@ -57,5 +57,5 @@ export const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities = Object.freeze(
     raycast: true,
     overlapBox: true,
     queryPoint: true,
-    characterController: false
+    characterController: true
 });

@@ -21,6 +21,7 @@ describe('WASM physics capabilities', () => {
         expect(WASM_PHYSICS_CAPABILITIES.queryPoint).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.sleeping).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.contactEvents).toBe(true);
+        expect(WASM_PHYSICS_CAPABILITIES.characterController).toBe(true);
         expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES)).toBe(true);
         expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES.bodyTypes)).toBe(true);
         expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES.shapes)).toBe(true);
