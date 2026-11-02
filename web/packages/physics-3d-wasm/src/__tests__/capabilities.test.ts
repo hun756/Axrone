@@ -17,6 +17,8 @@ describe('WASM physics capabilities', () => {
         expect(WASM_PHYSICS_CAPABILITIES.constraints).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.queries).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.raycast).toBe(true);
+        expect(WASM_PHYSICS_CAPABILITIES.overlapBox).toBe(true);
+        expect(WASM_PHYSICS_CAPABILITIES.queryPoint).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.sleeping).toBe(true);
         expect(WASM_PHYSICS_CAPABILITIES.contactEvents).toBe(true);
         expect(Object.isFrozen(WASM_PHYSICS_CAPABILITIES)).toBe(true);

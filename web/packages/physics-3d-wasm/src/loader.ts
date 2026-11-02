@@ -229,6 +229,53 @@ export interface WasmPhysicsExports {
         hit: number
     ): number;
     overlapSphere(cx: number, cy: number, cz: number, radius: number, ids: number, capacity: number): number;
+    raycastAllV2(
+        ox: number,
+        oy: number,
+        oz: number,
+        dx: number,
+        dy: number,
+        dz: number,
+        maxDistance: number,
+        categoryBits: number,
+        maskBits: number,
+        hits: number,
+        capacity: number
+    ): number;
+    raycastClosestV2(
+        ox: number,
+        oy: number,
+        oz: number,
+        dx: number,
+        dy: number,
+        dz: number,
+        maxDistance: number,
+        categoryBits: number,
+        maskBits: number,
+        hit: number
+    ): number;
+    overlapSphereV2(
+        cx: number,
+        cy: number,
+        cz: number,
+        radius: number,
+        categoryBits: number,
+        maskBits: number,
+        ids: number,
+        capacity: number
+    ): number;
+    overlapBoxAll(
+        outBodyIds: number,
+        capacity: number,
+        minX: number,
+        minY: number,
+        minZ: number,
+        maxX: number,
+        maxY: number,
+        maxZ: number
+    ): number;
+    queryPointAll(outBodyIds: number, capacity: number, x: number, y: number, z: number): number;
+    stepStatisticsView(): bigint;
     constraintCreateFixed(
         bodyA: number,
         bodyB: number,
@@ -445,6 +492,12 @@ const REQUIRED_EXPORTS = [
     "raycastAll",
     "raycastClosest",
     "overlapSphere",
+    "raycastAllV2",
+    "raycastClosestV2",
+    "overlapSphereV2",
+    "overlapBoxAll",
+    "queryPointAll",
+    "stepStatisticsView",
     "queryScratchPtr",
     "queryScratchCapacity",
     "constraintCreateFixed",

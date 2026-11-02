@@ -6,6 +6,12 @@ export type MutableQuat = [number, number, number, number];
 
 export type BodyType = "static" | "dynamic" | "kinematic";
 
+export const WasmBodyType = Object.freeze({
+    static: 0,
+    kinematic: 1,
+    dynamic: 2
+} as const) satisfies Record<BodyType, number>;
+
 export const BODY_FLAGS = Object.freeze({
     freezeRotationX: 1,
     freezeRotationY: 2,
@@ -172,4 +178,39 @@ export interface RaycastHit {
     readonly distance: number;
     readonly point: Vec3Tuple;
     readonly normal: Vec3Tuple;
+}
+
+export interface QueryFilter {
+    readonly categoryBits: number;
+    readonly maskBits: number;
+}
+
+export interface RaycastFractionHit {
+    readonly body: number;
+    readonly shape: number;
+    readonly fraction: number;
+    readonly point: Vec3Tuple;
+    readonly normal: Vec3Tuple;
+}
+
+export interface StepStatistics {
+    readonly broadphasePairsTested: number;
+    readonly shapePairsTested: number;
+    readonly contactsGenerated: number;
+    readonly sensorContacts: number;
+    readonly velocityIterations: number;
+    readonly positionIterations: number;
+    readonly sleepingBodies: number;
+    readonly liveBodies: number;
+}
+
+export interface WasmProfilerSnapshot {
+    readonly stepTime: number;
+    readonly collisionTime: 0;
+    readonly solveTime: 0;
+    readonly broadphaseTime: 0;
+    readonly narrowphaseTime: 0;
+    readonly solveVelocityTime: 0;
+    readonly solvePositionTime: 0;
+    readonly sleepTime: 0;
 }
