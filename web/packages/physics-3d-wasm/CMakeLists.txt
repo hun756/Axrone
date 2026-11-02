@@ -19,6 +19,7 @@ set(PHYSICS_CORE_SOURCES
     src/core/narrowphase.cpp
     src/core/solver.cpp
     src/core/query.cpp
+    src/core/events.cpp
     src/runtime/arena.cpp
 )
 
@@ -168,6 +169,21 @@ if(PHYSICS_BUILD_TESTS AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "wasm32")
         -ffp-contract=off
     )
     add_test(NAME axrone_physics_query_tests COMMAND axrone_physics_query_tests)
+
+    add_executable(axrone_physics_events_tests
+        tests/events_test.cpp
+    )
+    target_link_libraries(axrone_physics_events_tests PRIVATE axrone_physics_core)
+    target_include_directories(axrone_physics_events_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_compile_options(axrone_physics_events_tests PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+        -Wshadow
+        -Wundef
+        -ffp-contract=off
+    )
+    add_test(NAME axrone_physics_events_tests COMMAND axrone_physics_events_tests)
 
     add_executable(axrone_physics_fingerprint
         tests/fingerprint_main.cpp
