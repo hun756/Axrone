@@ -30,6 +30,9 @@ import { GJK3D, supportFromVertices, type Support3D } from './gjk3d';
 import { resolveShapeFrame } from './physics-world-3d-shape-geometry';
 import { PhysicsError3D } from './physics-managers-3d';
 
+const BOX_EDGE_AXIS_EPSILON_SQ = 1e-8;
+const BOX_FACE_EDGE_BIAS = 0.001;
+
 export interface INarrowphaseHost {
     readonly bodyManager: {
         getPosition(bodyId: BodyId3D): IVec3Like;
@@ -300,7 +303,58 @@ export class PhysicsWorld3DNarrowphase {
                 bestN = projection > 0 ? { x: ax.x, y: ax.y, z: ax.z } : Vec3.negate(ax);
             }
         }
+        let edgePair = -1;
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                const cross = Vec3.cross(axesA[i], axesB[j]);
+                const lenSq = Vec3.lengthSquared(cross);
+                if (lenSq < BOX_EDGE_AXIS_EPSILON_SQ) continue;
+                const invLen = 1 / Math.sqrt(lenSq);
+                const n = { x: cross.x * invLen, y: cross.y * invLen, z: cross.z * invLen };
+                const pA = hA.x * Math.abs(Vec3.dot(xA, n)) + hA.y * Math.abs(Vec3.dot(yA, n)) + hA.z * Math.abs(Vec3.dot(zA, n));
+                const pB = hB.x * Math.abs(Vec3.dot(xB, n)) + hB.y * Math.abs(Vec3.dot(yB, n)) + hB.z * Math.abs(Vec3.dot(zB, n));
+                const projection = Vec3.dot(delta, n);
+                const pen = pA + pB - Math.abs(projection);
+                if (pen < 0) return null;
+                if (pen + BOX_FACE_EDGE_BIAS < minP) {
+                    minP = pen;
+                    bestN = projection > 0 ? n : Vec3.negate(n);
+                    edgePair = i * 3 + j;
+                }
+            }
+        }
+        if (edgePair >= 0) return { normal: bestN, point: this.edgeEdgePoint(cA, axesA, hA, cB, axesB, hB, edgePair, bestN), penetration: minP };
         return { normal: bestN, point: midpointVec3(cA, cB), penetration: minP };
+    }
+
+    private edgeEdgePoint(
+        cA: IVec3Like, axesA: IVec3Like[], hA: IVec3Like,
+        cB: IVec3Like, axesB: IVec3Like[], hB: IVec3Like,
+        edgePair: number, n: IVec3Like
+    ): IVec3Like {
+        const i = Math.floor(edgePair / 3), j = edgePair % 3;
+        const extA = [hA.x, hA.y, hA.z], extB = [hB.x, hB.y, hB.z];
+        const eA = { x: cA.x, y: cA.y, z: cA.z };
+        const eB = { x: cB.x, y: cB.y, z: cB.z };
+        for (let k = 0; k < 3; k++) {
+            if (k === i) continue;
+            const s = Vec3.dot(axesA[k], n) > 0 ? extA[k] : -extA[k];
+            eA.x += axesA[k].x * s; eA.y += axesA[k].y * s; eA.z += axesA[k].z * s;
+        }
+        for (let m = 0; m < 3; m++) {
+            if (m === j) continue;
+            const s = Vec3.dot(axesB[m], n) > 0 ? -extB[m] : extB[m];
+            eB.x += axesB[m].x * s; eB.y += axesB[m].y * s; eB.z += axesB[m].z * s;
+        }
+        const dirA = axesA[i], dirB = axesB[j];
+        const halfA = extA[i], halfB = extB[j];
+        const closest = this.segSeg(
+            { x: eA.x - dirA.x * halfA, y: eA.y - dirA.y * halfA, z: eA.z - dirA.z * halfA },
+            { x: eA.x + dirA.x * halfA, y: eA.y + dirA.y * halfA, z: eA.z + dirA.z * halfA },
+            { x: eB.x - dirB.x * halfB, y: eB.y - dirB.y * halfB, z: eB.z - dirB.z * halfB },
+            { x: eB.x + dirB.x * halfB, y: eB.y + dirB.y * halfB, z: eB.z + dirB.z * halfB }
+        );
+        return midpointVec3(closest.pointA, closest.pointB);
     }
 
     buildBoxBoxManifold(
@@ -473,20 +527,90 @@ export class PhysicsWorld3DNarrowphase {
 
     private capBox(cap: IShapeDescriptor3D, box: IShapeDescriptor3D): ICollisionResult | null {
         if (!isCapsuleDef(cap.def) || !isBoxDef(box.def)) return null;
-        const p1 = transformPoint3D(cap.def.p1, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
-        const p2 = transformPoint3D(cap.def.p2, this._host.bodyManager.getPosition(cap.bodyId), this._host.bodyManager.getRotation(cap.bodyId));
-        const bC = transformPoint3D(box.def.center, this._host.bodyManager.getPosition(box.bodyId), this._host.bodyManager.getRotation(box.bodyId));
-        const bRot = Quat.multiply(this._host.bodyManager.getRotation(box.bodyId), box.def.rotation ?? IDENTITY_ROTATION);
-        const l1 = inverseTransformPoint3D(p1, bC, bRot), l2 = inverseTransformPoint3D(p2, bC, bRot);
-        const hE = box.def.halfExtents;
-        const c1 = { x: clamp(l1.x, -hE.x, hE.x), y: clamp(l1.y, -hE.y, hE.y), z: clamp(l1.z, -hE.z, hE.z) };
-        const c2 = { x: clamp(l2.x, -hE.x, hE.x), y: clamp(l2.y, -hE.y, hE.y), z: clamp(l2.z, -hE.z, hE.z) };
-        const closest = this.closestSeg({ x: 0, y: 0, z: 0 }, c1, c2);
-        const dist = Vec3.len(closest);
-        if (dist > cap.def.radius) return null;
-        const invD = dist > PhysicsConstants.EPSILON ? 1 / dist : 0;
-        const localN = { x: closest.x * invD, y: closest.y * invD, z: closest.z * invD };
-        return { normal: Quat.rotateVector(bRot, localN), point: transformPoint3D({ x: 0, y: 0, z: 0 }, bC, bRot), penetration: cap.def.radius - dist };
+        const bm = this._host.bodyManager;
+        const capPos = bm.getPosition(cap.bodyId), capRot = bm.getRotation(cap.bodyId);
+        const p1 = transformPoint3D(cap.def.p1, capPos, capRot);
+        const p2 = transformPoint3D(cap.def.p2, capPos, capRot);
+        const boxPos = bm.getPosition(box.bodyId), boxRot = bm.getRotation(box.bodyId);
+        const bC = transformPoint3D(box.def.center, boxPos, boxRot);
+        const bRot = Quat.multiply(boxRot, box.def.rotation ?? IDENTITY_ROTATION);
+        const l1 = inverseTransformPoint3D(p1, bC, bRot);
+        const l2 = inverseTransformPoint3D(p2, bC, bRot);
+        const half = box.def.halfExtents;
+        const radius = cap.def.radius;
+        const prox = this.segBoxProximity(l1, l2, half);
+        if (prox.distSq > PhysicsConstants.EPSILON * PhysicsConstants.EPSILON) {
+            const q = prox.q;
+            const cx = clamp(q.x, -half.x, half.x), cy = clamp(q.y, -half.y, half.y), cz = clamp(q.z, -half.z, half.z);
+            const dx = q.x - cx, dy = q.y - cy, dz = q.z - cz;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (dist > radius) return null;
+            const invD = 1 / dist;
+            const outward = Quat.rotateVector(bRot, { x: dx * invD, y: dy * invD, z: dz * invD });
+            return { normal: Vec3.negate(outward), point: transformPoint3D({ x: cx, y: cy, z: cz }, bC, bRot), penetration: radius - dist };
+        }
+        const q = prox.q;
+        let exitAxis = 0;
+        let exitMargin = half.x - Math.abs(q.x);
+        if (half.y - Math.abs(q.y) < exitMargin) { exitAxis = 1; exitMargin = half.y - Math.abs(q.y); }
+        if (half.z - Math.abs(q.z) < exitMargin) { exitAxis = 2; exitMargin = half.z - Math.abs(q.z); }
+        const depth = exitMargin > 0 ? exitMargin : 0;
+        const exitSign = q[exitAxis === 0 ? 'x' : exitAxis === 1 ? 'y' : 'z'] >= 0 ? 1 : -1;
+        const exitFaceCoord = half[exitAxis === 0 ? 'x' : exitAxis === 1 ? 'y' : 'z'] * exitSign;
+        const localOutward = { x: 0, y: 0, z: 0 };
+        localOutward[exitAxis === 0 ? 'x' : exitAxis === 1 ? 'y' : 'z'] = exitSign;
+        const localPoint = { x: q.x, y: q.y, z: q.z };
+        localPoint[exitAxis === 0 ? 'x' : exitAxis === 1 ? 'y' : 'z'] = exitFaceCoord;
+        return { normal: Vec3.negate(Quat.rotateVector(bRot, localOutward)), point: transformPoint3D(localPoint, bC, bRot), penetration: radius + depth };
+    }
+
+    private segBoxProximity(l1: IVec3Like, l2: IVec3Like, half: IVec3Like): { q: IVec3Like; distSq: number } {
+        const l = [l1.x, l1.y, l1.z];
+        const e = [l2.x - l1.x, l2.y - l1.y, l2.z - l1.z];
+        const h = [half.x, half.y, half.z];
+        const ts: number[] = [0, 1];
+        for (let k = 0; k < 3; k++) {
+            if (Math.abs(e[k]) <= 1e-12) continue;
+            const tp = (h[k] - l[k]) / e[k];
+            const tn = (-h[k] - l[k]) / e[k];
+            if (tp > 0 && tp < 1) ts.push(tp);
+            if (tn > 0 && tn < 1) ts.push(tn);
+        }
+        ts.sort((a, b) => a - b);
+        const evals: number[] = ts.slice();
+        for (let k = 0; k + 1 < ts.length; k++) {
+            const lo = ts[k], hi = ts[k + 1];
+            if (hi - lo <= 1e-12) continue;
+            const tm = (lo + hi) * 0.5;
+            let den = 0, num = 0;
+            for (let a = 0; a < 3; a++) {
+                const qm = l[a] + e[a] * tm;
+                if (Math.abs(qm) > h[a]) {
+                    const s = qm > 0 ? h[a] : -h[a];
+                    den += e[a] * e[a];
+                    num += e[a] * (s - l[a]);
+                }
+            }
+            evals.push(den > 1e-30 ? Math.min(hi, Math.max(lo, num / den)) : lo);
+        }
+        let bestQ = { x: l[0], y: l[1], z: l[2] };
+        let bestDistSq = Infinity;
+        let insideQ: IVec3Like | null = null;
+        let insideMargin = -Infinity;
+        for (const t of evals) {
+            const q = { x: l[0] + e[0] * t, y: l[1] + e[1] * t, z: l[2] + e[2] * t };
+            const gx = Math.max(Math.abs(q.x) - h[0], 0);
+            const gy = Math.max(Math.abs(q.y) - h[1], 0);
+            const gz = Math.max(Math.abs(q.z) - h[2], 0);
+            const distSq = gx * gx + gy * gy + gz * gz;
+            if (distSq < bestDistSq) { bestDistSq = distSq; bestQ = q; }
+            if (distSq === 0) {
+                const margin = Math.min(h[0] - Math.abs(q.x), h[1] - Math.abs(q.y), h[2] - Math.abs(q.z));
+                if (margin > insideMargin) { insideMargin = margin; insideQ = q; }
+            }
+        }
+        if (bestDistSq <= PhysicsConstants.EPSILON * PhysicsConstants.EPSILON && insideQ) return { q: insideQ, distSq: 0 };
+        return { q: bestQ, distSq: bestDistSq };
     }
 
     private aabbApprox(dA: IShapeDescriptor3D, dB: IShapeDescriptor3D, aabbA: IAabb3D, aabbB: IAabb3D): ICollisionResult | null {
