@@ -1,0 +1,34 @@
+{
+  "name": "@axrone/physics-3d-wasm",
+  "version": "0.1.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@axrone/ecs-runtime": "^0.1.0",
+    "@axrone/numeric": "^0.0.1"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rollup -c rollup.config.mjs",
+    "build:wasm": "node scripts/build.mjs wasm-release",
+    "smoke:dist": "node scripts/smoke-dist.mjs",
+    "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:memory": "node tests/memory_test.mjs",
+    "test:parity": "vitest run --config vitest.parity.config.mjs",
+    "test:parity:strict": "vitest run --config vitest.parity-strict.config.mjs",
+    "parity": "node scripts/parity.mjs",
+    "bench": "node bench/run.mjs"
+  }
+}
