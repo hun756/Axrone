@@ -68,3 +68,53 @@ export type {
     WasmProfilerSnapshot,
     WorldOptions
 } from "./types";
+export { WasmPhysicsBridge3D, createWasmPhysicsBridge3DSystems } from "./bridge";
+export type {
+    BeforeUpdateContext,
+    FixedUpdateContext,
+    GameLoopSystem,
+    IPhysicsCollisionHandler,
+    SceneLoopState,
+    WasmPhysicsBridge3DOptions
+} from "./bridge";
+export {
+    CapsuleCollider3D,
+    CapsuleDirection3D,
+    Collider3D,
+    CollisionDetectionMode3D,
+    CylinderCollider3D,
+    BoxCollider3D,
+    CharacterController,
+    FixedJoint3D,
+    ForceMode3D,
+    HingeJoint3D,
+    INVALID_CONSTRAINT_ID,
+    INVALID_SHAPE_ID,
+    Joint3D,
+    JOINT_CAPABILITY_3D,
+    JointDriveMode3D,
+    MeshCollider3D,
+    PhysicMaterialCombine,
+    Rigidbody3D,
+    Rigidbody3DType,
+    RigidbodyConstraints3D,
+    RigidbodyInterpolation3D,
+    SphereCollider3D,
+    SpringJoint3D,
+    DEFAULT_JOINT_DRIVE,
+    DEFAULT_JOINT_MOTOR,
+    DEFAULT_SOFT_JOINT_LIMIT,
+    DEFAULT_SOFT_JOINT_LIMIT_SPRING
+} from "./components";
+export type {
+    ICharacterControllerConfig,
+    IJointDrive3D,
+    IJointLimits3D,
+    IJointMotor3D,
+    IMutableCollisionFilter3D,
+    IPhysicMaterial3D,
+    IRigidbody3DConfig,
+    ISoftJointLimit3D,
+    ISoftJointLimitSpring3D,
+    JointCapability3D
+} from "./components";
