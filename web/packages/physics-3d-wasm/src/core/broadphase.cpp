@@ -8,8 +8,8 @@ namespace axrone::physics {
 namespace {
 
 bool sweepLess(const World& world, int32_t left, int32_t right) {
-    const float leftMin = world.bodies[left].aabb.minX;
-    const float rightMin = world.bodies[right].aabb.minX;
+    const float leftMin = world.sweepRecords[left].minX;
+    const float rightMin = world.sweepRecords[right].minX;
     if (leftMin < rightMin) {
         return true;
     }
@@ -34,11 +34,14 @@ float selectExtent(const Vec3& half, int32_t axis) {
 void updateBounds(World& world) {
     for (int32_t i = 0; i < world.highWater; ++i) {
         Body& body = world.bodies[i];
+        SweepRecord& record = world.sweepRecords[i];
         const int32_t slots = shapeSlots(body);
         if (body.state == kBodyFree || slots == 0) {
             body.aabb = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+            record = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0 };
             continue;
         }
+        record.filter = sweepFilterCode(body.state, slots);
 
         const Vec3 position = transformPosition(world.transforms[i]);
         const Mat3& rotation = body.rotation;
@@ -146,15 +149,21 @@ void updateBounds(World& world) {
             covered = true;
         }
 
-        body.aabb = covered ? bounds : AABB{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        const AABB final = covered ? bounds : AABB{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        body.aabb = final;
+        record.minX = final.minX;
+        record.minY = final.minY;
+        record.minZ = final.minZ;
+        record.maxX = final.maxX;
+        record.maxY = final.maxY;
+        record.maxZ = final.maxZ;
     }
 }
 
 int32_t buildSweep(World& world) {
     int32_t count = 0;
     for (int32_t i = 0; i < world.highWater; ++i) {
-        const Body& body = world.bodies[i];
-        if (body.state != kBodyFree && shapeSlots(body) > 0) {
+        if (sweepQueryableFilter(world.sweepRecords[i].filter)) {
             world.sweepOrder[count++] = i;
         }
     }
@@ -177,16 +186,20 @@ int32_t buildSweep(World& world) {
 
 void broadphase(World& world) {
     const int32_t count = buildSweep(world);
+    world.statsShapePairs = 0;
+    int64_t broadphasePairs = 0;
 
     for (int32_t i = 0; i < count; ++i) {
         const int32_t a = world.sweepOrder[i];
-        const AABB& boundsA = world.bodies[a].aabb;
-        const bool aDynamic = world.bodies[a].state == kBodyDynamic;
-        const bool aKinematic = world.bodies[a].state == kBodyKinematic;
+        const SweepRecord& boundsA = world.sweepRecords[a];
+        const int32_t filterA = boundsA.filter;
+        const int32_t stateA = sweepFilterState(filterA);
+        const bool aDynamic = stateA == kBodyDynamic;
+        const bool aKinematic = stateA == kBodyKinematic;
 
         for (int32_t j = i + 1; j < count; ++j) {
             const int32_t b = world.sweepOrder[j];
-            const AABB& boundsB = world.bodies[b].aabb;
+            const SweepRecord& boundsB = world.sweepRecords[b];
 
             if (boundsB.minX > boundsA.maxX) {
                 break;
@@ -197,14 +210,19 @@ void broadphase(World& world) {
             if (boundsB.minZ > boundsA.maxZ || boundsB.maxZ < boundsA.minZ) {
                 continue;
             }
-            const bool bKinematic = world.bodies[b].state == kBodyKinematic;
-            if (!aDynamic && world.bodies[b].state != kBodyDynamic && aKinematic == bKinematic) {
+            const int32_t stateB = sweepFilterState(boundsB.filter);
+            const bool bKinematic = stateB == kBodyKinematic;
+            if (!aDynamic && stateB != kBodyDynamic && aKinematic == bKinematic) {
                 continue;
             }
 
+            ++broadphasePairs;
             collidePair(world, a, b);
         }
     }
+
+    world.statsBroadphasePairs = broadphasePairs;
+    world.statsSerial = world.stepSerial;
 }
 
 }

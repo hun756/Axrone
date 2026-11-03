@@ -42,6 +42,7 @@ struct World {
     uint16_t* slotGen = nullptr;
     ShapeBulk** shapeBulks = nullptr;
     int32_t* sweepOrder = nullptr;
+    SweepRecord* sweepRecords = nullptr;
     int32_t* freeIds = nullptr;
     Contact* contacts = nullptr;
     Constraint* constraints = nullptr;
@@ -52,6 +53,11 @@ struct World {
     int32_t* cacheNextUsed = nullptr;
     int32_t cachePrevUsedCount = 0;
     int32_t cacheNextUsedCount = 0;
+
+    int64_t stepSerial = 0;
+    int64_t statsSerial = -1;
+    int64_t statsBroadphasePairs = 0;
+    int64_t statsShapePairs = 0;
 
     Vec3 axesA[3] = {};
     Vec3 axesB[3] = {};
@@ -268,6 +274,10 @@ struct World {
     int32_t bodyCount() const;
     int32_t getContactCount() const;
     uint64_t fingerprint() const;
+
+    void invalidateStats() {
+        statsSerial = -1;
+    }
 
     bool isActive(int32_t id) const;
     int32_t cacheLookup(int32_t a, int32_t b, int32_t feature) const;
