@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-28T22:30:20.790Z",
+  "generatedAt": "2026-11-04T04:31:33.264Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -1538,22 +1538,28 @@
         "WorldSingletonRegistry",
         "WorldStorageRuntime",
         "__debugScriptSystem",
+        "bumpRenderMutationClock",
         "clearComponentPropertyMetadataCaches",
         "clearScriptCaches",
         "clearScriptRegistry",
+        "createRenderMutationClock",
         "getAllScripts",
         "getComponentMetadata",
         "getComponentPropertyMetadata",
         "getComponentPropertyMetadataByKey",
+        "getCreationTimestamp",
         "getDependencyTree",
         "getScriptMetrics",
+        "isCreationBatchOpen",
         "property",
+        "runWithinCreationBatch",
         "script",
         "setComponentMetadata",
         "setComponentPropertyMetadata",
         "validateAllScripts"
       ],
       "typeExports": [
+        "ActorComponentEntry",
         "ActorConfig",
         "ActorId",
         "ActorLayer",
@@ -1591,6 +1597,7 @@
         "PropertyTypeReference",
         "QueryCache",
         "QueryResult",
+        "RenderMutationClock",
         "ScriptDecoratorOptions",
         "ScriptMetadata",
         "SingletonEntry",
@@ -1630,6 +1637,7 @@
             "ComponentError"
           ],
           "typeExports": [
+            "ActorComponentEntry",
             "ActorConfig",
             "ActorLayer",
             "ActorState",
@@ -1672,22 +1680,28 @@
             "WorldSingletonRegistry",
             "WorldStorageRuntime",
             "__debugScriptSystem",
+            "bumpRenderMutationClock",
             "clearComponentPropertyMetadataCaches",
             "clearScriptCaches",
             "clearScriptRegistry",
+            "createRenderMutationClock",
             "getAllScripts",
             "getComponentMetadata",
             "getComponentPropertyMetadata",
             "getComponentPropertyMetadataByKey",
+            "getCreationTimestamp",
             "getDependencyTree",
             "getScriptMetrics",
+            "isCreationBatchOpen",
             "property",
+            "runWithinCreationBatch",
             "script",
             "setComponentMetadata",
             "setComponentPropertyMetadata",
             "validateAllScripts"
           ],
           "typeExports": [
+            "ActorComponentEntry",
             "ActorConfig",
             "ActorId",
             "ActorLayer",
@@ -1721,6 +1735,7 @@
             "PropertyTypeId",
             "PropertyTypeReference",
             "QueryResult",
+            "RenderMutationClock",
             "ScriptDecoratorOptions",
             "ScriptMetadata",
             "System",
@@ -1751,11 +1766,13 @@
           "path": "@axrone/ecs-runtime/core",
           "exports": [
             "Actor",
+            "ActorComponentEntry",
             "Component",
             "PropertyDecoratorOptions",
             "PropertyMetadata",
             "PropertyTypeId",
             "PropertyTypeReference",
+            "RenderMutationClock",
             "Script",
             "World",
             "WorldActorRegistry",
@@ -1768,16 +1785,21 @@
             "WorldSingletonRegistry",
             "WorldStorageRuntime",
             "__debugScriptSystem",
+            "bumpRenderMutationClock",
             "clearComponentPropertyMetadataCaches",
             "clearScriptCaches",
             "clearScriptRegistry",
+            "createRenderMutationClock",
             "getAllScripts",
             "getComponentMetadata",
             "getComponentPropertyMetadata",
             "getComponentPropertyMetadataByKey",
+            "getCreationTimestamp",
             "getDependencyTree",
             "getScriptMetrics",
+            "isCreationBatchOpen",
             "property",
+            "runWithinCreationBatch",
             "script",
             "setComponentMetadata",
             "setComponentPropertyMetadata",
@@ -1919,22 +1941,28 @@
             "WorldSingletonRegistry",
             "WorldStorageRuntime",
             "__debugScriptSystem",
+            "bumpRenderMutationClock",
             "clearComponentPropertyMetadataCaches",
             "clearScriptCaches",
             "clearScriptRegistry",
+            "createRenderMutationClock",
             "getAllScripts",
             "getComponentMetadata",
             "getComponentPropertyMetadata",
             "getComponentPropertyMetadataByKey",
+            "getCreationTimestamp",
             "getDependencyTree",
             "getScriptMetrics",
+            "isCreationBatchOpen",
             "property",
+            "runWithinCreationBatch",
             "script",
             "setComponentMetadata",
             "setComponentPropertyMetadata",
             "validateAllScripts"
           ],
           "typeExports": [
+            "ActorComponentEntry",
             "ActorConfig",
             "ActorId",
             "ActorLayer",
@@ -1971,6 +1999,7 @@
             "PropertyTypeReference",
             "QueryCache",
             "QueryResult",
+            "RenderMutationClock",
             "ScriptDecoratorOptions",
             "ScriptMetadata",
             "System",
@@ -3840,6 +3869,130 @@
         "JointCapability3D",
         "RayCast3DConfig",
         "RaycastHit3D"
+      ],
+      "hasDefaultExport": false,
+      "subpaths": []
+    },
+    {
+      "name": "@axrone/physics-3d-wasm",
+      "version": "0.1.0",
+      "description": "",
+      "exports": [
+        "BODY_FLAGS",
+        "BoxCollider3D",
+        "CapsuleCollider3D",
+        "CapsuleDirection3D",
+        "CharacterController",
+        "Collider3D",
+        "CollisionDetectionMode3D",
+        "CollisionFlags",
+        "CylinderCollider3D",
+        "DEFAULT_JOINT_DRIVE",
+        "DEFAULT_JOINT_MOTOR",
+        "DEFAULT_SOFT_JOINT_LIMIT",
+        "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
+        "FixedJoint3D",
+        "ForceMode3D",
+        "HingeJoint3D",
+        "INVALID_CONSTRAINT_ID",
+        "INVALID_SHAPE_ID",
+        "JOINT_CAPABILITY_3D",
+        "Joint3D",
+        "JointDriveMode3D",
+        "MeshCollider3D",
+        "PhysicMaterialCombine",
+        "Rigidbody3D",
+        "Rigidbody3DType",
+        "RigidbodyConstraints3D",
+        "RigidbodyInterpolation3D",
+        "SphereCollider3D",
+        "SpringJoint3D",
+        "WASM_PHYSICS_CAPABILITIES",
+        "WasmBodyType",
+        "WasmCharacterController",
+        "WasmPhysicsBridge3D",
+        "WasmPhysicsWorld3D",
+        "WasmPhysicsWorld3DCompat",
+        "createWasmPhysicsBridge3DSystems",
+        "decodeBase64",
+        "instantiateWasm",
+        "loadEmbeddedWasm"
+      ],
+      "typeExports": [
+        "BeforeUpdateContext",
+        "BodyOptions",
+        "BodyType",
+        "BoxShape",
+        "CapsuleAttachOptions",
+        "CapsuleShape",
+        "CollisionFlagsValue",
+        "CompatBodyDef",
+        "CompatBodyHandle",
+        "CompatCollisionEvent",
+        "CompatCollisionEventType",
+        "CompatContactListener",
+        "CompatContactManifold",
+        "CompatContactPoint",
+        "CompatMaterial",
+        "CompatQuat",
+        "CompatSensorEvent",
+        "CompatSensorEventType",
+        "CompatShapeDef",
+        "CompatStatistics",
+        "CompatVec3",
+        "CompatWorldConfig",
+        "ConeAttachOptions",
+        "ConeShape",
+        "ContactEventKind",
+        "ContactEventSnapshot",
+        "ContactSnapshot",
+        "CylinderAttachOptions",
+        "CylinderShape",
+        "FixedJointOptions",
+        "FixedUpdateContext",
+        "GameLoopSystem",
+        "HeightFieldAttachOptions",
+        "HeightFieldShape",
+        "HingeJointOptions",
+        "HullAttachOptions",
+        "HullShape",
+        "ICharacterControllerConfig",
+        "IJointDrive3D",
+        "IJointLimits3D",
+        "IJointMotor3D",
+        "IMutableCollisionFilter3D",
+        "IPhysicMaterial3D",
+        "IPhysicsCollisionHandler",
+        "IRigidbody3DConfig",
+        "ISoftJointLimit3D",
+        "ISoftJointLimitSpring3D",
+        "JointCapability3D",
+        "MeshAttachOptions",
+        "MutableQuat",
+        "MutableVec3",
+        "QuatTuple",
+        "QueryFilter",
+        "RaycastFractionHit",
+        "RaycastHit",
+        "SceneLoopState",
+        "Shape",
+        "ShapeFilter",
+        "ShapeMaterial",
+        "SliderJointOptions",
+        "SphereShape",
+        "SpringJointOptions",
+        "StepOptions",
+        "StepStatistics",
+        "TransformSnapshot",
+        "TriangleMeshShape",
+        "Vec3Tuple",
+        "VertexSource",
+        "WasmCharacterControllerOptions",
+        "WasmPhysicsBridge3DOptions",
+        "WasmPhysicsCapabilities",
+        "WasmPhysicsExports",
+        "WasmProfilerSnapshot",
+        "WorldOptions"
       ],
       "hasDefaultExport": false,
       "subpaths": []
@@ -5808,6 +5961,7 @@
         "SCENE_ANIMATION_BUILT_IN_MANIFEST",
         "SCENE_CORE_BUILT_IN_MANIFEST",
         "SCENE_MIXED_RUNTIME_PROFILE_ID",
+        "SCENE_RENDER_CAPABILITIES_ALL",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "Scene2D",
@@ -5815,6 +5969,9 @@
         "SceneActorSnapshot",
         "SceneAssetFacade",
         "SceneAssetRuntime",
+        "SceneBatchRuntimeFactory",
+        "SceneBatchRuntimeFactoryContext",
+        "SceneBatchRuntimeSet",
         "SceneBuiltInComponentName",
         "SceneBuiltInManifest",
         "SceneBuiltInRegistry",
@@ -5825,6 +5982,7 @@
         "SceneClearFlag",
         "SceneComponentSnapshot",
         "SceneError",
+        "SceneInstancingMode",
         "SceneLifecycleError",
         "SceneLifecycleFacade",
         "SceneLifecycleRuntime",
@@ -5903,6 +6061,7 @@
         "SceneSamplerHandle",
         "SceneSerializedValue",
         "SceneShaderDefinition",
+        "SceneShaderDefinitionFromEffectOptions",
         "SceneShaderError",
         "SceneShaderHandle",
         "SceneSnapshot",
@@ -5946,6 +6105,7 @@
         "createAssetImportPipeline",
         "createAssetReference",
         "createFetchAnimationStreamingResolver",
+        "createFullSceneBatchRuntimes",
         "createLazySceneUIWidgetRef",
         "createScene2D",
         "createSceneBuiltInManifest",
@@ -5967,6 +6127,7 @@
         "get3DSceneRuntimeProfile",
         "getCoreSceneRuntimeProfile",
         "getDefaultSceneBuiltInRegistry",
+        "getDefaultSceneRuntimeComposition",
         "getDefaultSceneRuntimeProfile",
         "getMixedSceneRuntimeProfile",
         "getSceneUIWidgetRefResolver",
@@ -5992,7 +6153,9 @@
         "resolveSceneFogState",
         "resolveSceneGroundLight",
         "resolveSceneRegistryFromProfile",
+        "resolveSceneRenderCapabilities",
         "resolveSceneRuntimeBuiltInComponents",
+        "resolveSceneRuntimeComposition",
         "resolveSceneSkyLight",
         "serializeSpriteAtlasDefinition",
         "setSceneUIWidgetRefResolver"
@@ -6088,21 +6251,28 @@
         "FailedAnimationStreamingChunk",
         "FetchAnimationStreamingResolverOptions",
         "ResolvedAnimationStreamingChunk",
+        "Scene2DBulkSpriteConfig",
         "SceneActorRuntimeOptions",
         "SceneAssetRuntimeOptions",
-        "SceneCapabilityGuardHost",
         "SceneFogMode",
         "SceneFogState",
         "SceneLifecycleRuntimeOptions",
         "SceneMaterialInspectorControlDefinition",
         "SceneMaterialInspectorControlKind",
         "SceneMaterialInspectorSection",
+        "SceneRenderCapabilities",
         "SceneRuntimeBuiltInComponentName",
         "SceneRuntimeBuiltInManifest",
         "SceneRuntimeBuiltInRegistry",
+        "SceneRuntimeComposition",
         "SceneRuntimeFrameRecord",
         "SceneRuntimeKernelOptions",
+        "SceneRuntimePhysicsBridge",
+        "SceneRuntimePhysicsBridgeInput",
+        "SceneRuntimePhysicsBridgeSelection",
+        "SceneRuntimePhysicsProfilerStats",
         "SceneRuntimePhysicsStats",
+        "SceneRuntimePhysicsWorldView",
         "SceneRuntimeProfilerListener",
         "SceneRuntimeProfilerOptions",
         "SceneRuntimeProfilerPhaseId",
@@ -6157,7 +6327,6 @@
             "Camera",
             "DEFAULT_SCENE_FOG_STATE",
             "Scene2D",
-            "SceneAssetFacade",
             "SceneAssetRuntime",
             "SceneLifecycleFacade",
             "SceneLifecycleRuntime",
@@ -6177,13 +6346,48 @@
             "SceneFogMode",
             "SceneFogState",
             "SceneLifecycleRuntimeOptions",
+            "SceneRuntimeComposition",
             "SceneRuntimeKernelOptions",
+            "SceneRuntimePhysicsBridge",
+            "SceneRuntimePhysicsBridgeInput",
+            "SceneRuntimePhysicsBridgeSelection",
+            "SceneRuntimePhysicsProfilerStats",
+            "SceneRuntimePhysicsWorldView",
             "SceneUIWidgetRef",
             "SceneUIWidgetRefResolver",
             "UIHostBillboardMode",
             "UIHostConfig",
             "UIHostRenderMode"
           ]
+        },
+        {
+          "path": "@axrone/scene-2d/lean",
+          "exports": [
+            "Camera",
+            "CameraConfig",
+            "Color",
+            "Scene2D",
+            "Scene2DBulkSpriteConfig",
+            "SceneMaterialAlphaMode",
+            "SceneMaterialDefinition",
+            "SceneMaterialHandle",
+            "SceneMaterialSurfaceDefinition",
+            "SceneMeshDefinition",
+            "SceneMeshHandle",
+            "SceneOptions",
+            "SceneRegistry",
+            "SceneRenderPlanningStats",
+            "SceneRenderStats",
+            "SceneShaderDefinition",
+            "SceneShaderHandle",
+            "SceneTextureBindingDefinition",
+            "SceneTextureDefinition",
+            "SceneTextureHandle",
+            "SceneUniformValue",
+            "SpriteRenderer",
+            "SpriteRendererConfig"
+          ],
+          "typeExports": []
         },
         {
           "path": "@axrone/scene-2d/profile",
@@ -6315,6 +6519,7 @@
         "SCENE_ATTRIBUTE_LOCATIONS",
         "SCENE_CORE_BUILT_IN_MANIFEST",
         "SCENE_MIXED_RUNTIME_PROFILE_ID",
+        "SCENE_RENDER_CAPABILITIES_ALL",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "Scene",
@@ -6325,6 +6530,9 @@
         "SceneActorSnapshot",
         "SceneAssetFacade",
         "SceneAssetRuntime",
+        "SceneBatchRuntimeFactory",
+        "SceneBatchRuntimeFactoryContext",
+        "SceneBatchRuntimeSet",
         "SceneBuiltInComponentName",
         "SceneBuiltInManifest",
         "SceneBuiltInRegistry",
@@ -6344,6 +6552,7 @@
         "SceneFogUniformBinder",
         "SceneFrameUniformBinder",
         "SceneGeometryMeshBuilder",
+        "SceneInstancingMode",
         "SceneLifecycleError",
         "SceneLifecycleFacade",
         "SceneLifecycleRuntime",
@@ -6442,6 +6651,7 @@
         "SceneSamplerRegistry",
         "SceneSerializedValue",
         "SceneShaderDefinition",
+        "SceneShaderDefinitionFromEffectOptions",
         "SceneShaderError",
         "SceneShaderFactory",
         "SceneShaderHandle",
@@ -6488,6 +6698,7 @@
         "createExtensionRegistry",
         "createFetchAnimationStreamingResolver",
         "createFrameGraph",
+        "createFullSceneBatchRuntimes",
         "createGLConstants",
         "createGLContext",
         "createGLContextFromCanvas",
@@ -6524,6 +6735,7 @@
         "get3DSceneRuntimeProfile",
         "getCoreSceneRuntimeProfile",
         "getDefaultSceneBuiltInRegistry",
+        "getDefaultSceneRuntimeComposition",
         "getDefaultSceneRuntimeProfile",
         "getGLConstants",
         "getMixedSceneRuntimeProfile",
@@ -6548,7 +6760,9 @@
         "resolveSceneFogState",
         "resolveSceneGroundLight",
         "resolveSceneRegistryFromProfile",
+        "resolveSceneRenderCapabilities",
         "resolveSceneRuntimeBuiltInComponents",
+        "resolveSceneRuntimeComposition",
         "resolveSceneSkyLight",
         "resolveSceneSurface",
         "resolveSurfaceFeatures",
@@ -6653,7 +6867,6 @@
         "SceneActorRuntimeOptions",
         "SceneAssetRuntimeOptions",
         "SceneCameraFrameState",
-        "SceneCapabilityGuardHost",
         "SceneComponentTypeResolver",
         "SceneDrawExecutorContext",
         "SceneFogMode",
@@ -6686,6 +6899,7 @@
         "SceneParticleBatchRuntimeRenderParams",
         "SceneParticleBatchRuntimeRenderStats",
         "SceneProfilerProbe",
+        "SceneRenderCapabilities",
         "SceneRenderItem",
         "SceneRenderPassRegistryOptions",
         "SceneRenderPassResource",
@@ -6699,9 +6913,15 @@
         "SceneRuntimeBuiltInComponentName",
         "SceneRuntimeBuiltInManifest",
         "SceneRuntimeBuiltInRegistry",
+        "SceneRuntimeComposition",
         "SceneRuntimeFrameRecord",
         "SceneRuntimeKernelOptions",
+        "SceneRuntimePhysicsBridge",
+        "SceneRuntimePhysicsBridgeInput",
+        "SceneRuntimePhysicsBridgeSelection",
+        "SceneRuntimePhysicsProfilerStats",
         "SceneRuntimePhysicsStats",
+        "SceneRuntimePhysicsWorldView",
         "SceneRuntimeProfilerListener",
         "SceneRuntimeProfilerOptions",
         "SceneRuntimeProfilerPhaseId",
@@ -6763,7 +6983,6 @@
             "Camera",
             "DEFAULT_SCENE_FOG_STATE",
             "Scene",
-            "SceneAssetFacade",
             "SceneAssetRuntime",
             "SceneLifecycleFacade",
             "SceneLifecycleRuntime",
@@ -6783,13 +7002,54 @@
             "SceneFogMode",
             "SceneFogState",
             "SceneLifecycleRuntimeOptions",
+            "SceneRuntimeComposition",
             "SceneRuntimeKernelOptions",
+            "SceneRuntimePhysicsBridge",
+            "SceneRuntimePhysicsBridgeInput",
+            "SceneRuntimePhysicsBridgeSelection",
+            "SceneRuntimePhysicsProfilerStats",
+            "SceneRuntimePhysicsWorldView",
             "SceneUIWidgetRef",
             "SceneUIWidgetRefResolver",
             "UIHostBillboardMode",
             "UIHostConfig",
             "UIHostRenderMode"
           ]
+        },
+        {
+          "path": "@axrone/scene-3d/lean",
+          "exports": [
+            "Camera",
+            "CameraConfig",
+            "MeshRenderer",
+            "MeshRendererConfig",
+            "Scene",
+            "Scene3DActorRuntime",
+            "Scene3DActorRuntimeOptions",
+            "SceneGeometryMeshBuilder",
+            "SceneInstancingMode",
+            "SceneMaterialAlphaMode",
+            "SceneMaterialDefinition",
+            "SceneMaterialHandle",
+            "SceneMaterialSurfaceDefinition",
+            "SceneMeshDefinition",
+            "SceneMeshHandle",
+            "SceneOptions",
+            "SceneProfilerProbe",
+            "SceneRegistry",
+            "SceneRenderPlanningStats",
+            "SceneRenderStats",
+            "SceneRenderableActorCreateOptions",
+            "SceneRenderableActorInstance",
+            "SceneShaderDefinition",
+            "SceneShaderHandle",
+            "SceneTextureBindingDefinition",
+            "SceneTextureDefinition",
+            "SceneTextureHandle",
+            "SceneUniformValue",
+            "createUnlitColorShaderDefinition"
+          ],
+          "typeExports": []
         },
         {
           "path": "@axrone/scene-3d/profile",
@@ -6829,7 +7089,6 @@
             "SceneDrawExecutor",
             "SceneFogUniformBinder",
             "SceneFrameUniformBinder",
-            "SceneGeometryMeshBuilder",
             "SceneLightingCollector",
             "SceneLightingUniformBinder",
             "SceneMaterialInstanceAdapter",
@@ -7122,6 +7381,7 @@
         "SCENE_ATTRIBUTE_LOCATIONS",
         "SCENE_CORE_BUILT_IN_MANIFEST",
         "SCENE_MIXED_RUNTIME_PROFILE_ID",
+        "SCENE_RENDER_CAPABILITIES_ALL",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
         "SCENE_UI_BUILT_IN_MANIFEST",
@@ -7130,6 +7390,9 @@
         "SceneActorSnapshot",
         "SceneAssetFacade",
         "SceneAssetRuntime",
+        "SceneBatchRuntimeFactory",
+        "SceneBatchRuntimeFactoryContext",
+        "SceneBatchRuntimeSet",
         "SceneBuiltInComponentName",
         "SceneBuiltInManifest",
         "SceneBuiltInRegistry",
@@ -7137,6 +7400,7 @@
         "SceneCanvasError",
         "SceneCanvasOptions",
         "SceneCapabilityError",
+        "SceneCapabilityGuardHost",
         "SceneClearFlag",
         "SceneComponentCatalog",
         "SceneComponentSnapshot",
@@ -7147,6 +7411,7 @@
         "SceneFogUniformBinder",
         "SceneFrameUniformBinder",
         "SceneGeometryMeshBuilder",
+        "SceneInstancingMode",
         "SceneLifecycleError",
         "SceneLifecycleFacade",
         "SceneLifecycleRuntime",
@@ -7289,7 +7554,9 @@
         "compileRenderShaderEffect",
         "convertSceneUniformValue",
         "createFetchAnimationStreamingResolver",
+        "createFullSceneBatchRuntimes",
         "createLazySceneUIWidgetRef",
+        "createLean2DSceneBatchRuntimes",
         "createParticleShaderDefinition",
         "createRenderCacheCameraKey",
         "createSceneBuiltInManifest",
@@ -7313,12 +7580,14 @@
         "get3DSceneRuntimeProfile",
         "getCoreSceneRuntimeProfile",
         "getDefaultSceneBuiltInRegistry",
+        "getDefaultSceneRuntimeComposition",
         "getDefaultSceneRuntimeProfile",
         "getMixedSceneRuntimeProfile",
         "getSceneComponentTypeName",
         "getSceneUIWidgetRefResolver",
         "normalizeSceneTextureBinding",
         "requireRegisteredComponent",
+        "resolveCameraVerticalFieldOfViewRadians",
         "resolvePhysicsBridgesForProfile",
         "resolveSceneAmbientLight",
         "resolveSceneBuiltInComponents",
@@ -7327,7 +7596,9 @@
         "resolveSceneGroundLight",
         "resolveSceneRegistryFromProfile",
         "resolveSceneRegistryFromProfileWithFallback",
+        "resolveSceneRenderCapabilities",
         "resolveSceneRuntimeBuiltInComponents",
+        "resolveSceneRuntimeComposition",
         "resolveSceneSkyLight",
         "resolveSceneSurface",
         "resolveSurfaceFeatures",
@@ -7349,6 +7620,7 @@
         "BillboardMode",
         "BillboardRendererConfig",
         "CameraConfig",
+        "CameraFieldOfViewAxis",
         "DirectionalLightConfig",
         "FailedAnimationStreamingChunk",
         "FetchAnimationStreamingResolverOptions",
@@ -7405,6 +7677,7 @@
         "SceneFogMode",
         "SceneFogState",
         "SceneFrameUniformContext",
+        "SceneInstancingMode",
         "SceneLifecycle",
         "SceneLifecycleRuntimeOptions",
         "SceneLightingState",
@@ -7473,6 +7746,7 @@
         "SceneRegistry",
         "SceneRegistryBuilderOptions",
         "SceneRegistryForBuiltIns",
+        "SceneRenderCapabilities",
         "SceneRenderItem",
         "SceneRenderPassDefinition",
         "SceneRenderPassHandle",
@@ -7491,9 +7765,15 @@
         "SceneRuntimeBuiltInComponentName",
         "SceneRuntimeBuiltInManifest",
         "SceneRuntimeBuiltInRegistry",
+        "SceneRuntimeComposition",
         "SceneRuntimeFrameRecord",
         "SceneRuntimeKernelOptions",
+        "SceneRuntimePhysicsBridge",
+        "SceneRuntimePhysicsBridgeInput",
+        "SceneRuntimePhysicsBridgeSelection",
+        "SceneRuntimePhysicsProfilerStats",
         "SceneRuntimePhysicsStats",
+        "SceneRuntimePhysicsWorldView",
         "SceneRuntimeProfile",
         "SceneRuntimeProfileContext",
         "SceneRuntimeProfilerListener",
@@ -7567,6 +7847,14 @@
       ],
       "hasDefaultExport": false,
       "subpaths": [
+        {
+          "path": "@axrone/scene-runtime/default-composition",
+          "exports": [
+            "getDefaultSceneRuntimeComposition",
+            "resolveSceneRuntimeComposition"
+          ],
+          "typeExports": []
+        },
         {
           "path": "@axrone/scene-runtime/errors",
           "exports": [
@@ -7662,6 +7950,10 @@
             "PrefabNodeBinding",
             "PrefabNodeBindingConfig",
             "ResolvedAnimationStreamingChunk",
+            "SceneAssetFacade",
+            "SceneBatchRuntimeFactory",
+            "SceneBatchRuntimeFactoryContext",
+            "SceneBatchRuntimeSet",
             "SceneCapabilityGuardHost",
             "SceneDirectGlPassGuard",
             "SceneDrawExecutionContextCache",
@@ -7669,6 +7961,7 @@
             "SceneDrawExecutorContext",
             "SceneFogMode",
             "SceneFogState",
+            "SceneGeometryMeshBuilder",
             "SceneLodEvaluator",
             "SceneParticleBatchRuntime",
             "SceneParticleBatchRuntimeOptions",
@@ -7686,12 +7979,14 @@
             "SceneRenderRuntimeOptions",
             "SceneRenderRuntimeParams",
             "SceneRenderStateApplier",
+            "SceneShaderDefinitionFromEffectOptions",
             "SceneSpriteBatchRuntime",
             "SceneSpriteRenderItemCollector",
             "bindAnimationStreamingBridge",
             "cloneSceneRenderPassDefinition",
             "createFetchAnimationStreamingResolver",
             "createRenderCacheCameraKey",
+            "createSceneShaderDefinitionFromEffect",
             "requireRegisteredComponent",
             "resolveSceneFogState"
           ],
@@ -7702,6 +7997,13 @@
             "SceneSpriteBatchRuntimeOptions",
             "SceneSpriteBatchRuntimeRenderStats"
           ]
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-2d-lean-composition",
+          "exports": [
+            "createLean2DSceneBatchRuntimes"
+          ],
+          "typeExports": []
         },
         {
           "path": "@axrone/scene-runtime/scene-2d-profile",
@@ -7915,7 +8217,6 @@
             "SceneDrawExecutor",
             "SceneFogUniformBinder",
             "SceneFrameUniformBinder",
-            "SceneGeometryMeshBuilder",
             "SceneLightingCollector",
             "SceneLightingUniformBinder",
             "SceneMaterialInstanceAdapter",
@@ -8062,6 +8363,40 @@
           ]
         },
         {
+          "path": "@axrone/scene-runtime/scene-asset-facade",
+          "exports": [
+            "SceneAssetFacade"
+          ],
+          "typeExports": []
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-batch-runtimes",
+          "exports": [
+            "createFullSceneBatchRuntimes"
+          ],
+          "typeExports": []
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-camera",
+          "exports": [
+            "Camera",
+            "resolveCameraVerticalFieldOfViewRadians"
+          ],
+          "typeExports": [
+            "CameraConfig",
+            "CameraFieldOfViewAxis"
+          ]
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-capability-guard",
+          "exports": [
+            "requireRegisteredComponent"
+          ],
+          "typeExports": [
+            "SceneCapabilityGuardHost"
+          ]
+        },
+        {
           "path": "@axrone/scene-runtime/scene-core-profile",
           "exports": [
             "CORE_SCENE_RUNTIME_PROFILE_ID",
@@ -8074,7 +8409,6 @@
           "exports": [
             "Camera",
             "DEFAULT_SCENE_FOG_STATE",
-            "SceneAssetFacade",
             "SceneAssetRuntime",
             "SceneLifecycleFacade",
             "SceneLifecycleRuntime",
@@ -8093,7 +8427,13 @@
             "SceneFogMode",
             "SceneFogState",
             "SceneLifecycleRuntimeOptions",
+            "SceneRuntimeComposition",
             "SceneRuntimeKernelOptions",
+            "SceneRuntimePhysicsBridge",
+            "SceneRuntimePhysicsBridgeInput",
+            "SceneRuntimePhysicsBridgeSelection",
+            "SceneRuntimePhysicsProfilerStats",
+            "SceneRuntimePhysicsWorldView",
             "SceneUIWidgetRef",
             "SceneUIWidgetRefResolver",
             "UIHostBillboardMode",
@@ -8111,12 +8451,30 @@
           "typeExports": []
         },
         {
+          "path": "@axrone/scene-runtime/scene-geometry-mesh-builder",
+          "exports": [
+            "SceneGeometryMeshBuilder"
+          ],
+          "typeExports": []
+        },
+        {
           "path": "@axrone/scene-runtime/scene-manifest-profile",
           "exports": [
             "createSceneManifestRuntimeProfile"
           ],
           "typeExports": [
             "SceneManifestRuntimeProfileOptions"
+          ]
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-mesh-renderer",
+          "exports": [
+            "MeshRenderer"
+          ],
+          "typeExports": [
+            "MeshRendererConfig",
+            "MeshRendererMorphConfig",
+            "MeshRendererSkinConfig"
           ]
         },
         {
@@ -8167,6 +8525,32 @@
           ]
         },
         {
+          "path": "@axrone/scene-runtime/scene-shader-effect",
+          "exports": [
+            "createSceneShaderDefinitionFromEffect"
+          ],
+          "typeExports": [
+            "SceneShaderDefinitionFromEffectOptions"
+          ]
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-sprite-renderer",
+          "exports": [
+            "SpriteRenderer"
+          ],
+          "typeExports": [
+            "SpriteRendererBorderInput",
+            "SpriteRendererBorderState",
+            "SpriteRendererColorInput",
+            "SpriteRendererConfig",
+            "SpriteRendererFrameApplyOptions",
+            "SpriteRendererRectInput",
+            "SpriteRendererRectState",
+            "SpriteRendererSizeInput",
+            "SpriteRendererVec2Input"
+          ]
+        },
+        {
           "path": "@axrone/scene-runtime/types",
           "exports": [],
           "typeExports": [
@@ -8175,6 +8559,7 @@
             "SceneCanvasOptions",
             "SceneClearFlag",
             "SceneComponentHost",
+            "SceneInstancingMode",
             "SceneLifecycle",
             "SceneLoopState",
             "SceneMaterialAlphaMode",
@@ -9767,6 +10152,7 @@
         "getUIHostBinding",
         "getUIHostRuntime",
         "intersectRayWithUIQuad",
+        "isSceneUIResourceResolverTarget",
         "orientQuadTowardCamera",
         "resolveFramebufferSize",
         "resolveUIWidgetRef",
@@ -9829,6 +10215,7 @@
           "exports": [
             "attachUIOverlayToScene",
             "createSceneUIResourceResolver",
+            "isSceneUIResourceResolverTarget",
             "resolveFramebufferSize"
           ],
           "typeExports": []
@@ -9876,6 +10263,10 @@
             "SCENE_CORE_BUILT_IN_MANIFEST",
             "SCENE_MIXED_RUNTIME_PROFILE_ID",
             "SceneActorSnapshot",
+            "SceneAssetFacade",
+            "SceneBatchRuntimeFactory",
+            "SceneBatchRuntimeFactoryContext",
+            "SceneBatchRuntimeSet",
             "SceneBuiltInComponentName",
             "SceneBuiltInManifest",
             "SceneBuiltInRegistry",
@@ -9886,6 +10277,7 @@
             "SceneClearFlag",
             "SceneComponentSnapshot",
             "SceneError",
+            "SceneInstancingMode",
             "SceneLifecycleError",
             "SceneLoopState",
             "SceneManifestRegistryBuilderOptions",
@@ -9959,6 +10351,7 @@
             "SceneSamplerHandle",
             "SceneSerializedValue",
             "SceneShaderDefinition",
+            "SceneShaderDefinitionFromEffectOptions",
             "SceneShaderError",
             "SceneShaderHandle",
             "SceneSnapshot",
@@ -9980,15 +10373,18 @@
             "cloneRenderShaderEffectDefinition",
             "compileRenderShaderEffect",
             "createFetchAnimationStreamingResolver",
+            "createFullSceneBatchRuntimes",
             "createSceneBuiltInManifest",
             "createSceneManifestRuntimeProfile",
             "createSceneRegistry",
             "createSceneRegistryFromBuiltInManifests",
             "createSceneRuntimeProfile",
+            "createSceneShaderDefinitionFromEffect",
             "get2DSceneRuntimeProfile",
             "get3DSceneRuntimeProfile",
             "getCoreSceneRuntimeProfile",
             "getDefaultSceneBuiltInRegistry",
+            "getDefaultSceneRuntimeComposition",
             "getDefaultSceneRuntimeProfile",
             "getMixedSceneRuntimeProfile",
             "getUIHostBinding",
@@ -9997,6 +10393,7 @@
             "resolvePhysicsBridgesForProfile",
             "resolveSceneBuiltInComponents",
             "resolveSceneRegistryFromProfile",
+            "resolveSceneRuntimeComposition",
             "resolveUIWidgetRef"
           ],
           "typeExports": [
@@ -10671,6 +11068,11 @@
       "name": "Actor",
       "package": "@axrone/ecs-runtime",
       "kind": "class"
+    },
+    {
+      "name": "ActorComponentEntry",
+      "package": "@axrone/ecs-runtime",
+      "kind": "interface"
     },
     {
       "name": "ActorConfig",
@@ -14793,6 +15195,11 @@
       "kind": "interface"
     },
     {
+      "name": "BeforeUpdateContext",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "BehaviorSubject",
       "package": "@axrone/observer",
       "kind": "class"
@@ -14973,6 +15380,11 @@
       "kind": "unknown"
     },
     {
+      "name": "BODY_FLAGS",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
       "name": "BodyFlags",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -15023,9 +15435,19 @@
       "kind": "class"
     },
     {
+      "name": "BodyOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "BodyType",
       "package": "@axrone/physics",
       "kind": "unknown"
+    },
+    {
+      "name": "BodyType",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
     },
     {
       "name": "BodyType",
@@ -15101,6 +15523,16 @@
       "name": "BoxCollider3D",
       "package": "@axrone/physics-3d",
       "kind": "class"
+    },
+    {
+      "name": "BoxCollider3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "BoxShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "Brand",
@@ -15403,6 +15835,11 @@
       "kind": "unknown"
     },
     {
+      "name": "bumpRenderMutationClock",
+      "package": "@axrone/ecs-runtime",
+      "kind": "const"
+    },
+    {
       "name": "Burst",
       "package": "@axrone/particle-system",
       "kind": "interface"
@@ -15560,7 +15997,7 @@
     {
       "name": "Camera",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "Camera3D",
@@ -15585,7 +16022,7 @@
     {
       "name": "CameraConfig",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "CameraCullingError",
@@ -15600,6 +16037,11 @@
     {
       "name": "CameraCullingErrorContext",
       "package": "@axrone/geometry",
+      "kind": "type"
+    },
+    {
+      "name": "CameraFieldOfViewAxis",
+      "package": "@axrone/scene-runtime",
       "kind": "type"
     },
     {
@@ -15708,6 +16150,11 @@
       "kind": "type"
     },
     {
+      "name": "CapsuleAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "CapsuleCollider2D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -15728,6 +16175,11 @@
       "kind": "class"
     },
     {
+      "name": "CapsuleCollider3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
       "name": "CapsuleDirection3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -15736,6 +16188,16 @@
       "name": "CapsuleDirection3D",
       "package": "@axrone/physics-3d",
       "kind": "unknown"
+    },
+    {
+      "name": "CapsuleDirection3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "unknown"
+    },
+    {
+      "name": "CapsuleShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "ChaCha20Engine",
@@ -15760,6 +16222,11 @@
     {
       "name": "CharacterController",
       "package": "@axrone/physics-3d",
+      "kind": "class"
+    },
+    {
+      "name": "CharacterController",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "class"
     },
     {
@@ -16188,6 +16655,11 @@
       "kind": "class"
     },
     {
+      "name": "Collider3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
       "name": "CollisionConfiguration",
       "package": "@axrone/particle-system",
       "kind": "interface"
@@ -16203,6 +16675,11 @@
       "kind": "unknown"
     },
     {
+      "name": "CollisionDetectionMode3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "unknown"
+    },
+    {
       "name": "CollisionEventType",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -16231,6 +16708,16 @@
       "name": "CollisionFlags",
       "package": "@axrone/physics-3d",
       "kind": "unknown"
+    },
+    {
+      "name": "CollisionFlags",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "unknown"
+    },
+    {
+      "name": "CollisionFlagsValue",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
     },
     {
       "name": "CollisionModule",
@@ -16441,6 +16928,81 @@
       "name": "ComparisonStrategy",
       "package": "@axrone/utility",
       "kind": "type"
+    },
+    {
+      "name": "CompatBodyDef",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatBodyHandle",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatCollisionEvent",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatCollisionEventType",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
+      "name": "CompatContactListener",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatContactManifold",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatContactPoint",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatMaterial",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatQuat",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatSensorEvent",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatSensorEventType",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
+      "name": "CompatShapeDef",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatStatistics",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatVec3",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "CompatWorldConfig",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "CompiledRenderShaderEffect",
@@ -16718,6 +17280,16 @@
       "kind": "class"
     },
     {
+      "name": "ConeAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "ConeShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "ConfigurableJoint3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -16813,6 +17385,16 @@
       "kind": "type"
     },
     {
+      "name": "ContactEventKind",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
+      "name": "ContactEventSnapshot",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "ContactId",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -16831,6 +17413,11 @@
       "name": "ContactManager2D",
       "package": "@axrone/physics-2d",
       "kind": "class"
+    },
+    {
+      "name": "ContactSnapshot",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "containsPoint",
@@ -17433,6 +18020,21 @@
       "kind": "unknown"
     },
     {
+      "name": "createFullSceneBatchRuntimes",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "createFullSceneBatchRuntimes",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "createFullSceneBatchRuntimes",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "createGameLoop",
       "package": "@axrone/game-loop",
       "kind": "const"
@@ -17609,6 +18211,11 @@
     },
     {
       "name": "createLazySceneUIWidgetRef",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "createLean2DSceneBatchRuntimes",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
@@ -17936,6 +18543,11 @@
       "name": "createRenderCacheCameraKey",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
+    },
+    {
+      "name": "createRenderMutationClock",
+      "package": "@axrone/ecs-runtime",
+      "kind": "const"
     },
     {
       "name": "createRenderPassGraph",
@@ -18563,6 +19175,11 @@
       "kind": "unknown"
     },
     {
+      "name": "createWasmPhysicsBridge3DSystems",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "function"
+    },
+    {
       "name": "createWebGL2RenderPassExecutorId",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -18663,6 +19280,11 @@
       "kind": "unknown"
     },
     {
+      "name": "CylinderAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "CylinderCollider3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -18671,6 +19293,16 @@
       "name": "CylinderCollider3D",
       "package": "@axrone/physics-3d",
       "kind": "class"
+    },
+    {
+      "name": "CylinderCollider3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "CylinderShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "DateComparer",
@@ -18715,6 +19347,11 @@
     {
       "name": "decodeBase64",
       "package": "@axrone/hash",
+      "kind": "function"
+    },
+    {
+      "name": "decodeBase64",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "function"
     },
     {
@@ -18848,6 +19485,11 @@
       "kind": "const"
     },
     {
+      "name": "DEFAULT_JOINT_DRIVE",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
       "name": "DEFAULT_JOINT_MOTOR",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -18855,6 +19497,11 @@
     {
       "name": "DEFAULT_JOINT_MOTOR",
       "package": "@axrone/physics-3d",
+      "kind": "const"
+    },
+    {
+      "name": "DEFAULT_JOINT_MOTOR",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "const"
     },
     {
@@ -19123,6 +19770,11 @@
       "kind": "const"
     },
     {
+      "name": "DEFAULT_SOFT_JOINT_LIMIT",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
       "name": "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -19130,6 +19782,11 @@
     {
       "name": "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
       "package": "@axrone/physics-3d",
+      "kind": "const"
+    },
+    {
+      "name": "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "const"
     },
     {
@@ -20373,8 +21030,23 @@
       "kind": "class"
     },
     {
+      "name": "FixedJoint3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "FixedJointOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "FixedUpdateContext",
       "package": "@axrone/game-loop",
+      "kind": "interface"
+    },
+    {
+      "name": "FixedUpdateContext",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -20685,6 +21357,11 @@
     {
       "name": "ForceMode3D",
       "package": "@axrone/physics-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "ForceMode3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "unknown"
     },
     {
@@ -21023,6 +21700,11 @@
       "kind": "interface"
     },
     {
+      "name": "GameLoopSystem",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "GameLoopSystemError",
       "package": "@axrone/game-loop",
       "kind": "class"
@@ -21258,6 +21940,11 @@
       "kind": "unknown"
     },
     {
+      "name": "getCreationTimestamp",
+      "package": "@axrone/ecs-runtime",
+      "kind": "const"
+    },
+    {
       "name": "getDateTimePickerValue",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -21274,6 +21961,21 @@
     },
     {
       "name": "getDefaultSceneBuiltInRegistry",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "getDefaultSceneRuntimeComposition",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "getDefaultSceneRuntimeComposition",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "getDefaultSceneRuntimeComposition",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
@@ -22843,6 +23545,16 @@
       "kind": "type"
     },
     {
+      "name": "HeightFieldAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "HeightFieldShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "HeightmapImageSource",
       "package": "@axrone/terrain",
       "kind": "interface"
@@ -22893,6 +23605,16 @@
       "kind": "class"
     },
     {
+      "name": "HingeJoint3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "HingeJointOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "HistogramBucket",
       "package": "@axrone/profiler",
       "kind": "interface"
@@ -22901,6 +23623,16 @@
       "name": "hitTestShape",
       "package": "@axrone/shapes-2d",
       "kind": "unknown"
+    },
+    {
+      "name": "HullAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "HullShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "HYSTERESIS_THRESHOLD",
@@ -23160,6 +23892,11 @@
     {
       "name": "ICharacterControllerConfig",
       "package": "@axrone/physics-3d",
+      "kind": "interface"
+    },
+    {
+      "name": "ICharacterControllerConfig",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -23733,6 +24470,11 @@
       "kind": "interface"
     },
     {
+      "name": "IJointDrive3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "IJointLimits3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -23743,6 +24485,11 @@
       "kind": "interface"
     },
     {
+      "name": "IJointLimits3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "IJointMotor3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -23750,6 +24497,11 @@
     {
       "name": "IJointMotor3D",
       "package": "@axrone/physics-3d",
+      "kind": "interface"
+    },
+    {
+      "name": "IJointMotor3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -23990,6 +24742,11 @@
     {
       "name": "IMutableCollisionFilter3D",
       "package": "@axrone/physics-3d",
+      "kind": "interface"
+    },
+    {
+      "name": "IMutableCollisionFilter3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -24638,6 +25395,11 @@
       "kind": "interface"
     },
     {
+      "name": "instantiateWasm",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "function"
+    },
+    {
       "name": "IntegerDistribution",
       "package": "@axrone/random",
       "kind": "class"
@@ -24724,6 +25486,11 @@
     },
     {
       "name": "INVALID_CONSTRAINT_ID",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
+      "name": "INVALID_CONSTRAINT_ID",
       "package": "@axrone/physics-core",
       "kind": "const"
     },
@@ -24756,6 +25523,11 @@
       "name": "INVALID_SHAPE_ID",
       "package": "@axrone/physics",
       "kind": "unknown"
+    },
+    {
+      "name": "INVALID_SHAPE_ID",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
     },
     {
       "name": "INVALID_SHAPE_ID",
@@ -24953,6 +25725,11 @@
       "kind": "interface"
     },
     {
+      "name": "IPhysicMaterial3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "IPhysicsBody2D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -24990,6 +25767,11 @@
     {
       "name": "IPhysicsBodyDef3D",
       "package": "@axrone/physics-core",
+      "kind": "interface"
+    },
+    {
+      "name": "IPhysicsCollisionHandler",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -25343,6 +26125,11 @@
       "kind": "interface"
     },
     {
+      "name": "IRigidbody3DConfig",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "IRopeConstraint2D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -25651,6 +26438,11 @@
       "name": "IScopedSingletonMetadata",
       "package": "@axrone/utility",
       "kind": "interface"
+    },
+    {
+      "name": "isCreationBatchOpen",
+      "package": "@axrone/ecs-runtime",
+      "kind": "const"
     },
     {
       "name": "isDateTimePickerEditing",
@@ -26068,6 +26860,11 @@
       "kind": "interface"
     },
     {
+      "name": "ISoftJointLimit3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "ISoftJointLimitSpring3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -26075,6 +26872,11 @@
     {
       "name": "ISoftJointLimitSpring3D",
       "package": "@axrone/physics-3d",
+      "kind": "interface"
+    },
+    {
+      "name": "ISoftJointLimitSpring3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "interface"
     },
     {
@@ -26251,6 +27053,11 @@
       "name": "isScenePrefabReference",
       "package": "@axrone/scene-prefab",
       "kind": "const"
+    },
+    {
+      "name": "isSceneUIResourceResolverTarget",
+      "package": "@axrone/ui-webgl2",
+      "kind": "unknown"
     },
     {
       "name": "isScopedSingleton",
@@ -26798,6 +27605,11 @@
       "kind": "const"
     },
     {
+      "name": "JOINT_CAPABILITY_3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
       "name": "Joint2D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -26815,6 +27627,11 @@
     {
       "name": "Joint3D",
       "package": "@axrone/physics-3d",
+      "kind": "class"
+    },
+    {
+      "name": "Joint3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "class"
     },
     {
@@ -26838,6 +27655,11 @@
       "kind": "type"
     },
     {
+      "name": "JointCapability3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
       "name": "JointDriveMode3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -26845,6 +27667,11 @@
     {
       "name": "JointDriveMode3D",
       "package": "@axrone/physics-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "JointDriveMode3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "unknown"
     },
     {
@@ -27468,6 +28295,11 @@
       "kind": "const"
     },
     {
+      "name": "loadEmbeddedWasm",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "function"
+    },
+    {
       "name": "loadGltfSceneIntoScene",
       "package": "@axrone/scene-runtime-gltf",
       "kind": "const"
@@ -27878,6 +28710,11 @@
       "kind": "function"
     },
     {
+      "name": "MeshAttachOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "MeshCollider3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -27885,6 +28722,11 @@
     {
       "name": "MeshCollider3D",
       "package": "@axrone/physics-3d",
+      "kind": "class"
+    },
+    {
+      "name": "MeshCollider3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "class"
     },
     {
@@ -28161,6 +29003,16 @@
       "name": "MutableObjectArena",
       "package": "@axrone/render-core",
       "kind": "unknown"
+    },
+    {
+      "name": "MutableQuat",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
+      "name": "MutableVec3",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
     },
     {
       "name": "NamespacedEventMap",
@@ -29193,6 +30045,11 @@
       "kind": "unknown"
     },
     {
+      "name": "PhysicMaterialCombine",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "unknown"
+    },
+    {
       "name": "PHYSICS_EPSILON",
       "package": "@axrone/numeric",
       "kind": "const"
@@ -29798,6 +30655,11 @@
       "kind": "class"
     },
     {
+      "name": "QuatTuple",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
       "name": "QueryCache",
       "package": "@axrone/ecs-runtime",
       "kind": "unknown"
@@ -29811,6 +30673,11 @@
       "name": "QueryFactory",
       "package": "@axrone/scene-3d",
       "kind": "unknown"
+    },
+    {
+      "name": "QueryFilter",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "QueryHandle",
@@ -30181,6 +31048,16 @@
       "name": "RaycastFlagsBuilder",
       "package": "@axrone/raycast",
       "kind": "class"
+    },
+    {
+      "name": "RaycastFractionHit",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "RaycastHit",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "RaycastHit3D",
@@ -31048,6 +31925,11 @@
       "kind": "enum"
     },
     {
+      "name": "RenderMutationClock",
+      "package": "@axrone/ecs-runtime",
+      "kind": "interface"
+    },
+    {
       "name": "RenderOpaquePassMetadata",
       "package": "@axrone/render-core",
       "kind": "unknown"
@@ -31655,7 +32537,7 @@
     {
       "name": "requireRegisteredComponent",
       "package": "@axrone/scene-runtime",
-      "kind": "const"
+      "kind": "unknown"
     },
     {
       "name": "resetDeferredAsync",
@@ -31726,6 +32608,11 @@
       "name": "resolveCameraCullingMessage",
       "package": "@axrone/geometry",
       "kind": "const"
+    },
+    {
+      "name": "resolveCameraVerticalFieldOfViewRadians",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "resolveCanvasScale",
@@ -32073,6 +32960,21 @@
       "kind": "unknown"
     },
     {
+      "name": "resolveSceneRenderCapabilities",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolveSceneRenderCapabilities",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolveSceneRenderCapabilities",
+      "package": "@axrone/scene-runtime",
+      "kind": "const"
+    },
+    {
       "name": "resolveSceneRuntimeBuiltInComponents",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
@@ -32086,6 +32988,21 @@
       "name": "resolveSceneRuntimeBuiltInComponents",
       "package": "@axrone/scene-runtime",
       "kind": "const"
+    },
+    {
+      "name": "resolveSceneRuntimeComposition",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolveSceneRuntimeComposition",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "resolveSceneRuntimeComposition",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "resolveSceneSkyLight",
@@ -32268,6 +33185,11 @@
       "kind": "class"
     },
     {
+      "name": "Rigidbody3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
       "name": "Rigidbody3DType",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -32275,6 +33197,11 @@
     {
       "name": "Rigidbody3DType",
       "package": "@axrone/physics-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "Rigidbody3DType",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "unknown"
     },
     {
@@ -32298,6 +33225,11 @@
       "kind": "unknown"
     },
     {
+      "name": "RigidbodyConstraints3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "unknown"
+    },
+    {
       "name": "RigidbodyInterpolation3D",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -32305,6 +33237,11 @@
     {
       "name": "RigidbodyInterpolation3D",
       "package": "@axrone/physics-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "RigidbodyInterpolation3D",
+      "package": "@axrone/physics-3d-wasm",
       "kind": "unknown"
     },
     {
@@ -32396,6 +33333,11 @@
       "name": "RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES",
       "package": "@axrone/runtime-profile-full",
       "kind": "unknown"
+    },
+    {
+      "name": "runWithinCreationBatch",
+      "package": "@axrone/ecs-runtime",
+      "kind": "const"
     },
     {
       "name": "safeDeserializeLightingRig",
@@ -32608,6 +33550,21 @@
       "kind": "unknown"
     },
     {
+      "name": "SCENE_RENDER_CAPABILITIES_ALL",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SCENE_RENDER_CAPABILITIES_ALL",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SCENE_RENDER_CAPABILITIES_ALL",
+      "package": "@axrone/scene-runtime",
+      "kind": "const"
+    },
+    {
       "name": "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
@@ -32646,6 +33603,11 @@
       "name": "Scene2D",
       "package": "@axrone/scene-2d",
       "kind": "class"
+    },
+    {
+      "name": "Scene2DBulkSpriteConfig",
+      "package": "@axrone/scene-2d",
+      "kind": "interface"
     },
     {
       "name": "scene2DRuntimeProfile",
@@ -32788,129 +33750,174 @@
       "kind": "unknown"
     },
     {
-      "name": "SceneBuiltInComponentName",
+      "name": "SceneBatchRuntimeFactory",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
     },
     {
-      "name": "SceneBuiltInComponentName",
+      "name": "SceneBatchRuntimeFactory",
       "package": "@axrone/scene-3d",
       "kind": "unknown"
     },
     {
-      "name": "SceneBuiltInComponentName",
+      "name": "SceneBatchRuntimeFactory",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "type"
     },
     {
-      "name": "SceneBuiltInManifest",
+      "name": "SceneBatchRuntimeFactoryContext",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
     },
     {
-      "name": "SceneBuiltInManifest",
+      "name": "SceneBatchRuntimeFactoryContext",
       "package": "@axrone/scene-3d",
       "kind": "unknown"
     },
     {
-      "name": "SceneBuiltInManifest",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneBuiltInRegistry",
-      "package": "@axrone/scene-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneBuiltInRegistry",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneBuiltInRegistry",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCameraFrameState",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCameraFrameState",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCameraFrameStateCollector",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCameraFrameStateCollector",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasError",
-      "package": "@axrone/scene-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasError",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasError",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasOptions",
-      "package": "@axrone/scene-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasOptions",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCanvasOptions",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityError",
-      "package": "@axrone/scene-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityError",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityError",
-      "package": "@axrone/scene-runtime",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityGuardHost",
-      "package": "@axrone/scene-2d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityGuardHost",
-      "package": "@axrone/scene-3d",
-      "kind": "unknown"
-    },
-    {
-      "name": "SceneCapabilityGuardHost",
+      "name": "SceneBatchRuntimeFactoryContext",
       "package": "@axrone/scene-runtime",
       "kind": "interface"
+    },
+    {
+      "name": "SceneBatchRuntimeSet",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBatchRuntimeSet",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBatchRuntimeSet",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneBuiltInComponentName",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInComponentName",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInComponentName",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInManifest",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInManifest",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInManifest",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInRegistry",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInRegistry",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneBuiltInRegistry",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCameraFrameState",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCameraFrameState",
+      "package": "@axrone/scene-runtime",
+      "kind": "type"
+    },
+    {
+      "name": "SceneCameraFrameStateCollector",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCameraFrameStateCollector",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasError",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasError",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasError",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasOptions",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasOptions",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCanvasOptions",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityError",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityError",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityError",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityGuardHost",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityGuardHost",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneCapabilityGuardHost",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "SceneClearFlag",
@@ -33093,6 +34100,21 @@
       "kind": "unknown"
     },
     {
+      "name": "SceneInstancingMode",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneInstancingMode",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneInstancingMode",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "SceneLifecycle",
       "package": "@axrone/scene-runtime",
       "kind": "unknown"
@@ -33214,6 +34236,11 @@
     },
     {
       "name": "SceneLoopState",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneLoopState",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
     },
@@ -33325,7 +34352,7 @@
     {
       "name": "SceneMaterialCloneEvent",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialCompareFunction",
@@ -33445,7 +34472,7 @@
     {
       "name": "SceneMaterialKeywordChangeEvent",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialLifecycleEvent",
@@ -33455,7 +34482,7 @@
     {
       "name": "SceneMaterialLifecycleEvent",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialObservables",
@@ -33465,7 +34492,7 @@
     {
       "name": "SceneMaterialObservables",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneMaterialPassDefinition",
@@ -33515,7 +34542,7 @@
     {
       "name": "SceneMaterialRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneMaterialResource",
@@ -33525,7 +34552,7 @@
     {
       "name": "SceneMaterialResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialShadeModel",
@@ -33610,7 +34637,7 @@
     {
       "name": "SceneMaterialTextureBinder",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneMaterialTextureBinderResources",
@@ -33620,7 +34647,7 @@
     {
       "name": "SceneMaterialTextureBinderResources",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialTextureBinding",
@@ -33630,7 +34657,7 @@
     {
       "name": "SceneMaterialTextureBinding",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialTextureBindingHandle",
@@ -33655,7 +34682,7 @@
     {
       "name": "SceneMaterialTextureChangeEvent",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialTextureSlot",
@@ -33665,7 +34692,7 @@
     {
       "name": "SceneMaterialTextureSlot",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialTextureUniformSetter",
@@ -33675,7 +34702,7 @@
     {
       "name": "SceneMaterialTextureUniformSetter",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "type"
     },
     {
       "name": "SceneMaterialUniformChangeEvent",
@@ -33685,7 +34712,7 @@
     {
       "name": "SceneMaterialUniformChangeEvent",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMaterialUvSet",
@@ -33755,7 +34782,7 @@
     {
       "name": "SceneMeshRegistrationResult",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMeshRegistry",
@@ -33765,7 +34792,7 @@
     {
       "name": "SceneMeshRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneMeshResource",
@@ -33775,7 +34802,7 @@
     {
       "name": "SceneMeshResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneMeshSemantic",
@@ -33905,7 +34932,7 @@
     {
       "name": "SceneParticleBatchRuntime",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneParticleBatchRuntimeOptions",
@@ -33915,7 +34942,7 @@
     {
       "name": "SceneParticleBatchRuntimeOptions",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneParticleBatchRuntimeRenderParams",
@@ -33925,7 +34952,7 @@
     {
       "name": "SceneParticleBatchRuntimeRenderParams",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneParticleBatchRuntimeRenderStats",
@@ -33935,7 +34962,7 @@
     {
       "name": "SceneParticleBatchRuntimeRenderStats",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "ScenePhysicsBridgeSelection",
@@ -34728,6 +35755,21 @@
       "kind": "interface"
     },
     {
+      "name": "SceneRenderCapabilities",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRenderCapabilities",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRenderCapabilities",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
       "name": "SceneRenderFrameState",
       "package": "@axrone/scene-3d",
       "kind": "unknown"
@@ -34735,7 +35777,7 @@
     {
       "name": "SceneRenderFrameState",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneRenderItem",
@@ -34810,7 +35852,7 @@
     {
       "name": "SceneRenderPassRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneRenderPassRegistryOptions",
@@ -34820,7 +35862,7 @@
     {
       "name": "SceneRenderPassRegistryOptions",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneRenderPassResource",
@@ -34830,7 +35872,7 @@
     {
       "name": "SceneRenderPassResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneRenderPipeline",
@@ -34920,7 +35962,7 @@
     {
       "name": "SceneRenderStateApplier",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneRenderStats",
@@ -34945,7 +35987,7 @@
     {
       "name": "SceneResourceRuntime",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneResourceRuntimeClearCallbacks",
@@ -34955,7 +35997,7 @@
     {
       "name": "SceneResourceRuntimeClearCallbacks",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneResourceRuntimeOptions",
@@ -34965,7 +36007,7 @@
     {
       "name": "SceneResourceRuntimeOptions",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneResourceRuntimeSerializationResult",
@@ -34975,7 +36017,7 @@
     {
       "name": "SceneResourceRuntimeSerializationResult",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneRuntimeBuiltInComponentName",
@@ -35023,6 +36065,21 @@
       "kind": "interface"
     },
     {
+      "name": "SceneRuntimeComposition",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimeComposition",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimeComposition",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
       "name": "SceneRuntimeFacade",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
@@ -35083,6 +36140,66 @@
       "kind": "unknown"
     },
     {
+      "name": "SceneRuntimePhysicsBridge",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridge",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridge",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeInput",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeInput",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeInput",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeSelection",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeSelection",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsBridgeSelection",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneRuntimePhysicsProfilerStats",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsProfilerStats",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsProfilerStats",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
       "name": "SceneRuntimePhysicsStats",
       "package": "@axrone/scene-2d",
       "kind": "unknown"
@@ -35094,6 +36211,21 @@
     },
     {
       "name": "SceneRuntimePhysicsStats",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "SceneRuntimePhysicsWorldView",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsWorldView",
+      "package": "@axrone/scene-3d",
+      "kind": "unknown"
+    },
+    {
+      "name": "SceneRuntimePhysicsWorldView",
       "package": "@axrone/scene-runtime",
       "kind": "interface"
     },
@@ -35340,7 +36472,7 @@
     {
       "name": "SceneSamplerRegistrationResult",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneSamplerRegistry",
@@ -35350,7 +36482,7 @@
     {
       "name": "SceneSamplerRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneSamplerResource",
@@ -35360,7 +36492,7 @@
     {
       "name": "SceneSamplerResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneSerializationHost",
@@ -35475,7 +36607,7 @@
     {
       "name": "SceneShaderRegistrationResult",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneShaderRegistry",
@@ -35485,7 +36617,7 @@
     {
       "name": "SceneShaderRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneShaderResource",
@@ -35495,7 +36627,7 @@
     {
       "name": "SceneShaderResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneShaderVariantResolver",
@@ -35665,17 +36797,17 @@
     {
       "name": "SceneSpriteBatchRuntime",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneSpriteBatchRuntimeOptions",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneSpriteBatchRuntimeRenderStats",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneSpriteRenderItemCollector",
@@ -35780,7 +36912,7 @@
     {
       "name": "SceneTextureRegistrationResult",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneTextureRegistry",
@@ -35790,7 +36922,7 @@
     {
       "name": "SceneTextureRegistry",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneTextureResource",
@@ -35800,7 +36932,7 @@
     {
       "name": "SceneTextureResource",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneTextureResourceHandle",
@@ -35900,7 +37032,7 @@
     {
       "name": "SceneUniformWriter",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "class"
     },
     {
       "name": "SceneUniformWriteTarget",
@@ -35910,7 +37042,7 @@
     {
       "name": "SceneUniformWriteTarget",
       "package": "@axrone/scene-runtime",
-      "kind": "unknown"
+      "kind": "interface"
     },
     {
       "name": "SceneVertexAttribute",
@@ -36558,6 +37690,11 @@
       "kind": "const"
     },
     {
+      "name": "Shape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
       "name": "Shape2D",
       "package": "@axrone/shapes-2d",
       "kind": "unknown"
@@ -36616,6 +37753,11 @@
       "name": "ShapeConfiguration",
       "package": "@axrone/particle-system",
       "kind": "interface"
+    },
+    {
+      "name": "ShapeFilter",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
     },
     {
       "name": "ShapeFingerprint",
@@ -36681,6 +37823,11 @@
       "name": "ShapeManager3D",
       "package": "@axrone/physics-3d",
       "kind": "class"
+    },
+    {
+      "name": "ShapeMaterial",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
     },
     {
       "name": "ShapeMesh2D",
@@ -36933,6 +38080,11 @@
       "kind": "class"
     },
     {
+      "name": "SliderJointOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "SliderOrientation",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -37143,6 +38295,16 @@
       "kind": "class"
     },
     {
+      "name": "SphereCollider3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "SphereShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "splitmix32",
       "package": "@axrone/hash",
       "kind": "function"
@@ -37256,6 +38418,16 @@
       "name": "SpringJoint3D",
       "package": "@axrone/physics-3d",
       "kind": "class"
+    },
+    {
+      "name": "SpringJoint3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "SpringJointOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "SpringSimulation",
@@ -37603,6 +38775,11 @@
       "kind": "unknown"
     },
     {
+      "name": "StepOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "STEPPER_CONTROLLER_TYPE",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -37621,6 +38798,11 @@
       "name": "StepperControllerState",
       "package": "@axrone/ui",
       "kind": "unknown"
+    },
+    {
+      "name": "StepStatistics",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "StopAction",
@@ -38583,6 +39765,11 @@
       "kind": "const"
     },
     {
+      "name": "TransformSnapshot",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "TRANSPARENT_COLOR",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -38616,6 +39803,11 @@
       "name": "TreeViewControllerState",
       "package": "@axrone/ui",
       "kind": "unknown"
+    },
+    {
+      "name": "TriangleMeshShape",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "TriangleShape",
@@ -39778,6 +40970,11 @@
       "kind": "unknown"
     },
     {
+      "name": "Vec3Tuple",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
       "name": "Vec4",
       "package": "@axrone/numeric",
       "kind": "class"
@@ -39873,6 +41070,11 @@
       "kind": "unknown"
     },
     {
+      "name": "VertexSource",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "type"
+    },
+    {
       "name": "ViewportString",
       "package": "@axrone/ui",
       "kind": "type"
@@ -39926,6 +41128,61 @@
       "name": "WallClockOptions",
       "package": "@axrone/profiler",
       "kind": "unknown"
+    },
+    {
+      "name": "WASM_PHYSICS_CAPABILITIES",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
+      "name": "WasmBodyType",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "const"
+    },
+    {
+      "name": "WasmCharacterController",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "WasmCharacterControllerOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "WasmPhysicsBridge3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "WasmPhysicsBridge3DOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "WasmPhysicsCapabilities",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "WasmPhysicsExports",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
+      "name": "WasmPhysicsWorld3D",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "WasmPhysicsWorld3DCompat",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "class"
+    },
+    {
+      "name": "WasmProfilerSnapshot",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
     },
     {
       "name": "WBuffer",
@@ -40358,6 +41615,11 @@
       "kind": "class"
     },
     {
+      "name": "WorldOptions",
+      "package": "@axrone/physics-3d-wasm",
+      "kind": "interface"
+    },
+    {
       "name": "WorldQueryArchetype",
       "package": "@axrone/ecs-runtime",
       "kind": "interface"
@@ -40600,7 +41862,7 @@
     {
       "name": "Actor",
       "kind": "class",
-      "code": "declare class Actor<TWorld extends World<any> = World<any>, TComponents extends readonly ComponentType[] = readonly ComponentType[]> { constructor(world: TWorld, config?: ActorConfig); get revision(): number; get name(): string; set name(value: string); get active(): boolean; set active(value: bool…",
+      "code": "declare class Actor<TWorld extends World<any> = World<any>, TComponents extends readonly ComponentType[] = readonly ComponentType[]> { get id(): ActorId; constructor(world: TWorld, config?: ActorConfig); get revision(): number; get name(): string; set name(value: string); get active(): boolean; set…",
       "package": "@axrone/ecs-runtime"
     },
     {
@@ -41720,6 +42982,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "BODY_FLAGS",
+      "kind": "const",
+      "code": "declare const BODY_FLAGS: Readonly<{ freezeRotationX: 1; freezeRotationY: 2; freezeRotationZ: 4; freezePositionX: 8; freezePositionY: 16; freezePositionZ: 32; }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "BodyManager2D",
       "kind": "class",
       "code": "declare class BodyManager2D extends SoAManager<BodySchema> { constructor(maxBodies?: number); get bodyCount(): number; createBody(def: IPhysicsBodyDef2D): BodyId; destroyBody(bodyId: BodyId): void; getPosition(bodyId: BodyId, out?: IVec2Output): IVec2Output; setPosition(bodyId: BodyId, position: Re…",
@@ -41754,6 +43022,12 @@
       "kind": "class",
       "code": "declare class BoxCollider3D extends Collider3D { get size(): Readonly<Vec3>; set size(value: IVec3Like); origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "BoxCollider3D",
+      "kind": "class",
+      "code": "declare class BoxCollider3D extends Collider3D { get size(): Readonly<Vec3>; set size(value: IVec3Like); origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "brandClipId",
@@ -42008,6 +43282,12 @@
       "package": "@axrone/render-core"
     },
     {
+      "name": "bumpRenderMutationClock",
+      "kind": "const",
+      "code": "declare const bumpRenderMutationClock: (clock: RenderMutationClock | null) => void;",
+      "package": "@axrone/ecs-runtime"
+    },
+    {
       "name": "BUTTON_FEEDBACK_CONTROLLER_TYPE",
       "kind": "const",
       "code": "declare const BUTTON_FEEDBACK_CONTROLLER_TYPE = \"button-feedback\";",
@@ -42176,6 +43456,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "CapsuleCollider3D",
+      "kind": "class",
+      "code": "declare class CapsuleCollider3D extends Collider3D { get radius(): number; set radius(value: number); get height(): number; set height(value: number); get direction(): CapsuleDirection3D; set direction(value: CapsuleDirection3D); origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "ChaCha20Engine",
       "kind": "class",
       "code": "declare class ChaCha20Engine implements IRandomEngine { constructor(seed?: SeedSource); next01: () => Float64; nextUint32: () => UInt32; nextUint64: () => UInt64; jumpAhead: (steps?: UInt64) => void; getState: () => IRandomState; setState: (state: IRandomState) => void; clone: () => IRandomEngine; …",
@@ -42198,6 +43484,12 @@
       "kind": "class",
       "code": "declare class CharacterController extends Component { get radius(): number; set radius(value: number); get height(): number; set height(value: number); get center(): Readonly<Vec3>; set center(value: IVec3Like); get slopeLimit(): number; set slopeLimit(value: number); get stepOffset(): number; … }",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "CharacterController",
+      "kind": "class",
+      "code": "declare class CharacterController extends Component { get radius(): number; set radius(value: number); get height(): number; set height(value: number); get center(): Readonly<Vec3>; set center(value: IVec3Like); get slopeLimit(): number; set slopeLimit(value: number); get stepOffset(): number; … }",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "CharacterJoint3D",
@@ -42462,6 +43754,12 @@
       "kind": "class",
       "code": "declare abstract class Collider3D extends Component { min: Vec3; max: Vec3; get shapeId(): ShapeId3D; get isTrigger(): boolean; set isTrigger(value: boolean); get providesContacts(): boolean; set providesContacts(value: boolean); get contactOffset(): number; get attachedRigidbody(): Rigidbody3D | n…",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "Collider3D",
+      "kind": "class",
+      "code": "declare abstract class Collider3D extends Component { min: Vec3; max: Vec3; get shapeId(): number; get isTrigger(): boolean; set isTrigger(value: boolean); get providesContacts(): boolean; set providesContacts(value: boolean); get contactOffset(): number; get attachedRigidbody(): Rigidbody3D | null…",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "CollisionModule",
@@ -43226,6 +44524,12 @@
       "package": "@axrone/render-webgl2"
     },
     {
+      "name": "createFullSceneBatchRuntimes",
+      "kind": "const",
+      "code": "declare const createFullSceneBatchRuntimes: SceneBatchRuntimeFactory;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "createGameLoop",
       "kind": "const",
       "code": "declare const createGameLoop: <TState>(options: GameLoopOptions<TState>) => GameLoop<TState>;",
@@ -43391,6 +44695,12 @@
       "name": "createLazySceneUIWidgetRef",
       "kind": "const",
       "code": "declare const createLazySceneUIWidgetRef: (resolveHost: () => unknown | null, widgetKey: string) => SceneUIWidgetRef;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "createLean2DSceneBatchRuntimes",
+      "kind": "const",
+      "code": "declare const createLean2DSceneBatchRuntimes: SceneBatchRuntimeFactory;",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -43716,6 +45026,12 @@
       "kind": "const",
       "code": "declare const createRenderCacheCameraKey: (cameraFrame: SceneCameraFrameState, viewport: RenderCacheViewport) => string;",
       "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "createRenderMutationClock",
+      "kind": "const",
+      "code": "declare const createRenderMutationClock: () => RenderMutationClock;",
+      "package": "@axrone/ecs-runtime"
     },
     {
       "name": "createRenderPassGraph",
@@ -44252,6 +45568,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "createWasmPhysicsBridge3DSystems",
+      "kind": "function",
+      "code": "declare function createWasmPhysicsBridge3DSystems(ecsWorld: AnyWorld, options?: WasmPhysicsBridge3DOptions): Promise<{ bridge: WasmPhysicsBridge3D; system: GameLoopSystem<SceneLoopState>; }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "createWebGL2RenderPassExecutorId",
       "kind": "const",
       "code": "declare const createWebGL2RenderPassExecutorId: <const K extends RenderPassKind>(kind: K, name: string) => WebGL2RenderPassExecutorId<K>;",
@@ -44312,6 +45634,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "CylinderCollider3D",
+      "kind": "class",
+      "code": "declare class CylinderCollider3D extends Collider3D { get radius(): number; set radius(value: number); get height(): number; set height(value: number); get axis(): CapsuleDirection3D; set axis(value: CapsuleDirection3D); origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "DateComparer",
       "kind": "class",
       "code": "declare class DateComparer implements Comparer<Date> { constructor(options?: Readonly<Pick<ComparerOptions$1, 'timezone'>>); compare(a: Date, b: Date): CompareResult; … }",
@@ -44352,6 +45680,12 @@
       "kind": "function",
       "code": "declare function decodeBase64(input: string): Uint8Array;",
       "package": "@axrone/hash"
+    },
+    {
+      "name": "decodeBase64",
+      "kind": "function",
+      "code": "declare function decodeBase64(base64: string): Uint8Array;",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "decodeHeightmapFromImageData",
@@ -44450,10 +45784,22 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "DEFAULT_JOINT_DRIVE",
+      "kind": "const",
+      "code": "declare const DEFAULT_JOINT_DRIVE: Readonly<IJointDrive3D>;",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "DEFAULT_JOINT_MOTOR",
       "kind": "const",
       "code": "declare const DEFAULT_JOINT_MOTOR: Readonly<IJointMotor3D>;",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "DEFAULT_JOINT_MOTOR",
+      "kind": "const",
+      "code": "declare const DEFAULT_JOINT_MOTOR: Readonly<IJointMotor3D>;",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "DEFAULT_LIGHTING_CAPACITY",
@@ -44600,10 +45946,22 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "DEFAULT_SOFT_JOINT_LIMIT",
+      "kind": "const",
+      "code": "declare const DEFAULT_SOFT_JOINT_LIMIT: Readonly<ISoftJointLimit3D>;",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
       "kind": "const",
       "code": "declare const DEFAULT_SOFT_JOINT_LIMIT_SPRING: Readonly<ISoftJointLimitSpring3D>;",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "DEFAULT_SOFT_JOINT_LIMIT_SPRING",
+      "kind": "const",
+      "code": "declare const DEFAULT_SOFT_JOINT_LIMIT_SPRING: Readonly<ISoftJointLimitSpring3D>;",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "DEFAULT_SPATIAL_CONFIG",
@@ -45362,6 +46720,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "FixedJoint3D",
+      "kind": "class",
+      "code": "declare class FixedJoint3D extends Joint3D {",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "FlameGraphBuilder",
       "kind": "class",
       "code": "declare class FlameGraphBuilder implements AsyncDisposable { recordFrame(functionName: string, durationNs?: bigint): void; recordSignature(functionName: string, signature?: string): void; getRoots(): readonly FlameGraphNode[]; … }",
@@ -45848,6 +47212,12 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "getCreationTimestamp",
+      "kind": "const",
+      "code": "declare const getCreationTimestamp: () => number;",
+      "package": "@axrone/ecs-runtime"
+    },
+    {
       "name": "getDateTimePickerValue",
       "kind": "const",
       "code": "declare const getDateTimePickerValue: (runtime: UIRuntime, widget: WidgetId) => string | null;",
@@ -45857,6 +47227,12 @@
       "name": "getDefaultSceneBuiltInRegistry",
       "kind": "const",
       "code": "declare const getDefaultSceneBuiltInRegistry: () => SceneBuiltInRegistry;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "getDefaultSceneRuntimeComposition",
+      "kind": "const",
+      "code": "declare const getDefaultSceneRuntimeComposition: <R extends ComponentRegistry = Record<string, never>>() => SceneRuntimeComposition<R>;",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -46706,6 +48082,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "HingeJoint3D",
+      "kind": "class",
+      "code": "declare class HingeJoint3D extends Joint3D { get useLimits(): boolean; set useLimits(value: boolean); get limits(): Readonly<IJointLimits3D>; set limits(value: Partial<IJointLimits3D>); get useMotor(): boolean; set useMotor(value: boolean); get motor(): Readonly<IJointMotor3D>; set motor(value: Par…",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "hitTestShape",
       "kind": "const",
       "code": "declare const hitTestShape: (shape: Shape2D, point: ShapePointInput, options?: ShapeApproximationOptions) => ShapeHitTarget;",
@@ -46796,6 +48178,12 @@
       "package": "@axrone/input"
     },
     {
+      "name": "instantiateWasm",
+      "kind": "function",
+      "code": "declare function instantiateWasm(bytes: Uint8Array): Promise<WasmPhysicsExports>;",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "IntegerDistribution",
       "kind": "class",
       "code": "declare class IntegerDistribution implements IDistribution<number> { constructor(min: number, max: number); sample: (state: IRandomState) => RandomResult<number>; … }",
@@ -46870,6 +48258,12 @@
     {
       "name": "INVALID_CONSTRAINT_ID",
       "kind": "const",
+      "code": "declare const INVALID_CONSTRAINT_ID = -1;",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "INVALID_CONSTRAINT_ID",
+      "kind": "const",
       "code": "declare const INVALID_CONSTRAINT_ID: ConstraintId;",
       "package": "@axrone/physics-core"
     },
@@ -46884,6 +48278,12 @@
       "kind": "const",
       "code": "declare const INVALID_CONTACT_ID: ContactId;",
       "package": "@axrone/physics-core"
+    },
+    {
+      "name": "INVALID_SHAPE_ID",
+      "kind": "const",
+      "code": "declare const INVALID_SHAPE_ID = -1;",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "INVALID_SHAPE_ID",
@@ -47130,6 +48530,12 @@
       "kind": "const",
       "code": "declare const isConvexPolygon: (points: ArrayLike<number>) => boolean;",
       "package": "@axrone/shapes-2d"
+    },
+    {
+      "name": "isCreationBatchOpen",
+      "kind": "const",
+      "code": "declare const isCreationBatchOpen: () => boolean;",
+      "package": "@axrone/ecs-runtime"
     },
     {
       "name": "isDateTimePickerEditing",
@@ -47450,6 +48856,12 @@
       "package": "@axrone/scene-prefab"
     },
     {
+      "name": "isSceneUIResourceResolverTarget",
+      "kind": "const",
+      "code": "declare const isSceneUIResourceResolverTarget: (value: SceneUIOverlayTarget) => value is SceneUIOverlayTarget & SceneUIResourceResolverTarget;",
+      "package": "@axrone/ui-webgl2"
+    },
+    {
       "name": "isScopedSingleton",
       "kind": "function",
       "code": "declare function isScopedSingleton<T = unknown>(value: unknown): value is IScopedSingleton<T>;",
@@ -47642,6 +49054,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "JOINT_CAPABILITY_3D",
+      "kind": "const",
+      "code": "declare const JOINT_CAPABILITY_3D: { readonly FIXED: \"full\"; readonly SPRING: \"full\"; readonly HINGE: \"full\"; }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "Joint2D",
       "kind": "class",
       "code": "declare abstract class Joint2D extends Component { get constraintId(): ConstraintId | null; get connectedBody(): Rigidbody2D | null; set connectedBody(value: Rigidbody2D | null); get enableCollision(): boolean; set enableCollision(value: boolean); get breakForce(): number; set breakForce(value: num…",
@@ -47652,6 +49070,12 @@
       "kind": "class",
       "code": "declare abstract class Joint3D extends Component { get constraintId(): ConstraintId3D; get connectedBody(): Rigidbody3D | null; set connectedBody(value: Rigidbody3D | null); get autoConfigureConnectedAnchor(): boolean; set autoConfigureConnectedAnchor(value: boolean); get anchor(): Readonly<Vec3>; …",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "Joint3D",
+      "kind": "class",
+      "code": "declare abstract class Joint3D extends Component { get constraintId(): number; get connectedBody(): Rigidbody3D | null; set connectedBody(value: Rigidbody3D | null); get autoConfigureConnectedAnchor(): boolean; set autoConfigureConnectedAnchor(value: boolean); get anchor(): Readonly<Vec3>; set anch…",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "KeyComparer",
@@ -47886,6 +49310,12 @@
       "kind": "const",
       "code": "declare const LN2: number;",
       "package": "@axrone/random"
+    },
+    {
+      "name": "loadEmbeddedWasm",
+      "kind": "function",
+      "code": "declare function loadEmbeddedWasm(): Promise<WasmPhysicsExports>;",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "loadGltfSceneIntoScene",
@@ -48192,6 +49622,12 @@
       "kind": "class",
       "code": "declare class MeshCollider3D extends Collider3D { get convex(): boolean; set convex(value: boolean); get vertices(): Readonly<Float32Array>; get indices(): Readonly<Uint32Array>; setMesh(vertices: Float32Array, indices: Uint32Array): void; origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "MeshCollider3D",
+      "kind": "class",
+      "code": "declare class MeshCollider3D extends Collider3D { get convex(): boolean; set convex(value: boolean); get vertices(): Readonly<Float32Array>; get indices(): Readonly<Uint32Array>; setMesh(vertices: Float32Array, indices: Uint32Array): void; origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "MeshError",
@@ -49844,6 +51280,12 @@
       "package": "@axrone/geometry"
     },
     {
+      "name": "resolveCameraVerticalFieldOfViewRadians",
+      "kind": "const",
+      "code": "declare const resolveCameraVerticalFieldOfViewRadians: (fieldOfViewDegrees: number, fieldOfViewAxis: CameraFieldOfViewAxis, aspectRatio: number) => number;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "resolveContext",
       "kind": "const",
       "code": "declare const resolveContext: (source: ContextSource) => IGLContext;",
@@ -50006,9 +51448,21 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "resolveSceneRenderCapabilities",
+      "kind": "const",
+      "code": "declare const resolveSceneRenderCapabilities: (registry: Readonly<Record<string, unknown>> | undefined) => SceneRenderCapabilities;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "resolveSceneRuntimeBuiltInComponents",
       "kind": "const",
       "code": "declare const resolveSceneRuntimeBuiltInComponents: (manifests?: readonly SceneRuntimeBuiltInManifest<readonly SceneRuntimeBuiltInComponentName[]>[]) => readonly SceneRuntimeBuiltInComponentName[];",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "resolveSceneRuntimeComposition",
+      "kind": "const",
+      "code": "declare const resolveSceneRuntimeComposition: <R extends ComponentRegistry = Record<string, never>>(composition: SceneRuntimeComposition<R> | undefined) => SceneRuntimeComposition<R>;",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -50138,6 +51592,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "Rigidbody3D",
+      "kind": "class",
+      "code": "declare class Rigidbody3D extends Component { get bodyId(): number; get bodyType(): Rigidbody3DType; set bodyType(value: Rigidbody3DType); get mass(): number; set mass(value: number); get linearDamping(): number; set linearDamping(value: number); get angularDamping(): number; set angularDamping(val…",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "RigidbodyType2D",
       "kind": "enum",
       "code": "declare enum RigidbodyType2D { Static = 0, Kinematic = 1, Dynamic = 2 }",
@@ -50220,6 +51680,12 @@
       "kind": "const",
       "code": "declare const RUNTIME_PROFILE_FULL_CAPABILITY_PACKAGES: readonly string[];",
       "package": "@axrone/runtime-profile-full"
+    },
+    {
+      "name": "runWithinCreationBatch",
+      "kind": "const",
+      "code": "declare const runWithinCreationBatch: <T>(work: () => T) => T;",
+      "package": "@axrone/ecs-runtime"
     },
     {
       "name": "safeDeserializeLightingRig",
@@ -50308,7 +51774,7 @@
     {
       "name": "Scene",
       "kind": "class",
-      "code": "declare class Scene<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> { constructor(options?: SceneOptions<R>); createCameraActor(actorConfig?: ActorConfig, cameraConfig?: CameraConfig): Actor<World<SceneRegistry<R>>>; createRenderableActor(actorConfig?: ActorConfig, …",
+      "code": "declare class Scene$1<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> { constructor(options?: SceneOptions<R>); createCameraActor(actorConfig?: ActorConfig, cameraConfig?: CameraConfig): Actor<World<SceneRegistry<R>>>; createRenderableActor(actorConfig?: ActorConfig…",
       "package": "@axrone/scene-3d"
     },
     {
@@ -50354,6 +51820,12 @@
       "package": "@axrone/scene-runtime"
     },
     {
+      "name": "SCENE_RENDER_CAPABILITIES_ALL",
+      "kind": "const",
+      "code": "declare const SCENE_RENDER_CAPABILITIES_ALL: SceneRenderCapabilities;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
       "kind": "const",
       "code": "declare const SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST: SceneRuntimeBuiltInManifest<readonly [\"Hierarchy\", \"Transform\", \"PrefabNodeBinding\"]>;",
@@ -50374,7 +51846,7 @@
     {
       "name": "Scene2D",
       "kind": "class",
-      "code": "declare class Scene2D<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> { constructor(options?: SceneOptions<R>); createCameraActor(actorConfig?: ActorConfig, cameraConfig?: CameraConfig): _axrone_ecs_runtime.Actor<_axrone_ecs_runtime.World<_axrone_scene_runtime.Scene…",
+      "code": "declare class Scene2D$1<R extends ComponentRegistry = Record<string, never>> extends SceneAssetFacade<R> { constructor(options?: SceneOptions<R>, actorsComposition?: Scene2DActorComposition<R>); createCameraActor(actorConfig?: ActorConfig, cameraConfig?: CameraConfig): _axrone_ecs_runtime.Actor<_ax…",
       "package": "@axrone/scene-2d"
     },
     {
@@ -50458,7 +51930,7 @@
     {
       "name": "SceneDrawExecutor",
       "kind": "class",
-      "code": "declare class SceneDrawExecutor { constructor(_dependencies: SceneDrawExecutorDependencies); resetState(): void; execute(item: SceneRenderItem, context: SceneDrawExecutorContext, frameState: SceneRenderFrameState): void; … }",
+      "code": "declare class SceneDrawExecutor { constructor(_dependencies: SceneDrawExecutorDependencies); resetState(): void; flushTextureBindings(): void; invalidateTextureBindings(): void; execute(item: SceneRenderItem, context: SceneDrawExecutorContext, frameState: SceneRenderFrameState): void; … }",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -51332,6 +52804,12 @@
       "package": "@axrone/physics-3d"
     },
     {
+      "name": "SphereCollider3D",
+      "kind": "class",
+      "code": "declare class SphereCollider3D extends Collider3D { get radius(): number; set radius(value: number); origin: IVec3Like; direction: IVec3Like; hit: boolean; … }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "splitmix32",
       "kind": "function",
       "code": "declare function splitmix32(state: number): number;",
@@ -51390,6 +52868,12 @@
       "kind": "class",
       "code": "declare class SpringJoint3D extends Joint3D { get minDistance(): number; set minDistance(value: number); get maxDistance(): number; set maxDistance(value: number); get springValue(): number; set springValue(value: number); get damper(): number; set damper(value: number); get tolerance(): number; … }",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "SpringJoint3D",
+      "kind": "class",
+      "code": "declare class SpringJoint3D extends Joint3D { get minDistance(): number; set minDistance(value: number); get maxDistance(): number; set maxDistance(value: number); get springValue(): number; set springValue(value: number); get damper(): number; set damper(value: number); get tolerance(): number; … }",
+      "package": "@axrone/physics-3d-wasm"
     },
     {
       "name": "SpringSimulation",
@@ -51898,7 +53382,7 @@
     {
       "name": "Transform",
       "kind": "class",
-      "code": "declare class Transform extends Component { get position(): Vec3; set position(value: Vec3); get rotation(): Quat; set rotation(value: Quat); get scale(): Vec3; set scale(value: Vec3); get parent(): Transform | undefined; set parent(value: Transform | undefined); get children(): readonly Transform[…",
+      "code": "declare class Transform extends Component { get position(): Vec3; set position(value: Vec3); get rotation(): Quat; set rotation(value: Quat); get scale(): Vec3; set scale(value: Vec3); setLocalTRS(position: Readonly<Vec3>, rotation: Readonly<Quat>, scale: Readonly<Vec3>): void; setLocalTRS2D(x: num…",
       "package": "@axrone/ecs-runtime"
     },
     {
@@ -52472,6 +53956,42 @@
       "package": "@axrone/tween"
     },
     {
+      "name": "WASM_PHYSICS_CAPABILITIES",
+      "kind": "const",
+      "code": "declare const WASM_PHYSICS_CAPABILITIES: WasmPhysicsCapabilities;",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "WasmBodyType",
+      "kind": "const",
+      "code": "declare const WasmBodyType: Readonly<{ readonly static: 0; readonly kinematic: 1; readonly dynamic: 2; }",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "WasmCharacterController",
+      "kind": "class",
+      "code": "declare class WasmCharacterController { constructor(options: WasmCharacterControllerOptions); get radius(): number; set radius(value: number); get height(): number; set height(value: number); get skinWidth(): number; set skinWidth(value: number); get slopeLimitAngle(): number; set slopeLimitAngle(v…",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "WasmPhysicsBridge3D",
+      "kind": "class",
+      "code": "declare class WasmPhysicsBridge3D implements GameLoopSystem<SceneLoopState>, CompatContactListener { get physicsWorld(): WasmPhysicsWorld3DCompat; get isDisposed(): boolean; beforeUpdate(_context: BeforeUpdateContext<SceneLoopState>): void; fixedUpdate(context: FixedUpdateContext<SceneLoopState>): …",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "WasmPhysicsWorld3D",
+      "kind": "class",
+      "code": "declare class WasmPhysicsWorld3D { createBody(options: BodyOptions): number; attachSphere(id: number, radius: number, density?: number): void; attachBox(id: number, halfExtents: Vec3Tuple, density?: number): void; attachCapsule(id: number, options: CapsuleAttachOptions): number; attachCylinder(id: …",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "WasmPhysicsWorld3DCompat",
+      "kind": "class",
+      "code": "declare class WasmPhysicsWorld3DCompat { get bodyCount(): number; get contactCount(): number; createBody(def?: CompatBodyDef): number; destroyBody(bodyId: number): void; createBoxShape(bodyId: number, def: CompatShapeDef, material?: CompatMaterial): number; createSphereShape(bodyId: number, def: Co…",
+      "package": "@axrone/physics-3d-wasm"
+    },
+    {
       "name": "WBuffer",
       "kind": "const",
       "code": "declare const WBuffer: Readonly<{ createBufferFactory: (source: ContextSource) => IBufferFactory; createTypedArrayFromBuffer: <T extends ArrayBufferView>(buffer: ArrayBuffer | SharedArrayBuffer, type: new (buffer: ArrayBufferLike, byteOffset?: number, length?: number) => T, byteOffset?: number, len…",
@@ -52564,7 +54084,7 @@
     {
       "name": "World",
       "kind": "class",
-      "code": "declare class World<R extends ComponentRegistry> { constructor(registry: R, config?: WorldConfig); get registry(): Readonly<R>; get state(): WorldState; get isReady(): boolean; get isDisposed(): boolean; get metrics(): Readonly<WorldMetrics> | null; createEntity(): Entity; createEntityWithComponent…",
+      "code": "declare class World<R extends ComponentRegistry> { constructor(registry: R, config?: WorldConfig); get registry(): Readonly<R>; get state(): WorldState; get isReady(): boolean; get isDisposed(): boolean; get renderRevision(): number; get renderMutationClock(): RenderMutationClock; get metrics(): Re…",
       "package": "@axrone/ecs-runtime"
     },
     {
@@ -52594,7 +54114,7 @@
     {
       "name": "WorldMutationRuntime",
       "kind": "class",
-      "code": "declare class WorldMutationRuntime<R extends ComponentRegistry> { constructor(_options: WorldMutationRuntimeOptions<R>); createEntity(): Entity; createEntityWithComponents(components: Record<string, unknown>): Entity; destroyEntity(entity: Entity): void; registerActor(entity: Entity, actor: Actor):…",
+      "code": "declare class WorldMutationRuntime<R extends ComponentRegistry> { constructor(_options: WorldMutationRuntimeOptions<R>); createEntity(): Entity; createEntityWithComponents(components: Record<string, unknown>): Entity; createEntitiesWithComponentsBulk(componentSets: readonly Readonly<Record<string, …",
       "package": "@axrone/ecs-runtime"
     },
     {
