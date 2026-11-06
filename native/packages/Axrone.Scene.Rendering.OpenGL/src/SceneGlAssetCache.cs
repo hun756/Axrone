@@ -1,5 +1,7 @@
 namespace Axrone.Scene.Rendering.OpenGL;
 
+using System.Collections.Immutable;
+using Axrone.AssetShader;
 using Axrone.Render.Core;
 
 /// <summary>Upload counters for one asset-cache synchronization.</summary>
@@ -28,6 +30,9 @@ public sealed class SceneGlAssetCache : IDisposable
     private readonly Dictionary<SceneAssetId<SamplerAssetTag>, GLSampler> _samplers = new();
     private readonly Dictionary<SceneAssetId<TextureAssetTag>, SceneAssetId<SamplerAssetTag>?> _textureSamplers = new();
     private readonly GLSampler _defaultSampler;
+    private readonly SceneGlEffectPrograms _effectPrograms;
+    private readonly Dictionary<SceneAssetId<ShaderAssetTag>, ImmutableArray<SceneGlEffectPass>> _effectPasses = new();
+    private readonly HashSet<SceneGlShader> _effectOwned = new();
     private int _unskinnableShaderCount;
     private bool _disposed;
 
@@ -39,6 +44,7 @@ public sealed class SceneGlAssetCache : IDisposable
 
         _context = context;
         _assets = assets;
+        _effectPrograms = new SceneGlEffectPrograms(context);
         _defaultSampler = new GLSampler(context, "scene-default-sampler");
         _defaultSampler.SetFilter(GLConst.Linear, GLConst.Linear).Apply();
     }
@@ -112,14 +118,30 @@ public sealed class SceneGlAssetCache : IDisposable
         _context.AssertRenderThread();
 
         string label = definition.Id.ToString();
-        string fragmentSource = SceneGlMaterialShaderComposer.ComposeFragmentSource(definition.FragmentSource);
-        var shader = new SceneGlShader(
-            _context,
-            label,
-            definition.VertexSource,
-            fragmentSource);
+        string fragmentSource = string.Empty;
+        SceneGlShader shader;
+        if (definition.Effect is { } effect)
+        {
+            ImmutableArray<SceneGlEffectPass> passes = _effectPrograms.ResolveTechnique(effect, null, null);
+            _effectPasses[definition.Id] = passes;
+            shader = passes[0].Shader;
+            for (int i = 0; i < passes.Length; i++)
+            {
+                _effectOwned.Add(passes[i].Shader);
+            }
+        }
+        else
+        {
+            _ = _effectPasses.Remove(definition.Id);
+            fragmentSource = SceneGlMaterialShaderComposer.ComposeFragmentSource(definition.FragmentSource);
+            shader = new SceneGlShader(
+                _context,
+                label,
+                definition.VertexSource,
+                fragmentSource);
+        }
 
-        if (_shaders.TryGetValue(definition.Id, out SceneGlShader? previous))
+        if (_shaders.TryGetValue(definition.Id, out SceneGlShader? previous) && !_effectOwned.Contains(previous))
         {
             previous.Dispose();
         }
@@ -136,7 +158,12 @@ public sealed class SceneGlAssetCache : IDisposable
             _unskinnableShaderCount--;
         }
 
-        (SceneGlShader? skinned, SkinningInjectionFailure failure) = CompileSkinnedShader(definition, label, fragmentSource);
+        SceneGlShader? skinned = null;
+        SkinningInjectionFailure failure = SkinningInjectionFailure.EffectAuthored;
+        if (definition.Effect is null)
+        {
+            (skinned, failure) = CompileSkinnedShader(definition, label, fragmentSource);
+        }
         _skinnedShaders[definition.Id] = skinned;
         _skinningDiagnostics[definition.Id] = new SkinningShaderDiagnostic(definition.Id, skinned is not null, failure);
         if (skinned is null)
@@ -612,14 +639,29 @@ public sealed class SceneGlAssetCache : IDisposable
         texture.UploadSubData2D(pixels, 0, 0, definition.Width, definition.Height);
     }
 
+    /// <summary>Effect passes resolved for a shader asset, when an effect backs it.</summary>
+    /// <param name="id">Shader asset identity.</param>
+    /// <param name="passes">Resolved passes in technique order.</param>
+    /// <returns><see langword="true"/> when an effect backs the shader.</returns>
+    public bool TryGetEffectPasses(
+        SceneAssetId<ShaderAssetTag> id,
+        out ImmutableArray<SceneGlEffectPass> passes) =>
+        _effectPasses.TryGetValue(id, out passes);
+
     private void DisposeResources()
     {
         foreach (SceneGlShader shader in _shaders.Values)
         {
-            shader.Dispose();
+            if (!_effectOwned.Contains(shader))
+            {
+                shader.Dispose();
+            }
         }
 
         _shaders.Clear();
+        _effectPasses.Clear();
+        _effectOwned.Clear();
+        _effectPrograms.Dispose();
 
         foreach (SceneGlShader? skinnedShader in _skinnedShaders.Values)
         {

@@ -1,6 +1,7 @@
 namespace Axrone.Scene.Assets;
 
 using System.Collections.Frozen;
+using Axrone.AssetShader;
 
 /// <summary>
 /// Immutable shader definition: source pair, reflected uniform names and the
@@ -17,7 +18,8 @@ public sealed class SceneShaderDefinition : ISceneAssetDefinition<ShaderAssetTag
         IReadOnlyDictionary<SceneMeshSemantic, string>? attributes = null,
         bool depthTest = true,
         bool cull = true,
-        bool blend = false)
+        bool blend = false,
+        ShaderEffect? effect = null)
     {
         if (!id.IsValid)
         {
@@ -50,10 +52,18 @@ public sealed class SceneShaderDefinition : ISceneAssetDefinition<ShaderAssetTag
         DepthTest = depthTest;
         Cull = cull;
         Blend = blend;
+        Effect = effect;
     }
 
     /// <inheritdoc/>
     public SceneAssetId<ShaderAssetTag> Id { get; }
+
+    /// <summary>
+    /// Effect that backs this shader, or null when the raw source pair is authoritative. When an
+    /// effect is present the renderer compiles its technique passes through the variant baker
+    /// instead of the raw strings, so keywords and pass overrides become real GPU programs.
+    /// </summary>
+    public ShaderEffect? Effect { get; }
 
     /// <summary>Vertex shader source.</summary>
     public string VertexSource { get; }
