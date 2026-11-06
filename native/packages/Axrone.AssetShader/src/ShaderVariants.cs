@@ -263,6 +263,11 @@ public static class ShaderVariantSystem
         ShaderKeywordSelection selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
+        if (keywords.IsDefaultOrEmpty)
+        {
+            return ImmutableDictionary<ShaderSymbol, string>.Empty;
+        }
+
         ImmutableDictionary<ShaderSymbol, string>.Builder builder = ImmutableDictionary.CreateBuilder<ShaderSymbol, string>();
 
         foreach (ShaderKeywordDefinition kw in keywords)
