@@ -1,5 +1,7 @@
 namespace Axrone.Scene.Rendering.OpenGL;
 
+using Axrone.Render.OpenGL.Pipeline;
+
 /// <summary>
 /// Executes a planned frame across every active render path. For each pass it
 /// submits 3D meshes through the draw executor, 2D sprites through the sprite
@@ -22,8 +24,23 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     private readonly ISceneGlShadowSource? _shadow;
     private readonly bool _hasSpriteComponent;
     private readonly bool _hasInstancedComponent;
+    private readonly SceneGlRenderPipeline _pipeline;
+    private ScenePassWork _work;
     private SceneGlPrimitiveBatchRenderer? _primitiveRenderer;
     private bool _disposed;
+
+    /// <summary>Frame arguments a dispatched pass executes against.</summary>
+    /// <param name="World">World whose actors are submitted.</param>
+    /// <param name="Camera">Active camera frame.</param>
+    /// <param name="Items">Planned frame items.</param>
+    /// <param name="FrameState">Frame counter accumulator.</param>
+    /// <param name="ElapsedSeconds">Elapsed time for the frame.</param>
+    private readonly record struct ScenePassWork(
+        SceneWorld World,
+        SceneCameraFrame Camera,
+        ISceneFrameItemSource Items,
+        SceneRenderFrameState FrameState,
+        float ElapsedSeconds);
 
     /// <summary>Creates an orchestrator over an uploaded GPU asset cache.</summary>
     /// <param name="context">Render-thread GL context.</param>
@@ -72,6 +89,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         _meshExecutor = new SceneGlDrawExecutor(context, assets);
         _spriteRenderer = new SceneGlSpriteBatchRenderer(context, assets);
         _hasSpriteComponent = world.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
+        _pipeline = new SceneGlRenderPipeline(context);
+        _pipeline.Register(Axrone.Render.Core.PassKind.Opaque, ExecuteScenePass);
 
         if (particles is not null)
         {
@@ -95,6 +114,9 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     /// <summary>Mesh executor used by the orchestrator (diagnostics/tests).</summary>
     internal SceneGlDrawExecutor MeshExecutor => _meshExecutor;
 
+    /// <summary>Pipeline backend the frame is dispatched through (diagnostics/tests).</summary>
+    internal SceneGlRenderPipeline Pipeline => _pipeline;
+
     /// <summary>
     /// Renders every enabled pass and returns the accumulated frame counters.
     /// </summary>
@@ -104,7 +126,9 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         ISceneFrameItemSource items,
         ReadOnlySpan<SceneRenderPassDefinition> passes,
         SceneRenderFrameState frameState,
-        float elapsedSeconds = 0.0f)
+        float elapsedSeconds = 0.0f,
+        int backbufferWidth = 0,
+        int backbufferHeight = 0)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(world);
@@ -112,101 +136,120 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(frameState);
 
-        int passCount = 0;
-
-        for (int i = 0; i < passes.Length; i++)
+        _work = new ScenePassWork(world, camera, items, frameState, elapsedSeconds);
+        RenderFrameResult result;
+        try
         {
-            SceneRenderPassDefinition pass = passes[i];
-
-            ReadOnlySpan<SceneRenderItem> meshes = items.CollectMeshes(pass.Id);
-            _meshExecutor.Render(
-                world,
-                camera,
-                meshes,
-                items.Lighting,
-                pass,
-                frameState,
-                elapsedSeconds,
-                items.Fog,
-                items as ISceneAreaLightSource,
-                _probeAtlas,
-                _reflectionProbe,
-                _shadow);
-
-            if (items is ISceneLodFrameItemSource lodSource)
-            {
-                ReadOnlySpan<SceneRenderItem> lodMeshes = lodSource.CollectLodMeshItems(pass.Id);
-                if (!lodMeshes.IsEmpty)
-                {
-                    _meshExecutor.Render(
-                        world,
-                        camera,
-                        lodMeshes,
-                        items.Lighting,
-                        pass,
-                        frameState,
-                        elapsedSeconds,
-                        items.Fog,
-                        items as ISceneAreaLightSource,
-                        _probeAtlas,
-                        _reflectionProbe,
-                        _shadow);
-                }
-            }
-
-            if (_skinnedRenderer is not null && items is ISceneSkinnedMeshFrameItemSource skinnedSource)
-            {
-                ReadOnlySpan<SceneSkinnedMeshRenderItem> skinned = skinnedSource.CollectSkinnedMeshes(pass.Id);
-                if (!skinned.IsEmpty)
-                {
-                    _ = _skinnedRenderer.Render(
-                        world,
-                        camera,
-                        skinned,
-                        items.Lighting,
-                        pass,
-                        frameState,
-                        elapsedSeconds,
-                        items.Fog,
-                        items as ISceneAreaLightSource,
-                        _probeAtlas,
-                        _reflectionProbe,
-                        _shadow);
-                }
-            }
-
-            if (_hasSpriteComponent)
-            {
-                ReadOnlySpan<SceneSpriteRenderItem> sprites = items.CollectSprites(pass.Id);
-                if (sprites.Length > 0)
-                {
-                    _ = _spriteRenderer.Render(world, camera, sprites, pass, frameState);
-                }
-            }
-
-            if (_hasInstancedComponent &&
-                _instancedRenderer is not null &&
-                _instances is not null &&
-                items is ISceneInstancedFrameItemSource instancedSource)
-            {
-                ReadOnlySpan<SceneInstancedMeshItem> batches = instancedSource.CollectInstancedMeshes(pass.Id);
-                if (!batches.IsEmpty)
-                {
-                    _ = _instancedRenderer.Render(world, camera, batches, _instances, pass, frameState);
-                }
-            }
-
-            if (items is IScenePrimitiveFrameItemSource primitiveSource)
-            {
-                RenderPrimitives(world, camera, primitiveSource, pass, frameState);
-            }
-
-            RenderParticles(camera, pass, frameState);
-
-            passCount++;
+            result = _pipeline.Execute(
+                passes,
+                new RenderExecutionContext(
+                    frameState.Frame,
+                    elapsedSeconds,
+                    backbufferWidth,
+                    backbufferHeight));
+        }
+        finally
+        {
+            _work = default;
         }
 
-        return frameState.Snapshot(passCount);
+        return frameState.Snapshot(result.TotalPassesExecuted);
+    }
+
+    /// <summary>Executes one dispatched pass across every active render path.</summary>
+    /// <param name="pass">The pass the backend dispatched.</param>
+    private void ExecuteScenePass(SceneRenderPassDefinition pass)
+    {
+        ScenePassWork work = _work;
+        SceneWorld world = work.World;
+        SceneCameraFrame camera = work.Camera;
+        ISceneFrameItemSource items = work.Items;
+        SceneRenderFrameState frameState = work.FrameState;
+        float elapsedSeconds = work.ElapsedSeconds;
+        ReadOnlySpan<SceneRenderItem> meshes = items.CollectMeshes(pass.Id);
+        _meshExecutor.Render(
+            world,
+            camera,
+            meshes,
+            items.Lighting,
+            pass,
+            frameState,
+            elapsedSeconds,
+            items.Fog,
+            items as ISceneAreaLightSource,
+            _probeAtlas,
+            _reflectionProbe,
+            _shadow);
+
+        if (items is ISceneLodFrameItemSource lodSource)
+        {
+            ReadOnlySpan<SceneRenderItem> lodMeshes = lodSource.CollectLodMeshItems(pass.Id);
+            if (!lodMeshes.IsEmpty)
+            {
+                _meshExecutor.Render(
+                    world,
+                    camera,
+                    lodMeshes,
+                    items.Lighting,
+                    pass,
+                    frameState,
+                    elapsedSeconds,
+                    items.Fog,
+                    items as ISceneAreaLightSource,
+                    _probeAtlas,
+                    _reflectionProbe,
+                    _shadow);
+            }
+        }
+
+        if (_skinnedRenderer is not null && items is ISceneSkinnedMeshFrameItemSource skinnedSource)
+        {
+            ReadOnlySpan<SceneSkinnedMeshRenderItem> skinned = skinnedSource.CollectSkinnedMeshes(pass.Id);
+            if (!skinned.IsEmpty)
+            {
+                _ = _skinnedRenderer.Render(
+                    world,
+                    camera,
+                    skinned,
+                    items.Lighting,
+                    pass,
+                    frameState,
+                    elapsedSeconds,
+                    items.Fog,
+                    items as ISceneAreaLightSource,
+                    _probeAtlas,
+                    _reflectionProbe,
+                    _shadow);
+            }
+        }
+
+        if (_hasSpriteComponent)
+        {
+            ReadOnlySpan<SceneSpriteRenderItem> sprites = items.CollectSprites(pass.Id);
+            if (sprites.Length > 0)
+            {
+                _ = _spriteRenderer.Render(world, camera, sprites, pass, frameState);
+            }
+        }
+
+        if (_hasInstancedComponent &&
+            _instancedRenderer is not null &&
+            _instances is not null &&
+            items is ISceneInstancedFrameItemSource instancedSource)
+        {
+            ReadOnlySpan<SceneInstancedMeshItem> batches = instancedSource.CollectInstancedMeshes(pass.Id);
+            if (!batches.IsEmpty)
+            {
+                _ = _instancedRenderer.Render(world, camera, batches, _instances, pass, frameState);
+            }
+        }
+
+        if (items is IScenePrimitiveFrameItemSource primitiveSource)
+        {
+            RenderPrimitives(world, camera, primitiveSource, pass, frameState);
+        }
+
+        RenderParticles(camera, pass, frameState);
     }
 
     /// <inheritdoc/>
@@ -222,6 +265,7 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         _skinnedRenderer?.Dispose();
         _primitiveRenderer?.Dispose();
         _spriteRenderer.Dispose();
+        _pipeline.Dispose();
         _disposed = true;
     }
 
