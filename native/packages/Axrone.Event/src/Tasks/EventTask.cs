@@ -107,7 +107,7 @@ public enum EventTaskState : byte
 /// <param name="QueuedAtTicks">Queue instant in UTC ticks of the scheduler clock.</param>
 /// <param name="StartedAtTicks">First start instant in UTC ticks; zero before the first start.</param>
 /// <param name="CompletedAtTicks">Terminal instant in UTC ticks; zero while non-terminal.</param>
-/// <param name="ExecutionTimeMs">Last body execution in milliseconds; zero before the first start.</param>
+/// <param name="ExecutionTimeMs">Duration in milliseconds of the attempt that closed the task; zero while no attempt has been counted.</param>
 /// <param name="RetryCount">Retries consumed so far.</param>
 public readonly record struct EventTaskMetrics(
     EventTaskId Id,
@@ -131,7 +131,7 @@ public readonly record struct EventTaskMetrics(
 /// <param name="CompletedCount">Tasks completed since the last metrics clear.</param>
 /// <param name="FailedCount">Tasks failed or timed out since the last metrics clear.</param>
 /// <param name="TotalProcessed">Completed plus failed.</param>
-/// <param name="AverageExecutionTimeMs">Mean body execution over all measured bodies.</param>
+/// <param name="AverageExecutionTimeMs">Mean duration over counted bodies: completed attempts and finally-failed attempts, excluding retried, timed-out and cancelled ones.</param>
 /// <param name="ThroughputPerSecond">Bodies finished per second over the throughput window.</param>
 /// <param name="EstimatedMemoryBytes">Fixed slot table plus working task objects.</param>
 public readonly record struct EventTaskStats(

@@ -1412,12 +1412,12 @@ public sealed class EventTaskScheduler : IDisposable, IAsyncDisposable
     {
         long now = _timeProvider.GetUtcNow().UtcTicks;
         long executionTicks = Math.Max(0, now - entry.StartedAtTicks);
-        entry.AddBodyChain(executionTicks);
 
         if (succeeded)
         {
             if (entry.TryTransition(EventTaskState.Running, EventTaskState.Completed))
             {
+                entry.AddBodyChain(executionTicks);
                 entry.MarkTerminal(now);
                 entry.SignalSuccess();
                 Interlocked.Increment(ref _completedCount);
@@ -1425,7 +1425,7 @@ public sealed class EventTaskScheduler : IDisposable, IAsyncDisposable
         }
         else
         {
-            HandleBodyFailure(entry, failure!, now);
+            HandleBodyFailure(entry, failure!, now, executionTicks);
         }
 
         bool idle;
@@ -1459,7 +1459,7 @@ public sealed class EventTaskScheduler : IDisposable, IAsyncDisposable
         }
     }
 
-    private void HandleBodyFailure(TaskEntryBase entry, Exception failure, long now)
+    private void HandleBodyFailure(TaskEntryBase entry, Exception failure, long now, long executionTicks)
     {
         if (entry.State is EventTaskState.Timeout or EventTaskState.Cancelled)
         {
@@ -1529,6 +1529,7 @@ public sealed class EventTaskScheduler : IDisposable, IAsyncDisposable
 
         if (entry.TryTransition(EventTaskState.Running, EventTaskState.Failed))
         {
+            entry.AddBodyChain(executionTicks);
             entry.MarkTerminal(now);
             entry.SignalFailure(failure);
             Interlocked.Increment(ref _failedCount);

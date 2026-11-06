@@ -502,6 +502,99 @@ public sealed class TaskQueueTests
     }
 
     [Fact]
+    public async Task Stats_DeadlineLostBody_ContributesNoExecutionSample()
+    {
+        var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
+        var scheduler = new EventTaskScheduler(
+            new EventTaskSchedulerOptionsBuilder().WithMetrics().WithTaskTimeout(TimeSpan.FromMilliseconds(1)).Build(),
+            clock);
+        var park = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            EventTaskHandle handle = scheduler.Submit(async token =>
+            {
+                entered.SetResult();
+                await park.Task.ConfigureAwait(false);
+                return 7;
+            });
+
+            await entered.Task.WaitAsync(Wait);
+            WaitUntil(() => handle.State == EventTaskState.Running);
+
+            clock.Advance(TimeSpan.FromMilliseconds(2));
+            scheduler.AdvanceDueWork().Should().Be(1);
+            handle.State.Should().Be(EventTaskState.Timeout);
+
+            park.SetResult();
+            WaitUntil(() => scheduler.IsIdle);
+
+            scheduler.GetStats().AverageExecutionTimeMs.Should()
+                .Be(0d, "the late body lost the terminal transition, so the web scheduler's state guard would have sampled nothing");
+        }
+        finally
+        {
+            park.TrySetResult();
+            scheduler.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Stats_RetriedAttempt_ContributesNoExecutionSample()
+    {
+        var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
+        var scheduler = new EventTaskScheduler(
+            new EventTaskSchedulerOptionsBuilder()
+                .WithMetrics()
+                .WithRetries(1)
+                .WithRetryDelay(TimeSpan.FromMilliseconds(50))
+                .WithTaskTimeout(TimeSpan.Zero)
+                .Build(),
+            clock);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int attempts = 0;
+
+        try
+        {
+            EventTaskHandle handle = scheduler.Submit(async token =>
+            {
+                if (Interlocked.Increment(ref attempts) == 1)
+                {
+                    entered.SetResult();
+                    await release.Task.ConfigureAwait(false);
+                    throw new InvalidOperationException("the first attempt is retried");
+                }
+
+                return 7;
+            });
+
+            await entered.Task.WaitAsync(Wait);
+            WaitUntil(() => handle.State == EventTaskState.Running);
+
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            release.SetException(new InvalidOperationException("the first attempt is retried"));
+            WaitUntil(() => scheduler.DelayedRetryCount == 1);
+
+            clock.Advance(TimeSpan.FromMilliseconds(50));
+            scheduler.AdvanceDueWork().Should().Be(1);
+            (await handle.AwaitAsync<int>().AsTask().WaitAsync(Wait)).Should().Be(7);
+
+            EventTaskStats stats = scheduler.GetStats();
+            stats.CompletedCount.Should().Be(1);
+            stats.AverageExecutionTimeMs.Should()
+                .Be(0d, "only the attempt that closed the task is sampled, so the 100 ms of the retried attempt must stay out of the mean");
+            stats.ThroughputPerSecond.Should().BeGreaterThanOrEqualTo(0d);
+        }
+        finally
+        {
+            release.TrySetException(new InvalidOperationException("test teardown"));
+            scheduler.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task TerminalTransition_BodyWinsWhenDeadlineHasNotFired()
     {
         var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
