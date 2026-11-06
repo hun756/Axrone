@@ -1,6 +1,8 @@
 namespace Axrone.Scene.Rendering.OpenGL;
 
+using Axrone.Render.Core;
 using Axrone.Render.OpenGL.Pipeline;
+using Axrone.Scene.Assets;
 
 /// <summary>
 /// Executes a planned frame across every active render path. For each pass it
@@ -25,6 +27,10 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     private readonly bool _hasSpriteComponent;
     private readonly bool _hasInstancedComponent;
     private readonly SceneGlRenderPipeline _pipeline;
+    private readonly SceneGlPostProcessChain? _postProcess;
+    private readonly SceneRenderPassDefinition _postProcessPass = new(
+        new SceneAssetId<RenderPassAssetTag>(SceneStringId.FromName("scene/post-process")),
+        int.MaxValue);
     private ScenePassWork _work;
     private SceneGlPrimitiveBatchRenderer? _primitiveRenderer;
     private bool _disposed;
@@ -65,6 +71,11 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     /// <param name="reflectionProbe">Optional selected-probe source for material sampling.</param>
     /// <param name="shadow">Optional shadow source; when supplied, its cascade frame and
     /// height-fog contract are bound to every mesh and skinned shader in the pass.</param>
+    /// <param name="postProcess">
+    /// Optional offscreen post-process chain. When supplied the scene renders into its HDR target
+    /// and one extra post-process pass is dispatched after the planned passes, presenting the
+    /// result to the default framebuffer.
+    /// </param>
     public SceneGlRenderOrchestrator(
         GLContext context,
         SceneGlAssetCache assets,
@@ -75,7 +86,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         SceneSkinningOptions? skinningOptions = null,
         SceneGlReflectionProbeAtlas? probeAtlas = null,
         ISceneReflectionProbeSource? reflectionProbe = null,
-        ISceneGlShadowSource? shadow = null)
+        ISceneGlShadowSource? shadow = null,
+        SceneGlPostProcessChain? postProcess = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(assets);
@@ -90,7 +102,13 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         _spriteRenderer = new SceneGlSpriteBatchRenderer(context, assets);
         _hasSpriteComponent = world.Registry.TryGetDataByType(typeof(SceneSpriteRenderer), out _);
         _pipeline = new SceneGlRenderPipeline(context);
-        _pipeline.Register(Axrone.Render.Core.PassKind.Opaque, ExecuteScenePass);
+        _pipeline.Register(PassKind.Opaque, ExecuteScenePass);
+        if (postProcess is not null)
+        {
+            _postProcess = postProcess;
+            _pipeline.Register(PassKind.PostProcess, _ => SubmitPostProcess());
+            _pipeline.KindResolver = ResolveKind;
+        }
 
         if (particles is not null)
         {
@@ -137,23 +155,38 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         ArgumentNullException.ThrowIfNull(frameState);
 
         _work = new ScenePassWork(world, camera, items, frameState, elapsedSeconds);
-        RenderFrameResult result;
+        var ctx = new RenderExecutionContext(frameState.Frame, elapsedSeconds, backbufferWidth, backbufferHeight);
+        _postProcess?.BeginScene();
+        int dispatched;
         try
         {
-            result = _pipeline.Execute(
-                passes,
-                new RenderExecutionContext(
-                    frameState.Frame,
-                    elapsedSeconds,
-                    backbufferWidth,
-                    backbufferHeight));
+            dispatched = _pipeline.Execute(passes, ctx).TotalPassesExecuted;
+            if (_postProcess is not null)
+            {
+                // The chain reads the frame's HDR target, so it dispatches through the backend with
+                // target management on while the pass work is still published.
+                dispatched += _pipeline.Execute([_postProcessPass], ctx, manageTarget: true).TotalPassesExecuted;
+            }
         }
         finally
         {
             _work = default;
         }
 
-        return frameState.Snapshot(result.TotalPassesExecuted);
+        return frameState.Snapshot(dispatched);
+    }
+
+    /// <summary>Routes the synthetic post-process pass to its own kind; planned passes stay opaque.</summary>
+    private PassKind ResolveKind(SceneRenderPassDefinition pass) =>
+        pass.Id.Equals(_postProcessPass.Id)
+            ? PassKind.PostProcess
+            : PassKind.Opaque;
+
+    /// <summary>Runs the offscreen effect chain and presents its result.</summary>
+    private void SubmitPostProcess()
+    {
+        ScenePassWork work = _work;
+        _postProcess!.Submit(work.FrameState.Frame);
     }
 
     /// <summary>Executes one dispatched pass across every active render path.</summary>
