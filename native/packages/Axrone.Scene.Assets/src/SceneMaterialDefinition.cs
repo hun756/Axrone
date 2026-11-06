@@ -15,7 +15,9 @@ public sealed class SceneMaterialDefinition : ISceneAssetDefinition<MaterialAsse
         SceneAssetId<ShaderAssetTag> shaderId,
         SceneMaterialSurface surface,
         IReadOnlyList<SceneMaterialPass>? passes = null,
-        IReadOnlyDictionary<string, SceneUniformValue>? uniforms = null)
+        IReadOnlyDictionary<string, SceneUniformValue>? uniforms = null,
+        string? techniqueId = null,
+        IReadOnlyDictionary<string, string>? keywords = null)
     {
         if (!id.IsValid)
         {
@@ -55,6 +57,8 @@ public sealed class SceneMaterialDefinition : ISceneAssetDefinition<MaterialAsse
         Surface = surface;
         Passes = passArray;
         Uniforms = CreateUniforms(id, uniforms);
+        TechniqueId = techniqueId;
+        Keywords = CreateKeywords(id, keywords);
     }
 
     /// <inheritdoc/>
@@ -71,6 +75,15 @@ public sealed class SceneMaterialDefinition : ISceneAssetDefinition<MaterialAsse
 
     /// <summary>Custom uniform values.</summary>
     public IReadOnlyDictionary<string, SceneUniformValue> Uniforms { get; }
+
+    /// <summary>
+    /// Effect technique this material selects, or null for the effect default. Only meaningful
+    /// when the shader asset is backed by an effect.
+    /// </summary>
+    public string? TechniqueId { get; }
+
+    /// <summary>Keyword selections that pick the shader variant, copied on construction.</summary>
+    public IReadOnlyDictionary<string, string> Keywords { get; }
 
     private static FrozenDictionary<string, SceneUniformValue> CreateUniforms(
         SceneAssetId<MaterialAssetTag> id,
@@ -92,5 +105,27 @@ public sealed class SceneMaterialDefinition : ISceneAssetDefinition<MaterialAsse
         }
 
         return uniforms.ToFrozenDictionary(StringComparer.Ordinal);
+    }
+
+    private static FrozenDictionary<string, string> CreateKeywords(
+        SceneAssetId<MaterialAssetTag> id,
+        IReadOnlyDictionary<string, string>? keywords)
+    {
+        if (keywords is null || keywords.Count == 0)
+        {
+            return FrozenDictionary<string, string>.Empty;
+        }
+
+        foreach (KeyValuePair<string, string> keyword in keywords)
+        {
+            if (string.IsNullOrWhiteSpace(keyword.Key) || string.IsNullOrWhiteSpace(keyword.Value))
+            {
+                throw new SceneAssetException(
+                    SceneAssetErrorCodes.Invalid,
+                    $"Material '{id}' contains an empty keyword name or value.");
+            }
+        }
+
+        return keywords.ToFrozenDictionary(StringComparer.Ordinal);
     }
 }

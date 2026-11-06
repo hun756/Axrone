@@ -31,7 +31,7 @@ public sealed class SceneGlAssetCache : IDisposable
     private readonly Dictionary<SceneAssetId<TextureAssetTag>, SceneAssetId<SamplerAssetTag>?> _textureSamplers = new();
     private readonly GLSampler _defaultSampler;
     private readonly SceneGlEffectPrograms _effectPrograms;
-    private readonly Dictionary<SceneAssetId<ShaderAssetTag>, ImmutableArray<SceneGlEffectPass>> _effectPasses = new();
+    private readonly Dictionary<SceneAssetId<ShaderAssetTag>, EffectBinding> _effectPasses = new();
     private readonly HashSet<SceneGlShader> _effectOwned = new();
     private int _unskinnableShaderCount;
     private bool _disposed;
@@ -123,7 +123,7 @@ public sealed class SceneGlAssetCache : IDisposable
         if (definition.Effect is { } effect)
         {
             ImmutableArray<SceneGlEffectPass> passes = _effectPrograms.ResolveTechnique(effect, null, null);
-            _effectPasses[definition.Id] = passes;
+            _effectPasses[definition.Id] = new EffectBinding(effect, passes);
             shader = passes[0].Shader;
             for (int i = 0; i < passes.Length; i++)
             {
@@ -645,8 +645,72 @@ public sealed class SceneGlAssetCache : IDisposable
     /// <returns><see langword="true"/> when an effect backs the shader.</returns>
     public bool TryGetEffectPasses(
         SceneAssetId<ShaderAssetTag> id,
-        out ImmutableArray<SceneGlEffectPass> passes) =>
-        _effectPasses.TryGetValue(id, out passes);
+        out ImmutableArray<SceneGlEffectPass> passes)
+    {
+        if (_effectPasses.TryGetValue(id, out EffectBinding binding))
+        {
+            passes = binding.Passes;
+            return true;
+        }
+
+        passes = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves the program a material draws with: the variant selected by its technique and
+    /// keywords when an effect backs the shader, otherwise the raw compiled shader.
+    /// </summary>
+    /// <param name="material">Material whose selection is resolved.</param>
+    /// <returns>The program to bind for this material.</returns>
+    /// <exception cref="InvalidOperationException">The material's shader has not been registered.</exception>
+    public SceneGlShader ResolveMaterialProgram(SceneMaterialDefinition material)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ThrowIfDisposed();
+
+        if (!_shaders.TryGetValue(material.ShaderId, out SceneGlShader? shader))
+        {
+            throw new InvalidOperationException(
+                $"Material '{material.Id}' references shader '{material.ShaderId}', which is not registered.");
+        }
+
+        if (!_effectPasses.TryGetValue(material.ShaderId, out EffectBinding binding))
+        {
+            return shader;
+        }
+
+        ShaderSymbol? technique = null;
+        if (material.TechniqueId is { } techniqueName)
+        {
+            technique = new ShaderSymbol(techniqueName);
+        }
+
+        ImmutableArray<SceneGlEffectPass> selected = _effectPrograms.ResolveTechnique(
+            binding.Effect,
+            technique,
+            CreateSelection(material.Keywords));
+        return selected[0].Shader;
+    }
+
+    private static ShaderKeywordSelection CreateSelection(IReadOnlyDictionary<string, string> keywords)
+    {
+        if (keywords.Count == 0)
+        {
+            return ShaderKeywordSelection.Empty;
+        }
+
+        ImmutableDictionary<ShaderSymbol, string>.Builder builder =
+            ImmutableDictionary.CreateBuilder<ShaderSymbol, string>();
+        foreach (KeyValuePair<string, string> keyword in keywords)
+        {
+            builder[new ShaderSymbol(keyword.Key)] = keyword.Value;
+        }
+
+        return new ShaderKeywordSelection(builder.ToImmutable());
+    }
+
+    private readonly record struct EffectBinding(ShaderEffect Effect, ImmutableArray<SceneGlEffectPass> Passes);
 
     private void DisposeResources()
     {
