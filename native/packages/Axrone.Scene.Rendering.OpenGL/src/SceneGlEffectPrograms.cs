@@ -69,6 +69,31 @@ public sealed class SceneGlEffectPrograms : IDisposable
         return builder.MoveToImmutable();
     }
 
+    /// <summary>
+    /// Resolves only the pass a technique draws with: its first declared pass.
+    /// </summary>
+    /// <param name="effect">The effect to resolve.</param>
+    /// <param name="techniqueId">Technique to select; null takes the default, then the first.</param>
+    /// <param name="keywords">Keyword selection; null takes the effect defaults.</param>
+    /// <returns>The resolved draw pass.</returns>
+    /// <remarks>
+    /// A technique's remaining passes describe stages the frame may run elsewhere; compiling them
+    /// for every material that selects the technique would allocate programs no draw ever binds.
+    /// Use <see cref="ResolveTechnique"/> when a host needs the whole declaration.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The requested technique does not exist.</exception>
+    public SceneGlEffectPass ResolveDrawPass(
+        ShaderEffect effect,
+        ShaderSymbol? techniqueId,
+        ShaderKeywordSelection? keywords)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        ImmutableArray<ShaderPassDefinition> passes = SelectPasses(effect, techniqueId, out ShaderSymbol technique);
+        return ResolvePassCore(effect, technique, passes[0], keywords);
+    }
+
     /// <summary>Resolves one pass of a technique.</summary>
     /// <param name="effect">The effect to resolve.</param>
     /// <param name="techniqueId">Technique to select; null takes the default, then the first.</param>

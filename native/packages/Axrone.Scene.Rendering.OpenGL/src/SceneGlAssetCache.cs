@@ -686,11 +686,10 @@ public sealed class SceneGlAssetCache : IDisposable
             technique = new ShaderSymbol(techniqueName);
         }
 
-        ImmutableArray<SceneGlEffectPass> selected = _effectPrograms.ResolveTechnique(
+        return _effectPrograms.ResolveDrawPass(
             binding.Effect,
             technique,
-            CreateSelection(material.Keywords));
-        return selected[0].Shader;
+            CreateSelection(material.Keywords)).Shader;
     }
 
     private static ShaderKeywordSelection CreateSelection(IReadOnlyDictionary<string, string> keywords)

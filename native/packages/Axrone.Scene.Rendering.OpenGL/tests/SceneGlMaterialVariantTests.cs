@@ -1,10 +1,14 @@
 namespace Axrone.Scene.Rendering.OpenGL.Tests;
 
 using Axrone.AssetShader;
+using Axrone.Render.OpenGL.Mock;
 using Axrone.Scene.Assets;
 
 public sealed class SceneGlMaterialVariantTests
 {
+    private static int ProgramCompilations(MockGLApi api) =>
+        api.CallLog.Count(entry => entry.StartsWith("CreateProgram(", StringComparison.Ordinal));
+
     private static ShaderEffect TwoVariantEffect() =>
         new(new ShaderEffectDefinition(
             new ShaderSymbol("test/variants"),
@@ -89,6 +93,42 @@ public sealed class SceneGlMaterialVariantTests
         SceneGlShader program = fixture.Cache.ResolveMaterialProgram(material);
 
         program.Label.Should().Contain("/wire/lines");
+    }
+
+    [Fact]
+    public void Material_TechniqueSelection_CompilesOnlyThePassItDrawsWith()
+    {
+        using var fixture = new SceneGlFixture();
+        var effect = new ShaderEffect(TwoVariantEffect().Definition with
+        {
+            Techniques =
+            [
+                new ShaderTechniqueDefinition(new ShaderSymbol("opaque"), [new ShaderPassDefinition(new ShaderSymbol("base"))]),
+                new ShaderTechniqueDefinition(
+                    new ShaderSymbol("dense"),
+                    [
+                        new ShaderPassDefinition(new ShaderSymbol("base")),
+                        new ShaderPassDefinition(new ShaderSymbol("shadow")),
+                        new ShaderPassDefinition(new ShaderSymbol("depth")),
+                    ]),
+            ],
+        });
+        var shaderId = fixture.Assets.CreateId<ShaderAssetTag>("test/dense-shader");
+        var shader = new SceneShaderDefinition(shaderId, "void main(){}", "void main(){}", effect: effect);
+        fixture.Assets.Shaders.Register(shader);
+        fixture.Cache.RegisterShader(shader);
+        fixture.Api.ClearCallLog();
+
+        var id = fixture.Assets.CreateId<MaterialAssetTag>("test/mat-dense");
+        var material = new SceneMaterialDefinition(id, shaderId, new SceneMaterialSurface(), techniqueId: "dense");
+
+        SceneGlShader program = fixture.Cache.ResolveMaterialProgram(material);
+
+        program.Label.Should().Contain("/dense/base");
+        ProgramCompilations(fixture.Api).Should().Be(1, "the technique's other passes draw elsewhere, not here");
+
+        fixture.Cache.ResolveMaterialProgram(material).Should().BeSameAs(program);
+        ProgramCompilations(fixture.Api).Should().Be(1, "the same effect, technique, pass and keyword set is cached");
     }
 
     [Fact]
