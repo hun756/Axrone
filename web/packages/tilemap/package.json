@@ -36,6 +36,11 @@
             "import": "./dist/path.mjs",
             "require": "./dist/path.js"
         },
+        "./observer": {
+            "types": "./dist/observer.d.ts",
+            "import": "./dist/observer.mjs",
+            "require": "./dist/observer.js"
+        },
         "./profiler": {
             "types": "./dist/profiler.d.ts",
             "import": "./dist/profiler.mjs",
@@ -79,9 +84,13 @@
         "@axrone/utility": "^0.0.1"
     },
     "peerDependencies": {
+        "@axrone/observer": "^0.1.0",
         "@axrone/profiler": "^0.1.0"
     },
     "peerDependenciesMeta": {
+        "@axrone/observer": {
+            "optional": true
+        },
         "@axrone/profiler": {
             "optional": true
         }

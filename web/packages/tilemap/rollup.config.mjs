@@ -12,6 +12,7 @@ export default createMultiEntryConfig({
         grid: 'src/grid/index.ts',
         query: 'src/query/index.ts',
         path: 'src/path/index.ts',
+        observer: 'src/observable/index.ts',
         profiler: 'src/profiler/index.ts',
         errors: 'src/errors.ts'
     },
