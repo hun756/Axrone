@@ -25,6 +25,10 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     [ThreadStatic]
     private static bool t_immediateActive;
 
+    /// <summary>True while the current thread is draining transport batches.</summary>
+    [ThreadStatic]
+    private static bool t_dispatchActive;
+
     private readonly VyukovBoundedBatchQueue<EventEnvelope<TEvent>> _queue;
     private readonly Internal.EventSubscriptionTable<TEvent> _subscriptions = new();
     private readonly ConcurrentQueue<DeadLetterEntry<TEvent>> _deadLetters = new();
@@ -51,6 +55,7 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     private readonly int _deadLetterCapacity;
     private readonly int _defaultMaxListeners;
     private readonly int _pausedBufferCapacity;
+    private readonly long _maxQueueWaitTicks;
     private readonly MaxListenersPolicy _maxListenersPolicy;
     private readonly EventTelemetry _telemetry;
     private PausedEventBuffer<TEvent>? _pausedBuffer;
@@ -165,10 +170,18 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
             ThrowHelper.ThrowArgumentOutOfRange(nameof(options), "PausedBufferCapacity must be positive.");
         }
 
+        if (options.MaxQueueWaitMs < 0)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(options), "MaxQueueWaitMs must be non-negative.");
+        }
+
         _deadLetterCapacity = options.DeadLetterCapacity;
         _defaultMaxListeners = options.MaxListeners;
         _maxListeners = options.MaxListeners;
         _pausedBufferCapacity = options.PausedBufferCapacity;
+        _maxQueueWaitTicks = options.MaxQueueWaitMs == 0
+            ? 0
+            : (long)(options.MaxQueueWaitMs * (Stopwatch.Frequency / 1000.0));
         _maxListenersPolicy = options.MaxListenersPolicy;
         _telemetry = new EventTelemetry(options.MeterName ?? "Axrone.Event");
         _dispatchBuffer = new EventEnvelope<TEvent>[options.DispatchBatchSize];
@@ -593,13 +606,33 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
 
     private void PublishEnvelopeCore(in EventEnvelope<TEvent> envelope)
     {
+        // A handler running on the drain thread cannot wait for transport space: that thread is
+        // the only consumer, so waiting would deadlock the whole router. Fail fast instead and
+        // let the exception surface through the normal handler-error path.
+        if (t_dispatchActive || t_immediateActive)
+        {
+            if (TryPublishCore(in envelope))
+            {
+                return;
+            }
+
+            Interlocked.Increment(ref _reentrantDropped);
+            ThrowHelper.ThrowQueueFull(EventPriority.Normal, BufferCapacity);
+        }
+
         ProgressiveSpinBackoff.Initialize(out int backoff);
+        long started = _maxQueueWaitTicks == 0 ? 0 : Stopwatch.GetTimestamp();
         while (!TryPublishCore(in envelope))
         {
             ThrowIfFaulted();
             if (Volatile.Read(ref _state) != StateRunning)
             {
                 ThrowHelper.ThrowEngineTerminated();
+            }
+
+            if (_maxQueueWaitTicks != 0 && Stopwatch.GetTimestamp() - started >= _maxQueueWaitTicks)
+            {
+                ThrowHelper.ThrowQueueFull(EventPriority.Normal, BufferCapacity);
             }
 
             ProgressiveSpinBackoff.Advance(ref backoff);
@@ -1202,6 +1235,20 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     }
 
     private void DispatchBatch(ReadOnlyMemory<EventEnvelope<TEvent>> batch, CancellationToken cancellationToken)
+    {
+        bool previous = t_dispatchActive;
+        t_dispatchActive = true;
+        try
+        {
+            DispatchBatchCore(batch, cancellationToken);
+        }
+        finally
+        {
+            t_dispatchActive = previous;
+        }
+    }
+
+    private void DispatchBatchCore(ReadOnlyMemory<EventEnvelope<TEvent>> batch, CancellationToken cancellationToken)
     {
         long start = Stopwatch.GetTimestamp();
         int dispatched = 0;

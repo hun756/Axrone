@@ -18,6 +18,14 @@ public readonly record struct RouterOptions(int Capacity, int DispatchBatchSize,
     /// <summary>Slots in the pause buffer; allocated on first pause.</summary>
     public int PausedBufferCapacity { get; init; } = 1024;
 
+    /// <summary>
+    /// Upper bound a publisher waits for transport space, in milliseconds; zero waits
+    /// indefinitely. Re-entrant publishes from a dispatch handler never wait: they fail fast,
+    /// because the only thread that could free a slot is the one currently blocked in that
+    /// handler.
+    /// </summary>
+    public int MaxQueueWaitMs { get; init; } = 2000;
+
     /// <summary>House tuning: 64k ring, 256-wide dispatch batches, 1k dead letters.</summary>
     public static RouterOptions Default => new(65536, 256, 1024, "Axrone.Event");
 }
