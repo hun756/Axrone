@@ -4,3 +4,4 @@ export const TILEMAP_FORMAT_VERSION = 1;
 export * from './errors';
 export * from './metrics';
 export * from './types';
+export * from './codec';

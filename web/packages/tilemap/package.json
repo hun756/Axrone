@@ -16,6 +16,11 @@
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
         },
+        "./codec": {
+            "types": "./dist/codec.d.ts",
+            "import": "./dist/codec.mjs",
+            "require": "./dist/codec.js"
+        },
         "./errors": {
             "types": "./dist/errors.d.ts",
             "import": "./dist/errors.mjs",

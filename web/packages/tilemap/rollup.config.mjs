@@ -8,6 +8,7 @@ export default createMultiEntryConfig({
     packageDir,
     entries: {
         index: 'src/index.ts',
+        codec: 'src/codec/index.ts',
         errors: 'src/errors.ts'
     },
 });
