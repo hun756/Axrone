@@ -31,6 +31,11 @@
             "import": "./dist/query.mjs",
             "require": "./dist/query.js"
         },
+        "./path": {
+            "types": "./dist/path.d.ts",
+            "import": "./dist/path.mjs",
+            "require": "./dist/path.js"
+        },
         "./profiler": {
             "types": "./dist/profiler.d.ts",
             "import": "./dist/profiler.mjs",
