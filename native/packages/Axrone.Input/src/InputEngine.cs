@@ -46,7 +46,6 @@ public sealed partial class InputEngine<TSchema> : IDisposable where TSchema : u
             {
                 MaxSubscribers = 32,
                 WaiterPoolCapacity = 8,
-                PinnedRingCapacity = 64,
             });
     }
 

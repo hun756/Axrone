@@ -248,8 +248,6 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
     private readonly EventHubOptions _options;
     private readonly EventWaiterNode<TEvent>[] _waiters;
     private readonly RegistrationSlot[] _slots;
-    private readonly long[] _pinnedRingSequence;
-    private readonly nuint _ringIndexMask;
 
     /// <summary>
     /// Immutable dispatch snapshot. Publish reads this field once, so a subscriber added or
@@ -278,9 +276,6 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
 
         _consumer.FreeHeadTagged = new TaggedNodePointer(0, 0).Packed;
         _consumer.WaitersHeadTagged = TaggedNodePointer.Empty.Packed;
-
-        _ringIndexMask = (nuint)(options.PinnedRingCapacity - 1);
-        _pinnedRingSequence = GC.AllocateArray<long>(options.PinnedRingCapacity, pinned: true);
 
         _waiters = new EventWaiterNode<TEvent>[options.WaiterPoolCapacity];
         for (int i = 0; i < _waiters.Length; i++)
@@ -327,9 +322,6 @@ public class EventHub<TEvent, TBackoff, TMetricsSink> : EventHubContext<TEvent>,
         {
             long seq = Interlocked.Increment(ref _producer.Sequence);
             var assignedSequence = new SequenceNumber(seq);
-
-            nuint ringSlot = (nuint)((ulong)seq & _ringIndexMask);
-            Volatile.Write(ref _pinnedRingSequence[ringSlot], seq);
 
             IEventConsumer<TEvent>[] consumers = Volatile.Read(ref _activeConsumers);
             int dispatchedCount = consumers.Length;
