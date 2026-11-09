@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-09T18:50:44.603Z",
+  "generatedAt": "2026-11-09T20:59:20.348Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -1320,6 +1320,67 @@
         "ShaderTechniqueReflection",
         "ShaderUniformReflection",
         "ShaderVariant"
+      ],
+      "hasDefaultExport": false,
+      "subpaths": []
+    },
+    {
+      "name": "@axrone/asset-tilemap",
+      "version": "0.1.0",
+      "description": "Tilemap asset schemas, Tiled TMX/TSX importer, native JSON codecs and chunk asset paging.",
+      "exports": [
+        "AssetChunkPager",
+        "TILEMAP_ASSET_FORMAT_VERSION",
+        "TILESET_FORMAT_VERSION",
+        "TilemapAssetErrorCode",
+        "TilemapAssetFault",
+        "attribute",
+        "booleanProperty",
+        "childElements",
+        "chunkAssetCodec",
+        "createAssetTilemapCodecs",
+        "createAssetTilemapImportPipeline",
+        "createNativeTilemapImporter",
+        "createTiledTilemapImporter",
+        "createTilemapAssetDefinition",
+        "createTilesetDefinition",
+        "decodeBase64",
+        "firstChild",
+        "importTiledMap",
+        "integerAttribute",
+        "isTilemapAssetError",
+        "isTilemapAssetFault",
+        "nativeTilemapJsonCodec",
+        "nativeTilesetJsonCodec",
+        "parseTsxElement",
+        "parseTsxTileset",
+        "parseXml",
+        "requiredAttribute",
+        "serializeTilemapAssetDefinition",
+        "serializeTilesetDefinition",
+        "tilemapAssetError",
+        "tilemapAssetJsonCodec",
+        "tilemapChunkAssetKey",
+        "tilesetJsonCodec"
+      ],
+      "typeExports": [
+        "AssetChunkPagerOptions",
+        "AssetTilemapImportPipelineOptions",
+        "AssetTilemapImportResult",
+        "AssetTilemapKind",
+        "AssetTilemapSchema",
+        "TiledCollisionHint",
+        "TiledImportOptions",
+        "TiledImportResult",
+        "TiledImportedChunk",
+        "TiledTilemapImporterOptions",
+        "TiledTilesetEntry",
+        "TilemapAssetDefinition",
+        "TilemapAssetError",
+        "TilemapAssetErrorOptions",
+        "TilemapChunkAssetReference",
+        "TilesetDefinition",
+        "XmlElement"
       ],
       "hasDefaultExport": false,
       "subpaths": []
@@ -13336,6 +13397,16 @@
       "kind": "unknown"
     },
     {
+      "name": "AssetChunkPager",
+      "package": "@axrone/asset-tilemap",
+      "kind": "class"
+    },
+    {
+      "name": "AssetChunkPagerOptions",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
       "name": "AssetCodec",
       "package": "@axrone/asset-2d",
       "kind": "unknown"
@@ -14941,6 +15012,26 @@
       "kind": "unknown"
     },
     {
+      "name": "AssetTilemapImportPipelineOptions",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "AssetTilemapImportResult",
+      "package": "@axrone/asset-tilemap",
+      "kind": "type"
+    },
+    {
+      "name": "AssetTilemapKind",
+      "package": "@axrone/asset-tilemap",
+      "kind": "type"
+    },
+    {
+      "name": "AssetTilemapSchema",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
       "name": "AssetUri",
       "package": "@axrone/asset-2d",
       "kind": "unknown"
@@ -15124,6 +15215,11 @@
       "name": "attr",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
+    },
+    {
+      "name": "attribute",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "Attribute",
@@ -15976,6 +16072,11 @@
       "kind": "unknown"
     },
     {
+      "name": "booleanProperty",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "BorrowedShaderInstance",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
@@ -16761,6 +16862,11 @@
       "kind": "unknown"
     },
     {
+      "name": "childElements",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "ChromaticAberrationSettings",
       "package": "@axrone/render-core",
       "kind": "unknown"
@@ -16813,6 +16919,11 @@
     {
       "name": "chunkAreaForShift",
       "package": "@axrone/tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "chunkAssetCodec",
+      "package": "@axrone/asset-tilemap",
       "kind": "const"
     },
     {
@@ -18366,6 +18477,16 @@
       "kind": "const"
     },
     {
+      "name": "createAssetTilemapCodecs",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "createAssetTilemapImportPipeline",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "createAsync",
       "package": "@axrone/memory",
       "kind": "const"
@@ -18959,6 +19080,11 @@
       "name": "createMultisampledRenderTarget",
       "package": "@axrone/render-webgl2",
       "kind": "unknown"
+    },
+    {
+      "name": "createNativeTilemapImporter",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "createNoise",
@@ -19671,6 +19797,21 @@
       "kind": "const"
     },
     {
+      "name": "createTiledTilemapImporter",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "createTilemapAssetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "createTilesetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "createTorus",
       "package": "@axrone/geometry",
       "kind": "const"
@@ -20004,6 +20145,11 @@
       "name": "decodeAnimationClipStreamingChunkPayload",
       "package": "@axrone/animation",
       "kind": "unknown"
+    },
+    {
+      "name": "decodeBase64",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "decodeBase64",
@@ -21699,6 +21845,11 @@
       "name": "FiniteNumber",
       "package": "@axrone/numeric",
       "kind": "type"
+    },
+    {
+      "name": "firstChild",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "FixedJoint2D",
@@ -25471,6 +25622,11 @@
       "kind": "interface"
     },
     {
+      "name": "importTiledMap",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "Impulse",
       "package": "@axrone/physics",
       "kind": "unknown"
@@ -26154,6 +26310,11 @@
       "name": "instantiateWasm",
       "package": "@axrone/physics-3d-wasm",
       "kind": "function"
+    },
+    {
+      "name": "integerAttribute",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "IntegerDistribution",
@@ -27963,6 +28124,16 @@
     {
       "name": "isTileId",
       "package": "@axrone/tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "isTilemapAssetError",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "isTilemapAssetFault",
+      "package": "@axrone/asset-tilemap",
       "kind": "const"
     },
     {
@@ -29956,6 +30127,16 @@
       "kind": "class"
     },
     {
+      "name": "nativeTilemapJsonCodec",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "nativeTilesetJsonCodec",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "NAVIGATION_CONTROLLER_TYPE",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -30708,6 +30889,21 @@
     {
       "name": "parseRichTextMarkup",
       "package": "@axrone/ui",
+      "kind": "const"
+    },
+    {
+      "name": "parseTsxElement",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "parseTsxTileset",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "parseXml",
+      "package": "@axrone/asset-tilemap",
       "kind": "const"
     },
     {
@@ -33524,6 +33720,11 @@
       "name": "ReplaySubject",
       "package": "@axrone/observer",
       "kind": "class"
+    },
+    {
+      "name": "requiredAttribute",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "RequiredKeys",
@@ -38391,6 +38592,16 @@
       "kind": "unknown"
     },
     {
+      "name": "serializeTilemapAssetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "serializeTilesetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "serializeUIAsset",
       "package": "@axrone/ui",
       "kind": "function"
@@ -40656,6 +40867,11 @@
       "kind": "unknown"
     },
     {
+      "name": "TiledCollisionHint",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
       "name": "TileDefinition",
       "package": "@axrone/tilemap",
       "kind": "interface"
@@ -40663,6 +40879,31 @@
     {
       "name": "TileDefinitionTable",
       "package": "@axrone/tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TiledImportedChunk",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TiledImportOptions",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TiledImportResult",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TiledTilemapImporterOptions",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TiledTilesetEntry",
+      "package": "@axrone/asset-tilemap",
       "kind": "interface"
     },
     {
@@ -40676,6 +40917,11 @@
       "kind": "type"
     },
     {
+      "name": "TILEMAP_ASSET_FORMAT_VERSION",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "TILEMAP_FORMAT_VERSION",
       "package": "@axrone/tilemap",
       "kind": "const"
@@ -40686,9 +40932,54 @@
       "kind": "const"
     },
     {
+      "name": "TilemapAssetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "tilemapAssetError",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "TilemapAssetError",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TilemapAssetErrorCode",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "TilemapAssetErrorOptions",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "TilemapAssetFault",
+      "package": "@axrone/asset-tilemap",
+      "kind": "class"
+    },
+    {
+      "name": "tilemapAssetJsonCodec",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
       "name": "TilemapBuilder",
       "package": "@axrone/tilemap",
       "kind": "class"
+    },
+    {
+      "name": "tilemapChunkAssetKey",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "TilemapChunkAssetReference",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
     },
     {
       "name": "TilemapEngine",
@@ -40769,6 +41060,21 @@
       "name": "TileRead",
       "package": "@axrone/tilemap",
       "kind": "interface"
+    },
+    {
+      "name": "TILESET_FORMAT_VERSION",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
+    },
+    {
+      "name": "TilesetDefinition",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
+      "name": "tilesetJsonCodec",
+      "package": "@axrone/asset-tilemap",
+      "kind": "const"
     },
     {
       "name": "TileSolidPredicate",
@@ -43151,6 +43457,11 @@
       "kind": "function"
     },
     {
+      "name": "XmlElement",
+      "package": "@axrone/asset-tilemap",
+      "kind": "interface"
+    },
+    {
       "name": "Xoroshiro128PlusPlus",
       "package": "@axrone/random",
       "kind": "class"
@@ -44082,6 +44393,12 @@
       "package": "@axrone/asset-2d"
     },
     {
+      "name": "AssetChunkPager",
+      "kind": "class",
+      "code": "declare class AssetChunkPager implements IChunkPager { constructor(database: AssetDatabase<AssetTilemapSchema$1>, options: AssetChunkPagerOptions); load(key: ChunkKey, signal?: AbortSignal): Promise<Result<ChunkSnapshot | null, TilemapError>>; save(snapshot: ChunkSnapshot, signal?: AbortSignal): Pr…",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "AssetConfigurationError",
       "kind": "class",
       "code": "declare class AssetConfigurationError extends AssetError { constructor(code: AssetMessageCode, message: string, options?: ErrorOptions); … }",
@@ -44230,6 +44547,12 @@
       "kind": "const",
       "code": "declare const attr: <N extends string, T extends GLDataType, S extends ComponentCount>(name: N, type: T, size: S, normalized?: boolean, divisor?: number) => Attribute<N, T, S>;",
       "package": "@axrone/render-webgl2"
+    },
+    {
+      "name": "attribute",
+      "kind": "const",
+      "code": "declare const attribute: (element: XmlElement, name: string) => string | undefined;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "AUDIO_CLIP_ASSET_KIND",
@@ -44548,6 +44871,12 @@
       "kind": "class",
       "code": "declare class BodyManager3D implements Disposable { constructor(maxBodies?: number); get bodyCount(): number; createBody(def: IPhysicsBodyDef3D): BodyId3D; destroyBody(bodyId: BodyId3D): void; hasBody(bodyId: BodyId3D): boolean; getPosition(bodyId: BodyId3D, out?: IVec3Like): IVec3Like; setPosition…",
       "package": "@axrone/physics-3d"
+    },
+    {
+      "name": "booleanProperty",
+      "kind": "const",
+      "code": "declare const booleanProperty: (value: string) => boolean;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "BoundingVolumeHierarchy",
@@ -45018,6 +45347,12 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "childElements",
+      "kind": "const",
+      "code": "declare const childElements: (element: XmlElement, name?: string) => readonly XmlElement[];",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "CHUNK_CODEC_HEADER_BYTES",
       "kind": "const",
       "code": "declare const CHUNK_CODEC_HEADER_BYTES = 20;",
@@ -45076,6 +45411,12 @@
       "kind": "const",
       "code": "declare const chunkAreaForShift: (chunkShift: ValidChunkShift) => number;",
       "package": "@axrone/tilemap"
+    },
+    {
+      "name": "chunkAssetCodec",
+      "kind": "const",
+      "code": "declare const chunkAssetCodec: AssetBinaryCodec<ChunkSnapshot>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "ChunkedStackIterator",
@@ -45864,6 +46205,18 @@
       "package": "@axrone/asset-shader"
     },
     {
+      "name": "createAssetTilemapCodecs",
+      "kind": "const",
+      "code": "declare const createAssetTilemapCodecs: () => AssetCodecMap<AssetTilemapSchema$1>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "createAssetTilemapImportPipeline",
+      "kind": "const",
+      "code": "declare const createAssetTilemapImportPipeline: (options?: AssetTilemapImportPipelineOptions) => AssetImportPipeline<AssetTilemapSchema$1>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "createAsync",
       "kind": "const",
       "code": "declare const createAsync: <T>(promiseFactory: () => Promise<T>) => ILazyAsync<T>;",
@@ -46426,6 +46779,12 @@
       "kind": "const",
       "code": "declare const createMultisampledRenderTarget: (source: ContextSource, width: number, height: number, samples: number, colorFormat?: GLTextureFormat, depthFormat?: GLTextureFormat) => { msaaTarget: IFramebuffer; resolveTarget: IFramebuffer; }",
       "package": "@axrone/render-webgl2"
+    },
+    {
+      "name": "createNativeTilemapImporter",
+      "kind": "const",
+      "code": "declare const createNativeTilemapImporter: () => AssetImporter<AssetTilemapSchema$1, AssetImportSource>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "createNoise",
@@ -47052,6 +47411,24 @@
       "package": "@axrone/tilemap"
     },
     {
+      "name": "createTiledTilemapImporter",
+      "kind": "const",
+      "code": "declare const createTiledTilemapImporter: (options?: TiledTilemapImporterOptions) => AssetImporter<AssetTilemapSchema$1, AssetImportSource>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "createTilemapAssetDefinition",
+      "kind": "const",
+      "code": "declare const createTilemapAssetDefinition: (input: unknown) => Result<TilemapAssetDefinition, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "createTilesetDefinition",
+      "kind": "const",
+      "code": "declare const createTilesetDefinition: (input: unknown) => Result<TilesetDefinition, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "createTorus",
       "kind": "const",
       "code": "declare const createTorus: (config?: Partial<ITorusConfig>) => IGeometryBuffers;",
@@ -47338,6 +47715,12 @@
       "kind": "const",
       "code": "declare const decodeAnimationClipStreamingChunkPayload: (source: string | Uint8Array | ArrayBuffer | ArrayBufferView) => AnimationClipStreamingChunkPayload;",
       "package": "@axrone/animation"
+    },
+    {
+      "name": "decodeBase64",
+      "kind": "const",
+      "code": "declare const decodeBase64: (input: string) => Result<Uint8Array, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "decodeBase64",
@@ -48400,6 +48783,12 @@
       "kind": "const",
       "code": "declare const findScenePrefabComponentIndex: (components: readonly SceneComponentSnapshot[], selector: ScenePrefabComponentSelector) => number;",
       "package": "@axrone/scene-prefab"
+    },
+    {
+      "name": "firstChild",
+      "kind": "const",
+      "code": "declare const firstChild: (element: XmlElement, name: string) => XmlElement | undefined;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "FixedJoint2D",
@@ -49848,6 +50237,12 @@
       "package": "@axrone/animation"
     },
     {
+      "name": "importTiledMap",
+      "kind": "const",
+      "code": "declare const importTiledMap: (tmx: string, options?: TiledImportOptions) => Promise<Result<TiledImportResult, TilemapAssetError>>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "inferReadFormat",
       "kind": "const",
       "code": "declare const inferReadFormat: (gl: WebGL2RenderingContext, internalFormat: GLTextureFormat) => GLenum;",
@@ -49936,6 +50331,12 @@
       "kind": "function",
       "code": "declare function instantiateWasm(bytes: Uint8Array): Promise<WasmPhysicsExports>;",
       "package": "@axrone/physics-3d-wasm"
+    },
+    {
+      "name": "integerAttribute",
+      "kind": "const",
+      "code": "declare const integerAttribute: (element: XmlElement, name: string, fallback?: number) => Result<number, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "IntegerDistribution",
@@ -50782,6 +51183,18 @@
       "kind": "const",
       "code": "declare const isTileId: (value: unknown) => value is number;",
       "package": "@axrone/tilemap"
+    },
+    {
+      "name": "isTilemapAssetError",
+      "kind": "const",
+      "code": "declare const isTilemapAssetError: (value: unknown) => value is TilemapAssetError;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "isTilemapAssetFault",
+      "kind": "const",
+      "code": "declare const isTilemapAssetFault: (value: unknown) => value is TilemapAssetFault;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "isTilemapError",
@@ -51684,6 +52097,18 @@
       "package": "@axrone/physics-2d"
     },
     {
+      "name": "nativeTilemapJsonCodec",
+      "kind": "const",
+      "code": "declare const nativeTilemapJsonCodec: _axrone_asset_core.AssetJsonCodec<TilemapAssetDefinition>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "nativeTilesetJsonCodec",
+      "kind": "const",
+      "code": "declare const nativeTilesetJsonCodec: _axrone_asset_core.AssetJsonCodec<TilesetDefinition>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "NAVIGATION_CONTROLLER_TYPE",
       "kind": "const",
       "code": "declare const NAVIGATION_CONTROLLER_TYPE = \"navigation\";",
@@ -52120,6 +52545,24 @@
       "kind": "const",
       "code": "declare const parseRichTextMarkup: (markup: string) => RichTextSpan[];",
       "package": "@axrone/ui"
+    },
+    {
+      "name": "parseTsxElement",
+      "kind": "const",
+      "code": "declare const parseTsxElement: (root: XmlElement, options?: { readonly firstGid?: number; readonly fallbackName?: string; }",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "parseTsxTileset",
+      "kind": "const",
+      "code": "declare const parseTsxTileset: (xml: string, options?: { readonly firstGid?: number; readonly fallbackName?: string; }",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "parseXml",
+      "kind": "const",
+      "code": "declare const parseXml: (source: string) => Result<XmlElement, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "ParticleMemoryManager",
@@ -53164,6 +53607,12 @@
       "kind": "class",
       "code": "declare class ReplaySubject<T> extends Subject<T> { constructor(options?: SubjectOptions<T>); … }",
       "package": "@axrone/observer"
+    },
+    {
+      "name": "requiredAttribute",
+      "kind": "const",
+      "code": "declare const requiredAttribute: (element: XmlElement, name: string) => Result<string, TilemapAssetError>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "requireRegisteredComponent",
@@ -54330,6 +54779,18 @@
       "package": "@axrone/shapes-2d"
     },
     {
+      "name": "serializeTilemapAssetDefinition",
+      "kind": "const",
+      "code": "declare const serializeTilemapAssetDefinition: (definition: TilemapAssetDefinition) => AssetJsonValue;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "serializeTilesetDefinition",
+      "kind": "const",
+      "code": "declare const serializeTilesetDefinition: (definition: TilesetDefinition) => AssetJsonValue;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "serializeUIAsset",
       "kind": "function",
       "code": "declare function serializeUIAsset(asset: UIAsset): string;",
@@ -55398,6 +55859,12 @@
       "package": "@axrone/tilemap"
     },
     {
+      "name": "TILEMAP_ASSET_FORMAT_VERSION",
+      "kind": "const",
+      "code": "declare const TILEMAP_ASSET_FORMAT_VERSION = 1;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "TILEMAP_FORMAT_VERSION",
       "kind": "const",
       "code": "declare const TILEMAP_FORMAT_VERSION = 1;",
@@ -55410,10 +55877,40 @@
       "package": "@axrone/tilemap"
     },
     {
+      "name": "tilemapAssetError",
+      "kind": "const",
+      "code": "declare const tilemapAssetError: (code: TilemapAssetErrorCode, message: string, options?: TilemapAssetErrorOptions) => TilemapAssetError;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "TilemapAssetErrorCode",
+      "kind": "const",
+      "code": "declare const TilemapAssetErrorCode: { readonly UNSUPPORTED_VERSION: \"UNSUPPORTED_VERSION\"; readonly INVALID_TILESET: \"INVALID_TILESET\"; readonly INVALID_TILEMAP: \"INVALID_TILEMAP\"; readonly MALFORMED_SOURCE: \"MALFORMED_SOURCE\"; readonly UNSUPPORTED_PROJECTION: \"UNSUPPORTED_PROJECTION\"; readonly UN…",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "TilemapAssetFault",
+      "kind": "class",
+      "code": "declare class TilemapAssetFault extends Error { constructor(message: string, code?: TilemapAssetErrorCode, details?: Readonly<Record<string, unknown>>); … }",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "tilemapAssetJsonCodec",
+      "kind": "const",
+      "code": "declare const tilemapAssetJsonCodec: AssetJsonCodec<TilemapAssetDefinition>;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
       "name": "TilemapBuilder",
       "kind": "class",
       "code": "declare class TilemapBuilder<Layers extends readonly LayerSpec[] | MissingLayers = MissingLayers> { withProjection(projection: ProjectionSpec): this; withChunkShift(chunkShift: ValidChunkShift): this; withCapacity(maxLoadedChunks: number): this; withDirtyBudget(maxDirtyChunks: number): this; withPa…",
       "package": "@axrone/tilemap"
+    },
+    {
+      "name": "tilemapChunkAssetKey",
+      "kind": "const",
+      "code": "declare const tilemapChunkAssetKey: (mapKey: string, chunkX: number, chunkY: number) => string;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "TilemapEngine",
@@ -55438,6 +55935,18 @@
       "kind": "class",
       "code": "declare class TilemapFault extends Error { constructor(message: string, code?: TilemapErrorCode, details?: Readonly<Record<string, unknown>>); … }",
       "package": "@axrone/tilemap"
+    },
+    {
+      "name": "TILESET_FORMAT_VERSION",
+      "kind": "const",
+      "code": "declare const TILESET_FORMAT_VERSION = 1;",
+      "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "tilesetJsonCodec",
+      "kind": "const",
+      "code": "declare const tilesetJsonCodec: AssetJsonCodec<TilesetDefinition>;",
+      "package": "@axrone/asset-tilemap"
     },
     {
       "name": "TileTransform",
