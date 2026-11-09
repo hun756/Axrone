@@ -6,3 +6,4 @@ export * from './metrics';
 export * from './types';
 export * from './codec';
 export * from './grid';
+export * from './engine';
