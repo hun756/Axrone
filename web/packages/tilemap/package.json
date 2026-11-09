@@ -26,6 +26,11 @@
             "import": "./dist/grid.mjs",
             "require": "./dist/grid.js"
         },
+        "./profiler": {
+            "types": "./dist/profiler.d.ts",
+            "import": "./dist/profiler.mjs",
+            "require": "./dist/profiler.js"
+        },
         "./errors": {
             "types": "./dist/errors.d.ts",
             "import": "./dist/errors.mjs",
@@ -62,5 +67,13 @@
         "@axrone/memory": "^0.0.1",
         "@axrone/numeric": "^0.0.1",
         "@axrone/utility": "^0.0.1"
+    },
+    "peerDependencies": {
+        "@axrone/profiler": "^0.1.0"
+    },
+    "peerDependenciesMeta": {
+        "@axrone/profiler": {
+            "optional": true
+        }
     }
 }
