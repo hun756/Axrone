@@ -8,6 +8,10 @@ export * from './tilemap-asset';
 export * from './tiled/tmx-parser';
 export * from './tiled/tsx-parser';
 export * from './tiled/tiled-importer';
+export * from './native/chunk-asset-codec';
+export * from './native/tilemap-json-codec';
+export * from './native/asset-pager';
+export * from './importer';
 
 /** Asset database schema used by the tilemap asset pipeline. */
 export interface AssetTilemapSchema {
