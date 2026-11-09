@@ -43,6 +43,12 @@
       "@axrone/asset-shader/*": [
         "./packages/asset-shader/src/*"
       ],
+      "@axrone/asset-tilemap": [
+        "./packages/asset-tilemap/src/index.ts"
+      ],
+      "@axrone/asset-tilemap/*": [
+        "./packages/asset-tilemap/src/*"
+      ],
       "@axrone/event": [
         "./packages/event/src/index.ts"
       ],
