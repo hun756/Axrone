@@ -10,6 +10,7 @@ export default createMultiEntryConfig({
         index: 'src/index.ts',
         codec: 'src/codec/index.ts',
         grid: 'src/grid/index.ts',
+        query: 'src/query/index.ts',
         profiler: 'src/profiler/index.ts',
         errors: 'src/errors.ts'
     },

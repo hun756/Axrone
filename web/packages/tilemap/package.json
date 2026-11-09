@@ -26,6 +26,11 @@
             "import": "./dist/grid.mjs",
             "require": "./dist/grid.js"
         },
+        "./query": {
+            "types": "./dist/query.d.ts",
+            "import": "./dist/query.mjs",
+            "require": "./dist/query.js"
+        },
         "./profiler": {
             "types": "./dist/profiler.d.ts",
             "import": "./dist/profiler.mjs",
