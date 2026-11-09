@@ -21,15 +21,13 @@ import {
     type AssetTilemapSchema,
 } from '../index';
 
+const fixturesRoot = (): string => 
+    process.cwd().endsWith(path.join('packages', 'asset-tilemap'))
+        ? path.resolve(process.cwd(), 'src/__tests__/fixtures')
+        : path.resolve(process.cwd(), 'packages/asset-tilemap/src/__tests__/fixtures');
+
 const fixture = (name: string): string =>
-    readFileSync(
-        path.resolve(
-            process.cwd(),
-            'packages/asset-tilemap/src/__tests__/fixtures',
-            name
-        ),
-        'utf8'
-    );
+    readFileSync(path.resolve(fixturesRoot(), name), 'utf8');
 
 const createDatabase = (): AssetDatabase<AssetTilemapSchema> =>
     new AssetDatabase<AssetTilemapSchema>({
