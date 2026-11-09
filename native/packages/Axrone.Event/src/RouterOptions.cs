@@ -9,8 +9,11 @@ namespace Axrone.Event;
 /// <param name="MeterName">OpenTelemetry meter name.</param>
 public readonly record struct RouterOptions(int Capacity, int DispatchBatchSize, int DeadLetterCapacity, string MeterName)
 {
-    /// <summary>Subscription bound per router; zero disables the bound.</summary>
-    public int MaxListeners { get; init; }
+    /// <summary>
+    /// Subscription bound per router; zero disables the bound. Defaults to 10, matching the
+    /// TypeScript contract, so the leak detector is armed unless explicitly disabled.
+    /// </summary>
+    public int MaxListeners { get; init; } = 10;
 
     /// <summary>Reaction when <see cref="MaxListeners"/> is exceeded.</summary>
     public MaxListenersPolicy MaxListenersPolicy { get; init; } = MaxListenersPolicy.Warn;

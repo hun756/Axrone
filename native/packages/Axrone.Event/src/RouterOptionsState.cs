@@ -19,7 +19,7 @@ public struct RouterOptionsState : IAggregateDefinition<RouterOptionsState, Rout
         DispatchBatchSize = 256,
         DeadLetterCapacity = 1024,
         MeterName = "Axrone.Event",
-        MaxListeners = 0,
+        MaxListeners = 10,
         MaxListenersPolicy = MaxListenersPolicy.Warn,
         PausedBufferCapacity = 1024,
         MaxQueueWaitMs = 2000,
