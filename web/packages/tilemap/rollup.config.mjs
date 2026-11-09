@@ -9,6 +9,7 @@ export default createMultiEntryConfig({
     entries: {
         index: 'src/index.ts',
         codec: 'src/codec/index.ts',
+        grid: 'src/grid/index.ts',
         errors: 'src/errors.ts'
     },
 });
