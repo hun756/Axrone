@@ -61,7 +61,8 @@
         "test": "vitest run --root ../.. packages/tilemap",
         "typecheck": "tsc --noEmit -p tsconfig.build.json",
         "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
-        "lint": "eslint src --ext .ts"
+        "lint": "eslint src --ext .ts",
+        "bench": "node bench/run.mjs"
     },
     "keywords": [
         "tilemap",
