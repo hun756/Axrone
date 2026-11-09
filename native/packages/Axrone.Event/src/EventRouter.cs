@@ -241,6 +241,11 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     /// Removes a subscription by identity. Equivalent to disposing the returned handle; returns
     /// false when the identity is not registered or was already released.
     /// </summary>
+    /// <remarks>
+    /// A paused subscription is still registered, so this returns true and removes it. Before
+    /// this contract was fixed, <c>Pause()</c> followed by either this method or dispose leaked
+    /// the registry entry permanently.
+    /// </remarks>
     public bool Unsubscribe(Guid subscriptionId)
     {
         EventSubscription<TEvent>? subscription = _subscriptions.Find(subscriptionId);
@@ -249,9 +254,7 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
             return false;
         }
 
-        bool wasActive = subscription.IsActive;
-        subscription.Dispose();
-        return wasActive;
+        return subscription.Release();
     }
 
     /// <summary>Whether a subscription with the given identity is currently registered.</summary>
