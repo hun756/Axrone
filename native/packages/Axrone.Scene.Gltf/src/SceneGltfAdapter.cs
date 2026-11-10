@@ -907,7 +907,8 @@ public static class SceneGltfAdapter
                     attribute.Offset,
                     attribute.Stride,
                     attribute.Normalized,
-                    attribute.Integer));
+                    attribute.Integer,
+                    ComponentByteSize(attribute.ComponentType)));
             }
 
             if (attributes.Count == 0)
@@ -1265,6 +1266,15 @@ public static class SceneGltfAdapter
             GltfMorphTargetSemantic.Tangent => SceneMorphTargetSemantic.Tangent,
             _ => SceneMorphTargetSemantic.Position
         };
+
+    private static byte ComponentByteSize(int componentType) => componentType switch
+    {
+        5120 or 5121 => 1,
+        5122 or 5123 => 2,
+        5125 or 5126 => 4,
+        5130 => 8,
+        _ => 4,
+    };
 
     private static bool TryMapSemantic(GltfMeshSemantic semantic, out SceneMeshSemantic mapped)
     {

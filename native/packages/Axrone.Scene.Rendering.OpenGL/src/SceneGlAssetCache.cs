@@ -205,7 +205,14 @@ public sealed class SceneGlAssetCache : IDisposable
         for (int i = 0; i < attributes.Length; i++)
         {
             SceneVertexAttribute attribute = definition.Attributes[i];
-            uint type = attribute.Integer ? GLConst.Int : GLConst.Float;
+            uint type = attribute.Integer
+                ? attribute.ComponentSize switch
+                {
+                    1 => GLConst.UnsignedByte,
+                    2 => GLConst.UnsignedShort,
+                    _ => GLConst.UnsignedInt,
+                }
+                : GLConst.Float;
             attributes[i] = new VertexAttribute(
                 (int)attribute.Semantic,
                 attribute.ComponentCount,
