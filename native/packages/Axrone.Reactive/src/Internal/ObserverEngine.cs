@@ -260,9 +260,11 @@ internal struct EngineLifecycleState
 /// last pin release. A callback may therefore dispose its own subscription (or any other) without
 /// deadlocking.</para>
 /// <para><b>Terminal calls from a callback are rejected.</b> <see cref="Complete(Exception?)"/>,
-/// <see cref="Dispose()"/> and <see cref="DisposeAsync"/> throw <see cref="InvalidOperationException"/>
-/// when called from inside this engine's own dispatch; call them after the callback returns. The
-/// engine never blocks a callback waiting for itself.</para>
+/// <see cref="Dispose()"/>, <see cref="DisposeAsync"/> and <see cref="DrainAsync"/> throw
+/// <see cref="InvalidOperationException"/> when the target engine is anywhere on the current
+/// thread's dispatch stack, including a nested engine that is dispatching it. Terminal forwarding
+/// to an unrelated engine remains allowed. On the same thread the engine never blocks a callback
+/// waiting for its own in-flight dispatch.</para>
 /// <para><b>Drain is multi-waiter.</b> <see cref="DrainAsync"/> hands every waiter the same
 /// completion task, so concurrent drains share one signal.</para>
 /// </remarks>
@@ -738,56 +740,65 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             _order = [Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>()];
         }
 
-        for (int priority = 0; priority < PriorityCount; priority++)
+        PushDispatchFrame();
+        try
         {
-            int[] order = orders[priority];
-            for (int i = 0; i < order.Length; i++)
+            for (int priority = 0; priority < PriorityCount; priority++)
             {
-                int slotIndex = order[i];
-                ref SlotControlBlock block = ref _slots[slotIndex];
-                ulong current = Volatile.Read(ref block.StateAndGen);
-                if ((current & SlotControlBlock.StateMask) != SlotControlBlock.StateActive)
+                int[] order = orders[priority];
+                for (int i = 0; i < order.Length; i++)
                 {
-                    continue;
-                }
-
-                uint generation = (uint)current;
-                IValueObserver<T>? observer = Volatile.Read(ref _observers[slotIndex]);
-                nint context = block.Context;
-
-                if (!TryRetireSlot(ref block, slotIndex, generation))
-                {
-                    continue;
-                }
-
-                if (observer is null)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    if (error is not null)
+                    int slotIndex = order[i];
+                    ref SlotControlBlock block = ref _slots[slotIndex];
+                    ulong current = Volatile.Read(ref block.StateAndGen);
+                    if ((current & SlotControlBlock.StateMask) != SlotControlBlock.StateActive)
                     {
-                        observer.OnError(error, context);
+                        continue;
                     }
-                    else
+
+                    uint generation = (uint)current;
+                    IValueObserver<T>? observer = Volatile.Read(ref _observers[slotIndex]);
+                    nint context = block.Context;
+
+                    if (!TryRetireSlot(ref block, slotIndex, generation))
                     {
-                        observer.OnCompleted(context);
+                        continue;
                     }
-                }
-                catch (Exception exception)
-                {
-                    Interlocked.Increment(ref _observerFaultCount);
-                    TMetricsSink.OnObserverFault(exception, (uint)slotIndex);
+
+                    if (observer is null)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (error is not null)
+                        {
+                            observer.OnError(error, context);
+                        }
+                        else
+                        {
+                            observer.OnCompleted(context);
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        Interlocked.Increment(ref _observerFaultCount);
+                        TMetricsSink.OnObserverFault(exception, (uint)slotIndex);
+                    }
                 }
             }
+
+            Volatile.Write(
+                ref _lifecycle.Status,
+                error is not null ? (int)ObserverEngineStatus.Faulted : (int)ObserverEngineStatus.Completed);
+        }
+        finally
+        {
+            PopDispatchFrame();
+            ExitInFlightGate();
         }
 
-        Volatile.Write(
-            ref _lifecycle.Status,
-            error is not null ? (int)ObserverEngineStatus.Faulted : (int)ObserverEngineStatus.Completed);
-        ExitInFlightGate();
         return true;
     }
 
@@ -797,6 +808,11 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     /// </summary>
     public async ValueTask DrainAsync(CancellationToken cancellationToken = default)
     {
+        if (IsDispatching(this))
+        {
+            ThrowHelper.ThrowTerminalFromCallback();
+        }
+
         if (Volatile.Read(ref _lifecycle.Status) == (int)ObserverEngineStatus.Active)
         {
             Complete();
