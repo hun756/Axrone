@@ -413,11 +413,49 @@ public sealed class ObserverEngineTests
         }
     }
 
+    [Fact]
+    public async Task DrainFromCompletionCallback_ThrowsInsteadOfDeadlocking()
+    {
+        var engine = new ObserverEngine<int>(new ObserverEngineOptions
+        {
+            MaxObservers = 8,
+            FaultBehavior = ObserverFaultBehavior.Propagate,
+        });
+        ObserverSubscription? subscription = null;
+        Task? task = null;
+
+        try
+        {
+            subscription = engine.Subscribe(new DelegateObserver<int>(
+                onCompleted: () => engine.DrainAsync().AsTask().GetAwaiter().GetResult()));
+
+            task = Task.Run(() => engine.Complete());
+
+            Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(task, "drain-from-completion must fail fast, not hang");
+            await task;
+            engine.Status.Should().Be(ObserverEngineStatus.Completed);
+        }
+        finally
+        {
+            if (task?.IsCompletedSuccessfully == true)
+            {
+                subscription?.Dispose();
+                engine.Dispose();
+            }
+        }
+    }
+
     private sealed class DelegateObserver<T> : IValueObserver<T>
     {
         private readonly Action<T>? _onNext;
+        private readonly Action? _onCompleted;
 
-        public DelegateObserver(Action<T>? onNext = null) => _onNext = onNext;
+        public DelegateObserver(Action<T>? onNext = null, Action? onCompleted = null)
+        {
+            _onNext = onNext;
+            _onCompleted = onCompleted;
+        }
 
         public int NextCount;
 
@@ -433,6 +471,10 @@ public sealed class ObserverEngineTests
 
         public void OnError(Exception error, nint context) => ErrorCount++;
 
-        public void OnCompleted(nint context) => CompletedCount++;
+        public void OnCompleted(nint context)
+        {
+            CompletedCount++;
+            _onCompleted?.Invoke();
+        }
     }
 }
