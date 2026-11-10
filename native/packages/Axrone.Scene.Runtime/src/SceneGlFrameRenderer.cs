@@ -1,5 +1,7 @@
 namespace Axrone.Scene.Runtime;
 
+using Axrone.Scene;
+
 /// <summary>
 /// OpenGL execution layer over a <see cref="SceneRuntime"/>. Uploads the asset
 /// catalog once (or after a reload) and submits one draw pass per planned
@@ -58,14 +60,20 @@ public sealed class SceneGlFrameRenderer : IDisposable
     }
 
     /// <summary>Plans and renders one frame.</summary>
-    public SceneRenderStats Render(int frameIndex, float elapsedSeconds = 0.0f)
+    /// <param name="frameIndex">Frame index used by the render-state accumulator.</param>
+    /// <param name="elapsedSeconds">Elapsed time for time-driven feature state.</param>
+    /// <param name="cameraOverride">
+    /// Explicit camera actor for preview rendering; the primary camera is used
+    /// when this is <see cref="SceneActor.Null"/>.
+    /// </param>
+    public SceneRenderStats Render(int frameIndex, float elapsedSeconds = 0.0f, SceneActor cameraOverride = default)
     {
         ThrowIfDisposed();
         _context.AssertRenderThread();
 
         SceneFramePipeline frame = _runtime.Frame;
         frame.TimeSeconds = elapsedSeconds;
-        if (!frame.Plan(frameIndex))
+        if (!frame.Plan(frameIndex, cameraOverride))
         {
             return frame.Complete(0);
         }
