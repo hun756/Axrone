@@ -38,7 +38,7 @@ public abstract class ObservableBase<T> : IObservable<T>, IPriorityObservable<T>
         _subjectOptions = options.Normalize();
 
         int requested = Math.Max(2, _subjectOptions.MaxObservers);
-        int slots = NextPowerOfTwo(requested > 16_384 ? 65_536 : requested * 4);
+        int slots = NextPowerOfTwo(requested > 16_384 ? 65_536 : requested);
         _engine = new ObserverEngine<T>(new ObserverEngineOptions
         {
             MaxObservers = slots,
