@@ -90,8 +90,8 @@ public sealed class SceneBehaviourContext
     /// <summary>Dispatch priority; higher values run first.</summary>
     public int Priority { get; }
 
-    /// <summary>Current lifecycle position; detached contexts report <see cref="SceneBehaviourState.Detached"/>.</summary>
-    public SceneBehaviourState State => _detached ? SceneBehaviourState.Detached : LifecycleState;
+    /// <summary>Current lifecycle position; a detached context reports <see cref="SceneBehaviourState.Destroyed"/>.</summary>
+    public SceneBehaviourState State => LifecycleState;
 
     /// <summary>
     /// Enables or disables update dispatch. The world applies the change immediately when the

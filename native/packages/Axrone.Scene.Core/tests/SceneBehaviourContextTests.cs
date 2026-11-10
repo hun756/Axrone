@@ -32,7 +32,7 @@ public sealed class SceneBehaviourContextTests
 
         world.RemoveBehaviour(behaviour);
         context.IsAttached.Should().BeFalse();
-        context.State.Should().Be(SceneBehaviourState.Detached);
+        context.State.Should().Be(SceneBehaviourState.Destroyed);
         context.Enabled.Should().BeFalse();
     }
 
