@@ -132,6 +132,17 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     /// <summary>Mesh executor used by the orchestrator (diagnostics/tests).</summary>
     internal SceneGlDrawExecutor MeshExecutor => _meshExecutor;
 
+    /// <summary>Skinning diagnostics of the last submitted pass, when skinning is active.</summary>
+    public SceneSkinningDiagnostics SkinningDiagnostics =>
+        _skinnedRenderer?.Diagnostics ?? default;
+
+    /// <summary>Skinned draw calls issued by the last submitted pass.</summary>
+    public int SkinnedDrawCalls => _skinnedRenderer?.LastDrawCalls ?? 0;
+
+    /// <summary>Last skinned batch failure, or <see cref="SceneSkinningFailureReason.None"/>.</summary>
+    public SceneSkinningFailureReason SkinningFailure =>
+        _skinnedRenderer?.LastFailure ?? SceneSkinningFailureReason.None;
+
     /// <summary>Pipeline backend the frame is dispatched through (diagnostics/tests).</summary>
     internal SceneGlRenderPipeline Pipeline => _pipeline;
 

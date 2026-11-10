@@ -33,6 +33,15 @@ public sealed class SceneGlFrameRenderer : IDisposable
     /// <summary>GPU-side asset cache.</summary>
     public SceneGlAssetCache GpuAssets => _assets;
 
+    /// <summary>Skinning diagnostics of the last rendered frame, when skinning is active.</summary>
+    public SceneSkinningDiagnostics SkinningDiagnostics => _orchestrator.SkinningDiagnostics;
+
+    /// <summary>Skinned draw calls issued by the last rendered frame.</summary>
+    public int SkinnedDrawCalls => _orchestrator.SkinnedDrawCalls;
+
+    /// <summary>Last skinned batch failure of the last rendered frame.</summary>
+    public SceneSkinningFailureReason SkinningFailure => _orchestrator.SkinningFailure;
+
     /// <summary>Uploads every registered asset; call after loading a snapshot.</summary>
     public SceneGlUploadStats UploadAssets()
     {
