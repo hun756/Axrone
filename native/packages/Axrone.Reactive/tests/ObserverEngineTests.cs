@@ -115,105 +115,148 @@ public sealed class ObserverEngineTests
     [Fact]
     public async Task CompleteFromCallback_ThrowsInsteadOfDeadlocking()
     {
-        using var engine = new ObserverEngine<int>(new ObserverEngineOptions
+        var engine = new ObserverEngine<int>(new ObserverEngineOptions
         {
             MaxObservers = 8,
             FaultBehavior = ObserverFaultBehavior.Propagate,
         });
+        ObserverSubscription? subscription = null;
+        Task<Exception?>? task = null;
 
-        ObserverEngine<int> captured = engine;
-        using ObserverSubscription subscription = engine.Subscribe(new DelegateObserver<int>(_ => captured.Complete()));
-
-        Task<Exception?> task = Task.Run<Exception?>(() =>
+        try
         {
-            try
-            {
-                engine.Publish(1);
-                return null;
-            }
-            catch (Exception exception)
-            {
-                return exception;
-            }
-        });
+            ObserverEngine<int> captured = engine;
+            subscription = engine.Subscribe(new DelegateObserver<int>(_ => captured.Complete()));
 
-        Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
-        winner.Should().BeSameAs(task, "terminal-from-callback must fail fast, not hang");
-        Exception? exception = await task;
-        exception.Should().BeOfType<InvalidOperationException>()
-            .Which.Message.Should().Contain("inside an observer callback");
-        engine.Status.Should().Be(ObserverEngineStatus.Active);
+            task = Task.Run<Exception?>(() =>
+            {
+                try
+                {
+                    engine.Publish(1);
+                    return null;
+                }
+                catch (Exception exception)
+                {
+                    return exception;
+                }
+            });
+
+            Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(task, "terminal-from-callback must fail fast, not hang");
+            Exception? exception = await task;
+            exception.Should().BeOfType<InvalidOperationException>()
+                .Which.Message.Should().Contain("inside an observer callback");
+            engine.Status.Should().Be(ObserverEngineStatus.Active);
+        }
+        finally
+        {
+            // A regression leaves the dispatch spinning; disposing it would hang the test host too.
+            if (task?.IsCompletedSuccessfully == true)
+            {
+                subscription?.Dispose();
+                engine.Dispose();
+            }
+        }
     }
 
     [Fact]
     public async Task CrossEngineCompleteFromCallback_ThrowsInsteadOfDeadlocking()
     {
-        using var source = new ObserverEngine<int>(new ObserverEngineOptions
+        var source = new ObserverEngine<int>(new ObserverEngineOptions
         {
             MaxObservers = 8,
             FaultBehavior = ObserverFaultBehavior.Propagate,
         });
-        using var sink = new ObserverEngine<int>(new ObserverEngineOptions
+        var sink = new ObserverEngine<int>(new ObserverEngineOptions
         {
             MaxObservers = 8,
             FaultBehavior = ObserverFaultBehavior.Propagate,
         });
+        ObserverSubscription? sourceSub = null;
+        ObserverSubscription? sinkSub = null;
+        Task<Exception?>? task = null;
 
-        using ObserverSubscription sourceSub = source.Subscribe(new DelegateObserver<int>(_ => sink.Publish(0)));
-        using ObserverSubscription sinkSub = sink.Subscribe(new DelegateObserver<int>(_ => source.Complete()));
-
-        Task<Exception?> task = Task.Run<Exception?>(() =>
+        try
         {
-            try
-            {
-                source.Publish(1);
-                return null;
-            }
-            catch (Exception exception)
-            {
-                return exception;
-            }
-        });
+            sourceSub = source.Subscribe(new DelegateObserver<int>(_ => sink.Publish(0)));
+            sinkSub = sink.Subscribe(new DelegateObserver<int>(_ => source.Complete()));
 
-        Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
-        winner.Should().BeSameAs(task, "cross-engine terminal from a callback must fail fast, not hang");
-        Exception? exception = await task;
-        exception.Should().BeOfType<InvalidOperationException>()
-            .Which.Message.Should().Contain("inside an observer callback");
-        source.Status.Should().Be(ObserverEngineStatus.Active);
-        sink.Status.Should().Be(ObserverEngineStatus.Active);
+            task = Task.Run<Exception?>(() =>
+            {
+                try
+                {
+                    source.Publish(1);
+                    return null;
+                }
+                catch (Exception exception)
+                {
+                    return exception;
+                }
+            });
+
+            Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(task, "cross-engine terminal from a callback must fail fast, not hang");
+            Exception? exception = await task;
+            exception.Should().BeOfType<InvalidOperationException>()
+                .Which.Message.Should().Contain("inside an observer callback");
+            source.Status.Should().Be(ObserverEngineStatus.Active);
+            sink.Status.Should().Be(ObserverEngineStatus.Active);
+        }
+        finally
+        {
+            if (task?.IsCompletedSuccessfully == true)
+            {
+                sourceSub?.Dispose();
+                sinkSub?.Dispose();
+                source.Dispose();
+                sink.Dispose();
+            }
+        }
     }
 
     [Fact]
     public async Task DisposeFromCallback_ThrowsInsteadOfDeadlocking()
     {
-        using var engine = new ObserverEngine<int>(new ObserverEngineOptions
+        var engine = new ObserverEngine<int>(new ObserverEngineOptions
         {
             MaxObservers = 8,
             FaultBehavior = ObserverFaultBehavior.Propagate,
         });
+        ObserverSubscription? subscription = null;
+        Task<Exception?>? task = null;
 
-        ObserverEngine<int> captured = engine;
-        using ObserverSubscription subscription = engine.Subscribe(new DelegateObserver<int>(_ => captured.Dispose()));
-
-        Task<Exception?> task = Task.Run<Exception?>(() =>
+        try
         {
-            try
-            {
-                engine.Publish(1);
-                return null;
-            }
-            catch (Exception exception)
-            {
-                return exception;
-            }
-        });
+            ObserverEngine<int> captured = engine;
+            subscription = engine.Subscribe(new DelegateObserver<int>(_ => captured.Dispose()));
 
-        Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
-        winner.Should().BeSameAs(task, "dispose-from-callback must fail fast, not hang");
-        Exception? exception = await task;
-        exception.Should().BeOfType<InvalidOperationException>()
-            .Which.Message.Should().Contain("inside an observer callback");
+            task = Task.Run<Exception?>(() =>
+            {
+                try
+                {
+                    engine.Publish(1);
+                    return null;
+                }
+                catch (Exception exception)
+                {
+                    return exception;
+                }
+            });
+
+            Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(task, "dispose-from-callback must fail fast, not hang");
+            Exception? exception = await task;
+            exception.Should().BeOfType<InvalidOperationException>()
+                .Which.Message.Should().Contain("inside an observer callback");
+        }
+        finally
+        {
+            if (task?.IsCompletedSuccessfully == true)
+            {
+                subscription?.Dispose();
+                engine.Dispose();
+            }
+        }
     }
 
     [Fact]
