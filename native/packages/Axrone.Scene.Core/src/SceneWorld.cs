@@ -277,7 +277,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         }
     }
 
-    /// <summary>Stops lifecycle dispatch and reverts all behaviours to Awake.</summary>
+    /// <summary>Stops lifecycle dispatch and reverts all behaviours to Loaded.</summary>
     public void Stop()
     {
         ThrowIfDisposed();

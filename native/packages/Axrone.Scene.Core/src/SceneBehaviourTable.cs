@@ -227,7 +227,7 @@ internal sealed class SceneBehaviourTable
         return Remove(_slots[slot].Behaviour!);
     }
 
-    /// <summary>Starts every behaviour still in the Awake state.</summary>
+    /// <summary>Starts every behaviour still in the OnLoad state.</summary>
     public void StartAll()
     {
         for (int i = 0; i < _orderCount; i++)
@@ -249,7 +249,7 @@ internal sealed class SceneBehaviourTable
         }
     }
 
-    /// <summary>Reverts every started behaviour back to Awake so the next Start re-runs Start.</summary>
+    /// <summary>Reverts every started behaviour back to OnLoad so the next Start re-runs Start.</summary>
     public void ResetAll()
     {
         for (int i = 0; i < _orderCount; i++)
@@ -458,7 +458,7 @@ internal sealed class SceneBehaviourTable
             // Hierarchy state is known before Start so attaching to an inactive
             // actor never fires a spurious OnEnable.
             behaviour.SetActiveInHierarchyInternal(_host.IsActiveInHierarchy(actor));
-            behaviour.AwakeInternal();
+            behaviour.LoadInternal();
             if (_host.IsStarted)
             {
                 behaviour.StartInternal();

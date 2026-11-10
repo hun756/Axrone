@@ -9,14 +9,14 @@ internal struct Health : ISceneDataComponent
 
 internal sealed class CounterBehaviour : SceneBehaviour
 {
-    public int AwakeCount;
+    public int LoadCount;
     public int StartCount;
     public int EnableCount;
     public int DisableCount;
     public int DestroyCount;
     public int Updates;
 
-    public override void Awake() => AwakeCount++;
+    public override void OnLoad() => LoadCount++;
 
     public override void OnEnable() => EnableCount++;
 

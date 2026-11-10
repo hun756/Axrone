@@ -6,8 +6,8 @@ public enum SceneBehaviourState : byte
     /// <summary>Constructed but not attached to an actor.</summary>
     Detached = 0,
 
-    /// <summary>Awake has run.</summary>
-    Awake = 1,
+    /// <summary>OnLoad has run.</summary>
+    Loaded = 1,
 
     /// <summary>Start has run, but the behaviour is not enabled.</summary>
     Started = 2,
@@ -41,12 +41,12 @@ public interface ISceneBehaviour
     int Priority { get; }
 
     /// <summary>Runs once when the behaviour is attached to a started world.</summary>
-    void Awake();
+    void OnLoad();
 
     /// <summary>Runs when the behaviour becomes enabled.</summary>
     void OnEnable();
 
-    /// <summary>Runs once after Awake.</summary>
+    /// <summary>Runs once after OnLoad.</summary>
     void Start();
 
     /// <summary>Runs on every fixed step while enabled.</summary>
@@ -68,7 +68,7 @@ public interface ISceneBehaviour
 /// <summary>
 /// Base class for managed scene behaviours. Lifecycle transitions are driven
 /// by the owning world through the internal methods, so user code cannot
-/// reorder Awake/Start/Enable or resurrect a destroyed instance.
+/// reorder OnLoad/Start/Enable or resurrect a destroyed instance.
 /// </summary>
 public abstract class SceneBehaviour : ISceneBehaviour
 {
@@ -147,7 +147,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
     }
 
     /// <inheritdoc/>
-    public virtual void Awake()
+    public virtual void OnLoad()
     {
     }
 
@@ -253,20 +253,20 @@ public abstract class SceneBehaviour : ISceneBehaviour
         }
     }
 
-    /// <summary>Runs Awake exactly once.</summary>
-    internal void AwakeInternal()
+    /// <summary>Runs OnLoad exactly once.</summary>
+    internal void LoadInternal()
     {
         if (_state != SceneBehaviourState.Detached)
         {
             return;
         }
 
-        Awake();
-        _state = SceneBehaviourState.Awake;
+        OnLoad();
+        _state = SceneBehaviourState.Loaded;
     }
 
     /// <summary>
-    /// Reverts Started/Enabled/Disabled back to Awake so the next world Start
+    /// Reverts Started/Enabled/Disabled back to Loaded so the next world Start
     /// re-runs Start and OnEnable without a fresh instance.
     /// </summary>
     internal void ResetForRestart()
@@ -280,14 +280,14 @@ public abstract class SceneBehaviour : ISceneBehaviour
             SceneBehaviourState.Enabled or
             SceneBehaviourState.Disabled)
         {
-            _state = SceneBehaviourState.Awake;
+            _state = SceneBehaviourState.Loaded;
         }
     }
 
     /// <summary>Runs Start and applies the initial enabled and hierarchy state.</summary>
     internal void StartInternal()
     {
-        if (_state != SceneBehaviourState.Awake)
+        if (_state != SceneBehaviourState.Loaded)
         {
             return;
         }
