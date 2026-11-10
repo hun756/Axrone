@@ -98,6 +98,12 @@ public sealed class SceneOrbitCameraControllerBehaviour : ISceneBehaviour
     /// <summary>Applies a distance delta inside the clamp range.</summary>
     public void Zoom(float deltaDistance) => Distance = _distance + deltaDistance;
 
+    /// <summary>
+    /// Advances the orbit controller outside the world behaviour loop. Editor
+    /// camera rigs drive the transform manually while the world is paused.
+    /// </summary>
+    public void Tick(float deltaSeconds) => Update(deltaSeconds);
+
     /// <inheritdoc/>
     public void OnAttach(SceneBehaviourContext context)
     {
