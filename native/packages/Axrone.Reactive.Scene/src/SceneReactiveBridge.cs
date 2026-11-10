@@ -85,7 +85,7 @@ public sealed class SceneReactiveBridge : IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(loop);
-        if (_loop is not null && !ReferenceEquals(_loop, loop))
+        if (_loop is not null)
         {
             _loop.FrameCompleted -= OnLoopFrame;
         }

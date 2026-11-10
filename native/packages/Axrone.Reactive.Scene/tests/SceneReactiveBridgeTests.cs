@@ -179,6 +179,31 @@ public sealed class SceneReactiveBridgeTests
         bridge.Dispose();
     }
 
+    [Fact]
+    public void ReattachingTheSameLoopKeepsASingleRegistration()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/reactive-loop-reattach")))
+            .AddTransform3D()
+            .Build();
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        var bridge = new SceneReactiveBridge(runtime.World);
+        using var loop = new SceneRuntimeLoop(runtime);
+        var created = new List<SceneActor>();
+        using IDisposable subscription = bridge.ActorCreated.Subscribe(new Observer<SceneActor>(created.Add));
+
+        bridge.AttachLoop(loop);
+        bridge.AttachLoop(loop);
+        bridge.DetachLoop();
+        loop.Start();
+        _ = runtime.World.CreateActor();
+        _ = loop.Tick();
+
+        created.Should().BeEmpty("detach must remove the single loop registration");
+
+        bridge.Dispose();
+    }
+
     private static SceneWorld CreateWorld()
     {
         var registry = new SceneComponentRegistry();
