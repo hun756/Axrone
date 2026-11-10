@@ -11,8 +11,11 @@ public sealed class SceneChangeJournalTests
         public int Value;
     }
 
-    private sealed class TrackingBehaviour : SceneBehaviour
+    private sealed class TrackingBehaviour : ISceneBehaviour
     {
+        public SceneBehaviourContext? Context { get; private set; }
+
+        public void OnAttach(SceneBehaviourContext context) => Context = context;
     }
 
     private sealed class Tracker : IDisposable
@@ -54,7 +57,7 @@ public sealed class SceneChangeJournalTests
         SceneActor actor = world.CreateActor();
         TrackingBehaviour behaviour = world.AddBehaviour<TrackingBehaviour>(actor);
         var tracker = new Tracker();
-        behaviour.TrackSubscription(tracker);
+        behaviour.Context!.Track(tracker);
 
         world.RemoveBehaviour(behaviour);
 
@@ -79,8 +82,8 @@ public sealed class SceneChangeJournalTests
         TrackingBehaviour behaviour = world.AddBehaviour<TrackingBehaviour>(actor);
         world.Start();
 
-        behaviour.Enabled = false;
-        behaviour.Enabled = true;
+        world.SetBehaviourEnabled<TrackingBehaviour>(actor, false);
+        world.SetBehaviourEnabled<TrackingBehaviour>(actor, true);
 
         var buffer = new SceneChange[16];
         int count = world.Changes.Drain(buffer);

@@ -6,7 +6,7 @@ public enum SceneBehaviourState : byte
     /// <summary>Constructed but not attached to an actor.</summary>
     Detached = 0,
 
-    /// <summary>OnLoad has run.</summary>
+    /// <summary>OnAttach has run.</summary>
     Loaded = 1,
 
     /// <summary>Start has run, but the behaviour is not enabled.</summary>
@@ -18,384 +18,194 @@ public enum SceneBehaviourState : byte
     /// <summary>Disable has run; update phases are skipped.</summary>
     Disabled = 4,
 
-    /// <summary>Destroy has run; the instance must not be reused.</summary>
+    /// <summary>Detach has run; the instance must not be reused.</summary>
     Destroyed = 5
 }
 
 /// <summary>
-/// Managed lifecycle contract. Data components intentionally do not implement
-/// this: they are plain payloads consumed by systems.
+/// Managed scene behaviour contract. Implementations get exactly one entry point,
+/// <see cref="OnAttach"/>, and register the callbacks they need on the supplied
+/// <see cref="SceneBehaviourContext"/>. There is no base class and no lifecycle override
+/// surface: an unused phase costs no virtual dispatch and no empty override.
 /// </summary>
+/// <remarks>
+/// Data components intentionally do not implement this interface: they are plain payloads
+/// consumed by systems. A behaviour is the managed half of the scene model and owns
+/// per-instance state.
+/// </remarks>
 public interface ISceneBehaviour
 {
-    /// <summary>Owning actor, or <see cref="SceneActor.Null"/> while detached.</summary>
-    SceneActor Actor { get; }
-
-    /// <summary>Current lifecycle position.</summary>
-    SceneBehaviourState State { get; }
-
-    /// <summary>Whether update phases dispatch.</summary>
-    bool Enabled { get; set; }
-
-    /// <summary>Dispatch order; higher values run first.</summary>
-    int Priority { get; }
-
-    /// <summary>Runs once when the behaviour is attached to a started world.</summary>
-    void OnLoad();
-
-    /// <summary>Runs when the behaviour becomes enabled.</summary>
-    void OnEnable();
-
-    /// <summary>Runs once after OnLoad.</summary>
-    void Start();
-
-    /// <summary>Runs on every fixed step while enabled.</summary>
-    void FixedUpdate(float deltaSeconds);
-
-    /// <summary>Runs on every frame while enabled.</summary>
-    void Update(float deltaSeconds);
-
-    /// <summary>Runs after Update while enabled.</summary>
-    void LateUpdate(float deltaSeconds);
-
-    /// <summary>Runs when the behaviour becomes disabled.</summary>
-    void OnDisable();
-
-    /// <summary>Runs once when the behaviour is removed or destroyed.</summary>
-    void OnDestroy();
+    /// <summary>
+    /// Called once when the instance is attached to an actor. Register callbacks and
+    /// lifetime-bound subscriptions here; the context is valid for the whole attachment.
+    /// </summary>
+    void OnAttach(SceneBehaviourContext context);
 }
 
 /// <summary>
-/// Base class for managed scene behaviours. Lifecycle transitions are driven
-/// by the owning world through the internal methods, so user code cannot
-/// reorder OnLoad/Start/Enable or resurrect a destroyed instance.
+/// Attachment context for one <see cref="ISceneBehaviour"/> instance. It exposes the owning
+/// actor and world, live lifecycle state, typed scene-component access, and explicit
+/// registration of the phases the behaviour actually uses.
 /// </summary>
-public abstract class SceneBehaviour : ISceneBehaviour
+/// <remarks>
+/// <para>The context stays valid after detach; <see cref="IsAttached"/> turns false and
+/// <see cref="Enabled"/> reads false, so a script may safely keep the reference for
+/// diagnostics without touching a reused table slot.</para>
+/// <para>Registering the same phase twice throws: a silent overwrite would hide a bug in
+/// script setup.</para>
+/// </remarks>
+public sealed class SceneBehaviourContext
 {
-    private SceneActor _actor = SceneActor.Null;
-    private SceneBehaviourState _state = SceneBehaviourState.Detached;
-    private bool _enabled = true;
-    private bool _activeInHierarchy = true;
-    private int _priority;
-    /// <summary>Owning behaviour-table slot; <c>-1</c> while detached.</summary>
-    internal int SlotIndex = -1;
+    private readonly SceneBehaviourTable _table;
+    private readonly int _slot;
+    private bool _detached;
 
-    /// <summary>Journal used to record enable/disable transitions; set by the owning table.</summary>
-    internal SceneChangeJournal? Changes;
-
-    /// <summary>Registered behaviour type; set by the owning table.</summary>
-    internal SceneBehaviourTypeId TypeId;
-
-    private List<IDisposable>? _subscriptions;
-
-    /// <inheritdoc/>
-    public SceneActor Actor
+    internal SceneBehaviourContext(
+        SceneBehaviourTable table,
+        int slot,
+        SceneActor actor,
+        SceneWorld world,
+        SceneBehaviourTypeId typeId,
+        int priority)
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _actor;
+        _table = table;
+        _slot = slot;
+        Actor = actor;
+        World = world;
+        TypeId = typeId;
+        Priority = priority;
+        EnabledFlag = true;
+        ActiveInHierarchyFlag = true;
     }
 
-    /// <inheritdoc/>
-    public SceneBehaviourState State
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _state;
-    }
+    /// <summary>Owning actor.</summary>
+    public SceneActor Actor { get; }
 
-    /// <summary>Whether the behaviour is attached to an actor.</summary>
-    public bool IsAttached
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _actor.IsValid;
-    }
+    /// <summary>Owning world.</summary>
+    public SceneWorld World { get; }
 
-    /// <summary>Owning world, or <see langword="null"/> while detached.</summary>
-    public SceneWorld? World { get; private set; }
+    /// <summary>Registered behaviour type id.</summary>
+    public SceneBehaviourTypeId TypeId { get; }
 
-    /// <summary>Whether the behaviour has been destroyed.</summary>
-    public bool IsDestroyed
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _state == SceneBehaviourState.Destroyed;
-    }
+    /// <summary>Dispatch priority; higher values run first.</summary>
+    public int Priority { get; }
+
+    /// <summary>Current lifecycle position; detached contexts report <see cref="SceneBehaviourState.Detached"/>.</summary>
+    public SceneBehaviourState State => _detached ? SceneBehaviourState.Detached : LifecycleState;
 
     /// <summary>
-    /// Enables or disables update dispatch. Detached behaviours only record the
-    /// flag; the world applies it once the behaviour reaches Started.
+    /// Enables or disables update dispatch. The world applies the change immediately when the
+    /// behaviour has started; before that the flag is remembered for the start transition.
     /// </summary>
     public bool Enabled
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _enabled;
-        set
-        {
-            if (_enabled == value)
-            {
-                return;
-            }
-
-            _enabled = value;
-            RefreshDispatchState();
-        }
+        get => !_detached && EnabledFlag;
+        set => _table.SetEnabled(this, value);
     }
 
-    /// <inheritdoc/>
-    public int Priority
+    /// <summary>Whether the behaviour is still attached to its actor.</summary>
+    public bool IsAttached => !_detached;
+
+    /// <summary>Whether the actor's hierarchy branch is active.</summary>
+    public bool IsActiveInHierarchy => !_detached && ActiveInHierarchyFlag;
+
+    /// <summary>Whether the owning world has started.</summary>
+    public bool IsWorldStarted => _table.IsStarted;
+
+    internal int Slot => _slot;
+
+    internal SceneBehaviourState LifecycleState;
+
+    internal bool EnabledFlag;
+
+    internal bool ActiveInHierarchyFlag;
+
+    /// <summary>Tries to read one unmanaged scene component from the owning actor.</summary>
+    public bool TryGet<T>(out T value)
+        where T : unmanaged, ISceneDataComponent =>
+        World.TryGetData(Actor, out value);
+
+    /// <summary>Reads one unmanaged scene component from the owning actor.</summary>
+    public T Get<T>()
+        where T : unmanaged, ISceneDataComponent =>
+        World.GetData<T>(Actor);
+
+    /// <summary>Registers the callback that runs when the world starts.</summary>
+    public void OnStart(Action callback)
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _priority;
+        EnsureAttached();
+        _table.RegisterStart(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void OnLoad()
+    /// <summary>Registers the callback that runs when the behaviour becomes enabled.</summary>
+    public void OnEnable(Action callback)
     {
+        EnsureAttached();
+        _table.RegisterEnable(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void OnEnable()
+    /// <summary>Registers the callback that runs when the behaviour becomes disabled.</summary>
+    public void OnDisable(Action callback)
     {
+        EnsureAttached();
+        _table.RegisterDisable(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void Start()
+    /// <summary>Registers the callback that runs once per fixed step while enabled.</summary>
+    public void OnFixedUpdate(Action<float> callback)
     {
+        EnsureAttached();
+        _table.RegisterFixedUpdate(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void FixedUpdate(float deltaSeconds)
+    /// <summary>Registers the callback that runs once per frame while enabled.</summary>
+    public void OnUpdate(Action<float> callback)
     {
+        EnsureAttached();
+        _table.RegisterUpdate(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void Update(float deltaSeconds)
+    /// <summary>Registers the callback that runs after update while enabled.</summary>
+    public void OnLateUpdate(Action<float> callback)
     {
+        EnsureAttached();
+        _table.RegisterLateUpdate(this, callback);
     }
 
-    /// <inheritdoc/>
-    public virtual void LateUpdate(float deltaSeconds)
+    /// <summary>Registers cleanup that runs when the behaviour is removed or its actor is destroyed.</summary>
+    public void OnDetach(Action callback)
     {
-    }
-
-    /// <inheritdoc/>
-    public virtual void OnDisable()
-    {
-    }
-
-    /// <inheritdoc/>
-    public virtual void OnDestroy()
-    {
-    }
-
-    /// <summary>Attaches the instance to an actor and records its dispatch priority.</summary>
-    internal void Attach(in SceneActor actor, int priority, SceneWorld world)
-    {
-        if (_actor.IsValid)
-        {
-            throw new SceneValidationException(
-                SceneErrorCodes.ValidationInvalid,
-                $"{GetType().Name} is already attached to {_actor}.");
-        }
-
-        if (_state == SceneBehaviourState.Destroyed)
-        {
-            throw new SceneValidationException(
-                SceneErrorCodes.ValidationInvalid,
-                $"{GetType().Name} has been destroyed and cannot be reattached.");
-        }
-
-        _actor = actor;
-        _priority = priority;
-        World = world;
-        _state = SceneBehaviourState.Detached;
-    }
-
-    /// <summary>Clears the actor binding after destruction.</summary>
-    internal void Detach()
-    {
-        _actor = SceneActor.Null;
-        _priority = 0;
-        World = null;
-        SlotIndex = -1;
-        Changes = null;
-        TypeId = default;
+        EnsureAttached();
+        _table.RegisterDetach(this, callback);
     }
 
     /// <summary>
-    /// Tracks a subscription whose lifetime is bound to this behaviour. The owning table disposes
-    /// it when the behaviour is removed or the actor is destroyed.
+    /// Binds a subscription to this attachment. The owning table disposes it on detach, so
+    /// observable handlers cannot outlive the behaviour that registered them.
     /// </summary>
-    public void TrackSubscription(IDisposable subscription)
+    public IDisposable Track(IDisposable subscription)
     {
         ArgumentNullException.ThrowIfNull(subscription);
-        (_subscriptions ??= new List<IDisposable>()).Add(subscription);
+        EnsureAttached();
+        _table.Track(this, subscription);
+        return subscription;
     }
 
-    /// <summary>Disposes every tracked subscription; called by the owning table on teardown.</summary>
-    internal void DisposeSubscriptions()
+    internal void MarkDetached()
     {
-        List<IDisposable>? subscriptions = _subscriptions;
-        if (subscriptions is null)
-        {
-            return;
-        }
-
-        _subscriptions = null;
-        for (int i = subscriptions.Count - 1; i >= 0; i--)
-        {
-            try
-            {
-                subscriptions[i].Dispose();
-            }
-            catch (Exception)
-            {
-                // Teardown must finish even when a subscription's dispose misbehaves.
-            }
-        }
+        _detached = true;
+        EnabledFlag = false;
+        ActiveInHierarchyFlag = false;
+        LifecycleState = SceneBehaviourState.Destroyed;
     }
 
-    /// <summary>Runs OnLoad exactly once.</summary>
-    internal void LoadInternal()
+    private void EnsureAttached()
     {
-        if (_state != SceneBehaviourState.Detached)
+        if (_detached)
         {
-            return;
+            throw new SceneValidationException(
+                SceneErrorCodes.ValidationInvalid,
+                "The behaviour context is no longer attached.");
         }
-
-        OnLoad();
-        _state = SceneBehaviourState.Loaded;
-    }
-
-    /// <summary>
-    /// Reverts Started/Enabled/Disabled back to Loaded so the next world Start
-    /// re-runs Start and OnEnable without a fresh instance.
-    /// </summary>
-    internal void ResetForRestart()
-    {
-        if (_state == SceneBehaviourState.Enabled)
-        {
-            OnDisable();
-        }
-
-        if (_state is SceneBehaviourState.Started or
-            SceneBehaviourState.Enabled or
-            SceneBehaviourState.Disabled)
-        {
-            _state = SceneBehaviourState.Loaded;
-        }
-    }
-
-    /// <summary>Runs Start and applies the initial enabled and hierarchy state.</summary>
-    internal void StartInternal()
-    {
-        if (_state != SceneBehaviourState.Loaded)
-        {
-            return;
-        }
-
-        Start();
-        _state = SceneBehaviourState.Started;
-
-        if (_enabled && _activeInHierarchy)
-        {
-            _state = SceneBehaviourState.Enabled;
-            Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
-            OnEnable();
-        }
-        else
-        {
-            _state = SceneBehaviourState.Disabled;
-            Changes?.Write(SceneChange.BehaviourDisabled(Actor, TypeId));
-        }
-    }
-
-    /// <summary>
-    /// Applies hierarchy activation without touching the caller-controlled
-    /// enabled flag, firing enable/disable only on effective transitions.
-    /// </summary>
-    internal void SetActiveInHierarchyInternal(bool active)
-    {
-        if (_activeInHierarchy == active)
-        {
-            if (active && _state == SceneBehaviourState.Disabled && _enabled)
-            {
-                _state = SceneBehaviourState.Enabled;
-                Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
-                OnEnable();
-            }
-
-            return;
-        }
-
-        _activeInHierarchy = active;
-        RefreshDispatchState();
-    }
-
-    private void RefreshDispatchState()
-    {
-        if (_state is not (SceneBehaviourState.Enabled or SceneBehaviourState.Disabled))
-        {
-            return;
-        }
-
-        bool shouldDispatch = _enabled && _activeInHierarchy;
-        if (shouldDispatch && _state == SceneBehaviourState.Disabled)
-        {
-            _state = SceneBehaviourState.Enabled;
-            Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
-            OnEnable();
-        }
-        else if (!shouldDispatch && _state == SceneBehaviourState.Enabled)
-        {
-            _state = SceneBehaviourState.Disabled;
-            Changes?.Write(SceneChange.BehaviourDisabled(Actor, TypeId));
-            OnDisable();
-        }
-    }
-
-    /// <summary>Dispatches one fixed step when enabled.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void FixedUpdateInternal(float deltaSeconds)
-    {
-        if (_state == SceneBehaviourState.Enabled)
-        {
-            FixedUpdate(deltaSeconds);
-        }
-    }
-
-    /// <summary>Dispatches one frame update when enabled.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void UpdateInternal(float deltaSeconds)
-    {
-        if (_state == SceneBehaviourState.Enabled)
-        {
-            Update(deltaSeconds);
-        }
-    }
-
-    /// <summary>Dispatches one late update when enabled.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void LateUpdateInternal(float deltaSeconds)
-    {
-        if (_state == SceneBehaviourState.Enabled)
-        {
-            LateUpdate(deltaSeconds);
-        }
-    }
-
-    /// <summary>Runs disable and destroy exactly once.</summary>
-    internal void DestroyInternal()
-    {
-        if (_state == SceneBehaviourState.Destroyed)
-        {
-            return;
-        }
-
-        if (_state == SceneBehaviourState.Enabled)
-        {
-            OnDisable();
-        }
-
-        OnDestroy();
-        _state = SceneBehaviourState.Destroyed;
     }
 }

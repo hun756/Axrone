@@ -5,7 +5,7 @@ namespace Axrone.Scene.Runtime;
 /// elevation are clamped, azimuth wraps freely, and the camera always looks at
 /// the target with a pole-safe up vector.
 /// </summary>
-public sealed class SceneOrbitCameraControllerBehaviour : SceneBehaviour
+public sealed class SceneOrbitCameraControllerBehaviour : ISceneBehaviour
 {
     private Vec3 _target;
     private Vec3 _up = Vec3.UnitY;
@@ -15,6 +15,8 @@ public sealed class SceneOrbitCameraControllerBehaviour : SceneBehaviour
     private float _azimuth;
     private float _elevation = 0.35f;
     private float _autoRotateSpeed;
+    private SceneWorld? _world;
+    private SceneActor _actor = SceneActor.Null;
 
     /// <summary>Creates an orbit controller at the default distance.</summary>
     public SceneOrbitCameraControllerBehaviour()
@@ -97,14 +99,29 @@ public sealed class SceneOrbitCameraControllerBehaviour : SceneBehaviour
     public void Zoom(float deltaDistance) => Distance = _distance + deltaDistance;
 
     /// <inheritdoc/>
-    public override void Update(float deltaSeconds)
+    public void OnAttach(SceneBehaviourContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        _world = context.World;
+        _actor = context.Actor;
+        context.OnUpdate(Update);
+        context.OnDetach(ClearAttachment);
+    }
+
+    private void ClearAttachment()
+    {
+        _world = null;
+        _actor = SceneActor.Null;
+    }
+
+    private void Update(float deltaSeconds)
     {
         if (_autoRotateSpeed != 0.0f)
         {
             _azimuth += _autoRotateSpeed * deltaSeconds;
         }
 
-        SceneWorld? world = World;
+        SceneWorld? world = _world;
         if (world is null || !world.HasTransform3D)
         {
             return;
@@ -115,7 +132,7 @@ public sealed class SceneOrbitCameraControllerBehaviour : SceneBehaviour
             _azimuth,
             _elevation,
             _distance);
-        ref SceneTransform3D transform = ref world.GetTransform3D(Actor);
+        ref SceneTransform3D transform = ref world.GetTransform3D(_actor);
         SceneCameraOrbitMath.ApplyLook(ref transform, position, _target, _up);
     }
 }

@@ -659,7 +659,7 @@ public sealed class SceneRuntimeTests
         loop.Status.Should().Be(GameLoopStatus.Idle);
     }
 
-    private sealed class CountingBehaviour : SceneBehaviour
+    private sealed class CountingBehaviour : ISceneBehaviour
     {
         public int StartCount { get; private set; }
 
@@ -669,13 +669,13 @@ public sealed class SceneRuntimeTests
 
         public int FixedUpdateCount { get; private set; }
 
-        public override void Start() => StartCount++;
-
-        public override void OnEnable() => EnableCount++;
-
-        public override void Update(float deltaSeconds) => UpdateCount++;
-
-        public override void FixedUpdate(float deltaSeconds) => FixedUpdateCount++;
+        public void OnAttach(SceneBehaviourContext context)
+        {
+            context.OnStart(() => StartCount++);
+            context.OnEnable(() => EnableCount++);
+            context.OnUpdate(_ => UpdateCount++);
+            context.OnFixedUpdate(_ => FixedUpdateCount++);
+        }
     }
 
     private static SceneRuntime Create2DRuntime(out SceneAssetRegistry assets)

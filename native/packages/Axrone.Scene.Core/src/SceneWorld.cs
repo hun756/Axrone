@@ -580,7 +580,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Creates and attaches a managed behaviour through its factory.</summary>
     public T AddBehaviour<T>(SceneActor actor)
-        where T : SceneBehaviour
+        where T : class, ISceneBehaviour
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(AddBehaviour));
@@ -589,7 +589,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Attaches a preconstructed managed behaviour.</summary>
     public T AddBehaviour<T>(SceneActor actor, T behaviour)
-        where T : SceneBehaviour
+        where T : class, ISceneBehaviour
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(AddBehaviour));
@@ -597,15 +597,48 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     }
 
     /// <summary>Creates and attaches a behaviour from a descriptor.</summary>
-    public SceneBehaviour AddBehaviour(SceneActor actor, SceneBehaviourDescriptor descriptor)
+    public ISceneBehaviour AddBehaviour(SceneActor actor, SceneBehaviourDescriptor descriptor)
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(AddBehaviour));
         return _behaviours.Add(actor, descriptor);
     }
 
+    /// <summary>Returns the attachment context of the first behaviour of a type on an actor.</summary>
+    public SceneBehaviourContext? GetBehaviourContext<T>(SceneActor actor)
+        where T : class, ISceneBehaviour
+    {
+        ThrowIfDisposed();
+        return _behaviours.GetContext<T>(actor);
+    }
+
+    /// <summary>Enables or disables the first behaviour of a type on an actor.</summary>
+    /// <returns><see langword="false"/> when the actor has no behaviour of that type.</returns>
+    public bool SetBehaviourEnabled<T>(SceneActor actor, bool enabled)
+        where T : class, ISceneBehaviour
+    {
+        ThrowIfDisposed();
+        ThrowIfIterating(nameof(SetBehaviourEnabled));
+        SceneBehaviourContext? context = _behaviours.GetContext<T>(actor);
+        if (context is null)
+        {
+            return false;
+        }
+
+        context.Enabled = enabled;
+        return true;
+    }
+
+    /// <summary>Whether the first behaviour of a type on an actor is enabled.</summary>
+    public bool IsBehaviourEnabled<T>(SceneActor actor)
+        where T : class, ISceneBehaviour
+    {
+        ThrowIfDisposed();
+        return _behaviours.GetContext<T>(actor)?.Enabled == true;
+    }
+
     /// <summary>Removes a specific behaviour instance.</summary>
-    public bool RemoveBehaviour(SceneBehaviour behaviour)
+    public bool RemoveBehaviour(ISceneBehaviour behaviour)
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(RemoveBehaviour));
@@ -614,7 +647,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Removes the first behaviour of a type from an actor.</summary>
     public bool RemoveBehaviour<T>(SceneActor actor)
-        where T : SceneBehaviour
+        where T : class, ISceneBehaviour
     {
         ThrowIfDisposed();
         ThrowIfIterating(nameof(RemoveBehaviour));
@@ -623,7 +656,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Returns the first behaviour of a type on an actor.</summary>
     public T? GetBehaviour<T>(SceneActor actor)
-        where T : SceneBehaviour
+        where T : class, ISceneBehaviour
     {
         ThrowIfDisposed();
         return _behaviours.Get<T>(actor);
@@ -631,7 +664,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Whether an actor carries a behaviour of a type.</summary>
     public bool HasBehaviour<T>(SceneActor actor)
-        where T : SceneBehaviour
+        where T : class, ISceneBehaviour
     {
         ThrowIfDisposed();
         return _behaviours.Has<T>(actor);
@@ -832,14 +865,18 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     SceneWorld ISceneBehaviourHost.World => this;
 
-    void ISceneBehaviourHost.ReportBehaviourFault(SceneBehaviour behaviour, Exception exception)
+    void ISceneBehaviourHost.ReportBehaviourFault(
+        ISceneBehaviour behaviour,
+        SceneActor actor,
+        int slot,
+        Exception exception)
     {
-        SceneActor actor = behaviour.Actor;
+        _ = behaviour;
         SceneDiagnostic diagnostic = SceneDiagnostic.ForActor(
             SceneDiagnosticSeverity.Error,
             SceneDiagnosticCodes.BehaviourFaulted,
             in actor,
-            numeric: behaviour.SlotIndex);
+            numeric: slot);
         _diagnostics.Report(in diagnostic);
 
         if (_errorPolicy == SceneWorldErrorPolicy.FailFast)
