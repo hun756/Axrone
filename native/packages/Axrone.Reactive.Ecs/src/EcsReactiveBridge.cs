@@ -65,24 +65,24 @@ public sealed class EcsReactiveBridge : IDisposable, ISystemEventListener
     }
 
     /// <summary>Gets the entity created/destroyed stream.</summary>
-    public ObservableBase<EntityLifecycleEvent> EntityLifecycle => _lifecycle;
+    public IPriorityObservable<EntityLifecycleEvent> EntityLifecycle => _lifecycle;
 
     /// <summary>Gets the frame-started stream.</summary>
-    public ObservableBase<FrameEvent> FrameStarted => _frameStarted;
+    public IPriorityObservable<FrameEvent> FrameStarted => _frameStarted;
 
     /// <summary>Gets the frame-completed stream.</summary>
-    public ObservableBase<FrameEvent> FrameCompleted => _frameCompleted;
+    public IPriorityObservable<FrameEvent> FrameCompleted => _frameCompleted;
 
     /// <summary>Gets the system-started stream.</summary>
-    public ObservableBase<SystemEvent> SystemStarted => _systemStarted;
+    public IPriorityObservable<SystemEvent> SystemStarted => _systemStarted;
 
     /// <summary>Gets the system-completed stream.</summary>
-    public ObservableBase<SystemEvent> SystemCompleted => _systemCompleted;
+    public IPriorityObservable<SystemEvent> SystemCompleted => _systemCompleted;
 
     /// <summary>Gets the system-faulted stream.</summary>
-    public ObservableBase<SystemFaultEvent> SystemFaulted => _systemFaulted;
+    public IPriorityObservable<SystemFaultEvent> SystemFaulted => _systemFaulted;
 
-    public ObservableBase<int> PollCompleted => _pollCompleted;
+    public IPriorityObservable<int> PollCompleted => _pollCompleted;
 
     public World World => _world;
 

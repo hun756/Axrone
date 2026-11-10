@@ -54,7 +54,7 @@ public sealed class ObserverEngineTests
     }
 
     [Fact]
-    public void ObserverCanDisposeAnotherSubscriptionDuringTheSamePass()
+    public void DisposingAnotherSubscriptionDuringNotify_KeepsTheCurrentSnapshot()
     {
         using var engine = new ObserverEngine<int>(new ObserverEngineOptions { MaxObservers = 8 });
         ObserverSubscription later = default;
@@ -65,8 +65,11 @@ public sealed class ObserverEngineTests
 
         engine.Publish(1);
 
-        laterCalls.Should().Be(0, "the cleared slot must be skipped by the in-flight pass");
+        laterCalls.Should().Be(1, "the in-flight snapshot was pinned before notification");
         engine.ActiveSubscriberCount.Should().Be(1, "only the observer that disposed its peer remains");
+
+        engine.Publish(2);
+        laterCalls.Should().Be(1, "the disposed slot is gone from the next publish");
     }
 
     [Fact]
@@ -262,6 +265,70 @@ public sealed class ObserverEngineTests
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         allocated.Should().Be(0);
+    }
+
+    [Fact]
+    public void SubscribeDisposeChurn_KeepsActiveCountBounded()
+    {
+        using var engine = new ObserverEngine<int>(new ObserverEngineOptions { MaxObservers = 128, MaxSubscribers = 100 });
+        var observer = new DelegateObserver<int>();
+
+        for (int i = 0; i < 10_000; i++)
+        {
+            ObserverSubscription subscription = engine.Subscribe(observer);
+            subscription.Dispose();
+        }
+
+        engine.ActiveSubscriberCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void SubjectChurn_DisposesSubscriptions()
+    {
+        using var subject = new Subject<int>();
+        var observer = new NoopObserver<int>();
+
+        for (int i = 0; i < 1_000; i++)
+        {
+            using IDisposable subscription = subject.Subscribe(observer);
+        }
+
+        subject.SubscriberCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SubjectConcurrentChurn_KeepsActiveCountBounded()
+    {
+        using var subject = new Subject<int>();
+        var stable = new NoopObserver<int>();
+        using IDisposable stableSubscription = subject.Subscribe(stable);
+
+        Task[] churn = [.. Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            var dummy = new NoopObserver<int>();
+            for (int i = 0; i < 1_000; i++)
+            {
+                using IDisposable subscription = subject.Subscribe(dummy);
+            }
+        }))];
+
+        await Task.WhenAll(churn).WaitAsync(TimeSpan.FromSeconds(10));
+        subject.SubscriberCount.Should().Be(1);
+    }
+
+    private sealed class NoopObserver<T> : IObserver<T>
+    {
+        public void OnNext(T value)
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted()
+        {
+        }
     }
 
     private sealed class DelegateObserver<T> : IValueObserver<T>

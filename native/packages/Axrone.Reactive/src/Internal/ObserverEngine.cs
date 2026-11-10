@@ -1,5 +1,6 @@
 namespace Axrone.Reactive.Internal;
 
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
@@ -189,6 +190,8 @@ internal readonly record struct ObserverEngineOptions
 
     public int MaxObservers { get; init; } = 64;
 
+    public int MaxSubscribers { get; init; } = 64;
+
     public uint DefaultTopicMask { get; init; } = AllTopicsMask;
 
     public ObserverFaultBehavior FaultBehavior { get; init; } = ObserverFaultBehavior.IsolateObserver;
@@ -279,11 +282,13 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     private readonly uint _slotMask;
     private readonly uint _defaultTopicMask;
     private readonly ObserverFaultBehavior _faultBehavior;
+    private readonly int _maxSubscribers;
 
     private int[][] _order = [Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>()];
     private EngineLifecycleState _lifecycle;
     private TaskCompletionSource<bool>? _drainSignal;
     private ExceptionDispatchInfo? _terminalFault;
+    private int _observerFaultCount;
     private int _disposed;
 
     public ObserverEngine()
@@ -302,6 +307,9 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
         _slots = GC.AllocateArray<SlotControlBlock>(maxObservers, pinned: true);
         _observers = new IValueObserver<T>?[maxObservers];
         _slotMask = (uint)maxObservers - 1u;
+        _maxSubscribers = options.MaxSubscribers <= 0
+            ? maxObservers
+            : Math.Min(options.MaxSubscribers, maxObservers);
         _defaultTopicMask = options.DefaultTopicMask == 0u
             ? ObserverEngineOptions.AllTopicsMask
             : options.DefaultTopicMask;
@@ -322,6 +330,10 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     }
 
     public int Capacity => _slots.Length;
+
+    public int ObserverFaultCount => Volatile.Read(ref _observerFaultCount);
+
+    public Exception? TerminalError => Volatile.Read(ref _terminalFault)?.SourceException;
 
     public ObserverSubscription Subscribe(
         IValueObserver<T> observer,
@@ -412,9 +424,12 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
 
                 lock (_subscriptionGate)
                 {
-                    if (Volatile.Read(ref _lifecycle.Status) != (int)ObserverEngineStatus.Active)
+                    if (Volatile.Read(ref _lifecycle.Status) != (int)ObserverEngineStatus.Active ||
+                        Volatile.Read(ref _lifecycle.ActiveSubscribers) >= _maxSubscribers)
                     {
                         Volatile.Write(ref _observers[slotIndex], null);
+                        block.Context = 0;
+                        block.TopicMask = 0u;
                         Volatile.Write(ref block.StateAndGen, nextGeneration | SlotControlBlock.StateFree);
                         token = default;
                         return false;
@@ -477,11 +492,30 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             }
 
             RemoveFromOrderLocked((int)slotIndex, block.Priority);
-            ulong unsubscribing = (current & ~SlotControlBlock.StateMask) | SlotControlBlock.StateUnsubscribing;
-            if (Interlocked.CompareExchange(ref block.StateAndGen, unsubscribing, current) != current)
+
+            // A publisher may pin the slot between the read and the CAS; retry with the fresh
+            // caller count instead of abandoning the unsubscribe (which would leak the slot).
+            int spinCount = 0;
+            while (true)
             {
-                return false;
+                ulong unsubscribing = (current & ~SlotControlBlock.StateMask) | SlotControlBlock.StateUnsubscribing;
+                if (Interlocked.CompareExchange(ref block.StateAndGen, unsubscribing, current) == current)
+                {
+                    break;
+                }
+
+                current = Volatile.Read(ref block.StateAndGen);
+                if ((uint)current != token.Generation ||
+                    (current & SlotControlBlock.StateMask) != SlotControlBlock.StateActive)
+                {
+                    return false;
+                }
+
+                TBackoffPolicy.Backoff(ref spinCount);
             }
+
+            uint remaining = (uint)Interlocked.Decrement(ref _lifecycle.ActiveSubscribers);
+            TMetricsSink.OnUnsubscribed((uint)slotIndex, remaining);
         }
 
         TryFinalizeSlot((int)slotIndex, token.Generation);
@@ -570,55 +604,82 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             for (int priority = 0; priority < PriorityCount; priority++)
             {
                 int[] order = Volatile.Read(ref _order[priority]);
-                for (int i = 0; i < order.Length; i++)
+                if (order.Length == 0)
                 {
-                    int slotIndex = order[i];
-                    ref SlotControlBlock block = ref _slots[slotIndex];
-                    if (!TryAcquireSlotPin(ref block, out uint generation))
+                    continue;
+                }
+
+                // Pin the whole snapshot before invoking anyone: a subscription disposed by an
+                // earlier observer still receives the event that was already in flight.
+                int[] pinned = ArrayPool<int>.Shared.Rent(order.Length);
+                int pinnedCount = 0;
+                try
+                {
+                    for (int i = 0; i < order.Length; i++)
                     {
-                        continue;
+                        int slotIndex = order[i];
+                        ref SlotControlBlock block = ref _slots[slotIndex];
+                        if (TryAcquireSlotPin(ref block))
+                        {
+                            pinned[pinnedCount++] = slotIndex;
+                        }
                     }
 
-                    try
+                    for (int i = 0; i < pinnedCount; i++)
                     {
-                        uint slotTopic = block.TopicMask;
-                        if ((slotTopic & topicMask) == 0u)
-                        {
-                            continue;
-                        }
+                        int slotIndex = pinned[i];
+                        ref SlotControlBlock block = ref _slots[slotIndex];
 
-                        nint context = block.Context;
-                        if (!filter.ShouldDeliver(in item, slotTopic, context))
+                        try
                         {
-                            continue;
-                        }
+                            uint slotTopic = block.TopicMask;
+                            if ((slotTopic & topicMask) == 0u)
+                            {
+                                continue;
+                            }
 
-                        IValueObserver<T>? observer = Volatile.Read(ref _observers[slotIndex]);
-                        if (observer is null)
+                            nint context = block.Context;
+                            if (!filter.ShouldDeliver(in item, slotTopic, context))
+                            {
+                                continue;
+                            }
+
+                            IValueObserver<T>? observer = Volatile.Read(ref _observers[slotIndex]);
+                            if (observer is null)
+                            {
+                                continue;
+                            }
+
+                            observer.OnNext(in item, context);
+                            delivered++;
+                        }
+                        catch (Exception exception)
                         {
-                            continue;
-                        }
+                            if (_faultBehavior == ObserverFaultBehavior.Propagate)
+                            {
+                                throw;
+                            }
 
-                        observer.OnNext(in item, context);
-                        delivered++;
+                            Interlocked.Increment(ref _observerFaultCount);
+                            TMetricsSink.OnObserverFault(exception, (uint)slotIndex);
+
+                            if (_faultBehavior == ObserverFaultBehavior.FaultEngine)
+                            {
+                                terminalFault ??= exception;
+                            }
+                        }
                     }
-                    catch (Exception exception)
+                }
+                finally
+                {
+                    for (int i = 0; i < pinnedCount; i++)
                     {
-                        TMetricsSink.OnObserverFault(exception, (uint)slotIndex);
-                        if (_faultBehavior == ObserverFaultBehavior.Propagate)
-                        {
-                            throw;
-                        }
+                        int slotIndex = pinned[i];
+                        ref SlotControlBlock block = ref _slots[slotIndex];
+                        ReleaseSlotPin(ref block, slotIndex);
+                    }
 
-                        if (_faultBehavior == ObserverFaultBehavior.FaultEngine)
-                        {
-                            terminalFault ??= exception;
-                        }
-                    }
-                    finally
-                    {
-                        ReleaseSlotPin(ref block, slotIndex, generation);
-                    }
+                    ArrayPool<int>.Shared.Return(pinned);
                 }
             }
 
@@ -715,6 +776,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
                 }
                 catch (Exception exception)
                 {
+                    Interlocked.Increment(ref _observerFaultCount);
                     TMetricsSink.OnObserverFault(exception, (uint)slotIndex);
                 }
             }
@@ -870,35 +932,32 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryAcquireSlotPin(ref SlotControlBlock block, out uint generation)
+    private static bool TryAcquireSlotPin(ref SlotControlBlock block)
     {
         while (true)
         {
             ulong state = Volatile.Read(ref block.StateAndGen);
             if ((state & SlotControlBlock.StateMask) != SlotControlBlock.StateActive)
             {
-                generation = 0u;
                 return false;
             }
 
             ulong next = state + SlotControlBlock.OneCaller;
             if (Interlocked.CompareExchange(ref block.StateAndGen, next, state) == state)
             {
-                generation = (uint)state;
                 return true;
             }
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ReleaseSlotPin(ref SlotControlBlock block, int slotIndex, uint generation)
+    private void ReleaseSlotPin(ref SlotControlBlock block, int slotIndex)
     {
         ulong remaining = Interlocked.Add(ref block.StateAndGen, unchecked((ulong)(-(long)SlotControlBlock.OneCaller)));
         if ((remaining & SlotControlBlock.CallersMask) == 0UL &&
-            (remaining & SlotControlBlock.StateMask) == SlotControlBlock.StateUnsubscribing &&
-            (uint)remaining == generation)
+            (remaining & SlotControlBlock.StateMask) == SlotControlBlock.StateUnsubscribing)
         {
-            TryFinalizeSlot(slotIndex, generation);
+            TryFinalizeSlot(slotIndex, (uint)remaining);
         }
     }
 
@@ -926,9 +985,6 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             block.TopicMask = 0u;
             block.Priority = 0;
             Volatile.Write(ref block.StateAndGen, generation | SlotControlBlock.StateFree);
-
-            uint remaining = (uint)Interlocked.Decrement(ref _lifecycle.ActiveSubscribers);
-            TMetricsSink.OnUnsubscribed((uint)slotIndex, remaining);
             return;
         }
     }
@@ -951,6 +1007,8 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
                 continue;
             }
 
+            uint remaining = (uint)Interlocked.Decrement(ref _lifecycle.ActiveSubscribers);
+            TMetricsSink.OnUnsubscribed((uint)slotIndex, remaining);
             TryFinalizeSlot(slotIndex, generation);
             return true;
         }
