@@ -1,6 +1,7 @@
 namespace Axrone.Reactive.Scene.Tests;
 
 using Axrone.Scene;
+using Axrone.Scene.Runtime;
 using FluentAssertions;
 using Xunit;
 
@@ -128,6 +129,33 @@ public sealed class SceneReactiveBridgeTests
         }
 
         world.Changes.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void AttachedLoopPumpsAutomaticallyAndDetachesOnBridgeDispose()
+    {
+        SceneProfile profile = new SceneProfileBuilder(
+                new SceneProfileId(SceneStringId.FromName("test/reactive-loop")))
+            .AddTransform3D()
+            .Build();
+        using var runtime = new SceneRuntime(new SceneRuntimeOptions { Profile = profile });
+        var bridge = new SceneReactiveBridge(runtime.World);
+        using var loop = new SceneRuntimeLoop(runtime);
+        var created = new List<SceneActor>();
+        using IDisposable subscription = bridge.ActorCreated.Subscribe(new Observer<SceneActor>(created.Add));
+
+        bridge.AttachLoop(loop);
+        loop.Start();
+        SceneActor actor = runtime.World.CreateActor();
+        _ = loop.Tick();
+        created.Should().ContainSingle().Which.Should().Be(actor);
+
+        bridge.DetachLoop();
+        _ = runtime.World.CreateActor();
+        _ = loop.Tick();
+        created.Should().ContainSingle();
+
+        bridge.Dispose();
     }
 
     private static SceneWorld CreateWorld()

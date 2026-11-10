@@ -31,6 +31,12 @@ bridge.Pump();
 one frame of physics contact/sensor events. Calling it twice without a physics step does not
 duplicate physics events.
 
+A `SceneRuntimeLoop` can pump the bridge for you; the bridge detaches on dispose:
+
+```csharp
+bridge.AttachLoop(loop);   // pumps after every loop.Tick()
+```
+
 ## Streams
 
 | Stream | Payload |

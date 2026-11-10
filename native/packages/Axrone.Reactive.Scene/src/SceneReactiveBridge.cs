@@ -31,6 +31,7 @@ public sealed class SceneReactiveBridge : IDisposable
 
     private long _lastPhysicsStep = -1;
     private int _disposed;
+    private SceneRuntimeLoop? _loop;
 
     /// <summary>Creates a bridge over a scene world and, optionally, its 3D physics bridge.</summary>
     public SceneReactiveBridge(SceneWorld world, ScenePhysicsBridge3D? physics = null)
@@ -71,6 +72,34 @@ public sealed class SceneReactiveBridge : IDisposable
     public IObservable<ComponentChanged<T>> ComponentChanged<T>()
         where T : unmanaged, ISceneDataComponent =>
         GetOrCreate<T>().Changed;
+
+    /// <summary>
+    /// Pumps this bridge automatically after every <see cref="SceneRuntimeLoop.Tick"/>.
+    /// Attaching another loop detaches the previous one; <see cref="Dispose"/> detaches too.
+    /// </summary>
+    public void AttachLoop(SceneRuntimeLoop loop)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_loop is not null && !ReferenceEquals(_loop, loop))
+        {
+            _loop.FrameCompleted -= OnLoopFrame;
+        }
+
+        _loop = loop;
+        loop.FrameCompleted += OnLoopFrame;
+    }
+
+    /// <summary>Detaches the loop attached with <see cref="AttachLoop"/>, if any.</summary>
+    public void DetachLoop()
+    {
+        SceneRuntimeLoop? loop = _loop;
+        _loop = null;
+        if (loop is not null)
+        {
+            loop.FrameCompleted -= OnLoopFrame;
+        }
+    }
 
     /// <summary>
     /// Drains up to <paramref name="maxChanges"/> journal entries and dispatches them, then reads
@@ -164,6 +193,16 @@ public sealed class SceneReactiveBridge : IDisposable
         }
     }
 
+    private void OnLoopFrame(object? sender, EventArgs arguments)
+    {
+        _ = sender;
+        _ = arguments;
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            _ = Pump();
+        }
+    }
+
     private void PumpPhysics()
     {
         if (_physics is null)
@@ -233,6 +272,7 @@ public sealed class SceneReactiveBridge : IDisposable
             return;
         }
 
+        DetachLoop();
         _actorCreated.Dispose();
         _actorDestroyed.Dispose();
         _behaviourChanges.Dispose();
