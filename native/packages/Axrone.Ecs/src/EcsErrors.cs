@@ -250,14 +250,6 @@ internal static class EcsThrowHelper
     public static void ThrowWorldClosed(string operation) =>
         throw new EcsWorldClosedException(operation);
 
-    /// <summary>Throws when an event slot handle is unresolved.</summary>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowInvalidEventName(string operation) =>
-        throw new EcsConfigurationException(
-            "ecs.invalid-event-name",
-            $"'{operation}' requires an interned event name; use EcsEventNames.Intern.");
-
     /// <summary>Throws when an interned symbol is blank.</summary>
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
