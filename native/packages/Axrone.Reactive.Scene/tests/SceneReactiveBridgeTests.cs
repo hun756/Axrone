@@ -11,8 +11,11 @@ public sealed class SceneReactiveBridgeTests
         public int Value;
     }
 
-    private sealed class TrackingBehaviour : SceneBehaviour
+    private sealed class TrackingBehaviour : ISceneBehaviour
     {
+        public SceneBehaviourContext? Context { get; private set; }
+
+        public void OnAttach(SceneBehaviourContext context) => Context = context;
     }
 
     [Fact]
@@ -76,7 +79,7 @@ public sealed class SceneReactiveBridgeTests
         TrackingBehaviour behaviour = world.AddBehaviour<TrackingBehaviour>(actor);
 
         int observed = 0;
-        behaviour.ObserveComponentAdded<Probe>(bridge, _ => observed++);
+        behaviour.Context!.ObserveComponentAdded<Probe>(bridge, _ => observed++);
 
         world.AddData(actor, new Probe());
         bridge.Pump();

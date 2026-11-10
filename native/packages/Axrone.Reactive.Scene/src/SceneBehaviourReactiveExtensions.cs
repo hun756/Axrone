@@ -3,71 +3,68 @@ namespace Axrone.Reactive.Scene;
 using Axrone.Scene;
 
 /// <summary>
-/// Lifetime-bound subscriptions for <see cref="SceneBehaviour"/>. Every helper registers the
-/// returned subscription with <see cref="SceneBehaviour.TrackSubscription"/>, so the owning table
+/// Lifetime-bound subscriptions for a scene behaviour attachment. Every helper registers the
+/// returned subscription with <see cref="SceneBehaviourContext.Track"/>, so the owning table
 /// disposes it when the behaviour is removed or its actor is destroyed.
 /// </summary>
 public static class SceneBehaviourReactiveExtensions
 {
     /// <summary>Observes component additions for one unmanaged component type.</summary>
     public static IDisposable ObserveComponentAdded<T>(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<ComponentAdded<T>> handler)
         where T : unmanaged, ISceneDataComponent
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
         IDisposable subscription = bridge.ComponentAdded<T>().Subscribe(new ActionObserver<ComponentAdded<T>>(handler));
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     /// <summary>Observes component removals for one unmanaged component type.</summary>
     public static IDisposable ObserveComponentRemoved<T>(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<ComponentRemoved<T>> handler)
         where T : unmanaged, ISceneDataComponent
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
         IDisposable subscription = bridge.ComponentRemoved<T>().Subscribe(new ActionObserver<ComponentRemoved<T>>(handler));
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     /// <summary>Observes component changes for one unmanaged component type.</summary>
     public static IDisposable ObserveComponentChanged<T>(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<ComponentChanged<T>> handler)
         where T : unmanaged, ISceneDataComponent
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
         IDisposable subscription = bridge.ComponentChanged<T>().Subscribe(new ActionObserver<ComponentChanged<T>>(handler));
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     /// <summary>Observes collisions that involve this behaviour's actor.</summary>
     public static IDisposable OnCollision(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<SceneCollisionEvent> handler)
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
-        SceneActor actor = behaviour.Actor;
+        SceneActor actor = context.Actor;
         IDisposable subscription = bridge.Collisions.Subscribe(new ActionObserver<SceneCollisionEvent>(
             collision =>
             {
@@ -77,21 +74,20 @@ public static class SceneBehaviourReactiveExtensions
                 }
             }));
 
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     /// <summary>Observes sensor overlaps that involve this behaviour's actor.</summary>
     public static IDisposable OnSensor(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<SceneSensorEvent> handler)
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
-        SceneActor actor = behaviour.Actor;
+        SceneActor actor = context.Actor;
         IDisposable subscription = bridge.Sensors.Subscribe(new ActionObserver<SceneSensorEvent>(
             sensor =>
             {
@@ -101,21 +97,20 @@ public static class SceneBehaviourReactiveExtensions
                 }
             }));
 
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     /// <summary>Runs the handler once when this behaviour's actor is destroyed.</summary>
     public static IDisposable OnActorDestroyed(
-        this SceneBehaviour behaviour,
+        this SceneBehaviourContext context,
         SceneReactiveBridge bridge,
         Action<SceneActor> handler)
     {
-        ArgumentNullException.ThrowIfNull(behaviour);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(handler);
 
-        SceneActor actor = behaviour.Actor;
+        SceneActor actor = context.Actor;
         IDisposable subscription = bridge.ActorDestroyed.Subscribe(new ActionObserver<SceneActor>(
             destroyed =>
             {
@@ -125,8 +120,7 @@ public static class SceneBehaviourReactiveExtensions
                 }
             }));
 
-        behaviour.TrackSubscription(subscription);
-        return subscription;
+        return context.Track(subscription);
     }
 
     private sealed class ActionObserver<T>(Action<T> handler) : IObserver<T>

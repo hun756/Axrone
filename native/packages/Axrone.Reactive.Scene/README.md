@@ -48,19 +48,19 @@ journal allocation-free and avoids delivering stale values.
 ## SceneBehaviour lifetime
 
 ```csharp
-public sealed class PlayerController : SceneBehaviour
+public sealed class PlayerController : ISceneBehaviour
 {
-    public override void Awake()
+    public void OnAttach(SceneBehaviourContext context)
     {
-        this.ObserveComponentAdded<SceneCollider3D>(_bridge, change => { });
-        this.ObserveComponentChanged<SceneHealth>(_bridge, change => { });
-        this.OnCollision(_bridge, collision => { });
-        this.OnActorDestroyed(_bridge, actor => { });
+        context.ObserveComponentAdded<SceneCollider3D>(_bridge, change => { });
+        context.ObserveComponentChanged<SceneHealth>(_bridge, change => { });
+        context.OnCollision(_bridge, collision => { });
+        context.OnActorDestroyed(_bridge, actor => { });
     }
 }
 ```
 
-Every helper calls `SceneBehaviour.TrackSubscription`. The behaviour table disposes the
+Every helper calls `SceneBehaviourContext.Track`. The behaviour table disposes the
 subscriptions when the behaviour is removed or its actor is destroyed, so no manual unsubscribe
 and no leak on hot reload/play-stop.
 
@@ -74,8 +74,8 @@ and no leak on hot reload/play-stop.
 - **In-place writes.** `GetData<T>` returns `ref T`; a direct write is invisible to the journal.
   Call `world.MarkChanged<T>(actor)` after mutating, or use `world.SetData<T>(actor, value)`.
 - **No special collider event.** A collider attach is `ComponentAdded<SceneCollider3D>`. The
-  gameplay callback is `Collisions` / `OnCollision`, sourced from the physics step — matching
-  Unity's `OnCollisionEnter` role without a magic method.
+  gameplay callback is `Collisions` / `OnCollision`, sourced from the physics step, so collisions
+  are a stream instead of a virtual lifecycle method.
 - **Liveness.** A component stream with no subscribers is skipped before any payload work.
 
 ## Verification
