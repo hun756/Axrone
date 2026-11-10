@@ -414,6 +414,27 @@ public sealed class ObserverEngineTests
     }
 
     [Fact]
+    public void DeepNestedDispatchGrowsAndUnwindsTheFrameStack()
+    {
+        using var engine = new ObserverEngine<int>(new ObserverEngineOptions { MaxObservers = 8 });
+        int depth = 0;
+
+        using ObserverSubscription subscription = engine.Subscribe(new DelegateObserver<int>(_ =>
+        {
+            depth++;
+            if (depth < 24)
+            {
+                engine.Publish(depth);
+            }
+        }));
+
+        engine.Publish(0);
+
+        depth.Should().Be(24);
+        engine.Complete().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DrainFromCompletionCallback_ThrowsInsteadOfDeadlocking()
     {
         var engine = new ObserverEngine<int>(new ObserverEngineOptions
