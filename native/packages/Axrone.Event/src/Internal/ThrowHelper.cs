@@ -133,6 +133,15 @@ internal static class ThrowHelper
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowReentrantDepthExceeded(int maxDepth)
+    {
+        throw new EventReentrantPublishException(
+            $"Re-entrant publish depth exceeded {maxDepth}; a handler is publishing back into the same router.",
+            maxDepth);
+    }
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowTimerCapacity(EventPriority priority, int capacity)
     {
         throw new EventQueueFullException(

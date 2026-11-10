@@ -291,6 +291,55 @@ public class RouterTests
     }
 
     [Fact]
+    public void PublishBatch_RespectsMaxQueueWait()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        var options = new RouterOptions(4, 1, 8, "Axrone.Event.BatchTest") { MaxQueueWaitMs = 150 };
+        using var router = new EventRouter<int>(options);
+        using var subscription = router.Subscribe((_, _) =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10), CancellationToken.None);
+        });
+
+        router.Publish(1);
+        entered.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
+
+        var items = new int[64];
+        var watch = Stopwatch.StartNew();
+        Action publish = () => router.PublishBatch(items);
+
+        publish.Should().Throw<EventQueueFullException>();
+        watch.ElapsedMilliseconds.Should().BeLessThan(2000);
+        release.Set();
+    }
+
+    [Fact]
+    public void ReentrantSelfPublish_StopsAtDepthLimit()
+    {
+        var options = new RouterOptions(64, 1, 1024, "Axrone.Event.ReentrantTest")
+        {
+            MaxReentrantDepth = 8,
+            MaxQueueWaitMs = 1000,
+        };
+        using var router = new EventRouter<int>(options);
+        int calls = 0;
+        using var subscription = router.Subscribe((envelope, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            router.TryPublish(envelope.Payload + 1);
+        });
+
+        router.PublishImmediate(0);
+
+        SpinWait.SpinUntil(
+            () => router.ReentrantDroppedPublishes > 0,
+            TimeSpan.FromSeconds(5)).Should().BeTrue();
+        calls.Should().BeLessThanOrEqualTo(10);
+    }
+
+    [Fact]
     public void PublishBatch_Empty_ReturnsZero()
     {
         using var router = new EventRouter<int>(16);

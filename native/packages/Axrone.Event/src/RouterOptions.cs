@@ -29,6 +29,12 @@ public readonly record struct RouterOptions(int Capacity, int DispatchBatchSize,
     /// </summary>
     public int MaxQueueWaitMs { get; init; } = 2000;
 
+    /// <summary>
+    /// Maximum consecutive self-publishes from a dispatch handler before the re-entrant guard
+    /// fails the chain. Bounds feedback loops that would otherwise burn CPU invisibly.
+    /// </summary>
+    public int MaxReentrantDepth { get; init; } = 32;
+
     /// <summary>House tuning: 64k ring, 256-wide dispatch batches, 1k dead letters.</summary>
     public static RouterOptions Default => new(65536, 256, 1024, "Axrone.Event");
 }
