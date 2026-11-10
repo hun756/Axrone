@@ -80,7 +80,7 @@ public sealed class SceneSpriteAnimatorBehaviour : ISceneBehaviour
         _world = context.World;
         _actor = context.Actor;
         context.OnEnable(ApplyCurrentFrame);
-        context.OnUpdate(Update);
+        context.OnUpdate(Advance);
         context.OnDetach(ClearAttachment);
     }
 
@@ -90,7 +90,8 @@ public sealed class SceneSpriteAnimatorBehaviour : ISceneBehaviour
         _actor = SceneActor.Null;
     }
 
-    private void Update(float deltaSeconds)
+    /// <summary>Advances playback by <paramref name="deltaSeconds"/> outside the normal update phase.</summary>
+    public void Advance(float deltaSeconds)
     {
         if (!Playing || _complete || _clip is null)
         {
