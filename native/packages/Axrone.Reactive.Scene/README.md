@@ -44,6 +44,7 @@ bridge.AttachLoop(loop);   // pumps after every loop.Tick()
 | `ActorCreated` / `ActorDestroyed` | `SceneActor` |
 | `ComponentAdded<T>()` / `ComponentRemoved<T>()` / `ComponentChanged<T>()` | `SceneActor` |
 | `BehaviourChanges` | `SceneBehaviourTypeId` + `SceneChangeKind` |
+| `HierarchyChanges` | `SceneActor` + `SceneChangeKind` (`ParentChanged` / `ActiveInHierarchyChanged`) |
 | `Collisions` | `SceneCollisionEvent` (actors resolved when possible) |
 | `Sensors` | `SceneSensorEvent` |
 

@@ -26,6 +26,7 @@ public sealed class SceneReactiveBridge : IDisposable
     private readonly Subject<SceneActor> _actorCreated = new();
     private readonly Subject<SceneActor> _actorDestroyed = new();
     private readonly Subject<BehaviourChange> _behaviourChanges = new();
+    private readonly Subject<HierarchyChange> _hierarchyChanges = new();
     private readonly Subject<SceneCollisionEvent> _collisions = new();
     private readonly Subject<SceneSensorEvent> _sensors = new();
 
@@ -51,6 +52,9 @@ public sealed class SceneReactiveBridge : IDisposable
 
     /// <summary>Behaviour add/remove/enable/disable transitions.</summary>
     public IObservable<BehaviourChange> BehaviourChanges => _behaviourChanges;
+
+    /// <summary>Parent and effective-active transitions.</summary>
+    public IObservable<HierarchyChange> HierarchyChanges => _hierarchyChanges;
 
     /// <summary>Collisions from the last physics step.</summary>
     public IObservable<SceneCollisionEvent> Collisions => _collisions;
@@ -190,6 +194,15 @@ public sealed class SceneReactiveBridge : IDisposable
                 }
 
                 break;
+
+            case SceneChangeKind.ParentChanged:
+            case SceneChangeKind.ActiveInHierarchyChanged:
+                if (_hierarchyChanges.SubscriberCount > 0)
+                {
+                    _hierarchyChanges.OnNext(new HierarchyChange(change.Actor, change.Kind));
+                }
+
+                break;
         }
     }
 
@@ -276,6 +289,7 @@ public sealed class SceneReactiveBridge : IDisposable
         _actorCreated.Dispose();
         _actorDestroyed.Dispose();
         _behaviourChanges.Dispose();
+        _hierarchyChanges.Dispose();
         _collisions.Dispose();
         _sensors.Dispose();
 

@@ -26,6 +26,12 @@ public readonly record struct BehaviourChange(
     SceneChangeKind Kind);
 
 /// <summary>
+/// Hierarchy change for one actor. The payload is payload-free like the journal: query
+/// <see cref="SceneWorld.Hierarchy"/> for the current parent and effective active state.
+/// </summary>
+public readonly record struct HierarchyChange(SceneActor Actor, SceneChangeKind Kind);
+
+/// <summary>
 /// One collision from the physics step, resolved back to scene actors when possible.
 /// </summary>
 public readonly record struct SceneCollisionEvent(

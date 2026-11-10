@@ -132,6 +132,27 @@ public sealed class SceneReactiveBridgeTests
     }
 
     [Fact]
+    public void HierarchyChanges_FlowThroughBridge()
+    {
+        using SceneWorld world = CreateWorld();
+        using var bridge = new SceneReactiveBridge(world);
+        var changes = new List<HierarchyChange>();
+        using IDisposable subscription = bridge.HierarchyChanges.Subscribe(new Observer<HierarchyChange>(changes.Add));
+
+        SceneActor parent = world.CreateActor();
+        SceneActor child = world.CreateActor();
+        bridge.Pump();
+        changes.Clear();
+
+        world.Hierarchy.SetParent(child, parent);
+        world.SetActive(parent, false);
+        bridge.Pump();
+
+        changes.Should().Contain(change => change.Actor == child && change.Kind == SceneChangeKind.ParentChanged);
+        changes.Should().Contain(change => change.Actor == child && change.Kind == SceneChangeKind.ActiveInHierarchyChanged);
+    }
+
+    [Fact]
     public void AttachedLoopPumpsAutomaticallyAndDetachesOnBridgeDispose()
     {
         SceneProfile profile = new SceneProfileBuilder(
