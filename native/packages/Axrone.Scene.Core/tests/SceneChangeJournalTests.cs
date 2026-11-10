@@ -72,6 +72,29 @@ public sealed class SceneChangeJournalTests
     }
 
     [Fact]
+    public void BehaviourEnableAndDisable_AreJournaled()
+    {
+        using SceneWorld world = CreateWorld();
+        SceneActor actor = world.CreateActor();
+        TrackingBehaviour behaviour = world.AddBehaviour<TrackingBehaviour>(actor);
+        world.Start();
+
+        behaviour.Enabled = false;
+        behaviour.Enabled = true;
+
+        var buffer = new SceneChange[16];
+        int count = world.Changes.Drain(buffer);
+        buffer.AsSpan(0, count).ToArray()
+            .Select(change => change.Kind)
+            .Should().ContainInOrder(
+                SceneChangeKind.ActorCreated,
+                SceneChangeKind.BehaviourAdded,
+                SceneChangeKind.BehaviourEnabled,
+                SceneChangeKind.BehaviourDisabled,
+                SceneChangeKind.BehaviourEnabled);
+    }
+
+    [Fact]
     public void Journal_DropsOldestWhenFull()
     {
         var journal = new SceneChangeJournal(capacity: 2);

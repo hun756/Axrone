@@ -298,11 +298,13 @@ public abstract class SceneBehaviour : ISceneBehaviour
         if (_enabled && _activeInHierarchy)
         {
             _state = SceneBehaviourState.Enabled;
+            Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
             OnEnable();
         }
         else
         {
             _state = SceneBehaviourState.Disabled;
+            Changes?.Write(SceneChange.BehaviourDisabled(Actor, TypeId));
         }
     }
 
