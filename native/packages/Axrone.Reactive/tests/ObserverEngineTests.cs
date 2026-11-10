@@ -146,6 +146,45 @@ public sealed class ObserverEngineTests
     }
 
     [Fact]
+    public async Task CrossEngineCompleteFromCallback_ThrowsInsteadOfDeadlocking()
+    {
+        using var source = new ObserverEngine<int>(new ObserverEngineOptions
+        {
+            MaxObservers = 8,
+            FaultBehavior = ObserverFaultBehavior.Propagate,
+        });
+        using var sink = new ObserverEngine<int>(new ObserverEngineOptions
+        {
+            MaxObservers = 8,
+            FaultBehavior = ObserverFaultBehavior.Propagate,
+        });
+
+        using ObserverSubscription sourceSub = source.Subscribe(new DelegateObserver<int>(_ => sink.Publish(0)));
+        using ObserverSubscription sinkSub = sink.Subscribe(new DelegateObserver<int>(_ => source.Complete()));
+
+        Task<Exception?> task = Task.Run<Exception?>(() =>
+        {
+            try
+            {
+                source.Publish(1);
+                return null;
+            }
+            catch (Exception exception)
+            {
+                return exception;
+            }
+        });
+
+        Task winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+        winner.Should().BeSameAs(task, "cross-engine terminal from a callback must fail fast, not hang");
+        Exception? exception = await task;
+        exception.Should().BeOfType<InvalidOperationException>()
+            .Which.Message.Should().Contain("inside an observer callback");
+        source.Status.Should().Be(ObserverEngineStatus.Active);
+        sink.Status.Should().Be(ObserverEngineStatus.Active);
+    }
+
+    [Fact]
     public async Task DisposeFromCallback_ThrowsInsteadOfDeadlocking()
     {
         using var engine = new ObserverEngine<int>(new ObserverEngineOptions

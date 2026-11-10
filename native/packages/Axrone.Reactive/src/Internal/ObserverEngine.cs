@@ -273,7 +273,10 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     private const int PriorityCount = 3;
 
     [ThreadStatic]
-    private static ObserverEngine<T, TBackoffPolicy, TMetricsSink>? t_dispatching;
+    private static ObserverEngine<T, TBackoffPolicy, TMetricsSink>?[]? t_dispatchStack;
+
+    [ThreadStatic]
+    private static int t_dispatchDepth;
 
     private readonly SlotControlBlock[] _slots;
     private readonly IValueObserver<T>?[] _observers;
@@ -595,8 +598,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             return false;
         }
 
-        ObserverEngine<T, TBackoffPolicy, TMetricsSink>? previous = t_dispatching;
-        t_dispatching = this;
+        PushDispatchFrame();
         uint delivered = 0u;
 
         try
@@ -689,7 +691,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
         }
         finally
         {
-            t_dispatching = previous;
+            PopDispatchFrame();
             ExitInFlightGate();
         }
     }
@@ -701,7 +703,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
     /// </summary>
     public bool Complete(Exception? error = null)
     {
-        if (ReferenceEquals(t_dispatching, this))
+        if (IsDispatching(this))
         {
             ThrowHelper.ThrowTerminalFromCallback();
         }
@@ -833,7 +835,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
             return;
         }
 
-        if (ReferenceEquals(t_dispatching, this))
+        if (IsDispatching(this))
         {
             ThrowHelper.ThrowTerminalFromCallback();
         }
@@ -849,7 +851,7 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
 
     public async ValueTask DisposeAsync()
     {
-        if (ReferenceEquals(t_dispatching, this))
+        if (IsDispatching(this))
         {
             ThrowHelper.ThrowTerminalFromCallback();
         }
@@ -862,6 +864,51 @@ internal class ObserverEngine<T, TBackoffPolicy, TMetricsSink> : IObserverEngine
         Complete();
         await DrainAsync(CancellationToken.None).ConfigureAwait(false);
         Volatile.Write(ref _lifecycle.Status, (int)ObserverEngineStatus.Disposed);
+    }
+
+    private void PushDispatchFrame()
+    {
+        ObserverEngine<T, TBackoffPolicy, TMetricsSink>?[]? stack = t_dispatchStack;
+        if (stack is null)
+        {
+            stack = new ObserverEngine<T, TBackoffPolicy, TMetricsSink>[8];
+            t_dispatchStack = stack;
+        }
+        else if (t_dispatchDepth == stack.Length)
+        {
+            Array.Resize(ref stack, stack.Length * 2);
+            t_dispatchStack = stack;
+        }
+
+        stack[t_dispatchDepth++] = this;
+    }
+
+    private static void PopDispatchFrame()
+    {
+        ObserverEngine<T, TBackoffPolicy, TMetricsSink>?[]? stack = t_dispatchStack;
+        if (stack is not null && t_dispatchDepth > 0)
+        {
+            stack[--t_dispatchDepth] = null;
+        }
+    }
+
+    private static bool IsDispatching(ObserverEngine<T, TBackoffPolicy, TMetricsSink> engine)
+    {
+        ObserverEngine<T, TBackoffPolicy, TMetricsSink>?[]? stack = t_dispatchStack;
+        if (stack is null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < t_dispatchDepth; index++)
+        {
+            if (ReferenceEquals(stack[index], engine))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void AddToOrderLocked(int slotIndex, byte priority)
