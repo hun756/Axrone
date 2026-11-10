@@ -20,6 +20,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
     private readonly SceneComponentColumnSet _columns;
     private readonly SceneBehaviourTable _behaviours;
     private readonly SceneHierarchy _hierarchy;
+    private readonly SceneChangeJournal _changes = new();
     private readonly SceneTransform3DStore? _transform3D;
     private readonly SceneTransform2DStore? _transform2D;
     private readonly SceneStringId _defaultName;
@@ -62,7 +63,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
         _actors = new SceneActorTable(options.InitialCapacity);
         _columns = new SceneComponentColumnSet();
         _hierarchy = new SceneHierarchy(_actors, this);
-        _behaviours = new SceneBehaviourTable(_actors, _registry, this);
+        _behaviours = new SceneBehaviourTable(_actors, _registry, this, _changes);
         _defaultName = _names.Intern("Actor");
         _defaultTag = _names.Intern("Default");
 
@@ -91,6 +92,9 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
     /// <summary>Hierarchy traversal and structural API.</summary>
     public SceneHierarchy Hierarchy => _hierarchy;
+
+    /// <summary>Mutation journal drained once per frame by the host or a reactive bridge.</summary>
+    public SceneChangeJournal Changes => _changes;
 
     /// <summary>Whether lifecycle start has run.</summary>
     public bool IsStarted
@@ -148,6 +152,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
             _activeActorCount++;
         }
 
+        _changes.Write(SceneChange.ActorCreated(actor));
         return actor;
     }
 
@@ -227,6 +232,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
             _activeActorCount--;
         }
 
+        _changes.Write(SceneChange.ActorDestroyed(actor));
         _actors.Free(slot);
         return true;
     }
@@ -441,6 +447,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
         column.Set(slot, in value);
         record.Mask = record.Mask.With(descriptor.TypeId);
+        _changes.Write(SceneChange.ComponentAdded(actor, descriptor.TypeId));
         return ref column.Get(slot);
     }
 
@@ -523,7 +530,48 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
         _columns.Get<T>(descriptor.TypeId).ClearSlot(slot);
         record.Mask = record.Mask.Without(descriptor.TypeId);
+        _changes.Write(SceneChange.ComponentRemoved(actor, descriptor.TypeId));
         return true;
+    }
+
+    /// <summary>Writes a data component value and records a change.</summary>
+    public void SetData<T>(SceneActor actor, in T value)
+        where T : unmanaged, ISceneDataComponent
+    {
+        ThrowIfDisposed();
+
+        int slot = _actors.Resolve(actor);
+        SceneDataComponentDescriptor descriptor = _registry.GetDataByType(typeof(T));
+        ref SceneActorRecord record = ref _actors.RecordAt(slot);
+
+        if (!record.Mask.IsSet(descriptor.TypeId))
+        {
+            SceneThrowHelper.ThrowComponentMissing(in actor, descriptor.ComponentType.Name);
+        }
+
+        _columns.Get<T>(descriptor.TypeId).Set(slot, in value);
+        _changes.Write(SceneChange.ComponentChanged(actor, descriptor.TypeId));
+    }
+
+    /// <summary>
+    /// Records an in-place mutation made through <see cref="GetData{T}"/>'s by-reference result.
+    /// The journal cannot observe direct writes, so callers must mark the component after mutating.
+    /// </summary>
+    public void MarkChanged<T>(SceneActor actor)
+        where T : unmanaged, ISceneDataComponent
+    {
+        ThrowIfDisposed();
+
+        int slot = _actors.Resolve(actor);
+        SceneDataComponentDescriptor descriptor = _registry.GetDataByType(typeof(T));
+        ref SceneActorRecord record = ref _actors.RecordAt(slot);
+
+        if (!record.Mask.IsSet(descriptor.TypeId))
+        {
+            SceneThrowHelper.ThrowComponentMissing(in actor, descriptor.ComponentType.Name);
+        }
+
+        _changes.Write(SceneChange.ComponentChanged(actor, descriptor.TypeId));
     }
 
     /// <summary>Returns the actor's data component presence mask.</summary>

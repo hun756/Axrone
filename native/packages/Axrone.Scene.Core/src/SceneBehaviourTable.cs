@@ -35,6 +35,7 @@ internal sealed class SceneBehaviourTable
     private readonly SceneActorTable _actors;
     private readonly SceneComponentRegistry _registry;
     private readonly ISceneBehaviourHost _host;
+    private readonly SceneChangeJournal _changes;
 
     private SceneBehaviourSlot[] _slots;
     private int[] _order;
@@ -47,11 +48,13 @@ internal sealed class SceneBehaviourTable
         SceneActorTable actors,
         SceneComponentRegistry registry,
         ISceneBehaviourHost host,
+        SceneChangeJournal changes,
         int initialCapacity = 32)
     {
         ArgumentNullException.ThrowIfNull(actors);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(changes);
 
         if (initialCapacity <= 0)
         {
@@ -62,6 +65,7 @@ internal sealed class SceneBehaviourTable
         _actors = actors;
         _registry = registry;
         _host = host;
+        _changes = changes;
         _slots = new SceneBehaviourSlot[capacity];
         _order = new int[capacity];
         _freeHead = -1;
@@ -174,6 +178,8 @@ internal sealed class SceneBehaviourTable
         }
 
         int actorSlot = _slots[slot].ActorSlot;
+        SceneActor actor = SceneActor.FromEntity(_actors.RecordAt(actorSlot).Entity);
+        SceneBehaviourTypeId typeId = _slots[slot].TypeId;
         Unlink(actorSlot, slot);
 
         Exception? fault = null;
@@ -186,6 +192,8 @@ internal sealed class SceneBehaviourTable
             fault = exception;
         }
 
+        behaviour.Changes = null;
+        behaviour.DisposeSubscriptions();
         behaviour.Detach();
         ref SceneBehaviourSlot entry = ref _slots[slot];
         entry.Behaviour = null;
@@ -194,6 +202,7 @@ internal sealed class SceneBehaviourTable
         _freeHead = slot;
         _count--;
         RebuildOrder();
+        _changes.Write(SceneChange.BehaviourRemoved(actor, typeId));
 
         if (fault is not null)
         {
@@ -430,6 +439,8 @@ internal sealed class SceneBehaviourTable
         {
             behaviour.Attach(actor, descriptor.Priority, _host.World);
             behaviour.SlotIndex = slot;
+            behaviour.Changes = _changes;
+            behaviour.TypeId = descriptor.TypeId;
         }
         catch (Exception)
         {
@@ -475,6 +486,7 @@ internal sealed class SceneBehaviourTable
         }
 
         RebuildOrder();
+        _changes.Write(SceneChange.BehaviourAdded(actor, descriptor.TypeId));
     }
 
     private int AllocateSlot()

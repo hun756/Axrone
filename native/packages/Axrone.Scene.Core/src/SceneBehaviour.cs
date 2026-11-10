@@ -80,6 +80,14 @@ public abstract class SceneBehaviour : ISceneBehaviour
     /// <summary>Owning behaviour-table slot; <c>-1</c> while detached.</summary>
     internal int SlotIndex = -1;
 
+    /// <summary>Journal used to record enable/disable transitions; set by the owning table.</summary>
+    internal SceneChangeJournal? Changes;
+
+    /// <summary>Registered behaviour type; set by the owning table.</summary>
+    internal SceneBehaviourTypeId TypeId;
+
+    private List<IDisposable>? _subscriptions;
+
     /// <inheritdoc/>
     public SceneActor Actor
     {
@@ -208,6 +216,41 @@ public abstract class SceneBehaviour : ISceneBehaviour
         _priority = 0;
         World = null;
         SlotIndex = -1;
+        Changes = null;
+        TypeId = default;
+    }
+
+    /// <summary>
+    /// Tracks a subscription whose lifetime is bound to this behaviour. The owning table disposes
+    /// it when the behaviour is removed or the actor is destroyed.
+    /// </summary>
+    public void TrackSubscription(IDisposable subscription)
+    {
+        ArgumentNullException.ThrowIfNull(subscription);
+        (_subscriptions ??= new List<IDisposable>()).Add(subscription);
+    }
+
+    /// <summary>Disposes every tracked subscription; called by the owning table on teardown.</summary>
+    internal void DisposeSubscriptions()
+    {
+        List<IDisposable>? subscriptions = _subscriptions;
+        if (subscriptions is null)
+        {
+            return;
+        }
+
+        _subscriptions = null;
+        for (int i = subscriptions.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                subscriptions[i].Dispose();
+            }
+            catch (Exception)
+            {
+                // Teardown must finish even when a subscription's dispose misbehaves.
+            }
+        }
     }
 
     /// <summary>Runs Awake exactly once.</summary>
@@ -274,6 +317,7 @@ public abstract class SceneBehaviour : ISceneBehaviour
             if (active && _state == SceneBehaviourState.Disabled && _enabled)
             {
                 _state = SceneBehaviourState.Enabled;
+                Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
                 OnEnable();
             }
 
@@ -295,11 +339,13 @@ public abstract class SceneBehaviour : ISceneBehaviour
         if (shouldDispatch && _state == SceneBehaviourState.Disabled)
         {
             _state = SceneBehaviourState.Enabled;
+            Changes?.Write(SceneChange.BehaviourEnabled(Actor, TypeId));
             OnEnable();
         }
         else if (!shouldDispatch && _state == SceneBehaviourState.Enabled)
         {
             _state = SceneBehaviourState.Disabled;
+            Changes?.Write(SceneChange.BehaviourDisabled(Actor, TypeId));
             OnDisable();
         }
     }
