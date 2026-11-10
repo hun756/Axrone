@@ -99,6 +99,7 @@ public sealed class EventScheduler<TEvent>
     private readonly Lock _gate = new();
 
     private long _sequence;
+    private long _stampSequence;
     private long _timerSequence;
     private long _scheduled;
     private long _dequeued;
@@ -213,9 +214,10 @@ public sealed class EventScheduler<TEvent>
             return false;
         }
 
+        EventEnvelope<TEvent> stamped = envelope.IsStamped ? envelope : StampPayload(envelope.Payload);
         lock (_gate)
         {
-            return Volatile.Read(ref _completed) == 0 && TryEnqueueLocked(in envelope, priority);
+            return Volatile.Read(ref _completed) == 0 && TryEnqueueLocked(in stamped, priority);
         }
     }
 
@@ -223,7 +225,7 @@ public sealed class EventScheduler<TEvent>
     /// <param name="payload">Payload to queue.</param>
     /// <param name="priority">Lane priority.</param>
     public bool TrySchedule(in TEvent payload, EventPriority priority = EventPriority.Normal) =>
-        TrySchedule(new EventEnvelope<TEvent>(payload), priority);
+        TrySchedule(StampPayload(payload), priority);
 
     /// <summary>Enqueues, throwing when the lane is full or the scheduler is completed.</summary>
     /// <param name="envelope">Envelope to queue.</param>
@@ -399,7 +401,7 @@ public sealed class EventScheduler<TEvent>
                 }
 
                 _timers.Dequeue();
-                TryEnqueueLocked(new EventEnvelope<TEvent>(top.Payload), top.Priority);
+                TryEnqueueLocked(StampPayload(top.Payload), top.Priority);
                 top.FiredCount++;
                 _firedTimerTicks++;
                 fired++;
@@ -779,6 +781,21 @@ public sealed class EventScheduler<TEvent>
         _paused.Clear();
         _timerCount = 0;
         return cleared;
+    }
+
+    private EventEnvelope<TEvent> StampPayload(in TEvent payload)
+    {
+        Guid id = Guid.NewGuid();
+        return new EventEnvelope<TEvent>(
+            new EventMetadata(
+                id,
+                id,
+                Guid.Empty,
+                Interlocked.Increment(ref _stampSequence),
+                1,
+                0,
+                Stopwatch.GetTimestamp()),
+            payload);
     }
 
     private bool TryEnqueueLocked(in EventEnvelope<TEvent> envelope, EventPriority priority)
