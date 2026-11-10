@@ -38,7 +38,7 @@ public abstract class ObservableBase<T> : IObservable<T>, IPriorityObservable<T>
         _subjectOptions = options.Normalize();
 
         int requested = Math.Max(2, _subjectOptions.MaxObservers);
-        int slots = NextPowerOfTwo(requested > 16_384 ? 65_536 : requested);
+        int slots = NextPowerOfTwo(Math.Min(65_536, requested));
         _engine = new ObserverEngine<T>(new ObserverEngineOptions
         {
             MaxObservers = slots,
@@ -51,6 +51,8 @@ public abstract class ObservableBase<T> : IObservable<T>, IPriorityObservable<T>
 
     /// <summary>Live subscriptions.</summary>
     public int SubscriberCount => _engine.ActiveSubscriberCount;
+
+    internal int SlotCapacity => _engine.Capacity;
 
     /// <summary>Observer callbacks that faulted under isolation.</summary>
     public int ObserverFaultCount => _engine.ObserverFaultCount;
