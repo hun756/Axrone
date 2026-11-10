@@ -50,6 +50,7 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     private long _droppedDeadLetters;
     private long _reentrantDeferred;
     private long _reentrantDropped;
+    private long _filtered;
     private int _reentrantChain;
     private long _incompleteImmediate;
     private long _maxListenersWarnings;
@@ -120,6 +121,9 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
 
     /// <summary>Reentrant immediate publishes dropped because the transport was full.</summary>
     public long ReentrantDroppedPublishes => Interlocked.Read(ref _reentrantDropped);
+
+    /// <summary>Envelopes rejected by a publish filter before reaching the transport.</summary>
+    public long FilteredPublishes => Interlocked.Read(ref _filtered);
 
     /// <summary>Async handlers started by immediate dispatch that had not completed synchronously.</summary>
     public long IncompleteImmediateDispatches => Interlocked.Read(ref _incompleteImmediate);
@@ -469,6 +473,8 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
 
     /// <summary>
     /// Non-blocking publish; false when full or not running (backpressure, not an error).
+    /// Filtered events report true because the call was not backpressured; use
+    /// <see cref="FilteredPublishes"/> or the batch count to observe filtering.
     /// </summary>
     public bool TryPublish(in TEvent message)
     {
@@ -913,6 +919,7 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
         {
             if (!filter.ShouldProcess(in envelope))
             {
+                Interlocked.Increment(ref _filtered);
                 return false;
             }
         }

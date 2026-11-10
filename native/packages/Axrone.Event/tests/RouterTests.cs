@@ -316,6 +316,23 @@ public class RouterTests
     }
 
     [Fact]
+    public void FilteredPublish_IsCountedWithoutReachingTransport()
+    {
+        using var router = new EventRouter<int>(64);
+        router.AddFilter(new FuncFilter<int>(envelope => envelope.Payload > 0));
+
+        var count = 0;
+        using var subscription = router.Subscribe((_, _) => Interlocked.Increment(ref count));
+
+        router.TryPublish(-1).Should().BeTrue();
+        router.FilteredPublishes.Should().Be(1);
+
+        router.Publish(1);
+        SpinWait.SpinUntil(() => Volatile.Read(ref count) == 1, TimeSpan.FromSeconds(5)).Should().BeTrue();
+        router.FilteredPublishes.Should().Be(1);
+    }
+
+    [Fact]
     public void PublishFromAnotherRouterHandler_WaitsOnItsOwnTransport()
     {
         using var entered = new ManualResetEventSlim(false);
