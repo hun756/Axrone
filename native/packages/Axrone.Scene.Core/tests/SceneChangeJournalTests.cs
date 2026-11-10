@@ -75,6 +75,26 @@ public sealed class SceneChangeJournalTests
     }
 
     [Fact]
+    public void HierarchyMutations_AreJournaled()
+    {
+        using SceneWorld world = CreateWorld();
+        SceneActor parent = world.CreateActor();
+        SceneActor child = world.CreateActor();
+        world.Changes.Clear();
+
+        world.Hierarchy.SetParent(child, parent);
+        world.SetActive(parent, false);
+
+        var buffer = new SceneChange[16];
+        int count = world.Changes.Drain(buffer);
+        buffer.AsSpan(0, count).ToArray()
+            .Select(change => change.Kind)
+            .Should().ContainInOrder(
+                SceneChangeKind.ParentChanged,
+                SceneChangeKind.ActiveInHierarchyChanged);
+    }
+
+    [Fact]
     public void BehaviourEnableAndDisable_AreJournaled()
     {
         using SceneWorld world = CreateWorld();

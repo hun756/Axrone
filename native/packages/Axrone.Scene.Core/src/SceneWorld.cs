@@ -847,6 +847,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
 
         _transform3D?.MarkWorldDirtySubtree(slot);
         _transform2D?.MarkWorldDirtySubtree(slot);
+        _changes.Write(SceneChange.ParentChanged(child));
     }
 
     void ISceneHierarchyObserver.OnActiveInHierarchyChanged(in SceneActor actor, bool active)
@@ -860,6 +861,7 @@ public sealed class SceneWorld : IDisposable, ISceneHierarchyObserver, ISceneBeh
             _activeActorCount--;
         }
 
+        _changes.Write(SceneChange.ActiveInHierarchyChanged(actor));
         _behaviours.SetActiveInHierarchy(in actor, active);
     }
 

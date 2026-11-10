@@ -12,6 +12,8 @@ public enum SceneChangeKind : byte
     BehaviourRemoved = 6,
     BehaviourEnabled = 7,
     BehaviourDisabled = 8,
+    ParentChanged = 9,
+    ActiveInHierarchyChanged = 10,
 }
 
 /// <summary>
@@ -50,6 +52,12 @@ public readonly record struct SceneChange(
 
     public static SceneChange BehaviourDisabled(SceneActor actor, SceneBehaviourTypeId type) =>
         new(SceneChangeKind.BehaviourDisabled, actor, default, type);
+
+    public static SceneChange ParentChanged(SceneActor actor) =>
+        new(SceneChangeKind.ParentChanged, actor, default, default);
+
+    public static SceneChange ActiveInHierarchyChanged(SceneActor actor) =>
+        new(SceneChangeKind.ActiveInHierarchyChanged, actor, default, default);
 }
 
 /// <summary>
