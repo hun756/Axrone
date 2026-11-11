@@ -33,6 +33,7 @@ public sealed class SceneFramePipeline :
     private Vec3 _ambient;
     private Vec3 _sky;
     private Vec3 _ground;
+    private float _outputGamma = 1f;
     private readonly bool _hasSpriteComponent;
     private readonly bool _hasLodComponent;
     private readonly bool _hasSkinnedComponent;
@@ -176,6 +177,16 @@ public sealed class SceneFramePipeline :
     {
         get => _ground;
         set => _ground = value;
+    }
+
+    /// <summary>
+    /// Output gamma applied by the built-in shaders (1 = display-ready, 1/2.2
+    /// for linear scene colour spaces).
+    /// </summary>
+    public float OutputGamma
+    {
+        get => _outputGamma;
+        set => _outputGamma = MathF.Max(0.0001f, value);
     }
 
     /// <summary>Rebuilds the ordered pass list after asset changes.</summary>

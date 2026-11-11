@@ -29,6 +29,9 @@ public interface ISceneFrameItemSource
     /// <summary>Resolved fog settings for the current frame.</summary>
     SceneFogState Fog { get; }
 
+    /// <summary>Output gamma applied by the built-in shaders.</summary>
+    float OutputGamma => 1f;
+
     /// <summary>Collects and returns mesh items for one pass.</summary>
     ReadOnlySpan<SceneRenderItem> CollectMeshes(SceneAssetId<RenderPassAssetTag> passId);
 

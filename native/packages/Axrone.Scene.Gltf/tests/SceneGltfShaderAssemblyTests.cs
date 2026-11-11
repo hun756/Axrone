@@ -28,6 +28,19 @@ public sealed class SceneGltfShaderAssemblyTests
     [InlineData("gltf/pbr")]
     [InlineData("gltf/unlit")]
     [InlineData("gltf/toon")]
+    public void BuiltInShaders_ApplyTheFrameOutputGamma(string shaderId)
+    {
+        SceneGltfShaders.TryCreate(shaderId, names: null, out SceneShaderDefinition? shader)
+            .Should().BeTrue();
+
+        shader!.FragmentSource.Should().Contain("u_OutputGamma");
+        shader.FragmentSource.Should().Contain("vec3(u_OutputGamma)");
+    }
+
+    [Theory]
+    [InlineData("gltf/pbr")]
+    [InlineData("gltf/unlit")]
+    [InlineData("gltf/toon")]
     [InlineData("gltf/pbr/blend")]
     [InlineData("gltf/pbr/double-sided")]
     [InlineData("gltf/unlit/blend/double-sided")]

@@ -242,7 +242,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                     items as ISceneAreaLightSource,
                     _probeAtlas,
                     _reflectionProbe,
-                    _shadow);
+                    _shadow,
+                    items.OutputGamma);
             }
         }
 
@@ -263,7 +264,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                     items as ISceneAreaLightSource,
                     _probeAtlas,
                     _reflectionProbe,
-                    _shadow);
+                    _shadow,
+                    items.OutputGamma);
             }
         }
 

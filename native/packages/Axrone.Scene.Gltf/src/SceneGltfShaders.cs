@@ -167,6 +167,7 @@ public static class SceneGltfShaders
         "    }",
         "    color += emissive;",
         "    color = gltfApplyFog(color, v_WorldPosition, u_CameraPosition);",
+        "    color = pow(max(color, vec3(0.0)), vec3(u_OutputGamma));",
         "",
         "    float alpha = _AlphaMode == 2 ? baseColor.a : 1.0;",
         "    o_FragColor = vec4(color, alpha);"
@@ -218,6 +219,7 @@ public static class SceneGltfShaders
         "    }",
         "    color += emissive;",
         "    color = gltfApplyFog(color, v_WorldPosition, u_CameraPosition);",
+        "    color = pow(max(color, vec3(0.0)), vec3(u_OutputGamma));",
         "",
         "    float alpha = _AlphaMode == 2 ? baseColor.a : 1.0;",
         "    o_FragColor = vec4(color, alpha);"
@@ -234,7 +236,8 @@ public static class SceneGltfShaders
         "        discard;",
         "    }",
         "    float alpha = _AlphaMode == 2 ? baseColor.a : 1.0;",
-        "    vec3 color = gltfApplyFog(linearToSrgb(baseColor.rgb), v_WorldPosition, u_CameraPosition);",
+        "    vec3 color = gltfApplyFog(baseColor.rgb, v_WorldPosition, u_CameraPosition);",
+        "    color = pow(max(color, vec3(0.0)), vec3(u_OutputGamma));",
         "    o_FragColor = vec4(color, alpha);"
     ];
 

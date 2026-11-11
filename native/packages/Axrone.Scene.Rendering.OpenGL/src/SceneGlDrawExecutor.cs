@@ -27,6 +27,7 @@ public sealed class SceneGlDrawExecutor
     private const string LightColorUniform = "u_LightColor";
     private const string LightIntensityUniform = "u_LightIntensity";
     private const string AmbientLightUniform = "u_AmbientLight";
+    private const string OutputGammaUniform = "u_OutputGamma";
     private const string PointLightPositionUniform = "u_PointLightPosition";
     private const string PointLightColorUniform = "u_PointLightColor";
     private const string PointLightIntensityUniform = "u_PointLightIntensity";
@@ -73,7 +74,8 @@ public sealed class SceneGlDrawExecutor
         ISceneAreaLightSource? areaLights = null,
         SceneGlReflectionProbeAtlas? probeAtlas = null,
         ISceneReflectionProbeSource? reflectionProbe = null,
-        ISceneGlShadowSource? shadow = null)
+        ISceneGlShadowSource? shadow = null,
+        float outputGamma = 1f)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(camera);
@@ -119,6 +121,7 @@ public sealed class SceneGlDrawExecutor
             SceneGlMaterialExtensionBinder.Bind(shader, material.Surface);
             ApplyLighting(shader, in lights);
             ApplyFog(shader, in fog);
+            shader.SetFloat(OutputGammaUniform, outputGamma);
             ApplyCustomUniforms(shader, material.UniformEntries.Span);
             BindTextures(_context, shader, material.TextureSlots.Span);
             SceneGlAreaLightBinder.Bind(shader, areaLights is null ? default : areaLights.AreaLights);

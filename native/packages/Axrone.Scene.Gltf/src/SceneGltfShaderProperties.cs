@@ -224,6 +224,7 @@ public static class SceneGltfShaderProperties
         properties.Add(Material("u_Albedo", SceneGltfShaderPropertyType.Vec4));
         properties.Add(Material("u_AlphaCutoff", SceneGltfShaderPropertyType.Float));
         properties.Add(Material("u_AlbedoMap", SceneGltfShaderPropertyType.Sampler2D));
+        properties.Add(Frame("u_OutputGamma", SceneGltfShaderPropertyType.Float));
         AppendFog(properties);
         AppendAlphaProperties(properties);
         properties.Add(Material("_BaseColorFactor", SceneGltfShaderPropertyType.Vec4));
@@ -343,6 +344,7 @@ public static class SceneGltfShaderProperties
 
     private static void AppendLighting(List<SceneGltfShaderProperty> properties)
     {
+        properties.Add(Frame("u_OutputGamma", SceneGltfShaderPropertyType.Float));
         properties.Add(Frame("u_LightDirection", SceneGltfShaderPropertyType.Vec3));
         properties.Add(Frame("u_LightColor", SceneGltfShaderPropertyType.Vec3));
         properties.Add(Frame("u_LightIntensity", SceneGltfShaderPropertyType.Float));

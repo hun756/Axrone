@@ -130,7 +130,8 @@ public sealed class SceneGlSkinnedMeshRenderer : IDisposable
         ISceneAreaLightSource? areaLights = null,
         SceneGlReflectionProbeAtlas? probeAtlas = null,
         ISceneReflectionProbeSource? reflectionProbe = null,
-        ISceneGlShadowSource? shadow = null)
+        ISceneGlShadowSource? shadow = null,
+        float outputGamma = 1f)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(world);
@@ -235,6 +236,7 @@ public sealed class SceneGlSkinnedMeshRenderer : IDisposable
             SceneGlMaterialExtensionBinder.Bind(shader, material.Surface);
             SceneGlDrawExecutor.ApplyLighting(shader, in lights);
             SceneGlDrawExecutor.ApplyFog(shader, in fog);
+            shader.SetFloat("u_OutputGamma", outputGamma);
             SceneGlDrawExecutor.ApplyCustomUniforms(shader, material.UniformEntries.Span);
             SceneGlDrawExecutor.BindTextures(_context, shader, material.TextureSlots.Span);
             SceneGlAreaLightBinder.Bind(shader, areaLights is null ? default : areaLights.AreaLights);
