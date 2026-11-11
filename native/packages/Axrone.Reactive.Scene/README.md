@@ -37,6 +37,12 @@ A `SceneRuntimeLoop` can pump the bridge for you; the bridge detaches on dispose
 bridge.AttachLoop(loop);   // pumps after every loop.Tick()
 ```
 
+**Event–Scene boundary:** `Scene.Core` and `Scene.Runtime` do **not** reference `Axrone.Event`.
+Structural mutations flow through `SceneChangeJournal`; `Axrone.Reactive.Scene` is the adapter
+(`ActorCreated/Destroyed`, `ComponentAdded/Removed/Changed<T>`, `BehaviourChanges`,
+`HierarchyChanges`, `Collisions`, `Sensors`). `Axrone.Event` stays the gameplay/backend transport,
+so deleting the ECS event bus does not touch this path.
+
 ## Streams
 
 | Stream | Payload |
