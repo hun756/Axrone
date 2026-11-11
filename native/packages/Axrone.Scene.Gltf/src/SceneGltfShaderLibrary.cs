@@ -408,7 +408,7 @@ public static class SceneGltfShaderLibrary
             float height = clamp(cameraPosition.y - u_HeightFogGroundHeight, -limit, limit);
             float density = max(u_HeightFogDensity, 0.0);
             float optical = density * exp(-height) * distance * gltfHeightRatio((delta.y / distance) * distance, falloff);
-            return clamp(1.0 - exp(-clamp(max(optical, 0.0), AX_FOG_MAX_EXPONENT)), 0.0, 1.0);
+            return clamp(1.0 - exp(-clamp(max(optical, 0.0), 0.0, AX_FOG_MAX_EXPONENT)), 0.0, 1.0);
         }
 
         vec3 gltfApplyFog(vec3 color, vec3 worldPosition, vec3 cameraPosition) {
