@@ -134,6 +134,29 @@ public sealed class SceneAnimatorBridgeTests
     }
 
     [Fact]
+    public void StepIsAllocationFreeInSteadyState()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        _ = BindActor(world, bridge, controller);
+
+        for (int i = 0; i < 16; i++)
+        {
+            bridge.Step(0.016f);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100; i++)
+        {
+            bridge.Step(0.016f);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        (after - before).Should().Be(0);
+    }
+
+    [Fact]
     public void PauseHoldsTheLastPose()
     {
         using SceneWorld world = CreateWorld();
