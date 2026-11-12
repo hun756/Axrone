@@ -571,6 +571,48 @@ public sealed class SceneAnimatorBridge : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Samples the render pose between the previous and current animation steps.
+    /// Rotations slerp, translations and scales lerp, and the world palette is
+    /// rebuilt from the interpolated local pose so render-phase consumers never
+    /// see a mixed transform chain. Alpha 0 selects the previous step, 1 the
+    /// current one; before the first completed step the current pose is copied.
+    /// </summary>
+    public bool TrySamplePose(SceneActor actor, float alpha, Span<LocalTransform> localPose, Span<Mat4> worldPalette)
+    {
+        if (!TryResolve(actor, out _, out AnimatorSlot slot) || !slot.HasPose)
+        {
+            return false;
+        }
+
+        int boneCount = slot.BoneCount;
+        if (localPose.Length < boneCount || worldPalette.Length < boneCount)
+        {
+            return false;
+        }
+
+        if (!slot.HasPreviousPose)
+        {
+            slot.LocalPose.AsSpan(0, boneCount).CopyTo(localPose);
+        }
+        else
+        {
+            float t = FastMath.Clamp01(alpha);
+            for (int bone = 0; bone < boneCount; bone++)
+            {
+                LocalTransform previous = slot.PreviousLocalPose[bone];
+                LocalTransform current = slot.LocalPose[bone];
+                Vec3 translation = Vec3.Lerp(previous.Translation, current.Translation, t);
+                Vec3 scale = Vec3.Lerp(previous.Scale, current.Scale, t);
+                Quat rotation = FastMath.Slerp(previous.Rotation, current.Rotation, t);
+                localPose[bone] = new LocalTransform(translation, rotation, scale);
+            }
+        }
+
+        slot.Controller.Rig.EvaluatePose(localPose[..boneCount], worldPalette[..boneCount]);
+        return true;
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -610,6 +652,12 @@ public sealed class SceneAnimatorBridge : IDisposable
         ReadOnlySpan<Quat> rotations = frame.ReadRotations();
         ReadOnlySpan<Vec3> scales = frame.ReadScales();
         int boneCount = slot.BoneCount;
+        if (slot.HasPose)
+        {
+            Array.Copy(slot.LocalPose, slot.PreviousLocalPose, boneCount);
+            slot.HasPreviousPose = true;
+        }
+
         for (int bone = 0; bone < boneCount; bone++)
         {
             slot.LocalPose[bone] = new LocalTransform(translations[bone], rotations[bone], scales[bone]);
@@ -721,6 +769,7 @@ public sealed class SceneAnimatorBridge : IDisposable
             Controller = controller;
             BoneCount = controller.Rig.BoneCount;
             LocalPose = new LocalTransform[BoneCount];
+            PreviousLocalPose = new LocalTransform[BoneCount];
             Palette = new Mat4[BoneCount];
             Events = new List<ClipEvent>();
         }
@@ -734,6 +783,10 @@ public sealed class SceneAnimatorBridge : IDisposable
         public int BoneCount { get; }
 
         public LocalTransform[] LocalPose { get; }
+
+        public LocalTransform[] PreviousLocalPose { get; }
+
+        public bool HasPreviousPose { get; set; }
 
         public Mat4[] Palette { get; }
 

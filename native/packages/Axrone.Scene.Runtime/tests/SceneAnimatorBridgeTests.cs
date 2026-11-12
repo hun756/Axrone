@@ -80,6 +80,31 @@ public sealed class SceneAnimatorBridgeTests
     }
 
     [Fact]
+    public void SamplePoseInterpolatesBetweenFixedSteps()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        SceneActor actor = BindActor(world, bridge, controller);
+
+        bridge.Step(0.25f);
+        bridge.Step(0.25f);
+
+        Span<LocalTransform> local = stackalloc LocalTransform[1];
+        Span<Mat4> palette = stackalloc Mat4[1];
+
+        bridge.TrySamplePose(actor, 0.0f, local, palette).Should().BeTrue();
+        local[0].Translation.X.Should().BeApproximately(0.25f, 1e-4f);
+
+        bridge.TrySamplePose(actor, 0.5f, local, palette).Should().BeTrue();
+        local[0].Translation.X.Should().BeApproximately(0.375f, 1e-4f);
+        palette[0].M14.Should().BeApproximately(0.375f, 1e-4f);
+
+        bridge.TrySamplePose(actor, 1.0f, local, palette).Should().BeTrue();
+        local[0].Translation.X.Should().BeApproximately(0.5f, 1e-4f);
+    }
+
+    [Fact]
     public void LodDefersDistantAnimatorUntilIntervalElapses()
     {
         using SceneWorld world = CreateWorld();
