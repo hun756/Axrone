@@ -1,5 +1,24 @@
 namespace Axrone.Animation;
 
+/// <summary>Temporal curve applied to transition progress.</summary>
+public enum TransitionEasing
+{
+    /// <summary>Constant-rate blend.</summary>
+    Linear = 0,
+
+    /// <summary>Smooth acceleration and deceleration.</summary>
+    SmoothStep = 1,
+
+    /// <summary>Accelerating blend.</summary>
+    EaseIn = 2,
+
+    /// <summary>Decelerating blend.</summary>
+    EaseOut = 3,
+
+    /// <summary>Accelerate then decelerate.</summary>
+    EaseInOut = 4,
+}
+
 /// <summary>Conditional edge between states with duration and priority.</summary>
 public sealed class StateTransition
 {
@@ -52,6 +71,21 @@ public sealed class StateTransition
 
     /// <summary>Deterministic tie-breaker.</summary>
     public int TieBreakerIndex { get; init; }
+
+    /// <summary>Temporal curve applied to normalized progress.</summary>
+    public TransitionEasing Easing
+    {
+        get;
+        init
+        {
+            if ((uint)value > (uint)TransitionEasing.EaseInOut)
+            {
+                AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Unknown transition easing '{value}'.");
+            }
+
+            field = value;
+        }
+    } = TransitionEasing.Linear;
 
     /// <summary>Guard conditions.</summary>
     public ReadOnlySpan<ParameterCondition> Conditions => _conditions;
@@ -135,6 +169,7 @@ public sealed class StateMachineInstance
         public bool HasFixedDuration;
         public bool CanInterrupt;
         public bool IsActive;
+        public TransitionEasing Easing;
     }
 
     private readonly AnimationState[] _states;
@@ -252,6 +287,7 @@ public sealed class StateMachineInstance
             TargetNormalizedTime = offset,
             HasFixedDuration = true,
             CanInterrupt = true,
+            Easing = TransitionEasing.Linear,
         };
     }
 
@@ -344,6 +380,7 @@ public sealed class StateMachineInstance
                     TargetNormalizedTime = next.Offset,
                     HasFixedDuration = next.HasFixedDuration,
                     CanInterrupt = next.CanInterrupt,
+                    Easing = next.Easing,
                 };
                 ConsumeTransitionTriggers(next, parameters);
             }
@@ -417,6 +454,7 @@ public sealed class StateMachineInstance
                 active.TargetNormalizedTime = interrupt.Offset;
                 active.HasFixedDuration = interrupt.HasFixedDuration;
                 active.CanInterrupt = interrupt.CanInterrupt;
+                active.Easing = interrupt.Easing;
                 _activeTransition = active;
                 ConsumeTransitionTriggers(interrupt, parameters);
                 return;
@@ -532,7 +570,7 @@ public sealed class StateMachineInstance
         MotionDispatcher.Evaluate(_states[active.SourceStateIndex].RootMotion, StateNormalizedTime, sourceFrame, arena, rig, parameters, 0);
         MotionDispatcher.Evaluate(_states[active.TargetStateIndex].RootMotion, active.TargetNormalizedTime, targetFrame, arena, rig, parameters, 0);
 
-        BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, FastMath.Clamp01(active.Progress));
+        BlendingKernels.BlendFrame(outFrame, sourceFrame, targetFrame, ApplyEasing(active.Easing, active.Progress));
 
         arena.Free();
         arena.Free();
@@ -557,7 +595,7 @@ public sealed class StateMachineInstance
         MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out Vec3 sourcePos, out Quat sourceRot);
         MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, out Vec3 targetPos, out Quat targetRot);
 
-        float weight = FastMath.Clamp01(active.Progress);
+        float weight = ApplyEasing(active.Easing, active.Progress);
         deltaPos = Vec3.Lerp(sourcePos, targetPos, weight);
         deltaRot = FastMath.Slerp(sourceRot, targetRot, weight);
     }
@@ -581,8 +619,23 @@ public sealed class StateMachineInstance
         MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, parameters, out Vec3 sourcePos, out Quat sourceRot);
         MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, parameters, out Vec3 targetPos, out Quat targetRot);
 
-        float weight = FastMath.Clamp01(active.Progress);
+        float weight = ApplyEasing(active.Easing, active.Progress);
         deltaPos = Vec3.Lerp(sourcePos, targetPos, weight);
         deltaRot = FastMath.Slerp(sourceRot, targetRot, weight);
+    }
+
+    private static float ApplyEasing(TransitionEasing easing, float progress)
+    {
+        float t = FastMath.Clamp01(progress);
+        return easing switch
+        {
+            TransitionEasing.SmoothStep => t * t * (3.0f - (2.0f * t)),
+            TransitionEasing.EaseIn => t * t,
+            TransitionEasing.EaseOut => 1.0f - ((1.0f - t) * (1.0f - t)),
+            TransitionEasing.EaseInOut => t < 0.5f
+                ? 2.0f * t * t
+                : 1.0f - (MathF.Pow((-2.0f * t) + 2.0f, 2.0f) * 0.5f),
+            _ => t,
+        };
     }
 }

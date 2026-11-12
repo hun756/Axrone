@@ -177,6 +177,27 @@ public class StateMachineTests
     }
 
     [Fact]
+    public void TransitionEasing_ControlsBlendCurve()
+    {
+        var parameters = new ParameterStore(Params());
+        var idle = new AnimationState(
+            new StateId("idle"),
+            new ClipMotionNode(SlideClip(0.0f)),
+            new StateTransition(1, 1.0f, [new ParameterCondition("go", ConditionOperator.Equal, 0.0f)]) { Easing = TransitionEasing.EaseIn });
+        var run = new AnimationState(new StateId("run"), new ClipMotionNode(SlideClip(10.0f)));
+        var machine = new StateMachineInstance([idle, run], [], 0);
+        var frame = new AnimationFrame(2, NoCurves());
+        var arena = new FrameArena(2, NoCurves(), capacity: 4);
+
+        parameters.SetTrigger("go");
+        machine.Update(0.25f, parameters, new List<ClipEvent>(), 1.0f);
+        machine.Update(0.25f, parameters, new List<ClipEvent>(), 1.0f);
+        machine.Evaluate(frame, arena, TwoBone(), parameters);
+
+        frame.ReadTranslations()[1].X.Should().BeApproximately(0.15625f, 1e-4f);
+    }
+
+    [Fact]
     public void AnyStateSelfTransition_IsAllowed()
     {
         var parameters = new ParameterStore(Params());
