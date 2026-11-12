@@ -144,6 +144,28 @@ public class AdvancedTests
     }
 
     [Fact]
+    public void MotionMatching_SearchKReturnsNearestInOrder()
+    {
+        MotionMatchCandidate[] candidates =
+        [
+            new MotionMatchCandidate(0, 0.0f, new Vec3(3.0f, 0.0f, 0.0f), Vec3.UnitZ, null),
+            new MotionMatchCandidate(1, 0.0f, new Vec3(1.0f, 0.0f, 0.0f), Vec3.UnitZ, null),
+            new MotionMatchCandidate(2, 0.0f, new Vec3(2.0f, 0.0f, 0.0f), Vec3.UnitZ, null),
+        ];
+        var query = new MotionMatchQuery(Vec3.Zero, Vec3.UnitZ);
+        Span<int> indices = stackalloc int[2];
+        Span<float> scores = stackalloc float[2];
+
+        int count = MotionMatching.SearchK(query, candidates, indices, scores);
+
+        count.Should().Be(2);
+        indices[0].Should().Be(1);
+        indices[1].Should().Be(2);
+        scores[0].Should().BeApproximately(1.0f, 1e-5f);
+        scores[1].Should().BeApproximately(4.0f, 1e-5f);
+    }
+
+    [Fact]
     public void Grounding_AxisLocksKeepDisabledAxesZero()
     {
         FootContact[] contacts =
