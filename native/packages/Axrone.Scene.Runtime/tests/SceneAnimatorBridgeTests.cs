@@ -354,6 +354,35 @@ public sealed class SceneAnimatorBridgeTests
     }
 
     [Fact]
+    public void PlayMontageRoutesEventsThroughTheBridge()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        SceneActor actor = BindActor(world, bridge, controller);
+        var clip = new AnimationClip(
+            new ClipId("montage"), 1.0f, s_cueChannels,
+            events: s_cueEvents);
+        RecordingEventSink events = new();
+
+        AnimationMontage? montage = bridge.PlayMontage(
+            actor,
+            clip,
+            new AnimationMontageOptions(FadeInSeconds: 0.0f, FadeOutSeconds: 0.0f));
+        montage.Should().NotBeNull();
+
+        bridge.Step(0.2f, null, events);
+
+        events.Events.Should().ContainSingle(e => e.Name == "hit");
+        montage!.Status.Should().Be(AnimationMontageStatus.Playing);
+        controller.ActiveMontageCount.Should().Be(1);
+
+        bridge.Step(1.0f);
+        montage.Status.Should().Be(AnimationMontageStatus.Completed);
+        controller.ActiveMontageCount.Should().Be(0);
+    }
+
+    [Fact]
     public void RootMotionConsumerTakesPrecedenceOverTransform()
     {
         using SceneWorld world = CreateWorld();

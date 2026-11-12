@@ -135,6 +135,27 @@ public sealed class SceneAnimatorBridge : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Starts a one-shot montage on the actor's controller. The normal event sink
+    /// then receives clip events for the montage, and the controller releases the
+    /// layer when it completes or is stopped.
+    /// </summary>
+    public AnimationMontage? PlayMontage(
+        SceneActor actor,
+        AnimationClip clip,
+        AnimationMontageOptions options = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(clip);
+
+        if (!TryResolve(actor, out _, out AnimatorSlot slot))
+        {
+            return null;
+        }
+
+        return slot.Controller.PlayMontage(clip, options);
+    }
+
     /// <summary>Releases the animator bound to an actor.</summary>
     public bool Unbind(SceneActor actor)
     {
