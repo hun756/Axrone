@@ -410,6 +410,12 @@ public static class ChunkCodec
             AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk clip id missing.");
         }
 
+        if (payload.Tracks is null)
+        {
+            AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk track list missing.");
+        }
+
+        var seenTracks = new HashSet<(int Bone, byte Target)>();
         foreach (ChunkTrackDto track in payload.Tracks)
         {
             int components = track.Target switch
@@ -424,6 +430,16 @@ public static class ChunkCodec
             if (components < 0)
             {
                 AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkIncompatible, $"Unknown channel target {track.Target}.");
+            }
+
+            if (track.BoneIndex < 0 && (byte)ChannelTarget.Curve != track.Target)
+            {
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Only curve tracks may use a negative bone index.");
+            }
+
+            if (!seenTracks.Add((track.BoneIndex, track.Target)))
+            {
+                AnimationThrowHelper.ThrowStreaming(AnimationErrorCode.StreamingChunkCorrupt, "Chunk declares the same bone target twice.");
             }
 
             if (track.Interpolation > (byte)InterpolationMode.CubicSpline)

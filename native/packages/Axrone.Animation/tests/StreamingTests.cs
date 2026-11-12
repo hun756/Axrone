@@ -141,6 +141,28 @@ public class StreamingTests
     }
 
     [Fact]
+    public void Decode_RejectsDuplicateTracks()
+    {
+        var payload = new ChunkPayloadDto { ClipId = "walk", Duration = 1.0f };
+        var track = new ChunkTrackDto
+        {
+            BoneIndex = 0,
+            Target = (byte)ChannelTarget.Translation,
+            Interpolation = (byte)InterpolationMode.Linear,
+            KeyTimes = [0.0f],
+            KeyValues = [0.0f, 0.0f, 0.0f],
+        };
+        payload.Tracks.Add(track);
+        payload.Tracks.Add(track);
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(payload, ChunkJsonSerializerContext.Default.ChunkPayloadDto);
+
+        Action decode = () => ChunkCodec.Decode(json);
+
+        decode.Should().Throw<StreamingException>()
+            .Where(e => e.Code == AnimationErrorCode.StreamingChunkCorrupt);
+    }
+
+    [Fact]
     public void Scheduler_OrdersActiveBeforePreload()
     {
         var scheduler = new StreamingScheduler();
