@@ -51,6 +51,26 @@ public sealed class SceneGlSkinnedMeshTests
         """;
 
     [Fact]
+    public void InjectorKeepsTheRowVectorPaletteContract()
+    {
+        const string shader = """
+            #version 330 core
+            layout(location = 0) in vec3 a_Position;
+
+            void main()
+            {
+                gl_Position = vec4(a_Position, 1.0);
+            }
+            """;
+
+        bool injected = SkinningShaderInjector.TryInject(shader, out string source);
+
+        injected.Should().BeTrue();
+        source.Should().Contain("(vec4(position, 1.0) * skin)");
+        source.Should().NotContain("skin * vec4(position, 1.0)");
+    }
+
+    [Fact]
     public void SkinnedBatchUsesTheMaterialPipeline()
     {
         var api = new MockGLApi { EnableCallLogging = true };
