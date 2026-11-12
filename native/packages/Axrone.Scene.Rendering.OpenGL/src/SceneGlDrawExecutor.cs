@@ -162,7 +162,12 @@ public sealed class SceneGlDrawExecutor
 
     private void BeginPass(SceneCameraFrame camera, SceneRenderPassDefinition pass)
     {
-        if ((pass.ClearMask & SceneClearMask.Color) != 0)
+        // The camera's authored clear flags restrict what the active pass may
+        // clear (SceneCamera.ClearMask); the pass only decides whether it owns
+        // the clear at all.
+        SceneClearMask clearMask = pass.ClearMask & camera.Camera.ClearMask;
+
+        if ((clearMask & SceneClearMask.Color) != 0)
         {
             Vec4 color = pass.ClearColor ?? camera.Camera.ClearColor;
             _context.State.SetColorMask(true, true, true, true);
@@ -170,7 +175,7 @@ public sealed class SceneGlDrawExecutor
             _context.GL.Clear(GLConst.ColorBufferBit);
         }
 
-        if ((pass.ClearMask & SceneClearMask.Depth) != 0)
+        if ((clearMask & SceneClearMask.Depth) != 0)
         {
             float depth = pass.ClearDepth ?? camera.Camera.ClearDepth;
             _context.State.SetDepthMask(true);
