@@ -17,6 +17,9 @@ public enum MotionKind
 
     /// <summary>Rest-relative additive layer.</summary>
     Additive = 4,
+
+    /// <summary>Database-selected clip sample.</summary>
+    MotionMatching = 5,
 }
 
 /// <summary>Evaluatable motion node: clips and blends share one recursive contract.</summary>

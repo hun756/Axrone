@@ -103,6 +103,47 @@ public class AdvancedTests
     }
 
     [Fact]
+    public void MotionMatchingNode_SelectsAndSamplesTheNearestClip()
+    {
+        Rig rig = new(new RigId("mm-node"), [new BoneInfo { Name = "root", ParentIndex = -1 }]);
+        var walk = new AnimationClip(
+            new ClipId("walk"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f])]);
+        var run = new AnimationClip(
+            new ClipId("run"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f])]);
+        MotionMatchingDatabase database = MotionMatchingDatabase.Build(rig, [walk, run], sampleInterval: 0.5f);
+        var node = new MotionMatchingMotionNode(
+            database,
+            "tx",
+            "tz",
+            "fx",
+            "fz",
+            reselectIntervalSeconds: 0.0f,
+            continuityBias: 0.0f);
+        var parameters = new ParameterStore(new Dictionary<string, ParameterType>
+        {
+            ["tx"] = ParameterType.Float,
+            ["tz"] = ParameterType.Float,
+            ["fx"] = ParameterType.Float,
+            ["fz"] = ParameterType.Float,
+        });
+        parameters.SetFloat("fx", 0.0f);
+        parameters.SetFloat("fz", 1.0f);
+        var frame = new AnimationFrame(1, new CurveLayout(new Dictionary<CurveId, int>()));
+        var arena = new FrameArena(1, new CurveLayout(new Dictionary<CurveId, int>()), capacity: 4);
+
+        parameters.SetFloat("tx", 10.0f);
+        node.Evaluate(0.5f, frame, arena, rig, parameters, 0);
+        node.SelectedClipIndex.Should().Be(1);
+        frame.ReadTranslations()[0].X.Should().BeApproximately(5.0f, 1e-4f);
+
+        parameters.SetFloat("tx", 0.0f);
+        node.Evaluate(0.75f, frame, arena, rig, parameters, 0);
+        node.SelectedClipIndex.Should().Be(0);
+    }
+
+    [Fact]
     public void Grounding_AxisLocksKeepDisabledAxesZero()
     {
         FootContact[] contacts =

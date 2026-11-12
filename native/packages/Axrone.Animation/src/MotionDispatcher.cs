@@ -42,6 +42,9 @@ public static class MotionDispatcher
             case MotionKind.Additive:
                 ((AdditiveMotionNode)node).Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth);
                 break;
+            case MotionKind.MotionMatching:
+                ((MotionMatchingMotionNode)node).Evaluate(normalizedTime, outFrame, arena, rig, parameters, depth);
+                break;
             default:
                 AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
                 break;
@@ -75,6 +78,9 @@ public static class MotionDispatcher
                 break;
             case MotionKind.Additive:
                 ((AdditiveMotionNode)node).ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+                break;
+            case MotionKind.MotionMatching:
+                ((MotionMatchingMotionNode)node).ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
                 break;
             default:
                 AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
@@ -113,6 +119,9 @@ public static class MotionDispatcher
                 break;
             case MotionKind.Additive:
                 ((AdditiveMotionNode)node).ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+                break;
+            case MotionKind.MotionMatching:
+                ((MotionMatchingMotionNode)node).ComputeRootDelta(prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
                 break;
             default:
                 AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
@@ -203,6 +212,9 @@ public static class MotionDispatcher
             case MotionKind.Additive:
                 ((AdditiveMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
                 break;
+            case MotionKind.MotionMatching:
+                ((MotionMatchingMotionNode)node).CollectEvents(prevNormTime, curNormTime, layerWeight, ref sink);
+                break;
             default:
                 AnimationThrowHelper.ThrowEvaluation(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'.");
                 break;
@@ -235,6 +247,7 @@ public static class MotionDispatcher
             MotionKind.Blend2D => ((Blend2DMotionNode)node).GetDuration(),
             MotionKind.Direct => ((DirectMotionNode)node).GetDuration(),
             MotionKind.Additive => ((AdditiveMotionNode)node).GetDuration(),
+            MotionKind.MotionMatching => ((MotionMatchingMotionNode)node).GetDuration(),
             _ => throw new EvaluationException(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'."),
         };
     }
@@ -256,6 +269,7 @@ public static class MotionDispatcher
             MotionKind.Blend2D => ((Blend2DMotionNode)node).GetDuration(parameters),
             MotionKind.Direct => ((DirectMotionNode)node).GetDuration(parameters),
             MotionKind.Additive => GetDuration(((AdditiveMotionNode)node).BaseChild, parameters),
+            MotionKind.MotionMatching => ((MotionMatchingMotionNode)node).GetDuration(parameters),
             _ => throw new EvaluationException(AnimationErrorCode.EvaluationMotionKindInvalid, $"Unknown motion kind '{node.Kind}'."),
         };
     }
