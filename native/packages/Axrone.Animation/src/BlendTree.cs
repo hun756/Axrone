@@ -457,6 +457,8 @@ public sealed class Blend2DMotionNode : MotionNode
     private readonly Vec2[] _positions;
     private readonly MotionNode[] _children;
     private readonly int[] _triangles;
+    private AnimationFrame[]? _frameScratch;
+    private float[]? _weightScratch;
     private ParameterHandle _parameterXHandle;
     private ParameterHandle _parameterYHandle;
     private bool _parametersBound;
@@ -710,42 +712,33 @@ public sealed class Blend2DMotionNode : MotionNode
         Vec2 input = ReadInput(parameters);
         int childCount = _children.Length;
         // Holder must be a managed array (stackalloc forbids reference types);
-        // weights are unmanaged and honor the stack budget.
-        AnimationFrame[] holder = ArrayPool<AnimationFrame>.Shared.Rent(childCount);
-        bool weightsPooled = childCount > AnimationConstants.MaxStackScratchFrames;
-        float[]? rentedWeights = weightsPooled ? ArrayPool<float>.Shared.Rent(childCount) : null;
-        Span<float> weights = rentedWeights is not null
-            ? rentedWeights.AsSpan(0, childCount)
+        // weights are unmanaged and honor the stack budget. Both buffers are
+        // cached per node so steady-state evaluation never touches the pool.
+        AnimationFrame[] holder = _frameScratch ??= new AnimationFrame[childCount];
+        float[]? weightArray = childCount > AnimationConstants.MaxStackScratchFrames
+            ? _weightScratch ??= new float[childCount]
+            : null;
+        Span<float> weights = weightArray is not null
+            ? weightArray.AsSpan(0, childCount)
             : stackalloc float[childCount];
-        try
+        int exact = ComputeWeights(input, weights);
+        if (exact >= 0)
         {
-            int exact = ComputeWeights(input, weights);
-            if (exact >= 0)
-            {
-                MotionDispatcher.Evaluate(_children[exact], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
-                return;
-            }
-
-            for (int i = 0; i < childCount; i++)
-            {
-                holder[i] = arena.Alloc();
-                MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
-            }
-
-            BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
-
-            for (int i = 0; i < childCount; i++)
-            {
-                arena.Free();
-            }
+            MotionDispatcher.Evaluate(_children[exact], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
         }
-        finally
+
+        for (int i = 0; i < childCount; i++)
         {
-            ArrayPool<AnimationFrame>.Shared.Return(holder);
-            if (rentedWeights is not null)
-            {
-                ArrayPool<float>.Shared.Return(rentedWeights);
-            }
+            holder[i] = arena.Alloc();
+            MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
+        }
+
+        BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
+
+        for (int i = 0; i < childCount; i++)
+        {
+            arena.Free();
         }
     }
 
@@ -790,6 +783,8 @@ public sealed class DirectMotionNode : MotionNode
 {
     private readonly string[] _parameterNames;
     private readonly MotionNode[] _children;
+    private AnimationFrame[]? _frameScratch;
+    private float[]? _weightScratch;
     private ParameterHandle[] _parameterHandles = Array.Empty<ParameterHandle>();
     private bool _parametersBound;
 
@@ -918,66 +913,54 @@ public sealed class DirectMotionNode : MotionNode
         }
 
         int childCount = _children.Length;
-        // Holder must be a managed array (stackalloc forbids reference types);
-        // weights are unmanaged and honor the stack budget.
-        AnimationFrame[] holder = ArrayPool<AnimationFrame>.Shared.Rent(childCount);
-        bool weightsPooled = childCount > AnimationConstants.MaxStackScratchFrames;
-        float[]? rentedWeights = weightsPooled ? ArrayPool<float>.Shared.Rent(childCount) : null;
-        Span<float> weights = rentedWeights is not null
-            ? rentedWeights.AsSpan(0, childCount)
+        AnimationFrame[] holder = _frameScratch ??= new AnimationFrame[childCount];
+        float[]? weightArray = childCount > AnimationConstants.MaxStackScratchFrames
+            ? _weightScratch ??= new float[childCount]
+            : null;
+        Span<float> weights = weightArray is not null
+            ? weightArray.AsSpan(0, childCount)
             : stackalloc float[childCount];
 
-        try
+        int activeCount = 0;
+        int singleIndex = -1;
+
+        ParameterHandle[] handles = _parameterHandles;
+        bool bound = _parametersBound && handles.Length == childCount;
+        for (int i = 0; i < childCount; i++)
         {
-            int activeCount = 0;
-            int singleIndex = -1;
-
-            ParameterHandle[] handles = _parameterHandles;
-            bool bound = _parametersBound && handles.Length == childCount;
-            for (int i = 0; i < childCount; i++)
+            float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
+            float w = MathF.Max(0.0f, raw);
+            weights[i] = w;
+            if (w > 0.0f)
             {
-                float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
-                float w = MathF.Max(0.0f, raw);
-                weights[i] = w;
-                if (w > 0.0f)
-                {
-                    activeCount++;
-                    singleIndex = i;
-                }
-            }
-
-            if (activeCount == 0)
-            {
-                outFrame.ResetToRest(rig);
-                return;
-            }
-
-            if (activeCount == 1)
-            {
-                MotionDispatcher.Evaluate(_children[singleIndex], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
-                return;
-            }
-
-            for (int i = 0; i < childCount; i++)
-            {
-                holder[i] = arena.Alloc();
-                MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
-            }
-
-            BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
-
-            for (int i = 0; i < childCount; i++)
-            {
-                arena.Free();
+                activeCount++;
+                singleIndex = i;
             }
         }
-        finally
+
+        if (activeCount == 0)
         {
-            ArrayPool<AnimationFrame>.Shared.Return(holder, clearArray: true);
-            if (rentedWeights is not null)
-            {
-                ArrayPool<float>.Shared.Return(rentedWeights, clearArray: true);
-            }
+            outFrame.ResetToRest(rig);
+            return;
+        }
+
+        if (activeCount == 1)
+        {
+            MotionDispatcher.Evaluate(_children[singleIndex], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+            return;
+        }
+
+        for (int i = 0; i < childCount; i++)
+        {
+            holder[i] = arena.Alloc();
+            MotionDispatcher.Evaluate(_children[i], normalizedTime, holder[i], arena, rig, parameters, depth + 1);
+        }
+
+        BlendingKernels.BlendWeightedFrames(outFrame, holder.AsSpan(0, childCount), weights, rig);
+
+        for (int i = 0; i < childCount; i++)
+        {
+            arena.Free();
         }
     }
 

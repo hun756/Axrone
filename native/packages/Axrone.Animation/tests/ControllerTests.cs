@@ -73,6 +73,42 @@ public class ControllerTests
     }
 
     [Fact]
+    public void Controller_UpdateIsAllocationFree()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(new Dictionary<string, ParameterType>
+        {
+            ["x"] = ParameterType.Float,
+            ["y"] = ParameterType.Float,
+        });
+        using var controller = new AnimationController(rig, parameters, NoCurves());
+        var blend = new Blend2DMotionNode("x", "y", [
+            (new Vec2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f))),
+            (new Vec2(1.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(10.0f))),
+        ]);
+        var machine = new StateMachineInstance([new AnimationState(new StateId("blend"), blend)], [], 0);
+        controller.AddLayer(new AnimationLayer(new LayerId("base"), machine));
+        controller.BindAll();
+        parameters.SetFloat("x", 0.5f);
+        parameters.SetFloat("y", 0.0f);
+
+        var events = new List<ClipEvent>(4);
+        for (int i = 0; i < 16; i++)
+        {
+            controller.Update(0.016f, events, out _, out _);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100; i++)
+        {
+            controller.Update(0.016f, events, out _, out _);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        (after - before).Should().Be(0);
+    }
+
+    [Fact]
     public void Montage_FadesInPlaysAndCompletes()
     {
         Rig rig = TwoBone();
