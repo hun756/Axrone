@@ -4,6 +4,7 @@ using System.Buffers;
 using System.Text.Json;
 using Axrone.Numeric;
 using Axrone.Scene;
+using Axrone.Scene.Assets;
 using Axrone.Scene.Prefab;
 using Axrone.Scene.Runtime;
 using Axrone.Scene.Snapshot;
@@ -57,6 +58,33 @@ public sealed class SceneAnimatorCodecTests
     {
         SceneAnimatorCodec codec = new();
         using JsonDocument document = JsonDocument.Parse("""{"version":1,"slot":0,"generation":1,"activeLayer":-1}""");
+
+        Action read = () => codec.Read(document.RootElement);
+
+        read.Should().Throw<SceneValidationException>();
+    }
+
+    [Fact]
+    public void AnimationBindingRoundTripsAssetIds()
+    {
+        var value = new SceneAnimationBinding
+        {
+            Skin = SceneAssetId<SkinAssetTag>.FromName("skin/hero"),
+            DefaultClip = SceneAssetId<AnimationAssetTag>.FromName("clip/run"),
+        };
+
+        SceneAnimationBinding restored = RoundTrip(new SceneAnimationBindingCodec(), in value);
+
+        restored.Should().Be(value);
+        restored.HasSkin.Should().BeTrue();
+        restored.HasDefaultClip.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AnimationBindingRejectsMissingSkin()
+    {
+        SceneAnimationBindingCodec codec = new();
+        using JsonDocument document = JsonDocument.Parse("""{"version":1,"skin":""}""");
 
         Action read = () => codec.Read(document.RootElement);
 

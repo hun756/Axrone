@@ -97,6 +97,7 @@ public static class SceneAnimationImporter
 
         var rig = new Rig(new RigId($"skin:{skin.Id}"), bones);
         var runtimeClips = new List<AnimationClip>(clips.Count);
+        SceneAnimationClipDefinition? defaultDefinition = null;
 
         foreach (SceneAnimationClipDefinition definition in clips)
         {
@@ -104,6 +105,7 @@ public static class SceneAnimationImporter
             if (clip is not null)
             {
                 runtimeClips.Add(clip);
+                defaultDefinition ??= definition;
             }
         }
 
@@ -140,6 +142,23 @@ public static class SceneAnimationImporter
             new LayerId("base"),
             new StateMachineInstance(states, Array.Empty<StateTransition>(), 0));
         controller.AddLayer(baseLayer);
+
+        var binding = new SceneAnimationBinding
+        {
+            Skin = skin.Id,
+            DefaultClip = defaultDefinition?.Id ?? default,
+        };
+        if (world.Registry.TryGetDataByType(typeof(SceneAnimationBinding), out _))
+        {
+            if (world.HasData<SceneAnimationBinding>(meshActor))
+            {
+                world.SetData(meshActor, binding);
+            }
+            else
+            {
+                world.AddData(meshActor, binding);
+            }
+        }
 
         result = new SceneAnimationImportResult(
             meshActor,

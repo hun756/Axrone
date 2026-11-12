@@ -73,6 +73,9 @@ public sealed class SceneAnimationImporterTests
         result.Controller.LayerCount.Should().Be(1);
         result.InverseBind.Should().HaveCount(2);
         result.JointActors.Should().Equal(root, child);
+        world.TryGetData(root, out SceneAnimationBinding binding).Should().BeTrue();
+        binding.Skin.Should().Be(skin.Id);
+        binding.DefaultClip.Should().Be(clip.Id);
         result.Dispose();
     }
 
@@ -272,6 +275,7 @@ public sealed class SceneAnimationImporterTests
             "Transform3D",
             SceneComponentTraits.Required | SceneComponentTraits.Singleton,
             priority: 1000);
+        registry.RegisterData<SceneAnimationBinding>("AnimationBinding");
         return new SceneWorld(registry, diagnostics: null, new SceneWorldOptions(initialCapacity: 4));
     }
 }
