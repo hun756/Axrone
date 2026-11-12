@@ -30,6 +30,20 @@ public interface ISceneAnimatorEventSink
 }
 
 /// <summary>
+/// Receives root motion instead of having the bridge write it straight onto the
+/// actor transform. A character controller can sweep the delta through physics
+/// and decide which axes survive.
+/// </summary>
+public interface ISceneRootMotionConsumer
+{
+    /// <summary>Consumes one animator step's root delta.</summary>
+    /// <param name="actor">Animated actor.</param>
+    /// <param name="deltaPosition">World-space translation delta for this step.</param>
+    /// <param name="deltaRotation">World-space rotation delta for this step.</param>
+    void ConsumeRootMotion(SceneActor actor, in Vec3 deltaPosition, in Quat deltaRotation);
+}
+
+/// <summary>
 /// Bridges <see cref="SceneAnimator"/> components onto
 /// <see cref="AnimationController"/> instances. Controllers stay caller-owned;
 /// the bridge only tracks the generation-safe binding, advances bound animators
@@ -68,6 +82,13 @@ public sealed class SceneAnimatorBridge : IDisposable
     /// accumulated delta is applied in one step so playback speed is unchanged.
     /// </summary>
     public SceneAnimatorLodSettings? Lod { get; set; }
+
+    /// <summary>
+    /// Optional root-motion receiver. When null, enabled animators apply the
+    /// delta directly to <see cref="SceneTransform3D"/>; when set, the consumer
+    /// owns collision, axis projection and transform writes.
+    /// </summary>
+    public ISceneRootMotionConsumer? RootMotionConsumer { get; set; }
 
     /// <summary>
     /// Binds a controller to an actor that carries a <see cref="SceneAnimator"/>
@@ -677,11 +698,18 @@ public sealed class SceneAnimatorBridge : IDisposable
             out Vec3 rootMotionPosition,
             out Quat rootMotionRotation);
 
-        if (component.ApplyRootMotion && _world.HasData<SceneTransform3D>(slot.Actor))
+        if (component.ApplyRootMotion)
         {
-            ref SceneTransform3D transform = ref _world.GetData<SceneTransform3D>(slot.Actor);
-            transform.SetPosition(transform.Position + rootMotionPosition);
-            transform.SetRotation(Quat.Normalize(transform.Rotation * rootMotionRotation));
+            if (RootMotionConsumer is { } consumer)
+            {
+                consumer.ConsumeRootMotion(slot.Actor, in rootMotionPosition, in rootMotionRotation);
+            }
+            else if (_world.HasData<SceneTransform3D>(slot.Actor))
+            {
+                ref SceneTransform3D transform = ref _world.GetData<SceneTransform3D>(slot.Actor);
+                transform.SetPosition(transform.Position + rootMotionPosition);
+                transform.SetRotation(Quat.Normalize(transform.Rotation * rootMotionRotation));
+            }
         }
 
         AnimationFrame frame = controller.CurrentFrame;

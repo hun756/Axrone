@@ -354,6 +354,25 @@ public sealed class SceneAnimatorBridgeTests
     }
 
     [Fact]
+    public void RootMotionConsumerTakesPrecedenceOverTransform()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        SceneActor actor = BindActor(world, bridge, controller);
+        ref SceneAnimator component = ref world.GetData<SceneAnimator>(actor);
+        component.ApplyRootMotion = true;
+        RecordingRootMotionConsumer consumer = new();
+        bridge.RootMotionConsumer = consumer;
+
+        bridge.Step(0.5f);
+
+        consumer.Actor.Should().Be(actor);
+        consumer.Position.X.Should().BeApproximately(0.5f, 0.001f);
+        world.GetData<SceneTransform3D>(actor).Position.X.Should().Be(0.0f);
+    }
+
+    [Fact]
     public void CopyPoseRejectsUndersizedSpans()
     {
         using SceneWorld world = CreateWorld();
@@ -534,6 +553,22 @@ public sealed class SceneAnimatorBridgeTests
         {
             Actor = actor;
             Events.Add(clipEvent);
+        }
+    }
+
+    private sealed class RecordingRootMotionConsumer : ISceneRootMotionConsumer
+    {
+        public SceneActor Actor { get; private set; }
+
+        public Vec3 Position { get; private set; }
+
+        public Quat Rotation { get; private set; }
+
+        public void ConsumeRootMotion(SceneActor actor, in Vec3 deltaPosition, in Quat deltaRotation)
+        {
+            Actor = actor;
+            Position += deltaPosition;
+            Rotation = Quat.Normalize(Rotation * deltaRotation);
         }
     }
 
