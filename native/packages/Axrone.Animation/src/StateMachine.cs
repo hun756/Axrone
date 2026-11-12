@@ -263,6 +263,59 @@ public sealed class StateMachineInstance
         _activeTransition = default;
     }
 
+    /// <summary>
+    /// Copies the source machine's current state, normalized time and in-flight
+    /// transition onto this machine when the state ids resolve here. Used by
+    /// masked layers that share a locomotion graph with the base layer.
+    /// </summary>
+    /// <returns>True when the source state exists on this machine.</returns>
+    public bool SyncFrom(StateMachineInstance source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!TryFindState(source._states[source.CurrentStateIndex].Id, out int localState))
+        {
+            return false;
+        }
+
+        int localTarget = -1;
+        bool sourceTransition = source._activeTransition.IsActive;
+        if (sourceTransition)
+        {
+            _ = TryFindState(
+                source._states[source._activeTransition.TargetStateIndex].Id,
+                out localTarget);
+        }
+
+        _activeTransition = default;
+        CurrentStateIndex = localState;
+        StateNormalizedTime = source.StateNormalizedTime;
+        PreviousNormalizedTime = source.PreviousNormalizedTime;
+
+        if (sourceTransition && localTarget >= 0)
+        {
+            _activeTransition = source._activeTransition;
+            _activeTransition.SourceStateIndex = localState;
+            _activeTransition.TargetStateIndex = localTarget;
+        }
+
+        return true;
+    }
+
+    private bool TryFindState(StateId id, out int index)
+    {
+        for (int i = 0; i < _states.Length; i++)
+        {
+            if (_states[i].Id == id)
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
+    }
+
     /// <summary>Starts a manual cross-fade.</summary>
     public void CrossFade(int targetStateIndex, float duration, float offset = 0.0f)
     {

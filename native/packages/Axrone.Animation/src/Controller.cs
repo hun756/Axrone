@@ -36,6 +36,12 @@ public sealed class AnimationLayer
     /// <summary>Optional additive reference pose; when null, the rig rest pose is used.</summary>
     public AnimationFrame? AdditiveReference { get; init; }
 
+    /// <summary>
+    /// Optional layer whose state id and normalized time this layer follows
+    /// before advancing. Used by masked upper-body layers that share locomotion.
+    /// </summary>
+    public AnimationLayer? SyncSource { get; init; }
+
     /// <summary>Creates a layer.</summary>
     public AnimationLayer(LayerId id, StateMachineInstance machine)
     {
@@ -202,6 +208,17 @@ public sealed class AnimationController : IDisposable
             {
                 _layers.Remove(montage.Layer);
                 _montages.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            AnimationLayer layer = _layers[i];
+            if (layer.SyncSource is { } source &&
+                !ReferenceEquals(source, layer) &&
+                _layers.Contains(source))
+            {
+                layer.Machine.SyncFrom(source.Machine);
             }
         }
 

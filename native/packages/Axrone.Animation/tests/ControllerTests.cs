@@ -73,6 +73,37 @@ public class ControllerTests
     }
 
     [Fact]
+    public void SyncedLayerFollowsBaseStateTime()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = new AnimationController(rig, parameters, NoCurves());
+        var baseLayer = new AnimationLayer(
+            new LayerId("base"),
+            new StateMachineInstance(
+                [new AnimationState(new StateId("locomotion"), new ClipMotionNode(SlideClip(0.0f)))],
+                [],
+                0));
+        var overlay = new AnimationLayer(
+            new LayerId("upper"),
+            new StateMachineInstance(
+                [new AnimationState(new StateId("locomotion"), new ClipMotionNode(SlideClip(10.0f)))],
+                [],
+                0))
+        {
+            Weight = 0.5f,
+            SyncSource = baseLayer,
+        };
+        controller.AddLayer(baseLayer);
+        controller.AddLayer(overlay);
+
+        controller.Update(0.3f, new List<ClipEvent>(), out _, out _);
+
+        overlay.Machine.StateNormalizedTime.Should().Be(baseLayer.Machine.StateNormalizedTime);
+        controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(1.5f, 1e-4f);
+    }
+
+    [Fact]
     public void Controller_UpdateIsAllocationFree()
     {
         Rig rig = TwoBone();
