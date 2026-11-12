@@ -17,7 +17,11 @@ internal static class SkinningShaderInjector
     public const string BoneCountUniform = "u_SkinBoneCount";
 
     private const string PositionDeclaration = "in vec3 a_Position";
-    private const string ProtectedDeclaration = "__AXRONE_SKIN_POSITION__";
+    private const string NormalDeclaration = "in vec3 a_Normal";
+    private const string TangentDeclaration = "in vec4 a_Tangent";
+    private const string ProtectedPositionDeclaration = "__AXRONE_SKIN_POSITION__";
+    private const string ProtectedNormalDeclaration = "__AXRONE_SKIN_NORMAL__";
+    private const string ProtectedTangentDeclaration = "__AXRONE_SKIN_TANGENT__";
 
     private const string Prelude = """
         layout(location = 6) in ivec4 a_SkinJoints;
@@ -35,13 +39,28 @@ internal static class SkinningShaderInjector
                 texelFetch(u_SkinBones, ivec2(base + 3, 0), 0));
         }
 
+        mat4 ReadSkinMatrix()
+        {
+            return ReadSkinBone(a_SkinJoints.x) * a_SkinWeights.x
+                 + ReadSkinBone(a_SkinJoints.y) * a_SkinWeights.y
+                 + ReadSkinBone(a_SkinJoints.z) * a_SkinWeights.z
+                 + ReadSkinBone(a_SkinJoints.w) * a_SkinWeights.w;
+        }
+
         vec3 ApplySkin(vec3 position)
         {
-            mat4 skin = ReadSkinBone(a_SkinJoints.x) * a_SkinWeights.x
-                      + ReadSkinBone(a_SkinJoints.y) * a_SkinWeights.y
-                      + ReadSkinBone(a_SkinJoints.z) * a_SkinWeights.z
-                      + ReadSkinBone(a_SkinJoints.w) * a_SkinWeights.w;
-            return (vec4(position, 1.0) * skin).xyz;
+            return (vec4(position, 1.0) * ReadSkinMatrix()).xyz;
+        }
+
+        vec3 ApplySkinNormal(vec3 normal)
+        {
+            mat3 normalBasis = transpose(inverse(mat3(ReadSkinMatrix())));
+            return normalize(normal * normalBasis);
+        }
+
+        vec4 ApplySkinTangent(vec4 tangent)
+        {
+            return vec4(ApplySkinNormal(tangent.xyz), tangent.w);
         }
         """;
 
@@ -95,12 +114,44 @@ internal static class SkinningShaderInjector
             return false;
         }
 
-        string rewritten = vertexSource.Replace(PositionDeclaration, ProtectedDeclaration, StringComparison.Ordinal);
-        rewritten = rewritten.Replace("a_Position", "ApplySkin(a_Position)", StringComparison.Ordinal);
-        rewritten = rewritten.Replace(ProtectedDeclaration, PositionDeclaration, StringComparison.Ordinal);
+        string rewritten = RewriteAttribute(
+            vertexSource,
+            PositionDeclaration,
+            ProtectedPositionDeclaration,
+            "a_Position",
+            "ApplySkin(a_Position)");
+        rewritten = RewriteAttribute(
+            rewritten,
+            NormalDeclaration,
+            ProtectedNormalDeclaration,
+            "a_Normal",
+            "ApplySkinNormal(a_Normal)");
+        rewritten = RewriteAttribute(
+            rewritten,
+            TangentDeclaration,
+            ProtectedTangentDeclaration,
+            "a_Tangent",
+            "ApplySkinTangent(a_Tangent)");
         injected = rewritten.Insert(versionEnd + 1, Prelude + "\n");
         failure = SkinningInjectionFailure.None;
         return true;
+    }
+
+    private static string RewriteAttribute(
+        string source,
+        string declaration,
+        string protectedDeclaration,
+        string usage,
+        string replacement)
+    {
+        if (!source.Contains(declaration, StringComparison.Ordinal))
+        {
+            return source;
+        }
+
+        string rewritten = source.Replace(declaration, protectedDeclaration, StringComparison.Ordinal);
+        rewritten = rewritten.Replace(usage, replacement, StringComparison.Ordinal);
+        return rewritten.Replace(protectedDeclaration, declaration, StringComparison.Ordinal);
     }
 
     private static bool UsesAttributeLocation(string source, int location)
