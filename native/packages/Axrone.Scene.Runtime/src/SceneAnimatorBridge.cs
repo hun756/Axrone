@@ -17,6 +17,19 @@ public interface IScenePoseSink
 }
 
 /// <summary>
+/// Receives clip events emitted by bound animators. Events are delivered after
+/// the pose for the same step is published, in deterministic slot order, so a
+/// gameplay handler sees the pose that produced them.
+/// </summary>
+public interface ISceneAnimatorEventSink
+{
+    /// <summary>Receives one clip event.</summary>
+    /// <param name="actor">Actor whose controller emitted the event.</param>
+    /// <param name="clipEvent">Event payload from the clip.</param>
+    void OnClipEvent(SceneActor actor, in ClipEvent clipEvent);
+}
+
+/// <summary>
 /// Bridges <see cref="SceneAnimator"/> components onto
 /// <see cref="AnimationController"/> instances. Controllers stay caller-owned;
 /// the bridge only tracks the generation-safe binding, advances bound animators
@@ -48,6 +61,13 @@ public sealed class SceneAnimatorBridge : IDisposable
 
     /// <summary>Gets the number of bound animators.</summary>
     public int Count => _slotCount - _freeCount;
+
+    /// <summary>
+    /// Optional distance-based update-rate policy. When set, actors outside the
+    /// near band accumulate time and evaluate on their band interval; the
+    /// accumulated delta is applied in one step so playback speed is unchanged.
+    /// </summary>
+    public SceneAnimatorLodSettings? Lod { get; set; }
 
     /// <summary>
     /// Binds a controller to an actor that carries a <see cref="SceneAnimator"/>
@@ -142,7 +162,7 @@ public sealed class SceneAnimatorBridge : IDisposable
     /// Advances every bound animator by the scaled delta and publishes poses.
     /// Completed, faulted, paused, disabled and inactive actors are skipped.
     /// </summary>
-    public void Step(float deltaSeconds, IScenePoseSink? poseSink = null)
+    public void Step(float deltaSeconds, IScenePoseSink? poseSink = null, ISceneAnimatorEventSink? eventSink = null)
     {
         ThrowIfDisposed();
         if (!(deltaSeconds > 0.0f))
@@ -185,9 +205,30 @@ public sealed class SceneAnimatorBridge : IDisposable
                 continue;
             }
 
+            float stepDelta = deltaSeconds;
+            if (Lod is { } lod && _world.HasData<SceneTransform3D>(slot.Actor))
+            {
+                float interval = lod.ResolveInterval(_world.GetWorldMatrix3D(slot.Actor).Translation);
+                if (interval > 0.0f)
+                {
+                    slot.LodAccumulator += deltaSeconds;
+                    if (slot.LodAccumulator < interval)
+                    {
+                        continue;
+                    }
+
+                    stepDelta = slot.LodAccumulator;
+                    slot.LodAccumulator = 0.0f;
+                }
+                else
+                {
+                    slot.LodAccumulator = 0.0f;
+                }
+            }
+
             try
             {
-                StepSlot(slot, in component, deltaSeconds, poseSink);
+                StepSlot(slot, in component, stepDelta, poseSink, eventSink);
                 slot.Status = SceneAnimatorStatus.Playing;
             }
             catch (Exception exception)
@@ -225,6 +266,7 @@ public sealed class SceneAnimatorBridge : IDisposable
 
         slot.Status = SceneAnimatorStatus.Playing;
         slot.Fault = null;
+        slot.LodAccumulator = 0.0f;
         return true;
     }
 
@@ -547,7 +589,7 @@ public sealed class SceneAnimatorBridge : IDisposable
         _disposed = true;
     }
 
-    private void StepSlot(AnimatorSlot slot, in SceneAnimator component, float deltaSeconds, IScenePoseSink? poseSink)
+    private void StepSlot(AnimatorSlot slot, in SceneAnimator component, float deltaSeconds, IScenePoseSink? poseSink, ISceneAnimatorEventSink? eventSink)
     {
         AnimationController controller = slot.Controller;
         controller.Update(
@@ -579,6 +621,16 @@ public sealed class SceneAnimatorBridge : IDisposable
         slot.HasPose = true;
 
         poseSink?.ApplyPose(slot.Actor, localPose, palette);
+
+        if (eventSink is not null)
+        {
+            List<ClipEvent> events = slot.Events;
+            for (int i = 0; i < events.Count; i++)
+            {
+                ClipEvent clipEvent = events[i];
+                eventSink.OnClipEvent(slot.Actor, in clipEvent);
+            }
+        }
     }
 
     private bool TryResolve(SceneActor actor, out int index, out AnimatorSlot slot)
@@ -686,6 +738,8 @@ public sealed class SceneAnimatorBridge : IDisposable
         public Mat4[] Palette { get; }
 
         public List<ClipEvent> Events { get; }
+
+        public float LodAccumulator { get; set; }
 
         public List<AnimationLayer>? Layers { get; set; }
 

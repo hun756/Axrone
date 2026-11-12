@@ -146,6 +146,13 @@ public sealed class SceneRuntime : IDisposable
     /// <summary>Whether the profile registers animator components.</summary>
     public bool HasAnimators { get; }
 
+    /// <summary>
+    /// Optional gameplay receiver for clip events. Events are dispatched after
+    /// the pose for the same fixed step is published; setting this does not
+    /// change the animator update path.
+    /// </summary>
+    public ISceneAnimatorEventSink? AnimatorEventSink { get; set; }
+
     /// <summary>Whether the profile registers skinned mesh renderers.</summary>
     public bool HasSkinnedMeshes { get; }
 

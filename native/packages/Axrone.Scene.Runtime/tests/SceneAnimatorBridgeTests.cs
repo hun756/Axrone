@@ -9,6 +9,14 @@ using Xunit;
 
 public sealed class SceneAnimatorBridgeTests
 {
+    private static readonly float[] s_timeKeys = [0.0f, 1.0f];
+    private static readonly float[] s_translationKeys = [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f];
+    private static readonly AnimationChannel[] s_cueChannels =
+    [
+        new(0, ChannelTarget.Translation, InterpolationMode.Linear, s_timeKeys, s_translationKeys),
+    ];
+    private static readonly ClipEvent[] s_cueEvents = [new(0.1f, "hit", "arm")];
+
     [Fact]
     public void BindRequiresAnimatorComponent()
     {
@@ -46,6 +54,58 @@ public sealed class SceneAnimatorBridgeTests
         sink.LocalPose.Length.Should().Be(1);
         sink.LocalPose[0].Translation.X.Should().BeApproximately(0.5f, 0.001f);
         sink.WorldPalette[0].M14.Should().BeApproximately(0.5f, 0.001f);
+    }
+
+    [Fact]
+    public void StepDeliversClipEventsToGameplaySink()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        Rig rig = CreateRig();
+        ParameterStore parameters = new(Array.Empty<KeyValuePair<string, ParameterType>>());
+        AnimationController controller = new(rig, parameters, new CurveLayout(new Dictionary<CurveId, int>()));
+        AnimationClip clip = new(
+            new ClipId("cue"), 1.0f, s_cueChannels,
+            events: s_cueEvents);
+        controller.AddLayer(new AnimationLayer(new LayerId("base"), CreateMachine(new ClipMotionNode(clip))));
+        SceneActor actor = BindActor(world, bridge, controller);
+        RecordingEventSink sink = new();
+
+        bridge.Step(0.25f, null, sink);
+
+        sink.Actor.Should().Be(actor);
+        sink.Events.Should().ContainSingle();
+        sink.Events[0].Name.Should().Be("hit");
+        sink.Events[0].Payload.Should().Be("arm");
+    }
+
+    [Fact]
+    public void LodDefersDistantAnimatorUntilIntervalElapses()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        SceneActor actor = BindActor(world, bridge, controller);
+        world.UpdateTransforms();
+        bridge.Lod = new SceneAnimatorLodSettings(
+            new Vec3(1000.0f, 0.0f, 0.0f),
+            mediumDistance: 10.0f,
+            farDistance: 20.0f,
+            mediumInterval: 0.05f,
+            farInterval: 0.1f);
+
+        Span<LocalTransform> pose = stackalloc LocalTransform[1];
+        Span<Mat4> palette = stackalloc Mat4[1];
+
+        bridge.Step(0.04f);
+        bridge.TryCopyPose(actor, pose, palette).Should().BeFalse();
+
+        bridge.Step(0.04f);
+        bridge.TryCopyPose(actor, pose, palette).Should().BeFalse();
+
+        bridge.Step(0.03f);
+        bridge.TryCopyPose(actor, pose, palette).Should().BeTrue();
+        pose[0].Translation.X.Should().BeApproximately(0.11f, 0.001f);
     }
 
     [Fact]
@@ -395,6 +455,19 @@ public sealed class SceneAnimatorBridgeTests
             Actor = actor;
             LocalPose = localPose.ToArray();
             WorldPalette = worldPalette.ToArray();
+        }
+    }
+
+    private sealed class RecordingEventSink : ISceneAnimatorEventSink
+    {
+        public SceneActor Actor { get; private set; }
+
+        public List<ClipEvent> Events { get; } = [];
+
+        public void OnClipEvent(SceneActor actor, in ClipEvent clipEvent)
+        {
+            Actor = actor;
+            Events.Add(clipEvent);
         }
     }
 
