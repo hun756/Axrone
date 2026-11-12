@@ -134,6 +134,24 @@ public sealed class SceneAnimatorBridgeTests
     }
 
     [Fact]
+    public void PublishInterpolatedPosesFeedsTheRenderSink()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        AnimationController controller = CreateController(out _, out _);
+        _ = BindActor(world, bridge, controller);
+        RecordingPoseSink sink = new();
+
+        bridge.Step(0.25f);
+        bridge.Step(0.25f);
+        bridge.PublishInterpolatedPoses(0.5f, sink);
+
+        sink.Count.Should().Be(1);
+        sink.LocalPose[0].Translation.X.Should().BeApproximately(0.375f, 1e-4f);
+        sink.WorldPalette[0].M14.Should().BeApproximately(0.375f, 1e-4f);
+    }
+
+    [Fact]
     public void StepIsAllocationFreeInSteadyState()
     {
         using SceneWorld world = CreateWorld();

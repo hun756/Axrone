@@ -591,6 +591,44 @@ public sealed class SceneAnimatorBridge : IDisposable
             return false;
         }
 
+        SampleSlot(slot, alpha, localPose[..boneCount], worldPalette[..boneCount]);
+        return true;
+    }
+
+    /// <summary>
+    /// Samples every bound actor's render pose between the previous and current
+    /// fixed step and publishes it to the supplied sink. Call once in the render
+    /// phase, before drawing, so skinned meshes receive the interpolated palette
+    /// instead of the latest fixed-step pose.
+    /// </summary>
+    public void PublishInterpolatedPoses(float alpha, IScenePoseSink? poseSink)
+    {
+        ThrowIfDisposed();
+        if (poseSink is null)
+        {
+            return;
+        }
+
+        Sync();
+        for (int i = 0; i < _slotCount; i++)
+        {
+            AnimatorSlot? slot = _slots[i];
+            if (slot is null || !slot.HasPose)
+            {
+                continue;
+            }
+
+            int boneCount = slot.BoneCount;
+            Span<LocalTransform> localPose = slot.RenderLocalPose.AsSpan(0, boneCount);
+            Span<Mat4> palette = slot.RenderPalette.AsSpan(0, boneCount);
+            SampleSlot(slot, alpha, localPose, palette);
+            poseSink.ApplyPose(slot.Actor, localPose, palette);
+        }
+    }
+
+    private static void SampleSlot(AnimatorSlot slot, float alpha, Span<LocalTransform> localPose, Span<Mat4> worldPalette)
+    {
+        int boneCount = slot.BoneCount;
         if (!slot.HasPreviousPose)
         {
             slot.LocalPose.AsSpan(0, boneCount).CopyTo(localPose);
@@ -609,8 +647,7 @@ public sealed class SceneAnimatorBridge : IDisposable
             }
         }
 
-        slot.Controller.Rig.EvaluatePose(localPose[..boneCount], worldPalette[..boneCount]);
-        return true;
+        slot.Controller.Rig.EvaluatePose(localPose, worldPalette);
     }
 
     /// <inheritdoc/>
@@ -770,7 +807,9 @@ public sealed class SceneAnimatorBridge : IDisposable
             BoneCount = controller.Rig.BoneCount;
             LocalPose = new LocalTransform[BoneCount];
             PreviousLocalPose = new LocalTransform[BoneCount];
+            RenderLocalPose = new LocalTransform[BoneCount];
             Palette = new Mat4[BoneCount];
+            RenderPalette = new Mat4[BoneCount];
             Events = new List<ClipEvent>();
         }
 
@@ -786,9 +825,13 @@ public sealed class SceneAnimatorBridge : IDisposable
 
         public LocalTransform[] PreviousLocalPose { get; }
 
+        public LocalTransform[] RenderLocalPose { get; }
+
         public bool HasPreviousPose { get; set; }
 
         public Mat4[] Palette { get; }
+
+        public Mat4[] RenderPalette { get; }
 
         public List<ClipEvent> Events { get; }
 
