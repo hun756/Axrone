@@ -113,6 +113,21 @@ public class BlendTests
     }
 
     [Fact]
+    public void AdditiveFrame_UsesCapturedReferencePose()
+    {
+        Rig rig = TwoBone();
+        var target = new AnimationFrame(2, NoCurves());
+        AnimationFrame baseFrame = Pose(0.0f);
+        AnimationFrame additive = Pose(10.0f);
+        AnimationFrame reference = Pose(10.0f);
+        target.CopyFrom(baseFrame);
+
+        BlendingKernels.ApplyAdditiveFrame(target, baseFrame, additive, rig, 1.0f, null, reference);
+
+        target.ReadTranslations()[1].X.Should().Be(0.0f);
+    }
+
+    [Fact]
     public void AdditiveFrame_AddsRestRelativeDelta()
     {
         Rig rig = TwoBone();

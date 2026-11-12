@@ -33,6 +33,9 @@ public sealed class AnimationLayer
     /// <summary>IK jobs applied to this layer's pose before composition.</summary>
     public IReadOnlyList<AnimationIkLayer> IkLayers => _ikLayers;
 
+    /// <summary>Optional additive reference pose; when null, the rig rest pose is used.</summary>
+    public AnimationFrame? AdditiveReference { get; init; }
+
     /// <summary>Creates a layer.</summary>
     public AnimationLayer(LayerId id, StateMachineInstance machine)
     {
@@ -164,7 +167,7 @@ public sealed class AnimationController : IDisposable
             }
             else
             {
-                BlendingKernels.ApplyAdditiveFrame(CurrentFrame, CurrentFrame, layerFrame, Rig, weight, layer.BoneMask);
+                BlendingKernels.ApplyAdditiveFrame(CurrentFrame, CurrentFrame, layerFrame, Rig, weight, layer.BoneMask, layer.AdditiveReference);
             }
 
             Arena.Free();
