@@ -73,6 +73,71 @@ public class ControllerTests
     }
 
     [Fact]
+    public void Montage_FadesInPlaysAndCompletes()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = BaseController(rig, parameters);
+        AnimationMontage montage = controller.PlayMontage(
+            SlideClip(10.0f),
+            new AnimationMontageOptions(FadeInSeconds: 0.5f, FadeOutSeconds: 0.5f));
+        var events = new List<ClipEvent>();
+
+        controller.LayerCount.Should().Be(2);
+        controller.ActiveMontageCount.Should().Be(1);
+
+        controller.Update(0.25f, events, out _, out _);
+        montage.Weight.Should().BeApproximately(0.5f, 1e-4f);
+        controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(1.25f, 1e-4f);
+
+        controller.Update(0.5f, events, out _, out _);
+        montage.Weight.Should().BeApproximately(0.5f, 1e-4f);
+        controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(3.75f, 1e-4f);
+
+        controller.Update(0.3f, events, out _, out _);
+        montage.Status.Should().Be(AnimationMontageStatus.Completed);
+        controller.ActiveMontageCount.Should().Be(0);
+        controller.LayerCount.Should().Be(1);
+        controller.CurrentFrame.ReadTranslations()[1].X.Should().Be(0.0f);
+    }
+
+    [Fact]
+    public void Montage_StopReleasesLayerOnNextUpdate()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = BaseController(rig, parameters);
+        AnimationMontage montage = controller.PlayMontage(SlideClip(10.0f));
+
+        controller.Update(0.1f, new List<ClipEvent>(), out _, out _);
+        montage.Stop();
+        montage.Status.Should().Be(AnimationMontageStatus.Stopped);
+        controller.LayerCount.Should().Be(2);
+
+        controller.Update(0.1f, new List<ClipEvent>(), out _, out _);
+        controller.LayerCount.Should().Be(1);
+        controller.ActiveMontageCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Montage_EventsReachTheControllerSink()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = BaseController(rig, parameters);
+        var clip = new AnimationClip(
+            new ClipId("cue"), 1.0f,
+            [new AnimationChannel(1, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f])],
+            events: [new ClipEvent(0.1f, "hit", "montage")]);
+
+        controller.PlayMontage(clip, new AnimationMontageOptions(FadeInSeconds: 0.0f));
+        var events = new List<ClipEvent>();
+        controller.Update(0.2f, events, out _, out _);
+
+        events.Should().ContainSingle(e => e.Name == "hit" && e.Payload == "montage");
+    }
+
+    [Fact]
     public void EmptyController_RestsWithoutLayers()
     {
         Rig rig = TwoBone();
