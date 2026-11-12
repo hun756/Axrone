@@ -53,6 +53,40 @@ public class BlendTreeTests
     }
 
     [Fact]
+    public void ClipNode_RootDeltaUsesLocalRotationOrder()
+    {
+        Rig rig = TwoBone();
+        Quat q0 = Quat.CreateFromAxisAngle(Vec3.UnitX, 1.1f);
+        Quat q1 = Quat.CreateFromAxisAngle(Vec3.UnitY, 0.9f);
+        var clip = new AnimationClip(
+            new ClipId("turn"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Rotation, InterpolationMode.Linear, [0.0f, 1.0f],
+                [q0.X, q0.Y, q0.Z, q0.W, q1.X, q1.Y, q1.Z, q1.W])]);
+        var node = new ClipMotionNode(clip) { IsLooping = false };
+
+        node.ComputeRootDelta(0.0f, 1.0f, rig, out _, out Quat delta);
+
+        Quat expected = Quat.Normalize(Quat.Inverse(q0) * q1);
+        MathF.Abs(Quat.Dot(delta, expected)).Should().BeApproximately(1.0f, 1e-5f);
+    }
+
+    [Fact]
+    public void ClipNode_ClearsLanesMissingFromClip()
+    {
+        Rig rig = TwoBone();
+        var clip = new AnimationClip(
+            new ClipId("partial"), 1.0f,
+            [new AnimationChannel(1, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f])]);
+        var node = new ClipMotionNode(clip);
+        var frame = new AnimationFrame(2, NoCurves());
+        frame.GetTranslations()[0] = new Vec3(9.0f, 0.0f, 0.0f);
+
+        node.Evaluate(0.5f, frame, new FrameArena(2, NoCurves(), capacity: 4), rig, new ParameterStore(Params()), 0);
+
+        frame.ReadTranslations()[0].Should().Be(Vec3.Zero);
+    }
+
+    [Fact]
     public void Blend1D_SelectsAndBlends()
     {
         Rig rig = TwoBone();

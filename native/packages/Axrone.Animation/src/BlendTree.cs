@@ -86,6 +86,7 @@ public sealed class ClipMotionNode : MotionNode
     /// <inheritdoc/>
     public override void Evaluate(float normalizedTime, AnimationFrame outFrame, FrameArena arena, Rig rig, ParameterStore parameters, int depth)
     {
+        outFrame.ResetToRest(rig);
         float scaled = (normalizedTime * TimeScale) + CycleOffset;
         float time = IsLooping
             ? FastMath.WrapTime(scaled * Clip.Duration, Clip.Duration)
@@ -142,7 +143,7 @@ public sealed class ClipMotionNode : MotionNode
         }
 
         deltaPos = p1 - p0;
-        deltaRot = Quat.Normalize(r1 * Quat.Inverse(r0));
+        deltaRot = Quat.Normalize(Quat.Inverse(r0) * r1);
         if (t1 >= t0)
         {
             return;
@@ -169,7 +170,7 @@ public sealed class ClipMotionNode : MotionNode
                 channel.Sample(0.0f, bufStart);
                 Quat rEnd = new(bufEnd[0], bufEnd[1], bufEnd[2], bufEnd[3]);
                 Quat rStart = new(bufStart[0], bufStart[1], bufStart[2], bufStart[3]);
-                deltaRot = Quat.Normalize((rEnd * Quat.Inverse(r0)) * (r1 * Quat.Inverse(rStart)));
+                deltaRot = Quat.Normalize((Quat.Inverse(rStart) * r1) * (Quat.Inverse(r0) * rEnd));
             }
         }
     }
@@ -667,37 +668,38 @@ public sealed class DirectMotionNode : MotionNode
         Span<float> weights = rentedWeights is not null
             ? rentedWeights.AsSpan(0, childCount)
             : stackalloc float[childCount];
-        int activeCount = 0;
-        int singleIndex = -1;
-
-        ParameterHandle[] handles = _parameterHandles;
-        bool bound = _parametersBound && handles.Length == childCount;
-        for (int i = 0; i < childCount; i++)
-        {
-            float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
-            float w = MathF.Max(0.0f, raw);
-            weights[i] = w;
-            if (w > 0.0f)
-            {
-                activeCount++;
-                singleIndex = i;
-            }
-        }
-
-        if (activeCount == 0)
-        {
-            outFrame.ResetToRest(rig);
-            return;
-        }
-
-        if (activeCount == 1)
-        {
-            MotionDispatcher.Evaluate(_children[singleIndex], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
-            return;
-        }
 
         try
         {
+            int activeCount = 0;
+            int singleIndex = -1;
+
+            ParameterHandle[] handles = _parameterHandles;
+            bool bound = _parametersBound && handles.Length == childCount;
+            for (int i = 0; i < childCount; i++)
+            {
+                float raw = bound ? parameters.GetFloat(in handles[i]) : parameters.GetFloat(_parameterNames[i]);
+                float w = MathF.Max(0.0f, raw);
+                weights[i] = w;
+                if (w > 0.0f)
+                {
+                    activeCount++;
+                    singleIndex = i;
+                }
+            }
+
+            if (activeCount == 0)
+            {
+                outFrame.ResetToRest(rig);
+                return;
+            }
+
+            if (activeCount == 1)
+            {
+                MotionDispatcher.Evaluate(_children[singleIndex], normalizedTime, outFrame, arena, rig, parameters, depth + 1);
+                return;
+            }
+
             for (int i = 0; i < childCount; i++)
             {
                 holder[i] = arena.Alloc();
@@ -713,10 +715,10 @@ public sealed class DirectMotionNode : MotionNode
         }
         finally
         {
-            ArrayPool<AnimationFrame>.Shared.Return(holder);
+            ArrayPool<AnimationFrame>.Shared.Return(holder, clearArray: true);
             if (rentedWeights is not null)
             {
-                ArrayPool<float>.Shared.Return(rentedWeights);
+                ArrayPool<float>.Shared.Return(rentedWeights, clearArray: true);
             }
         }
     }
