@@ -57,6 +57,52 @@ public class AdvancedTests
     }
 
     [Fact]
+    public void MotionMatching_ContinuityBiasOnlyAppliesToTheCurrentClip()
+    {
+        MotionMatchCandidate[] candidates =
+        [
+            new MotionMatchCandidate(0, 0.0f, Vec3.Zero, Vec3.UnitZ, null),
+            new MotionMatchCandidate(1, 0.0f, Vec3.Zero, Vec3.UnitZ, null),
+        ];
+
+        var unbiased = new MotionMatchQuery(Vec3.Zero, Vec3.UnitZ);
+        MotionMatching.Search(unbiased, candidates, out _).Should().Be(0);
+
+        var continuity = new MotionMatchQuery(
+            Vec3.Zero,
+            Vec3.UnitZ,
+            ContinuityBias: 1.0f,
+            ContinuityClipIndex: 1);
+        MotionMatching.Search(continuity, candidates, out _).Should().Be(1);
+    }
+
+    [Fact]
+    public void MotionMatchingDatabase_SamplesClipsAndTags()
+    {
+        Rig rig = new(new RigId("mm"), [new BoneInfo { Name = "root", ParentIndex = -1 }]);
+        var walk = new AnimationClip(
+            new ClipId("walk"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f])],
+            tags: ["walk"]);
+        var run = new AnimationClip(
+            new ClipId("run"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f])],
+            tags: ["run"]);
+
+        MotionMatchingDatabase database = MotionMatchingDatabase.Build(rig, [walk, run], sampleInterval: 0.5f);
+
+        database.Candidates.Length.Should().Be(6);
+        database.Candidates[0].ClipIndex.Should().Be(0);
+        database.Candidates[3].ClipIndex.Should().Be(1);
+        database.Candidates[0].Tags.Should().Contain("walk");
+        database.Candidates[3].Tags.Should().Contain("run");
+
+        var query = new MotionMatchQuery(new Vec3(10.0f, 0.0f, 0.0f), Vec3.UnitZ);
+        int best = MotionMatching.Search(query, database.Candidates, out _);
+        database.Candidates[best].ClipIndex.Should().Be(1);
+    }
+
+    [Fact]
     public void Grounding_AxisLocksKeepDisabledAxesZero()
     {
         FootContact[] contacts =

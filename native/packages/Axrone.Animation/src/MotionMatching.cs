@@ -6,7 +6,8 @@ public readonly record struct MotionMatchQuery(
     Vec3 FacingDirection,
     HashSet<string>? RequiredTags = null,
     HashSet<string>? ExcludedTags = null,
-    float ContinuityBias = 0.0f);
+    float ContinuityBias = 0.0f,
+    int ContinuityClipIndex = -1);
 
 /// <summary>One searchable pose sample.</summary>
 public readonly record struct MotionMatchCandidate(
@@ -64,7 +65,12 @@ public static class MotionMatching
                 facingScore = 1.0f - dot;
             }
 
-            float score = candidate.CostBias + trajectoryDistSq + facingScore - query.ContinuityBias;
+            float score = candidate.CostBias + trajectoryDistSq + facingScore;
+            if (query.ContinuityBias != 0.0f && candidate.ClipIndex == query.ContinuityClipIndex)
+            {
+                score -= query.ContinuityBias;
+            }
+
             if (score < bestScore)
             {
                 bestScore = score;
