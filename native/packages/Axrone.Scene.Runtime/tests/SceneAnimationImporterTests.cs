@@ -109,6 +109,71 @@ public sealed class SceneAnimationImporterTests
         reason.Should().Contain("missing");
     }
 
+    [Fact]
+    public void ImportedClipsBecomeAddressableStates()
+    {
+        using SceneWorld world = CreateWorld();
+        SceneActor root = world.CreateActor("Root");
+        SceneActor child = world.CreateActor("Child");
+        world.Hierarchy.SetParent(child, root);
+        world.UpdateTransforms();
+
+        var nodeMap = new Dictionary<string, SceneActor>(StringComparer.Ordinal)
+        {
+            ["node/root"] = root,
+            ["node/child"] = child,
+        };
+        var parents = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["node/root"] = null,
+            ["node/child"] = "node/root",
+        };
+        var skin = new SceneSkinDefinition(
+            SceneAssetId<SkinAssetTag>.FromName("skin/states"),
+            s_jointIds,
+            s_jointIndices,
+            "node/root",
+            IdentityBindMatrices(2));
+        var clipA = new SceneAnimationClipDefinition(
+            SceneAssetId<AnimationAssetTag>.FromName("clip/a"),
+            1.0f,
+            [CreateTrack(1.0f)]);
+        var clipB = new SceneAnimationClipDefinition(
+            SceneAssetId<AnimationAssetTag>.FromName("clip/b"),
+            1.0f,
+            [CreateTrack(4.0f)]);
+
+        bool imported = SceneAnimationImporter.TryImport(
+            world,
+            skin,
+            [clipA, clipB],
+            nodeMap,
+            parents,
+            out SceneAnimationImportResult? result,
+            out string reason);
+
+        imported.Should().BeTrue(reason);
+        result.Should().NotBeNull();
+        result!.BaseLayer.Machine.ForceState(1);
+        result.Controller.Update(0.5f, new List<ClipEvent>(), out _, out _);
+        result.Controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(2.0f, 1e-4f);
+        result.Dispose();
+    }
+
+    private static SceneAnimationTrackDefinition CreateTrack(float toX)
+    {
+        float[] values = [0.0f, 0.0f, 0.0f, toX, 0.0f, 0.0f];
+        return new SceneAnimationTrackDefinition(
+            "node/child",
+            SceneAnimationPath.Translation,
+            SceneAnimationInterpolation.Linear,
+            keyframeCount: 2,
+            valueComponentCount: 3,
+            sampleStride: 3,
+            times: s_times,
+            values: values);
+    }
+
     private static SceneAnimationClipDefinition CreateClip()
     {
         var track = new SceneAnimationTrackDefinition(

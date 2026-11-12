@@ -122,13 +122,22 @@ public static class SceneAnimationImporter
 
         var parameters = new ParameterStore(Array.Empty<KeyValuePair<string, ParameterType>>());
         var controller = new AnimationController(rig, parameters, new CurveLayout(new Dictionary<CurveId, int>()));
-        controller.AddLayer(
-            new AnimationLayer(
-                new LayerId("base"),
-                new StateMachineInstance(
-                    [new AnimationState(new StateId("clip0"), new ClipMotionNode(runtimeClips[0]))],
-                    Array.Empty<StateTransition>(),
-                    0)));
+        var states = new AnimationState[runtimeClips.Count];
+        for (int i = 0; i < runtimeClips.Count; i++)
+        {
+            string stateName = runtimeClips[i].Id.ToString();
+            if (string.IsNullOrWhiteSpace(stateName))
+            {
+                stateName = $"clip{i}";
+            }
+
+            states[i] = new AnimationState(new StateId(stateName), new ClipMotionNode(runtimeClips[i]));
+        }
+
+        var baseLayer = new AnimationLayer(
+            new LayerId("base"),
+            new StateMachineInstance(states, Array.Empty<StateTransition>(), 0));
+        controller.AddLayer(baseLayer);
 
         result = new SceneAnimationImportResult(
             meshActor,
@@ -136,7 +145,8 @@ public static class SceneAnimationImporter
             runtimeClips,
             controller,
             inverseBind,
-            jointActors);
+            jointActors,
+            baseLayer);
         return true;
     }
 
@@ -282,7 +292,8 @@ public sealed record SceneAnimationImportResult(
     IReadOnlyList<AnimationClip> Clips,
     AnimationController Controller,
     IReadOnlyList<Mat4> InverseBind,
-    IReadOnlyList<SceneActor> JointActors) : IDisposable
+    IReadOnlyList<SceneActor> JointActors,
+    AnimationLayer BaseLayer) : IDisposable
 {
     /// <summary>Disposes the owned controller.</summary>
     public void Dispose() => Controller.Dispose();
