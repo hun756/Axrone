@@ -27,7 +27,10 @@ public sealed class SceneGlDrawExecutor
     private const string LightColorUniform = "u_LightColor";
     private const string LightIntensityUniform = "u_LightIntensity";
     private const string AmbientLightUniform = "u_AmbientLight";
+    private const string SkyLightUniform = "u_SkyLight";
+    private const string GroundLightUniform = "u_GroundLight";
     private const string OutputGammaUniform = "u_OutputGamma";
+    private const string EditorPreviewUniform = "u_EditorPreview";
     private const string PointLightPositionUniform = "u_PointLightPosition";
     private const string PointLightColorUniform = "u_PointLightColor";
     private const string PointLightIntensityUniform = "u_PointLightIntensity";
@@ -75,7 +78,8 @@ public sealed class SceneGlDrawExecutor
         SceneGlReflectionProbeAtlas? probeAtlas = null,
         ISceneReflectionProbeSource? reflectionProbe = null,
         ISceneGlShadowSource? shadow = null,
-        float outputGamma = 1f)
+        float outputGamma = 1f,
+        bool editorPreview = false)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(camera);
@@ -122,6 +126,7 @@ public sealed class SceneGlDrawExecutor
             ApplyLighting(shader, in lights);
             ApplyFog(shader, in fog);
             shader.SetFloat(OutputGammaUniform, outputGamma);
+            shader.SetInt(EditorPreviewUniform, editorPreview ? 1 : 0);
             ApplyCustomUniforms(shader, material.UniformEntries.Span);
             BindTextures(_context, shader, material.TextureSlots.Span);
             SceneGlAreaLightBinder.Bind(shader, areaLights is null ? default : areaLights.AreaLights);
@@ -216,6 +221,8 @@ public sealed class SceneGlDrawExecutor
         shader.SetVec3(LightColorUniform, in lights.DirectionalColor);
         shader.SetFloat(LightIntensityUniform, lights.DirectionalIntensity);
         shader.SetVec3(AmbientLightUniform, in lights.Ambient);
+        shader.SetVec3(SkyLightUniform, in lights.Sky);
+        shader.SetVec3(GroundLightUniform, in lights.Ground);
 
         shader.SetVec3(PointLightPositionUniform, in lights.PointPosition);
         shader.SetVec3(PointLightColorUniform, in lights.PointColor);
@@ -329,6 +336,8 @@ public sealed class SceneGlDrawExecutor
 
         LightingStats stats = lighting.Stats;
         values.Ambient = lighting.Environment.Ambient;
+        values.Sky = lighting.Environment.Sky;
+        values.Ground = lighting.Environment.Ground;
 
         if (stats.SelectedDirectionalCount > 0)
         {
@@ -377,6 +386,8 @@ public sealed class SceneGlDrawExecutor
     internal struct LightingValues
     {
         public Vec3 Ambient;
+        public Vec3 Sky;
+        public Vec3 Ground;
         public Vec3 DirectionalDirection;
         public Vec3 DirectionalColor;
         public float DirectionalIntensity;

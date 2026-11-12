@@ -24,6 +24,17 @@ public sealed class SceneGltfShaderAssemblyTests
             "ambient diffuse must not be multiplied by a Fresnel term");
     }
 
+    [Fact]
+    public void PbrFragment_OffersTheMatteEditorPreviewLighting()
+    {
+        SceneShaderDefinition shader = SceneGltfShaders.CreatePbr();
+
+        shader.FragmentSource.Should().Contain("u_EditorPreview == 1");
+        shader.FragmentSource.Should().Contain("mix(u_GroundLight, u_SkyLight, hemiFactor)");
+        shader.FragmentSource.Should().Contain("u_AmbientLight * 0.45");
+        shader.Uniforms.Should().Contain(["u_EditorPreview", "u_SkyLight", "u_GroundLight"]);
+    }
+
     [Theory]
     [InlineData("gltf/pbr")]
     [InlineData("gltf/unlit")]

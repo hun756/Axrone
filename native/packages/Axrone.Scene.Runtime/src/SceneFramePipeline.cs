@@ -189,6 +189,12 @@ public sealed class SceneFramePipeline :
         set => _outputGamma = MathF.Max(0.0001f, value);
     }
 
+    /// <summary>
+    /// Selects the editor preview lighting model (matte ambient + directional)
+    /// instead of the runtime PBR response.
+    /// </summary>
+    public bool EditorPreview { get; set; }
+
     /// <summary>Rebuilds the ordered pass list after asset changes.</summary>
     public void RebuildPasses()
     {

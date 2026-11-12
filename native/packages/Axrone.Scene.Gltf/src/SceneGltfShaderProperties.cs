@@ -345,6 +345,9 @@ public static class SceneGltfShaderProperties
     private static void AppendLighting(List<SceneGltfShaderProperty> properties)
     {
         properties.Add(Frame("u_OutputGamma", SceneGltfShaderPropertyType.Float));
+        properties.Add(Frame("u_EditorPreview", SceneGltfShaderPropertyType.Int));
+        properties.Add(Frame("u_SkyLight", SceneGltfShaderPropertyType.Vec3));
+        properties.Add(Frame("u_GroundLight", SceneGltfShaderPropertyType.Vec3));
         properties.Add(Frame("u_LightDirection", SceneGltfShaderPropertyType.Vec3));
         properties.Add(Frame("u_LightColor", SceneGltfShaderPropertyType.Vec3));
         properties.Add(Frame("u_LightIntensity", SceneGltfShaderPropertyType.Float));

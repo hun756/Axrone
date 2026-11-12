@@ -243,7 +243,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                     _probeAtlas,
                     _reflectionProbe,
                     _shadow,
-                    items.OutputGamma);
+                    items.OutputGamma,
+                    items.EditorPreview);
             }
         }
 
@@ -265,7 +266,8 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
                     _probeAtlas,
                     _reflectionProbe,
                     _shadow,
-                    items.OutputGamma);
+                    items.OutputGamma,
+                    items.EditorPreview);
             }
         }
 
