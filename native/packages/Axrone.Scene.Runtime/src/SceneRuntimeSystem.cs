@@ -72,7 +72,8 @@ public sealed class SceneRuntimeSystem : IGameLoopSystem<SceneRuntimeFrameState>
             animators.Step(
                 stepSeconds,
                 _runtime.HasSkinnedMeshes ? _runtime.BonePaletteSink : null,
-                _runtime.AnimatorEventSink);
+                _runtime.AnimatorEventSink,
+                _runtime.MorphWeights);
         }
 
         if (_runtime.PathAgents is { } pathAgents)

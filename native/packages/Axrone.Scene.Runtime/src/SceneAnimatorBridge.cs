@@ -1,6 +1,7 @@
 namespace Axrone.Scene.Runtime;
 
 using Axrone.Animation;
+using Axrone.Scene.Rendering;
 
 /// <summary>
 /// Minimal CPU pose consumer. The bridge publishes the animated local pose and
@@ -204,7 +205,7 @@ public sealed class SceneAnimatorBridge : IDisposable
     /// Advances every bound animator by the scaled delta and publishes poses.
     /// Completed, faulted, paused, disabled and inactive actors are skipped.
     /// </summary>
-    public void Step(float deltaSeconds, IScenePoseSink? poseSink = null, ISceneAnimatorEventSink? eventSink = null)
+    public void Step(float deltaSeconds, IScenePoseSink? poseSink = null, ISceneAnimatorEventSink? eventSink = null, ISceneMorphWeightSink? morphSink = null)
     {
         ThrowIfDisposed();
         if (!(deltaSeconds > 0.0f))
@@ -270,7 +271,7 @@ public sealed class SceneAnimatorBridge : IDisposable
 
             try
             {
-                StepSlot(slot, in component, stepDelta, poseSink, eventSink);
+                StepSlot(slot, in component, stepDelta, poseSink, eventSink, morphSink);
                 slot.Status = SceneAnimatorStatus.Playing;
             }
             catch (Exception exception)
@@ -710,7 +711,7 @@ public sealed class SceneAnimatorBridge : IDisposable
         _disposed = true;
     }
 
-    private void StepSlot(AnimatorSlot slot, in SceneAnimator component, float deltaSeconds, IScenePoseSink? poseSink, ISceneAnimatorEventSink? eventSink)
+    private void StepSlot(AnimatorSlot slot, in SceneAnimator component, float deltaSeconds, IScenePoseSink? poseSink, ISceneAnimatorEventSink? eventSink, ISceneMorphWeightSink? morphSink)
     {
         AnimationController controller = slot.Controller;
         controller.Update(
@@ -755,6 +756,16 @@ public sealed class SceneAnimatorBridge : IDisposable
         slot.HasPose = true;
 
         poseSink?.ApplyPose(slot.Actor, localPose, palette);
+
+        if (morphSink is not null && component.MorphCurveCount > 0)
+        {
+            ReadOnlySpan<float> curves = controller.CurrentFrame.Curves.AsSpan();
+            int offset = component.MorphCurveOffset;
+            if (offset >= 0 && offset + component.MorphCurveCount <= curves.Length)
+            {
+                morphSink.ApplyMorphWeights(slot.Actor, curves.Slice(offset, component.MorphCurveCount));
+            }
+        }
 
         if (eventSink is not null)
         {

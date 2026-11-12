@@ -66,6 +66,10 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
     /// <see cref="ISceneSkinnedMeshFrameItemSource"/>, skinned batches are drawn
     /// after LOD meshes.
     /// </param>
+    /// <param name="morphWeights">
+    /// Optional morphology weight source; when supplied, skinned actors with
+    /// weights draw their private deformed mesh variant.
+    /// </param>
     /// <param name="skinningOptions">Optional skinning configuration; defaults to 256 bones on unit 15.</param>
     /// <param name="probeAtlas">Optional reflection probe cubemap atlas.</param>
     /// <param name="reflectionProbe">Optional selected-probe source for material sampling.</param>
@@ -84,6 +88,7 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
         SceneInstanceRegistry? instances = null,
         ISceneBonePaletteSource? bonePalettes = null,
         SceneSkinningOptions? skinningOptions = null,
+        ISceneMorphWeightSource? morphWeights = null,
         SceneGlReflectionProbeAtlas? probeAtlas = null,
         ISceneReflectionProbeSource? reflectionProbe = null,
         ISceneGlShadowSource? shadow = null,
@@ -125,7 +130,7 @@ public sealed class SceneGlRenderOrchestrator : IDisposable
 
         if (bonePalettes is not null)
         {
-            _skinnedRenderer = new SceneGlSkinnedMeshRenderer(context, assets, bonePalettes, skinningOptions);
+            _skinnedRenderer = new SceneGlSkinnedMeshRenderer(context, assets, bonePalettes, skinningOptions, morphWeights);
         }
     }
 

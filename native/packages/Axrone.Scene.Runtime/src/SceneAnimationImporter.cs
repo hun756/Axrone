@@ -125,6 +125,19 @@ public static class SceneAnimationImporter
         var parameters = new ParameterStore(Array.Empty<KeyValuePair<string, ParameterType>>());
         Dictionary<CurveId, int> curveSlots = BuildCurveLayout(clips);
         var curveLayout = new CurveLayout(curveSlots);
+        int morphCurveOffset = 0;
+        int morphCurveCount = 0;
+        int morphCurveEnd = -1;
+        foreach (KeyValuePair<CurveId, int> slot in curveSlots)
+        {
+            if (slot.Key.Value.Contains(":morph:", StringComparison.Ordinal))
+            {
+                morphCurveOffset = morphCurveCount == 0 ? slot.Value : Math.Min(morphCurveOffset, slot.Value);
+                morphCurveEnd = Math.Max(morphCurveEnd, slot.Value);
+                morphCurveCount = morphCurveEnd - morphCurveOffset + 1;
+            }
+        }
+
         var controller = new AnimationController(rig, parameters, curveLayout);
         var states = new AnimationState[runtimeClips.Count];
         for (int i = 0; i < runtimeClips.Count; i++)
@@ -160,10 +173,21 @@ public static class SceneAnimationImporter
             }
         }
 
-        if (world.Registry.TryGetDataByType(typeof(SceneAnimator), out _) &&
-            !world.HasData<SceneAnimator>(meshActor))
+        if (world.Registry.TryGetDataByType(typeof(SceneAnimator), out _))
         {
-            world.AddData(meshActor, SceneAnimator.Default);
+            if (world.HasData<SceneAnimator>(meshActor))
+            {
+                ref SceneAnimator live = ref world.GetData<SceneAnimator>(meshActor);
+                live.MorphCurveOffset = morphCurveOffset;
+                live.MorphCurveCount = morphCurveCount;
+            }
+            else
+            {
+                SceneAnimator animator = SceneAnimator.Default;
+                animator.MorphCurveOffset = morphCurveOffset;
+                animator.MorphCurveCount = morphCurveCount;
+                world.AddData(meshActor, animator);
+            }
         }
 
         result = new SceneAnimationImportResult(

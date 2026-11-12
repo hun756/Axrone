@@ -3,6 +3,7 @@ namespace Axrone.Scene.Runtime.Tests;
 using Axrone.Animation;
 using Axrone.Numeric;
 using Axrone.Scene;
+using Axrone.Scene.Rendering;
 using Axrone.Scene.Runtime;
 using FluentAssertions;
 using Xunit;
@@ -11,6 +12,7 @@ public sealed class SceneAnimatorBridgeTests
 {
     private static readonly float[] s_timeKeys = [0.0f, 1.0f];
     private static readonly float[] s_translationKeys = [0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f];
+    private static readonly float[] s_curveValues = [0.0f, 1.0f];
     private static readonly AnimationChannel[] s_cueChannels =
     [
         new(0, ChannelTarget.Translation, InterpolationMode.Linear, s_timeKeys, s_translationKeys),
@@ -351,6 +353,37 @@ public sealed class SceneAnimatorBridgeTests
         bridge.Step(0.5f);
 
         world.GetData<SceneTransform3D>(actor).Position.X.Should().BeApproximately(0.5f, 0.001f);
+    }
+
+    [Fact]
+    public void StepPublishesMorphWeightsToTheRenderStore()
+    {
+        using SceneWorld world = CreateWorld();
+        using SceneAnimatorBridge bridge = new(world);
+        Rig rig = CreateRig();
+        var layout = new CurveLayout(new Dictionary<CurveId, int> { [new CurveId("morph/0")] = 0 });
+        var parameters = new ParameterStore(Array.Empty<KeyValuePair<string, ParameterType>>());
+        var controller = new AnimationController(rig, parameters, layout);
+        var channel = new AnimationChannel(
+            -1,
+            ChannelTarget.Curve,
+            InterpolationMode.Linear,
+            s_timeKeys,
+            s_curveValues,
+            new CurveId("morph/0"));
+        var clip = new AnimationClip(new ClipId("morph"), 1.0f, [channel]);
+        controller.AddLayer(new AnimationLayer(new LayerId("base"), CreateMachine(new ClipMotionNode(clip))));
+        SceneActor actor = BindActor(world, bridge, controller);
+        ref SceneAnimator component = ref world.GetData<SceneAnimator>(actor);
+        component.MorphCurveOffset = 0;
+        component.MorphCurveCount = 1;
+        var store = new SceneMorphWeightStore();
+
+        bridge.Step(0.5f, null, null, store);
+
+        store.TryGetMorphWeights(actor, out ReadOnlySpan<float> weights).Should().BeTrue();
+        weights.Length.Should().Be(1);
+        weights[0].Should().BeApproximately(0.5f, 1e-4f);
     }
 
     [Fact]

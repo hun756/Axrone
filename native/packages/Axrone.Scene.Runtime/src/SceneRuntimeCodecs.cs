@@ -169,6 +169,8 @@ public sealed class SceneAnimatorCodec : SceneDataCodec<SceneAnimator>
         writer.WriteBoolean("enabled", value.Enabled);
         writer.WriteBoolean("applyRootMotion", value.ApplyRootMotion);
         writer.WriteNumber("activeLayer", value.ActiveLayer);
+        writer.WriteNumber("morphCurveOffset", value.MorphCurveOffset);
+        writer.WriteNumber("morphCurveCount", value.MorphCurveCount);
     }
 
     /// <inheritdoc/>
@@ -211,6 +213,16 @@ public sealed class SceneAnimatorCodec : SceneDataCodec<SceneAnimator>
             value.ActiveLayer = activeLayer.GetInt32();
         }
 
+        if (data.TryGetProperty("morphCurveOffset", out JsonElement morphOffset))
+        {
+            value.MorphCurveOffset = morphOffset.GetInt32();
+        }
+
+        if (data.TryGetProperty("morphCurveCount", out JsonElement morphCount))
+        {
+            value.MorphCurveCount = morphCount.GetInt32();
+        }
+
         if (!float.IsFinite(value.Speed))
         {
             throw Invalid($"SceneAnimator speed {value.Speed} must be finite.");
@@ -219,6 +231,11 @@ public sealed class SceneAnimatorCodec : SceneDataCodec<SceneAnimator>
         if (value.ActiveLayer < 0)
         {
             throw Invalid($"SceneAnimator activeLayer {value.ActiveLayer} must not be negative.");
+        }
+
+        if (value.MorphCurveOffset < 0 || value.MorphCurveCount < 0)
+        {
+            throw Invalid($"SceneAnimator morph range {value.MorphCurveOffset}/{value.MorphCurveCount} must not be negative.");
         }
 
         return value;

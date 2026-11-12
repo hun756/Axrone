@@ -24,6 +24,8 @@ public sealed class SceneAnimatorCodecTests
             Enabled = false,
             ApplyRootMotion = true,
             ActiveLayer = 2,
+            MorphCurveOffset = 4,
+            MorphCurveCount = 3,
         };
 
         SceneAnimator restored = RoundTrip(new SceneAnimatorCodec(), in value);
@@ -58,6 +60,17 @@ public sealed class SceneAnimatorCodecTests
     {
         SceneAnimatorCodec codec = new();
         using JsonDocument document = JsonDocument.Parse("""{"version":1,"slot":0,"generation":1,"activeLayer":-1}""");
+
+        Action read = () => codec.Read(document.RootElement);
+
+        read.Should().Throw<SceneValidationException>();
+    }
+
+    [Fact]
+    public void AnimatorRejectsNegativeMorphRange()
+    {
+        SceneAnimatorCodec codec = new();
+        using JsonDocument document = JsonDocument.Parse("""{"version":1,"slot":0,"generation":1,"morphCurveCount":-1}""");
 
         Action read = () => codec.Read(document.RootElement);
 

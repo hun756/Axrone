@@ -201,6 +201,28 @@ public sealed class SceneGlAssetCache : IDisposable
         ThrowIfDisposed();
         _context.AssertRenderThread();
 
+        GLMesh mesh = CreateMesh(definition);
+
+        if (_meshes.TryGetValue(definition.Id, out GLMesh? previous))
+        {
+            previous.Dispose();
+        }
+
+        _meshes[definition.Id] = mesh;
+        _meshSources[definition.Id] = definition;
+        return mesh;
+    }
+
+    /// <summary>
+    /// Creates a GPU mesh without registering it. Used for per-actor morph
+    /// variants that share the asset definition but need their own vertex buffer.
+    /// </summary>
+    public GLMesh CreateMesh(SceneMeshDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ThrowIfDisposed();
+        _context.AssertRenderThread();
+
         VertexAttribute[] attributes = new VertexAttribute[definition.Attributes.Count];
         for (int i = 0; i < attributes.Length; i++)
         {
@@ -231,7 +253,7 @@ public sealed class SceneGlAssetCache : IDisposable
                 sphere.Center + new Vec3(sphere.Radius))
             : new Aabb3D(Vec3.Zero, Vec3.Zero);
 
-        var mesh = new GLMesh(
+        return new GLMesh(
             _context,
             layout,
             definition.Vertices.Span,
@@ -240,16 +262,13 @@ public sealed class SceneGlAssetCache : IDisposable
             MapTopology(definition.Topology),
             definition.Id.ToString(),
             MapIndexType(definition.IndexFormat));
-
-        if (_meshes.TryGetValue(definition.Id, out GLMesh? previous))
-        {
-            previous.Dispose();
-        }
-
-        _meshes[definition.Id] = mesh;
-        _meshSources[definition.Id] = definition;
-        return mesh;
     }
+
+    /// <summary>Resolves the CPU definition behind an uploaded mesh.</summary>
+    public bool TryGetMeshDefinition(
+        SceneAssetId<MeshAssetTag> id,
+        [NotNullWhen(true)] out SceneMeshDefinition? definition) =>
+        _meshSources.TryGetValue(id, out definition);
 
     /// <summary>Uploads and stores a texture.</summary>
     public GLTexture RegisterTexture(SceneTextureDefinition definition)

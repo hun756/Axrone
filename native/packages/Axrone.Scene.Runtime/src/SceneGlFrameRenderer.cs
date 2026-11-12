@@ -29,7 +29,8 @@ public sealed class SceneGlFrameRenderer : IDisposable
             _assets,
             runtime.World,
             runtime.HasParticles ? runtime.Particles : null,
-            bonePalettes: runtime.HasSkinnedMeshes ? runtime.BonePalettes : null);
+            bonePalettes: runtime.HasSkinnedMeshes ? runtime.BonePalettes : null,
+            morphWeights: runtime.MorphWeights);
     }
 
     /// <summary>GPU-side asset cache.</summary>

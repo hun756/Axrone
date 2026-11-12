@@ -215,6 +215,9 @@ public sealed class SceneAnimationImporterTests
         imported.Should().BeTrue(reason);
         result.Should().NotBeNull();
         result!.CurveLayout.Count.Should().Be(2);
+        world.TryGetData(root, out SceneAnimator animator).Should().BeTrue();
+        animator.MorphCurveOffset.Should().Be(0);
+        animator.MorphCurveCount.Should().Be(2);
         result.Controller.Update(0.5f, new List<ClipEvent>(), out _, out _);
         Span<float> curves = result.Controller.CurrentFrame.Curves.AsSpan();
         curves[0].Should().BeApproximately(0.5f, 1e-4f);
@@ -276,6 +279,7 @@ public sealed class SceneAnimationImporterTests
             SceneComponentTraits.Required | SceneComponentTraits.Singleton,
             priority: 1000);
         registry.RegisterData<SceneAnimationBinding>("AnimationBinding");
+        registry.RegisterData<SceneAnimator>("SceneAnimator");
         return new SceneWorld(registry, diagnostics: null, new SceneWorldOptions(initialCapacity: 4));
     }
 }
