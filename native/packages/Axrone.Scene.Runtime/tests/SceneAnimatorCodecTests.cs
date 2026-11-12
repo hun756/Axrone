@@ -209,12 +209,18 @@ public sealed class SceneAnimatorCodecTests
             Enabled = true,
             StartWaypoint = 0,
         };
+        var binding = new SceneAnimationBinding
+        {
+            Skin = SceneAssetId<SkinAssetTag>.FromName("skin/hero"),
+            DefaultClip = SceneAssetId<AnimationAssetTag>.FromName("clip/run"),
+        };
 
         using SceneRuntime source = new(new SceneRuntimeOptions { Profile = CreateAnimationProfile() });
         SceneActor actor = source.World.CreateActor("Animated");
         source.World.GetTransform3D(actor).SetPosition(new Vec3(1.0f, 2.0f, 3.0f));
         source.World.AddData(actor, animator);
         source.World.AddData(actor, pathAgent);
+        source.World.AddData(actor, binding);
         source.World.UpdateTransforms();
 
         SceneSnapshot snapshot = source.CaptureSnapshot("prefab/animated");
@@ -226,6 +232,7 @@ public sealed class SceneAnimatorCodecTests
         SceneActor loaded = result.Actors[0];
         target.World.GetData<SceneAnimator>(loaded).Should().Be(animator);
         target.World.GetData<ScenePathAgent>(loaded).Should().Be(pathAgent);
+        target.World.GetData<SceneAnimationBinding>(loaded).Should().Be(binding);
     }
 
     private static SceneProfile CreateAnimationProfile() =>
