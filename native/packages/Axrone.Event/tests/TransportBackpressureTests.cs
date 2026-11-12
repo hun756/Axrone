@@ -62,4 +62,29 @@ public sealed class TransportBackpressureTests
         SpinWait.SpinUntil(() => reentrantThrew, TimeSpan.FromSeconds(10)).Should().BeTrue(
             "a re-entrant publish on the drain thread must fail fast, never deadlock");
     }
+
+    [Fact]
+    public void PublishResult_DistinguishesAcceptedFilteredBufferedAndStopped()
+    {
+        using var router = new EventRouter<int>(RouterOptions.Default with { MaxListeners = 0 });
+        router.Subscribe((_, _) => { });
+        router.AddFilter(new RejectFilter(13));
+
+        router.TryPublishWithResult(1).Status.Should().Be(EventPublishStatus.Accepted);
+        router.TryPublishWithResult(13).Status.Should().Be(EventPublishStatus.Filtered);
+
+        router.Pause();
+        router.TryPublishWithResult(2).Status.Should().Be(EventPublishStatus.Buffered);
+        router.Resume();
+
+        router.Complete();
+        EventPublishResult stopped = router.TryPublishWithResult(3);
+        stopped.Status.Should().Be(EventPublishStatus.NotRunning);
+        stopped.ShouldRetry.Should().BeFalse();
+    }
+
+    private sealed class RejectFilter(int rejected) : IEventFilter<int>
+    {
+        public bool ShouldProcess(in EventEnvelope<int> envelope) => envelope.Payload != rejected;
+    }
 }

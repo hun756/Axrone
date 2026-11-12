@@ -44,6 +44,23 @@ public sealed class FrameDrivenDispatchTests
     }
 
     [Fact]
+    public void FrameDrivenBus_HonorsTimeBudgetOverload()
+    {
+        using var bus = new EventBus(
+            RouterOptions.Default with { MaxListeners = 0, DispatchBatchSize = 1 },
+            EventDispatchMode.FrameDriven);
+
+        int calls = 0;
+        using IEventSubscription subscription = bus.Subscribe<int>((_, _) => calls++);
+
+        bus.Publish(1);
+        bus.Publish(2);
+
+        bus.Pump(TimeSpan.FromMilliseconds(50)).Should().Be(2);
+        calls.Should().Be(2);
+    }
+
+    [Fact]
     public void BackgroundBus_RefusesManualPump()
     {
         using var bus = new EventBus();

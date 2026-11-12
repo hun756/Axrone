@@ -1,5 +1,6 @@
 namespace Axrone.Event.Internal;
 
+using System.Diagnostics;
 using Axrone.Execution;
 using Axrone.Utility.Backoff.SpinPolicies;
 
@@ -14,7 +15,7 @@ using Axrone.Utility.Backoff.SpinPolicies;
 /// The wake queue, its backoff and its lifecycle are <see cref="CommandPump{TCommand,TContext,TProcessor,TBackoff,TTelemetry}"/>
 /// from <c>Axrone.Execution</c>; this type only supplies the registration table and the rotating
 /// visit order. In <see cref="EventDispatchMode.FrameDriven"/> no worker is created at all and the
-/// owning loop calls <see cref="Pump"/>.
+/// owning loop calls <see cref="Pump(int)"/>.
 /// </para>
 /// <para>
 /// The worker parks on a reset event after the pump reports no commands, so a signal racing the
@@ -178,6 +179,42 @@ internal sealed class EventDispatcher : IDisposable, IAsyncDisposable
         while (passes < maxBatches && DrainAllOnce())
         {
             passes++;
+        }
+
+        return passes;
+    }
+
+    /// <summary>
+    /// Advances frame-driven dispatch until idle or the elapsed budget is spent.
+    /// One pass is always allowed when work exists, so a tiny budget cannot starve
+    /// the queue completely.
+    /// </summary>
+    public int Pump(TimeSpan maxDuration, int maxBatches = int.MaxValue)
+    {
+        if (_mode != EventDispatchMode.FrameDriven)
+        {
+            ThrowHelper.ThrowInvalidOperation("Pump is only available when the bus runs in FrameDriven mode.");
+        }
+
+        if (maxDuration <= TimeSpan.Zero)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(maxDuration));
+        }
+
+        if (maxBatches < 1)
+        {
+            ThrowHelper.ThrowArgumentOutOfRange(nameof(maxBatches));
+        }
+
+        long started = Stopwatch.GetTimestamp();
+        int passes = 0;
+        while (passes < maxBatches && DrainAllOnce())
+        {
+            passes++;
+            if (Stopwatch.GetElapsedTime(started) >= maxDuration)
+            {
+                break;
+            }
         }
 
         return passes;

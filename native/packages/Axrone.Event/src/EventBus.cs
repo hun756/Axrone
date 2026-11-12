@@ -35,7 +35,7 @@ public sealed class EventBus : IEventBus, IDisposable, IAsyncDisposable
     /// <param name="options">Options applied to every per-type router.</param>
     /// <param name="mode">
     /// Background starts one worker thread. FrameDriven creates no thread and requires the owner
-    /// to call <see cref="Pump"/>.
+    /// to call <see cref="Pump(int)"/>.
     /// </param>
     public EventBus(RouterOptions options, EventDispatchMode mode)
     {
@@ -52,8 +52,22 @@ public sealed class EventBus : IEventBus, IDisposable, IAsyncDisposable
     /// <exception cref="InvalidOperationException">The bus runs in background mode.</exception>
     public int Pump(int maxBatches = 1) => _dispatcher.Pump(maxBatches);
 
+    /// <summary>
+    /// Advances frame-driven dispatch until no router has work or the time budget
+    /// is exhausted. Useful when the owner has a per-frame millisecond budget.
+    /// </summary>
+    public int Pump(TimeSpan maxDuration, int maxBatches = int.MaxValue) =>
+        _dispatcher.Pump(maxDuration, maxBatches);
+
     /// <inheritdoc/>
     public void Publish<TEvent>(in TEvent message) => Router<TEvent>().Publish(in message);
+
+    /// <summary>
+    /// Non-blocking publish that reports whether the payload was accepted,
+    /// buffered, filtered or backpressured.
+    /// </summary>
+    public EventPublishResult TryPublishWithResult<TEvent>(in TEvent message) =>
+        Router<TEvent>().TryPublishWithResult(in message);
 
     /// <inheritdoc/>
     public void PublishEnvelope<TEvent>(in EventEnvelope<TEvent> envelope) => Router<TEvent>().PublishEnvelope(in envelope);

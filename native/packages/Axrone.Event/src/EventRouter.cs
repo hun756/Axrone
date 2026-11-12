@@ -522,6 +522,60 @@ public sealed class EventRouter<TEvent> : IEventEmitter, IDisposable, IAsyncDisp
     }
 
     /// <summary>
+    /// Non-blocking publish that reports why a payload was not accepted. Filters
+    /// are evaluated once; a filtered payload is not retried.
+    /// </summary>
+    public EventPublishResult TryPublishWithResult(in TEvent message)
+    {
+        ThrowIfFaulted();
+        if (Volatile.Read(ref _state) != StateRunning)
+        {
+            return new EventPublishResult(EventPublishStatus.NotRunning);
+        }
+
+        long start = Stopwatch.GetTimestamp();
+        if (!TryEnterReentrantPublish(throwOnLimit: false))
+        {
+            return new EventPublishResult(EventPublishStatus.Backpressured);
+        }
+
+        EventEnvelope<TEvent> envelope = Stamp(message);
+        PublishRoute route = RoutePublish(in envelope);
+        EventPublishResult result;
+
+        if (route == PublishRoute.Buffered)
+        {
+            result = new EventPublishResult(EventPublishStatus.Buffered);
+        }
+        else if (route == PublishRoute.BufferFull)
+        {
+            result = new EventPublishResult(EventPublishStatus.Backpressured);
+        }
+        else if (!PassesPublishGate(in envelope))
+        {
+            result = new EventPublishResult(EventPublishStatus.Filtered);
+        }
+        else if (!_queue.TryEnqueue(in envelope))
+        {
+            result = new EventPublishResult(EventPublishStatus.Backpressured);
+        }
+        else
+        {
+            _dispatcher.Signal();
+            _telemetry.RecordPublished(1);
+            foreach (IEventInterceptor<TEvent> interceptor in _interceptors)
+            {
+                interceptor.OnPublished(in envelope);
+            }
+
+            result = new EventPublishResult(EventPublishStatus.Accepted);
+        }
+
+        _metrics.RecordEmit(Stopwatch.GetTimestamp() - start);
+        return result;
+    }
+
+    /// <summary>
     /// Dispatches synchronously on the caller thread in priority order, bypassing the transport.
     /// Reentrant calls from a handler are deferred to the transport instead of recursing.
     /// </summary>
