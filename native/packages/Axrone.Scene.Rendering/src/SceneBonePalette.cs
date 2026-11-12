@@ -29,6 +29,11 @@ public interface ISceneBonePaletteSource
 /// existing actor is allocation-free. An empty palette removes the entry, which
 /// makes an unbound animator stop contributing to skinning.
 /// </summary>
+/// <remarks>
+/// The actor index and revision are lock-guarded. <see cref="TryGetBonePalette"/>
+/// returns a view over the resident array; consume it before the next write for
+/// that actor (the normal same-frame render path does).
+/// </remarks>
 public sealed class SceneBonePaletteStore : ISceneBonePaletteSink, ISceneBonePaletteSource
 {
     private readonly Dictionary<SceneActor, PaletteSlot> _slots = new();
