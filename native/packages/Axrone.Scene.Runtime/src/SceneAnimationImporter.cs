@@ -121,7 +121,9 @@ public static class SceneAnimationImporter
         }
 
         var parameters = new ParameterStore(Array.Empty<KeyValuePair<string, ParameterType>>());
-        var controller = new AnimationController(rig, parameters, new CurveLayout(new Dictionary<CurveId, int>()));
+        Dictionary<CurveId, int> curveSlots = BuildCurveLayout(clips);
+        var curveLayout = new CurveLayout(curveSlots);
+        var controller = new AnimationController(rig, parameters, curveLayout);
         var states = new AnimationState[runtimeClips.Count];
         for (int i = 0; i < runtimeClips.Count; i++)
         {
@@ -146,8 +148,37 @@ public static class SceneAnimationImporter
             controller,
             inverseBind,
             jointActors,
-            baseLayer);
+            baseLayer,
+            curveLayout);
         return true;
+    }
+
+    private static Dictionary<CurveId, int> BuildCurveLayout(IReadOnlyList<SceneAnimationClipDefinition> clips)
+    {
+        var slots = new Dictionary<CurveId, int>();
+        foreach (SceneAnimationClipDefinition clip in clips)
+        {
+            foreach (SceneAnimationTrackDefinition track in clip.Tracks)
+            {
+                if (track.Path != SceneAnimationPath.Weights ||
+                    track.ValueComponentCount <= 0 ||
+                    string.IsNullOrEmpty(track.TargetNodeId))
+                {
+                    continue;
+                }
+
+                for (int component = 0; component < track.ValueComponentCount; component++)
+                {
+                    var id = new CurveId($"{track.TargetNodeId}:morph:{component}");
+                    if (!slots.ContainsKey(id))
+                    {
+                        slots[id] = slots.Count;
+                    }
+                }
+            }
+        }
+
+        return slots;
     }
 
     private static AnimationClip? BuildClip(
@@ -158,6 +189,24 @@ public static class SceneAnimationImporter
 
         foreach (SceneAnimationTrackDefinition track in definition.Tracks)
         {
+            if (track.KeyframeCount == 0)
+            {
+                continue;
+            }
+
+            InterpolationMode interpolation = track.Interpolation switch
+            {
+                SceneAnimationInterpolation.Step => InterpolationMode.Step,
+                SceneAnimationInterpolation.CubicSpline => InterpolationMode.CubicSpline,
+                _ => InterpolationMode.Linear,
+            };
+
+            if (track.Path == SceneAnimationPath.Weights)
+            {
+                AppendMorphChannels(channels, track, interpolation);
+                continue;
+            }
+
             if (!jointIndex.TryGetValue(track.TargetNodeId, out int boneIndex))
             {
                 continue;
@@ -171,17 +220,10 @@ public static class SceneAnimationImporter
                 _ => null,
             };
 
-            if (target is null || track.KeyframeCount == 0)
+            if (target is null)
             {
                 continue;
             }
-
-            InterpolationMode interpolation = track.Interpolation switch
-            {
-                SceneAnimationInterpolation.Step => InterpolationMode.Step,
-                SceneAnimationInterpolation.CubicSpline => InterpolationMode.CubicSpline,
-                _ => InterpolationMode.Linear,
-            };
 
             int componentCount = target.Value switch
             {
@@ -212,6 +254,51 @@ public static class SceneAnimationImporter
             definition.Duration,
             channels.ToArray(),
             tags: definition.Tags);
+    }
+
+    private static void AppendMorphChannels(
+        List<AnimationChannel> channels,
+        SceneAnimationTrackDefinition track,
+        InterpolationMode interpolation)
+    {
+        if (track.ValueComponentCount <= 0 || string.IsNullOrEmpty(track.TargetNodeId))
+        {
+            return;
+        }
+
+        ReadOnlySpan<float> times = track.Times.Span;
+        ReadOnlySpan<float> values = track.Values.Span;
+        int stride = track.SampleStride;
+        int components = track.ValueComponentCount;
+        bool cubic = interpolation == InterpolationMode.CubicSpline;
+        int keyCount = track.KeyframeCount;
+
+        for (int component = 0; component < components; component++)
+        {
+            var componentValues = new float[keyCount * (cubic ? 3 : 1)];
+            for (int key = 0; key < keyCount; key++)
+            {
+                int offset = (key * stride) + (cubic ? component * 3 : component);
+                if (cubic)
+                {
+                    componentValues[(key * 3) + 0] = values[offset + 0];
+                    componentValues[(key * 3) + 1] = values[offset + 1];
+                    componentValues[(key * 3) + 2] = values[offset + 2];
+                }
+                else
+                {
+                    componentValues[key] = values[offset];
+                }
+            }
+
+            channels.Add(new AnimationChannel(
+                -1,
+                ChannelTarget.Curve,
+                interpolation,
+                times.ToArray(),
+                componentValues,
+                new CurveId($"{track.TargetNodeId}:morph:{component}")));
+        }
     }
 
     private static SceneActor? FindSkinnedActor(
@@ -293,7 +380,8 @@ public sealed record SceneAnimationImportResult(
     AnimationController Controller,
     IReadOnlyList<Mat4> InverseBind,
     IReadOnlyList<SceneActor> JointActors,
-    AnimationLayer BaseLayer) : IDisposable
+    AnimationLayer BaseLayer,
+    CurveLayout CurveLayout) : IDisposable
 {
     /// <summary>Disposes the owned controller.</summary>
     public void Dispose() => Controller.Dispose();

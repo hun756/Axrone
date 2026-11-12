@@ -13,6 +13,7 @@ public sealed class SceneAnimationImporterTests
     private static readonly int[] s_jointIndices = [0, 1];
     private static readonly float[] s_times = [0.0f, 1.0f];
     private static readonly float[] s_translationValues = [0, 0, 0, 1, 0, 0];
+    private static readonly float[] s_morphValues = [0.0f, 0.5f, 1.0f, 1.0f];
     [Fact]
     public void ImportsSkinAndClipIntoRuntimeObjects()
     {
@@ -157,6 +158,64 @@ public sealed class SceneAnimationImporterTests
         result!.BaseLayer.Machine.ForceState(1);
         result.Controller.Update(0.5f, new List<ClipEvent>(), out _, out _);
         result.Controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(2.0f, 1e-4f);
+        result.Dispose();
+    }
+
+    [Fact]
+    public void ImportsMorphWeightsAsCurveChannels()
+    {
+        using SceneWorld world = CreateWorld();
+        SceneActor root = world.CreateActor("Root");
+        SceneActor child = world.CreateActor("Child");
+        world.Hierarchy.SetParent(child, root);
+        world.UpdateTransforms();
+
+        var nodeMap = new Dictionary<string, SceneActor>(StringComparer.Ordinal)
+        {
+            ["node/root"] = root,
+            ["node/child"] = child,
+        };
+        var parents = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["node/root"] = null,
+            ["node/child"] = "node/root",
+        };
+        var skin = new SceneSkinDefinition(
+            SceneAssetId<SkinAssetTag>.FromName("skin/morph"),
+            s_jointIds,
+            s_jointIndices,
+            "node/root",
+            IdentityBindMatrices(2));
+        var weights = new SceneAnimationTrackDefinition(
+            "node/child",
+            SceneAnimationPath.Weights,
+            SceneAnimationInterpolation.Linear,
+            keyframeCount: 2,
+            valueComponentCount: 2,
+            sampleStride: 2,
+            times: s_times,
+            values: s_morphValues);
+        var clip = new SceneAnimationClipDefinition(
+            SceneAssetId<AnimationAssetTag>.FromName("clip/morph"),
+            1.0f,
+            [weights]);
+
+        bool imported = SceneAnimationImporter.TryImport(
+            world,
+            skin,
+            [clip],
+            nodeMap,
+            parents,
+            out SceneAnimationImportResult? result,
+            out string reason);
+
+        imported.Should().BeTrue(reason);
+        result.Should().NotBeNull();
+        result!.CurveLayout.Count.Should().Be(2);
+        result.Controller.Update(0.5f, new List<ClipEvent>(), out _, out _);
+        Span<float> curves = result.Controller.CurrentFrame.Curves.AsSpan();
+        curves[0].Should().BeApproximately(0.5f, 1e-4f);
+        curves[1].Should().BeApproximately(0.75f, 1e-4f);
         result.Dispose();
     }
 
