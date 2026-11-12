@@ -146,14 +146,16 @@ public sealed class SceneAnimatorCodecTests
             .Build();
 
         profile.Registry.TryGetDataByType(typeof(SceneAnimator), out _).Should().BeTrue();
+        profile.Registry.TryGetDataByType(typeof(SceneAnimationBinding), out _).Should().BeTrue();
         profile.Registry.TryGetDataByType(typeof(ScenePathAgent), out _).Should().BeTrue();
 
         SceneCodecRegistry codecs = new(profile.Registry);
         SceneRuntimeCodecs.Register(codecs, profile.Registry);
 
         codecs.TryGet("SceneAnimator", out _).Should().BeTrue();
+        codecs.TryGet("SceneAnimationBinding", out _).Should().BeTrue();
         codecs.TryGet("ScenePathAgent", out _).Should().BeTrue();
-        codecs.Count.Should().Be(2);
+        codecs.Count.Should().Be(3);
     }
 
     [Fact]

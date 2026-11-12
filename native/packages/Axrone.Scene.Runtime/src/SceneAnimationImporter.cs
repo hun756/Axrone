@@ -160,6 +160,12 @@ public static class SceneAnimationImporter
             }
         }
 
+        if (world.Registry.TryGetDataByType(typeof(SceneAnimator), out _) &&
+            !world.HasData<SceneAnimator>(meshActor))
+        {
+            world.AddData(meshActor, SceneAnimator.Default);
+        }
+
         result = new SceneAnimationImportResult(
             meshActor,
             rig,
