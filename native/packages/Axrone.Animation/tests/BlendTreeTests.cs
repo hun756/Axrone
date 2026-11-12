@@ -158,6 +158,49 @@ public class BlendTreeTests
     }
 
     [Fact]
+    public void Blend2D_FreeformInterpolatesInsideHull()
+    {
+        Rig rig = TwoBone();
+        var node = new Blend2DMotionNode(
+            "aimX",
+            "aimY",
+            [
+                (new Vec2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f, 0.0f)) { IsLooping = false }),
+                (new Vec2(1.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f, 4.0f)) { IsLooping = false }),
+                (new Vec2(0.0f, 1.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f, 8.0f)) { IsLooping = false }),
+                (new Vec2(1.0f, 1.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f, 12.0f)) { IsLooping = false }),
+            ],
+            Blend2DMode.Freeform);
+
+        var frame = new AnimationFrame(2, NoCurves());
+        var arena = new FrameArena(2, NoCurves(), capacity: 8);
+        var parameters = new ParameterStore(Params());
+        parameters.SetFloat("aimX", 0.5f);
+        parameters.SetFloat("aimY", 0.5f);
+
+        node.Evaluate(1.0f, frame, arena, rig, parameters, 0);
+
+        frame.ReadTranslations()[1].X.Should().BeApproximately(6.0f, 1e-4f);
+    }
+
+    [Fact]
+    public void Blend2D_FreeformRejectsDuplicatePoints()
+    {
+        Action build = () => _ = new Blend2DMotionNode(
+            "aimX",
+            "aimY",
+            [
+                (new Vec2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(0.0f, 0.0f))),
+                (new Vec2(0.0f, 0.0f), (MotionNode)new ClipMotionNode(SlideClip(1.0f, 1.0f))),
+                (new Vec2(1.0f, 1.0f), (MotionNode)new ClipMotionNode(SlideClip(2.0f, 2.0f))),
+            ],
+            Blend2DMode.Freeform);
+
+        build.Should().Throw<CompilationException>()
+            .Where(e => e.Code == AnimationErrorCode.CompilationBlendDegenerate);
+    }
+
+    [Fact]
     public void Direct_SingleActiveFastPath()
     {
         Rig rig = TwoBone();

@@ -209,6 +209,16 @@ public sealed class ClipMotionNode : MotionNode
 /// <summary>Segment bracketing a Blend1D parameter value.</summary>
 public readonly record struct Blend1DSegment(int Index0, int Index1, float Weight);
 
+/// <summary>Weighting strategy for a two-parameter blend.</summary>
+public enum Blend2DMode
+{
+    /// <summary>Inverse-distance weights over every child (smooth outside the hull too).</summary>
+    InverseDistance = 0,
+
+    /// <summary>Barycentric weights inside the precomputed Delaunay hull; inverse distance outside.</summary>
+    Freeform = 1,
+}
+
 /// <summary>One-parameter blend over sorted threshold children.</summary>
 public sealed class Blend1DMotionNode : MotionNode
 {
@@ -446,6 +456,7 @@ public sealed class Blend2DMotionNode : MotionNode
 {
     private readonly Vec2[] _positions;
     private readonly MotionNode[] _children;
+    private readonly int[] _triangles;
     private ParameterHandle _parameterXHandle;
     private ParameterHandle _parameterYHandle;
     private bool _parametersBound;
@@ -465,8 +476,15 @@ public sealed class Blend2DMotionNode : MotionNode
     /// <summary>Children aligned with positions.</summary>
     public ReadOnlySpan<MotionNode> Children => _children;
 
+    /// <summary>Weighting strategy.</summary>
+    public Blend2DMode Mode { get; }
+
     /// <summary>Creates a blend.</summary>
-    public Blend2DMotionNode(string parameterX, string parameterY, (Vec2 Position, MotionNode Child)[] entries)
+    public Blend2DMotionNode(
+        string parameterX,
+        string parameterY,
+        (Vec2 Position, MotionNode Child)[] entries,
+        Blend2DMode mode = Blend2DMode.InverseDistance)
     {
         ArgumentNullException.ThrowIfNull(parameterX);
         ArgumentNullException.ThrowIfNull(parameterY);
@@ -476,8 +494,14 @@ public sealed class Blend2DMotionNode : MotionNode
             AnimationThrowHelper.ThrowCompilation(AnimationErrorCode.CompilationEmptyChildren, "Blend2D requires at least one child.");
         }
 
+        if ((uint)mode > (uint)Blend2DMode.Freeform)
+        {
+            AnimationThrowHelper.ThrowValidation(AnimationErrorCode.ValidationInvalidArgument, $"Unknown Blend2D mode '{mode}'.");
+        }
+
         ParameterX = parameterX;
         ParameterY = parameterY;
+        Mode = mode;
         _positions = new Vec2[entries.Length];
         _children = new MotionNode[entries.Length];
         for (int i = 0; i < entries.Length; i++)
@@ -485,6 +509,10 @@ public sealed class Blend2DMotionNode : MotionNode
             _positions[i] = entries[i].Position;
             _children[i] = entries[i].Child;
         }
+
+        _triangles = mode == Blend2DMode.Freeform
+            ? DelaunayTriangulation.Build(_positions)
+            : [];
     }
 
     /// <inheritdoc/>
@@ -581,14 +609,30 @@ public sealed class Blend2DMotionNode : MotionNode
             return;
         }
 
-        MotionDispatcher.CombineWeightedRootDeltas(_children, weights, prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);    }
+        MotionDispatcher.CombineWeightedRootDeltas(_children, weights, prevNormTime, curNormTime, rig, out deltaPos, out deltaRot);
+    }
 
     private Vec2 ReadInput(ParameterStore parameters) => _parametersBound
         ? new Vec2(parameters.GetFloat(in _parameterXHandle), parameters.GetFloat(in _parameterYHandle))
         : new Vec2(parameters.GetFloat(ParameterX), parameters.GetFloat(ParameterY));
 
-    /// <summary>Fills inverse-distance weights; returns an exact-hit child index or -1.</summary>
+    /// <summary>
+    /// Fills blend weights. Returns an exact-hit child index, or -1 when the
+    /// weights span multiple children.
+    /// </summary>
     private int ComputeWeights(Vec2 input, Span<float> weights)
+    {
+        if (Mode == Blend2DMode.Freeform &&
+            _triangles.Length > 0 &&
+            TryComputeFreeformWeights(input, weights))
+        {
+            return -1;
+        }
+
+        return ComputeInverseDistanceWeights(input, weights);
+    }
+
+    private int ComputeInverseDistanceWeights(Vec2 input, Span<float> weights)
     {
         for (int i = 0; i < _positions.Length; i++)
         {
@@ -602,6 +646,52 @@ public sealed class Blend2DMotionNode : MotionNode
         }
 
         return -1;
+    }
+
+    private bool TryComputeFreeformWeights(Vec2 input, Span<float> weights)
+    {
+        const float epsilon = 1e-5f;
+        weights.Clear();
+
+        for (int t = 0; t < _triangles.Length; t += 3)
+        {
+            int a = _triangles[t];
+            int b = _triangles[t + 1];
+            int c = _triangles[t + 2];
+            Vec2 pa = _positions[a];
+            Vec2 pb = _positions[b];
+            Vec2 pc = _positions[c];
+            float area = Vec2.Cross(pb - pa, pc - pa);
+            if (MathF.Abs(area) <= epsilon)
+            {
+                continue;
+            }
+
+            float wa = Vec2.Cross(pb - input, pc - input) / area;
+            float wb = Vec2.Cross(pc - input, pa - input) / area;
+            float wc = 1.0f - wa - wb;
+            if (wa < -epsilon || wb < -epsilon || wc < -epsilon)
+            {
+                continue;
+            }
+
+            wa = MathF.Max(0.0f, wa);
+            wb = MathF.Max(0.0f, wb);
+            wc = MathF.Max(0.0f, wc);
+            float total = wa + wb + wc;
+            if (total <= AnimationConstants.BlendEpsilon)
+            {
+                continue;
+            }
+
+            float inverse = 1.0f / total;
+            weights[a] = wa * inverse;
+            weights[b] = wb * inverse;
+            weights[c] = wc * inverse;
+            return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>
