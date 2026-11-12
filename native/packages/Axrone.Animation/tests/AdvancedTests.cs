@@ -55,4 +55,39 @@ public class AdvancedTests
 
         GroundingSystem.ComputeRootYOffset(contacts, heights, 0.0f, 5.0f).Should().Be(0.0f);
     }
+
+    [Fact]
+    public void Grounding_AxisLocksKeepDisabledAxesZero()
+    {
+        FootContact[] contacts =
+        [
+            new(0.0f, 1.0f, 0),
+            new(0.0f, 1.0f, 1),
+        ];
+        Vec3[] positions =
+        [
+            new Vec3(1.0f, 1.0f, 0.0f),
+            new Vec3(3.0f, 2.0f, 0.0f),
+        ];
+
+        Vec3 offset = GroundingSystem.ComputeRootOffset(
+            contacts,
+            positions,
+            Vec3.Zero,
+            0.5f,
+            GroundingAxes.X | GroundingAxes.Y);
+
+        offset.X.Should().BeApproximately(-2.0f, 1e-4f);
+        offset.Y.Should().BeApproximately(-1.5f, 1e-4f);
+        offset.Z.Should().Be(0.0f);
+
+        Vec3 vertical = GroundingSystem.ComputeRootOffset(
+            contacts,
+            positions,
+            Vec3.Zero,
+            0.5f);
+        vertical.X.Should().Be(0.0f);
+        vertical.Y.Should().BeApproximately(-1.5f, 1e-4f);
+        vertical.Z.Should().Be(0.0f);
+    }
 }
