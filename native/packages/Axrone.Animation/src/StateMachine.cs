@@ -310,7 +310,7 @@ public sealed class StateMachineInstance
         EnsureBound(parameters);
 
         AnimationState current = _states[CurrentStateIndex];
-        float motionDuration = MotionDispatcher.GetDuration(current.RootMotion);
+        float motionDuration = MotionDispatcher.GetDuration(current.RootMotion, parameters);
         float speedMagnitude = MathF.Max(MathF.Abs(current.Speed), AnimationConstants.SoaEpsilon);
         float stateDuration = MathF.Max(motionDuration / speedMagnitude, AnimationConstants.MinStateDuration);
 
@@ -392,7 +392,7 @@ public sealed class StateMachineInstance
     {
         ActiveTransitionData active = _activeTransition;
         AnimationState target = _states[active.TargetStateIndex];
-        float targetMotionDuration = MotionDispatcher.GetDuration(target.RootMotion);
+        float targetMotionDuration = MotionDispatcher.GetDuration(target.RootMotion, parameters);
         float targetSpeed = MathF.Max(MathF.Abs(target.Speed), AnimationConstants.SoaEpsilon);
         float targetDuration = MathF.Max(targetMotionDuration / targetSpeed, AnimationConstants.MinStateDuration);
 
@@ -556,6 +556,30 @@ public sealed class StateMachineInstance
 
         MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, out Vec3 sourcePos, out Quat sourceRot);
         MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, out Vec3 targetPos, out Quat targetRot);
+
+        float weight = FastMath.Clamp01(active.Progress);
+        deltaPos = Vec3.Lerp(sourcePos, targetPos, weight);
+        deltaRot = FastMath.Slerp(sourceRot, targetRot, weight);
+    }
+
+    /// <summary>
+    /// Extracts the root delta for the current blend parameters. Blend-tree nodes
+    /// weight their children's deltas, matching the pose that was evaluated.
+    /// </summary>
+    public void ExtractRootDelta(Rig rig, ParameterStore parameters, out Vec3 deltaPos, out Quat deltaRot)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        ActiveTransitionData active = _activeTransition;
+        if (!active.IsActive)
+        {
+            MotionDispatcher.ComputeRootDelta(_states[CurrentStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, parameters, out deltaPos, out deltaRot);
+            return;
+        }
+
+        MotionDispatcher.ComputeRootDelta(_states[active.SourceStateIndex].RootMotion, PreviousNormalizedTime, StateNormalizedTime, rig, parameters, out Vec3 sourcePos, out Quat sourceRot);
+        MotionDispatcher.ComputeRootDelta(_states[active.TargetStateIndex].RootMotion, active.TargetPreviousNormalizedTime, active.TargetNormalizedTime, rig, parameters, out Vec3 targetPos, out Quat targetRot);
 
         float weight = FastMath.Clamp01(active.Progress);
         deltaPos = Vec3.Lerp(sourcePos, targetPos, weight);

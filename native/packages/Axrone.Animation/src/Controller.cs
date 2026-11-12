@@ -136,7 +136,7 @@ public sealed class AnimationController : IDisposable
         {
             _layers[0].Machine.Evaluate(CurrentFrame, Arena, Rig, Parameters);
             ApplyIkLayers(_layers[0], CurrentFrame);
-            _layers[0].Machine.ExtractRootDelta(Rig, out rootMotionDeltaPos, out rootMotionDeltaRot);
+            _layers[0].Machine.ExtractRootDelta(Rig, Parameters, out rootMotionDeltaPos, out rootMotionDeltaRot);
         }
         else
         {
@@ -164,7 +164,7 @@ public sealed class AnimationController : IDisposable
             }
             else
             {
-                BlendingKernels.ApplyAdditiveFrame(CurrentFrame, CurrentFrame, layerFrame, Rig, weight);
+                BlendingKernels.ApplyAdditiveFrame(CurrentFrame, CurrentFrame, layerFrame, Rig, weight, layer.BoneMask);
             }
 
             Arena.Free();

@@ -214,7 +214,7 @@ public static class BlendingKernels
     /// Rotation deltas ride the rest-inverse sandwich with slerp-scaled magnitude.
     /// </summary>
     [SkipLocalsInit]
-    public static void ApplyAdditiveFrame(AnimationFrame target, AnimationFrame baseFrame, AnimationFrame additiveFrame, Rig rig, float alpha)
+    public static void ApplyAdditiveFrame(AnimationFrame target, AnimationFrame baseFrame, AnimationFrame additiveFrame, Rig rig, float alpha, AnimationMask? mask = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(baseFrame);
@@ -242,6 +242,11 @@ public static class BlendingKernels
 
         for (int i = 0; i < boneCount; i++)
         {
+            if (mask.HasValue && !mask.Value.IsEnabled(i))
+            {
+                continue;
+            }
+
             int tOff = i * 3;
             int rOff = rotBase + (i * 4);
             int sOff = scaleBase + (i * 3);

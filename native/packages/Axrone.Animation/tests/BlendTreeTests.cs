@@ -111,6 +111,28 @@ public class BlendTreeTests
     }
 
     [Fact]
+    public void Blend1D_UsesSegmentDurationAndRootDelta()
+    {
+        Rig rig = TwoBone();
+        var slow = new AnimationClip(
+            new ClipId("slow"), 2.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 2.0f], [0.0f, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f])]);
+        var fast = new AnimationClip(
+            new ClipId("fast"), 1.0f,
+            [new AnimationChannel(0, ChannelTarget.Translation, InterpolationMode.Linear, [0.0f, 1.0f], [0.0f, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f])]);
+        var node = new Blend1DMotionNode("speed", [
+            (0.0f, (MotionNode)new ClipMotionNode(slow) { IsLooping = false }),
+            (10.0f, (MotionNode)new ClipMotionNode(fast) { IsLooping = false }),
+        ]);
+        var parameters = new ParameterStore(Params());
+        parameters.SetFloat("speed", 5.0f);
+
+        node.GetDuration(parameters).Should().BeApproximately(1.5f, 1e-5f);
+        node.ComputeRootDelta(0.0f, 0.5f, rig, parameters, out Vec3 delta, out _);
+        delta.X.Should().BeApproximately(1.5f, 1e-4f);
+    }
+
+    [Fact]
     public void Blend1D_RejectsEmptyChildren()
     {
         Action build = () => { _ = new Blend1DMotionNode("speed", []); };
