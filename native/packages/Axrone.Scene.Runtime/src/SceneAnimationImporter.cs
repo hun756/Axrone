@@ -171,7 +171,7 @@ public static class SceneAnimationImporter
                 _ => null,
             };
 
-            if (target is null || track.KeyframeCount < 2)
+            if (target is null || track.KeyframeCount == 0)
             {
                 continue;
             }
