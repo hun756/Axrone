@@ -11,6 +11,9 @@ public enum IkSolverKind
 
     /// <summary>Closed-form three-bone solve with pole vector and bend limits.</summary>
     TwoBone = 2,
+
+    /// <summary>Single-bone look-at with a turn limit and optional roll alignment.</summary>
+    Aim = 3,
 }
 
 /// <summary>
@@ -34,6 +37,8 @@ public enum IkSolverKind
 /// <param name="MinBendDegrees">Minimum interior angle at the two-bone root, in degrees.</param>
 /// <param name="MaxBendDegrees">Maximum interior angle at the two-bone root, in degrees.</param>
 /// <param name="TwistDegrees">Twist around the root-to-target axis, in degrees.</param>
+/// <param name="AimUp">World up used by <see cref="IkSolverKind.Aim"/> to remove roll.</param>
+/// <param name="MaxAimAngleDegrees">Maximum turn for <see cref="IkSolverKind.Aim"/>, in degrees.</param>
 public readonly record struct AnimationIkJob(
     IkJobId Id,
     string RootBone,
@@ -50,7 +55,9 @@ public readonly record struct AnimationIkJob(
     Vec3 PolePosition = default,
     float MinBendDegrees = 0.0f,
     float MaxBendDegrees = 180.0f,
-    float TwistDegrees = 0.0f);
+    float TwistDegrees = 0.0f,
+    Vec3 AimUp = default,
+    float MaxAimAngleDegrees = 180.0f);
 
 /// <summary>
 /// Ordered IK jobs applied to a pose after animation evaluation. Targets can be
@@ -81,6 +88,8 @@ public sealed class AnimationIkLayer
         public float MinBendRadians;
         public float MaxBendRadians;
         public float TwistRadians;
+        public Vec3 AimUp;
+        public float MaxAimAngleRadians;
     }
 
     private readonly Rig _rig;
@@ -125,23 +134,41 @@ public sealed class AnimationIkLayer
                     $"Duplicate IK job '{job.Id}'.");
             }
 
-            int rootIndex = ResolveBone(rig, job.RootBone, job.Id);
-            int tipIndex = ResolveBone(rig, job.TipBone, job.Id);
-            int[] chain = BuildChain(rig, rootIndex, tipIndex, job.Id);
-            maxChainLength = Math.Max(maxChainLength, chain.Length);
-
             IkSolverKind solver = job.Solver switch
             {
                 IkSolverKind.Ccd => IkSolverKind.Ccd,
                 IkSolverKind.TwoBone => IkSolverKind.TwoBone,
+                IkSolverKind.Aim => IkSolverKind.Aim,
                 _ => IkSolverKind.Fabrik,
             };
+
+            int rootIndex = ResolveBone(rig, job.RootBone, job.Id);
+            int tipIndex = solver == IkSolverKind.Aim
+                ? rootIndex
+                : ResolveBone(rig, job.TipBone, job.Id);
+            int[] chain = BuildChain(rig, rootIndex, tipIndex, job.Id);
+            maxChainLength = Math.Max(maxChainLength, chain.Length);
 
             if (solver == IkSolverKind.TwoBone && chain.Length != 3)
             {
                 AnimationThrowHelper.ThrowValidation(
                     AnimationErrorCode.ValidationInvalidArgument,
                     $"Two-bone IK job '{job.Id}' requires exactly three bones (root, mid, tip) but resolved {chain.Length}.");
+            }
+
+            if (solver == IkSolverKind.Aim && chain.Length != 1)
+            {
+                AnimationThrowHelper.ThrowValidation(
+                    AnimationErrorCode.ValidationInvalidArgument,
+                    $"Aim job '{job.Id}' must resolve to one bone but resolved {chain.Length}.");
+            }
+
+            if (solver == IkSolverKind.Aim &&
+                (!float.IsFinite(job.MaxAimAngleDegrees) || job.MaxAimAngleDegrees < 0.0f || job.MaxAimAngleDegrees > 180.0f))
+            {
+                AnimationThrowHelper.ThrowValidation(
+                    AnimationErrorCode.ValidationInvalidArgument,
+                    $"Aim job '{job.Id}' max angle {job.MaxAimAngleDegrees} must be finite and inside [0, 180].");
             }
 
             int targetBone = -1;
@@ -187,6 +214,8 @@ public sealed class AnimationIkLayer
                 MinBendRadians = job.MinBendDegrees * (MathF.PI / 180.0f),
                 MaxBendRadians = job.MaxBendDegrees * (MathF.PI / 180.0f),
                 TwistRadians = job.TwistDegrees * (MathF.PI / 180.0f),
+                AimUp = job.AimUp,
+                MaxAimAngleRadians = job.MaxAimAngleDegrees * (MathF.PI / 180.0f),
             };
         }
 
@@ -295,6 +324,17 @@ public sealed class AnimationIkLayer
                         job.TwistRadians);
                     break;
 
+                case IkSolverKind.Aim:
+                    AimSolver.Solve(
+                        _rig,
+                        frame,
+                        job.Chain[0],
+                        job.TargetPosition,
+                        job.AimUp,
+                        jobWeight,
+                        job.MaxAimAngleRadians);
+                    break;
+
                 default:
                     IkSolvers.SolveCcd(
                         _rig,
@@ -307,7 +347,7 @@ public sealed class AnimationIkLayer
                     break;
             }
 
-            if (job.PreserveTipRotation)
+            if (job.PreserveTipRotation && job.Solver != IkSolverKind.Aim)
             {
                 ApplyTipRotation(frame, job.TipIndex, job.TargetRotation, jobWeight);
             }

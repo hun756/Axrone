@@ -78,6 +78,69 @@ public class IkLayerTests
     }
 
     [Fact]
+    public void AimJob_TurnsSingleBoneTowardTarget()
+    {
+        Rig rig = Arm();
+        AnimationFrame frame = RestFrame(rig);
+        var job = new AnimationIkJob(
+            new IkJobId("look"),
+            "shoulder",
+            "shoulder",
+            IkSolverKind.Aim,
+            TargetPosition: new Vec3(0.0f, 0.0f, 1.0f),
+            AimUp: Vec3.UnitY);
+
+        new AnimationIkLayer(rig, "aim", [job]).Apply(frame);
+
+        Span<Vec3> worldT = stackalloc Vec3[rig.BoneCount];
+        Span<Quat> worldR = stackalloc Quat[rig.BoneCount];
+        Span<Vec3> worldS = stackalloc Vec3[rig.BoneCount];
+        BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
+        Vec3 forward = Vec3.Normalize(worldR[0] * Vec3.UnitZ);
+        Vec3.Dot(forward, Vec3.UnitZ).Should().BeApproximately(1.0f, 1e-4f);
+    }
+
+    [Fact]
+    public void AimJob_RespectsMaximumTurn()
+    {
+        Rig rig = Arm();
+        AnimationFrame frame = RestFrame(rig);
+        var job = new AnimationIkJob(
+            new IkJobId("look"),
+            "shoulder",
+            "shoulder",
+            IkSolverKind.Aim,
+            TargetPosition: new Vec3(0.0f, 1.0f, 0.0f),
+            AimUp: Vec3.UnitY,
+            MaxAimAngleDegrees: 30.0f);
+
+        new AnimationIkLayer(rig, "aim", [job]).Apply(frame);
+
+        Span<Vec3> worldT = stackalloc Vec3[rig.BoneCount];
+        Span<Quat> worldR = stackalloc Quat[rig.BoneCount];
+        Span<Vec3> worldS = stackalloc Vec3[rig.BoneCount];
+        BlendingKernels.ForwardKinematics(rig, frame, worldT, worldR, worldS);
+        Vec3 forward = Vec3.Normalize(worldR[0] * Vec3.UnitZ);
+        Vec3.Dot(forward, Vec3.UnitY).Should().BeApproximately(0.5f, 1e-4f);
+    }
+
+    [Fact]
+    public void AimJob_RejectsInvalidMaximum()
+    {
+        Rig rig = Arm();
+        var job = new AnimationIkJob(
+            new IkJobId("look"),
+            "shoulder",
+            "shoulder",
+            IkSolverKind.Aim,
+            MaxAimAngleDegrees: 200.0f);
+
+        Action build = () => _ = new AnimationIkLayer(rig, "aim", [job]);
+
+        build.Should().Throw<ValidationException>();
+    }
+
+    [Fact]
     public void TwoBoneJob_ReachesTargetAndBendsTowardPole()
     {
         Rig rig = Arm();
