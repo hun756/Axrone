@@ -52,6 +52,7 @@ const freezeMotionDefinition = (motion: AnimationMotionDefinition): AnimationMot
                 kind: 'blend2d',
                 parameterX: motion.parameterX,
                 parameterY: motion.parameterY,
+                mode: motion.mode,
                 children: Object.freeze(
                     motion.children.map((child) =>
                         Object.freeze({
@@ -155,7 +156,8 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
 
     constructor(
         private readonly _parameterX: string,
-        private readonly _parameterY: string
+        private readonly _parameterY: string,
+        private readonly _mode: 'inverse-distance' | 'freeform' = 'inverse-distance'
     ) {}
 
     addChild(x: number, y: number, motion: AnimationMotionInput): this {
@@ -168,6 +170,7 @@ export class AnimationBlend2DGraphBuilder implements AnimationMotionBuilder {
             kind: 'blend2d',
             parameterX: this._parameterX,
             parameterY: this._parameterY,
+            mode: this._mode,
             children: this._children.map((child) => ({
                 position: tuple2(child.x, child.y),
                 motion: toMotionDefinition(child.motion),

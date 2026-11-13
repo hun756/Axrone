@@ -67,7 +67,8 @@ function evaluateBlend2DMotion(
         resolveParameterScalar(context.parameters, motion.parameterY),
         motion.children,
         context,
-        depth
+        depth,
+        motion.triangles
     );
     const frames = context.scratch.acquireFrameArray(motion.children.length);
     for (let index = 0; index < motion.children.length; index += 1) {

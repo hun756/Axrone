@@ -1,4 +1,5 @@
 import { AnimationCompilationError, AnimationResolutionError } from './errors';
+import { buildDelaunayTriangles } from './delaunay';
 import { AnimationClip } from './clip';
 import type { DiagnosticCode } from './blend-types';
 import type {
@@ -47,6 +48,16 @@ const compileBlendTree = (
                 kind: 'blend2d',
                 parameterX: definition.parameterX,
                 parameterY: definition.parameterY,
+                mode: definition.mode ?? 'inverse-distance',
+                triangles:
+                    definition.mode === 'freeform'
+                        ? buildDelaunayTriangles(
+                              definition.children.map((child) => ({
+                                  x: child.position[0],
+                                  y: child.position[1],
+                              }))
+                          )
+                        : new Int32Array(0),
                 children: Object.freeze(
                     definition.children.map((child) =>
                         Object.freeze({

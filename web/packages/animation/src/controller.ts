@@ -22,6 +22,7 @@ import {
     evaluateLayerRuntime,
     extractLayerRootDelta,
     forceLayerState,
+    syncLayerRuntime,
     updateLayerRuntime,
     type AnimationCompiledStateMachine,
     type AnimationLayerRuntime,
@@ -46,6 +47,7 @@ interface AnimationCompiledLayer {
     readonly machine: AnimationCompiledStateMachine;
     readonly mask: AnimationMask | null;
     readonly ikLayers: readonly AnimationIkLayer[];
+    readonly syncSourceIndex: number;
 }
 
 export interface AnimationControllerUpdateResult {
@@ -162,6 +164,7 @@ export class AnimationController<
                     ikLayers: Object.freeze(
                         (layer.ikLayers ?? []).map((ikLayer) => new AnimationIkLayer(this.rig, ikLayer))
                     ),
+                    syncSourceIndex: -1,
                 } satisfies AnimationCompiledLayer);
             })
         );
@@ -172,6 +175,25 @@ export class AnimationController<
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             this._layerIndexById.set(this._layers[layerIndex]!.id, layerIndex);
         }
+        this._layers = Object.freeze(
+            this._layers.map((layer, layerIndex) => {
+                const syncSourceId = definition.layers[layerIndex]?.syncSourceLayerId;
+                if (syncSourceId === undefined) {
+                    return layer;
+                }
+                const resolved = String(syncSourceId);
+                if (resolved === layer.id) {
+                    throw new AnimationValidationError(`Animation layer '${layer.id}' cannot sync to itself`);
+                }
+                const syncSourceIndex = this._layerIndexById.get(resolved);
+                if (syncSourceIndex === undefined) {
+                    throw new AnimationValidationError(
+                        `Animation layer '${layer.id}' syncs to unknown layer '${resolved}'`
+                    );
+                }
+                return Object.freeze({ ...layer, syncSourceIndex });
+            })
+        );
         this._layerRuntimes = this._layers.map((layer) => createLayerRuntime(layer.machine));
         this._layerWeights = new Float32Array(this._layers.length);
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
@@ -215,6 +237,17 @@ export class AnimationController<
 
     update(deltaSeconds: number): AnimationControllerUpdateResult {
         const startTime = now();
+        for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
+            const layer = this._layers[layerIndex]!;
+            if (layer.syncSourceIndex >= 0) {
+                syncLayerRuntime(
+                    layer.machine,
+                    this._layerRuntimes[layerIndex]!,
+                    this._layers[layer.syncSourceIndex]!.machine,
+                    this._layerRuntimes[layer.syncSourceIndex]!
+                );
+            }
+        }
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             updateLayerRuntime(
                 this._layers[layerIndex]!.machine,

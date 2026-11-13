@@ -15,6 +15,7 @@ export type AnimationLayerBlendMode = 'override' | 'additive';
 export type AnimationTransitionOperator = '<' | '<=' | '>' | '>=' | '==' | '!=';
 export type AnimationParameterKind = 'float' | 'int' | 'bool' | 'trigger';
 export type AnimationIkSolver = 'fabrik' | 'ccd';
+export type AnimationTransitionEasing = 'linear' | 'smoothStep' | 'easeIn' | 'easeOut' | 'easeInOut';
 export type AnimationRetargetTranslationMode = 'none' | 'absolute' | 'scaled';
 export type AnimationRetargetRotationMode = 'copy' | 'offset';
 
@@ -226,6 +227,7 @@ export interface AnimationBlendTree2DDefinition {
     readonly kind: 'blend2d';
     readonly parameterX: AnimationParameterId | string;
     readonly parameterY: AnimationParameterId | string;
+    readonly mode?: 'inverse-distance' | 'freeform';
     readonly children: readonly AnimationBlendTreeChild2D[];
 }
 
@@ -277,6 +279,7 @@ export interface AnimationTransitionDefinition {
     readonly fixedDuration?: boolean;
     readonly canInterrupt?: boolean;
     readonly priority?: number;
+    readonly easing?: AnimationTransitionEasing;
     readonly conditions?: readonly AnimationConditionDefinition[];
 }
 
@@ -319,6 +322,7 @@ export interface AnimationLayerDefinition {
     readonly weight?: number;
     readonly mode?: AnimationLayerBlendMode;
     readonly boneMask?: readonly string[];
+    readonly syncSourceLayerId?: AnimationLayerId | string;
     readonly stateMachine: AnimationStateMachineDefinition;
     readonly ikLayers?: readonly AnimationIkLayerDefinition[];
 }

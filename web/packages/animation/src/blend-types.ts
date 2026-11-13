@@ -77,6 +77,8 @@ export interface AnimationCompiledBlend2DMotion {
     readonly parameterX: string;
     readonly parameterY: string;
     readonly children: readonly AnimationCompiledBlend2DChild[];
+    readonly mode: 'inverse-distance' | 'freeform';
+    readonly triangles: Int32Array;
 }
 
 export interface AnimationCompiledDirectChild {

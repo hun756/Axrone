@@ -19,6 +19,7 @@ import type {
     AnimationControllerClipActivity,
     AnimationStateMachineDefinition,
     AnimationTransitionDefinition,
+    AnimationTransitionEasing,
     AnimationControllerEvent,
 } from './types';
 
@@ -29,6 +30,7 @@ export interface AnimationCompiledTransition {
     readonly exitTime?: number;
     readonly fixedDuration: boolean;
     readonly canInterrupt: boolean;
+    readonly easing: AnimationTransitionEasing;
     readonly priority: number;
     readonly conditions: readonly AnimationConditionDefinition[];
 }
@@ -60,6 +62,7 @@ export interface AnimationTransitionRuntime {
     previousTargetNormalizedTime: number;
     complete: boolean;
     canInterrupt?: boolean;
+    easing?: AnimationTransitionEasing;
 }
 
 export interface AnimationLayerRuntime {
@@ -71,6 +74,38 @@ export interface AnimationLayerRuntime {
 
 const normalizePriority = (value: number | undefined): number =>
     typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+const resolveTransitionEasing = (
+    value: AnimationTransitionEasing | undefined
+): AnimationTransitionEasing => {
+    switch (value) {
+        case undefined:
+        case 'linear':
+        case 'smoothStep':
+        case 'easeIn':
+        case 'easeOut':
+        case 'easeInOut':
+            return value ?? 'linear';
+        default:
+            throw new AnimationValidationError(`Unknown transition easing '${String(value)}'`);
+    }
+};
+
+const applyTransitionEasing = (easing: AnimationTransitionEasing | undefined, progress: number): number => {
+    const t = Math.max(0, Math.min(1, progress));
+    switch (easing) {
+        case 'smoothStep':
+            return t * t * (3 - 2 * t);
+        case 'easeIn':
+            return t * t;
+        case 'easeOut':
+            return 1 - (1 - t) * (1 - t);
+        case 'easeInOut':
+            return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        default:
+            return t;
+    }
+};
 
 const sortTransitions = (
     transitions: readonly AnimationCompiledTransition[]
@@ -224,6 +259,7 @@ export const compileStateMachine = (
                     : undefined,
             fixedDuration: transition.fixedDuration ?? false,
             canInterrupt: transition.canInterrupt ?? false,
+            easing: resolveTransitionEasing(transition.easing),
             priority: normalizePriority(transition.priority),
             conditions: Object.freeze([...(transition.conditions ?? [])]),
         });
@@ -295,7 +331,8 @@ export const crossFadeLayerState = (
     stateId: string,
     durationSeconds: number,
     offset: number = 0,
-    canInterrupt: boolean = false
+    canInterrupt: boolean = false,
+    easing: AnimationTransitionEasing = 'linear'
 ): void => {
     const stateIndex = machine.stateIndexById.get(stateId);
     if (stateIndex === undefined) {
@@ -313,6 +350,7 @@ export const crossFadeLayerState = (
         previousTargetNormalizedTime: offset,
         complete: false,
         canInterrupt,
+        easing,
     };
 };
 
@@ -387,6 +425,7 @@ export const updateLayerRuntime = (
             previousTargetNormalizedTime: interrupter.offset,
             complete: false,
             canInterrupt: interrupter.canInterrupt,
+            easing: interrupter.easing,
         };
         return;
     }
@@ -425,8 +464,44 @@ export const updateLayerRuntime = (
         previousTargetNormalizedTime: candidate.offset,
         complete: false,
         canInterrupt: candidate.canInterrupt,
+        easing: candidate.easing,
     };
 }
+
+export const syncLayerRuntime = (
+    machine: AnimationCompiledStateMachine,
+    target: AnimationLayerRuntime,
+    sourceMachine: AnimationCompiledStateMachine,
+    source: AnimationLayerRuntime
+): void => {
+    const sourceStateId = sourceMachine.states[source.currentStateIndex]!.id;
+    const targetIndex = machine.stateIndexById.get(sourceStateId);
+    if (targetIndex === undefined) {
+        return;
+    }
+
+    target.currentStateIndex = targetIndex;
+    target.currentNormalizedTime = source.currentNormalizedTime;
+    target.previousNormalizedTime = source.previousNormalizedTime;
+
+    if (!source.transition) {
+        target.transition = null;
+        return;
+    }
+
+    const sourceTargetId = sourceMachine.states[source.transition.targetStateIndex]!.id;
+    const targetTargetIndex = machine.stateIndexById.get(sourceTargetId);
+    if (targetTargetIndex === undefined) {
+        target.transition = null;
+        return;
+    }
+
+    target.transition = {
+        ...source.transition,
+        sourceStateIndex: targetIndex,
+        targetStateIndex: targetTargetIndex,
+    };
+};
 
 export const evaluateLayerRuntime = (
     machine: AnimationCompiledStateMachine,
@@ -462,7 +537,7 @@ export const evaluateLayerRuntime = (
         targetFrame,
         targetState.loop
     );
-    return blendFrame(out, sourceFrame, targetFrame, runtime.transition.progress);
+    return blendFrame(out, sourceFrame, targetFrame, applyTransitionEasing(runtime.transition.easing, runtime.transition.progress));
 };
 
 export const extractLayerRootDelta = (
@@ -528,17 +603,18 @@ export const extractLayerRootDelta = (
         context
     );
 
+    const transitionWeight = applyTransitionEasing(runtime.transition.easing, runtime.transition.progress);
     outTranslation[0] =
         sourceTranslation[0]! +
-        (targetTranslation[0]! - sourceTranslation[0]!) * runtime.transition.progress;
+        (targetTranslation[0]! - sourceTranslation[0]!) * transitionWeight;
     outTranslation[1] =
         sourceTranslation[1]! +
-        (targetTranslation[1]! - sourceTranslation[1]!) * runtime.transition.progress;
+        (targetTranslation[1]! - sourceTranslation[1]!) * transitionWeight;
     outTranslation[2] =
         sourceTranslation[2]! +
-        (targetTranslation[2]! - sourceTranslation[2]!) * runtime.transition.progress;
+        (targetTranslation[2]! - sourceTranslation[2]!) * transitionWeight;
     SoaQuatBuffer.quatIdentity(outRotation, 0);
-    SoaQuatBuffer.quatSlerp(outRotation, 0, sourceRotation, 0, targetRotation, 0, runtime.transition.progress);
+    SoaQuatBuffer.quatSlerp(outRotation, 0, sourceRotation, 0, targetRotation, 0, transitionWeight);
 }
 
 export const collectLayerEvents = (
@@ -571,8 +647,9 @@ export const collectLayerEvents = (
 
     const sourceState = machine.states[runtime.transition.sourceStateIndex]!;
     const targetState = machine.states[runtime.transition.targetStateIndex]!;
-    const sourceWeight = Math.max(0, 1 - runtime.transition.progress);
-    const targetWeight = Math.max(0, runtime.transition.progress);
+    const transitionWeight = applyTransitionEasing(runtime.transition.easing, runtime.transition.progress);
+    const sourceWeight = Math.max(0, 1 - transitionWeight);
+    const targetWeight = Math.max(0, transitionWeight);
 
     collectMotionEvents(
         sourceState.motion,
@@ -630,8 +707,9 @@ export const collectLayerClipActivities = (
 
     const sourceState = machine.states[runtime.transition.sourceStateIndex]!;
     const targetState = machine.states[runtime.transition.targetStateIndex]!;
-    const sourceWeight = Math.max(0, 1 - runtime.transition.progress);
-    const targetWeight = Math.max(0, runtime.transition.progress);
+    const transitionWeight = applyTransitionEasing(runtime.transition.easing, runtime.transition.progress);
+    const sourceWeight = Math.max(0, 1 - transitionWeight);
+    const targetWeight = Math.max(0, transitionWeight);
 
     collectMotionClipActivities(
         sourceState.motion,

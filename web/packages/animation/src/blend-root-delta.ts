@@ -88,7 +88,8 @@ function extractBlend2DRootDelta(
         resolveParameterScalar(parameters, motion.parameterY),
         motion.children,
         context,
-        depth
+        depth,
+        motion.triangles
     );
     const childScratch = context.blendScratch.acquireRootDeltaScratch(depth * 2);
     const referenceScratch = context.blendScratch.acquireRootDeltaScratch(depth * 2 + 1);
