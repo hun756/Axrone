@@ -12,6 +12,7 @@ export * from './ik';
 export * from './motion-matching';
 export * from './optimization';
 export * from './parameters';
+export * from './physics-pose';
 export * from './pose';
 export * from './pose-frame';
 export * from './pose-blend';
