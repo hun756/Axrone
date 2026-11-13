@@ -141,7 +141,7 @@ export class SpriteAnimator extends Component {
     }
 
     override awake(): void {
-        this._renderer = this.getComponent(SpriteRenderer);
+        this._renderer = this.getComponent(SpriteRenderer) ?? null;
         this._applyCurrentFrame();
     }
 
