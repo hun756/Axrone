@@ -6,6 +6,7 @@ import type {
     AnimationCompiledBlend2DMotion,
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
+    AnimationCompiledMotionMatchingMotion,
 } from './blend-types';
 import { BLEND_EPSILON } from './blend-types';
 import { dispatchMotion } from './blend-visitor';
@@ -18,6 +19,7 @@ import {
     resolveBlend1DAlpha,
     computeBlend2DWeights,
 } from './blend-helpers';
+import { resolveMotionMatchingDuration } from './motion-matching-node';
 
 function resolveClipDuration(motion: AnimationCompiledClipMotion, parameters: AnimationParameterStore): number {
     return motion.clip.duration / Math.max(Math.abs(motion.timeScale), BLEND_EPSILON);
@@ -90,6 +92,7 @@ const durationVisitor: BlendMotionVisitor<DurationContext, number> = {
     visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: DurationContext) => resolveBlend2DDuration(motion, ctx.parameters, ctx.depth, ctx.blendScratch.acquireBlend2DWeights(ctx.depth, motion.children.length)),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: DurationContext) => resolveDirectDuration(motion, ctx.parameters, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: DurationContext) => resolveAdditiveDuration(motion, ctx.parameters, ctx.depth),
+    visitMotionMatching: (motion: AnimationCompiledMotionMatchingMotion, ctx: DurationContext) => resolveMotionMatchingDuration(motion),
 };
 
 // One mutable context per visitor: the recursion reads every field it needs from

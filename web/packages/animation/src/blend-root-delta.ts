@@ -7,6 +7,7 @@ import type {
     AnimationCompiledBlend2DMotion,
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
+    AnimationCompiledMotionMatchingMotion,
 } from './blend-types';
 import { SoaQuatBuffer } from '@axrone/numeric';
 import { dispatchMotion } from './blend-visitor';
@@ -21,6 +22,7 @@ import {
     resolveBlend1DAlpha,
     resolveBlend2DWeightsWithContext,
 } from './blend-helpers';
+import { resolveMotionMatchingTime } from './motion-matching-node';
 
 function extractClipRootDelta(
     motion: AnimationCompiledClipMotion,
@@ -36,6 +38,31 @@ function extractClipRootDelta(
         rootBoneIndex,
         resolveMotionTime(prevTime * motion.timeScale, motion.clip.duration, motion.cycleOffset, loop),
         resolveMotionTime(currTime * motion.timeScale, motion.clip.duration, motion.cycleOffset, loop),
+        loop, rig, outTranslation, outRotation
+    );
+}
+
+function extractMotionMatchingRootDelta(
+    motion: AnimationCompiledMotionMatchingMotion,
+    prevTime: number,
+    currTime: number,
+    loop: boolean,
+    rootBoneIndex: number,
+    rig: AnimationRig,
+    outTranslation: Float32Array,
+    outRotation: Float32Array
+): void {
+    const clip = motion.state.clip;
+    if (clip === null) {
+        outTranslation.fill(0);
+        SoaQuatBuffer.quatIdentity(outRotation, 0);
+        return;
+    }
+
+    clip.extractBoneDelta(
+        rootBoneIndex,
+        resolveMotionTime(resolveMotionMatchingTime(motion, prevTime), clip.duration, 0, loop),
+        resolveMotionTime(resolveMotionMatchingTime(motion, currTime), clip.duration, 0, loop),
         loop, rig, outTranslation, outRotation
     );
 }
@@ -191,6 +218,7 @@ const rootDeltaVisitor: BlendMotionVisitor<RootDeltaContext, void> = {
     visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: RootDeltaContext) => extractBlend2DRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: RootDeltaContext) => extractDirectRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: RootDeltaContext) => extractAdditiveRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
+    visitMotionMatching: (motion: AnimationCompiledMotionMatchingMotion, ctx: RootDeltaContext) => extractMotionMatchingRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.outTranslation, ctx.outRotation),
 };
 
 let rootDeltaContext: RootDeltaContext | null = null;

@@ -8,6 +8,7 @@ import type {
     AnimationRigId,
     AnimationStateId,
 } from './brands';
+import type { AnimationMotionMatchDatabase } from './motion-matching';
 
 export type AnimationTrackPath = 'translation' | 'rotation' | 'scale' | 'weights';
 export type AnimationInterpolation = 'LINEAR' | 'STEP' | 'CUBICSPLINE';
@@ -201,6 +202,27 @@ export interface AnimationMotionClipDefinition {
     readonly cycleOffset?: number;
 }
 
+/**
+ * Motion-matching leaf: the runtime searches a pose database for the sample
+ * that best matches the query parameters, then samples the owning clip.
+ */
+export interface AnimationMotionMatchingDefinition {
+    readonly kind: 'motionMatching';
+    readonly database: AnimationMotionMatchDatabase;
+    /** Parameter holding the world-space trajectory X of the actor. */
+    readonly trajectoryXParameter: AnimationParameterId | string;
+    /** Parameter holding the world-space trajectory Z of the actor. */
+    readonly trajectoryZParameter: AnimationParameterId | string;
+    /** Parameter holding the world-space facing X of the actor. */
+    readonly facingXParameter: AnimationParameterId | string;
+    /** Parameter holding the world-space facing Z of the actor. */
+    readonly facingZParameter: AnimationParameterId | string;
+    /** Minimum seconds between two searches. */
+    readonly reselectIntervalSeconds?: number;
+    /** Score bonus for staying on the currently selected clip. */
+    readonly continuityBias?: number;
+}
+
 export interface AnimationBlendTreeChild1D {
     readonly threshold: number;
     readonly motion: AnimationMotionDefinition;
@@ -252,6 +274,7 @@ export type AnimationBlendTreeDefinition =
 
 export type AnimationMotionDefinition =
     | AnimationMotionClipDefinition
+    | AnimationMotionMatchingDefinition
     | AnimationBlendTreeDefinition;
 
 export type AnimationConditionDefinition =

@@ -6,6 +6,7 @@ import type {
     AnimationCompiledBlend2DMotion,
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
+    AnimationCompiledMotionMatchingMotion,
 } from './blend-types';
 import type { AnimationControllerClipActivity } from './types';
 import { dispatchMotion } from './blend-visitor';
@@ -20,6 +21,7 @@ import {
     resolveBlend1DAlpha,
     computeBlend2DWeights,
 } from './blend-helpers';
+import { resolveMotionMatchingTime } from './motion-matching-node';
 
 function collectClipActivity(
     motion: AnimationCompiledClipMotion,
@@ -33,6 +35,25 @@ function collectClipActivity(
 ): void {
     const time = resolveMotionTime(normalizedTime * motion.timeScale, motion.clip.duration, motion.cycleOffset, loop);
     out.push({ clipId: motion.clip.id, layerId, stateId, layerWeight: resolvedLayerWeight, motionWeight: resolvedMotionWeight, loop, time, normalizedTime: motion.clip.duration > 0 ? time / motion.clip.duration : 0 } satisfies AnimationControllerClipActivity);
+}
+
+function collectMotionMatchingActivity(
+    motion: AnimationCompiledMotionMatchingMotion,
+    normalizedTime: number,
+    loop: boolean,
+    resolvedLayerWeight: number,
+    resolvedMotionWeight: number,
+    layerId: string,
+    stateId: string,
+    out: AnimationControllerClipActivity[]
+): void {
+    const clip = motion.state.clip;
+    if (clip === null) {
+        return;
+    }
+
+    const time = resolveMotionTime(resolveMotionMatchingTime(motion, normalizedTime), clip.duration, 0, loop);
+    out.push({ clipId: clip.id, layerId, stateId, layerWeight: resolvedLayerWeight, motionWeight: resolvedMotionWeight, loop, time, normalizedTime: clip.duration > 0 ? time / clip.duration : 0 } satisfies AnimationControllerClipActivity);
 }
 
 function collectBlend1DActivity(
@@ -139,6 +160,7 @@ const activityVisitor: BlendMotionVisitor<ActivityContext, void> = {
     visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: ActivityContext) => collectBlend2DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth, ctx.blendScratch.acquireBlend2DWeights(ctx.depth, motion.children.length)),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: ActivityContext) => collectDirectActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: ActivityContext) => collectAdditiveActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
+    visitMotionMatching: (motion: AnimationCompiledMotionMatchingMotion, ctx: ActivityContext) => collectMotionMatchingActivity(motion, ctx.normalizedTime, ctx.loop, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out),
 };
 
 let activityContext: ActivityContext | null = null;

@@ -6,6 +6,7 @@ import type {
     AnimationCompiledBlend2DMotion,
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
+    AnimationCompiledMotionMatchingMotion,
 } from './blend-types';
 import type { AnimationControllerEvent } from './types';
 import { dispatchMotion } from './blend-visitor';
@@ -19,6 +20,7 @@ import {
     resolveBlend1DAlpha,
     computeBlend2DWeights,
 } from './blend-helpers';
+import { resolveMotionMatchingTime } from './motion-matching-node';
 
 function collectClipEvents(
     motion: AnimationCompiledClipMotion,
@@ -129,8 +131,34 @@ function collectAdditiveEvents(
     }
 }
 
-const _eventWeights: number[] = [];
+function collectMotionMatchingEvents(
+    motion: AnimationCompiledMotionMatchingMotion,
+    prevTime: number,
+    currTime: number,
+    loop: boolean,
+    resolvedLayerWeight: number,
+    resolvedMotionWeight: number,
+    layerId: string,
+    stateId: string,
+    out: AnimationControllerEvent[]
+): void {
+    const clip = motion.state.clip;
+    if (clip === null) {
+        return;
+    }
 
+    const hits = clip.collectEvents(
+        resolveMotionTime(resolveMotionMatchingTime(motion, prevTime), clip.duration, 0, loop),
+        resolveMotionTime(resolveMotionMatchingTime(motion, currTime), clip.duration, 0, loop),
+        loop
+    );
+    for (let index = 0; index < hits.length; index += 1) {
+        const event = hits[index]!;
+        out.push({ ...event, layerId, stateId, layerWeight: resolvedLayerWeight, motionWeight: resolvedMotionWeight } satisfies AnimationControllerEvent);
+    }
+}
+
+const _eventWeights: number[] = [];
 interface EventContext {
     previousNormalizedTime: number;
     currentNormalizedTime: number;
@@ -151,6 +179,7 @@ const eventVisitor: BlendMotionVisitor<EventContext, void> = {
     visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: EventContext) => collectBlend2DEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth, ctx.weights),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: EventContext) => collectDirectEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: EventContext) => collectAdditiveEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
+    visitMotionMatching: (motion: AnimationCompiledMotionMatchingMotion, ctx: EventContext) => collectMotionMatchingEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out),
 };
 
 let eventContext: EventContext | null = null;

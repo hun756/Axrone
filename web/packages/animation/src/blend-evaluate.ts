@@ -5,6 +5,7 @@ import type {
     AnimationCompiledBlend2DMotion,
     AnimationCompiledDirectMotion,
     AnimationCompiledAdditiveMotion,
+    AnimationCompiledMotionMatchingMotion,
 } from './blend-types';
 import { AnimationFrame } from './pose-frame';
 import { blendFrame as blendFrameOp, blendWeightedFrames as blendWeightedFramesOp, applyAdditiveFrame as applyAdditiveFrameOp } from './pose-blend';
@@ -20,6 +21,10 @@ import {
 } from './blend-helpers';
 import { dispatchMotion } from './blend-visitor';
 import type { BlendMotionVisitor } from './blend-types';
+import {
+    resolveMotionMatchingTime,
+    updateMotionMatchingSelection,
+} from './motion-matching-node';
 
 function evaluateClipMotion(
     motion: AnimationCompiledClipMotion,
@@ -31,6 +36,25 @@ function evaluateClipMotion(
     out.reset(context.rig, context.restFrame.curves.values);
     const time = resolveMotionTime(normalizedTime * motion.timeScale, motion.clip.duration, motion.cycleOffset, loop);
     return motion.clip.sampleTime(time, out);
+}
+
+function evaluateMotionMatchingMotion(
+    motion: AnimationCompiledMotionMatchingMotion,
+    normalizedTime: number,
+    context: AnimationMotionEvaluationContext,
+    out: AnimationFrame,
+    loop: boolean
+): AnimationFrame {
+    updateMotionMatchingSelection(motion, normalizedTime, context.parameters);
+    const clip = motion.state.clip;
+    if (clip === null) {
+        out.reset(context.rig, context.restFrame.curves.values);
+        return out;
+    }
+
+    out.reset(context.rig, context.restFrame.curves.values);
+    const time = resolveMotionTime(resolveMotionMatchingTime(motion, normalizedTime), clip.duration, 0, loop);
+    return clip.sampleTime(time, out);
 }
 
 function evaluateBlend1DMotion(
@@ -149,6 +173,7 @@ const evaluateVisitor: BlendMotionVisitor<EvaluateContext, AnimationFrame> = {
     visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: EvaluateContext) => evaluateBlend2DMotion(motion, ctx.normalizedTime, ctx.context, ctx.out, ctx.loop, ctx.depth),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: EvaluateContext) => evaluateDirectMotion(motion, ctx.normalizedTime, ctx.context, ctx.out, ctx.loop, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: EvaluateContext) => evaluateAdditiveMotion(motion, ctx.normalizedTime, ctx.context, ctx.out, ctx.loop, ctx.depth),
+    visitMotionMatching: (motion: AnimationCompiledMotionMatchingMotion, ctx: EvaluateContext) => evaluateMotionMatchingMotion(motion, ctx.normalizedTime, ctx.context, ctx.out, ctx.loop),
 };
 
 let evaluateContext: EvaluateContext | null = null;
