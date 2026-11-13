@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-09T20:59:20.348Z",
+  "generatedAt": "2026-11-13T18:30:22.330Z",
   "engineVersion": "0.0.1",
   "packages": [
     {
@@ -6205,6 +6205,8 @@
         "createSpriteAtlas",
         "createSpriteAtlasJsonImporter",
         "createTexturePackerSpriteAtlasImporter",
+        "createTilemapActor",
+        "createTilemapRenderComposition",
         "createVersionedAssetReference",
         "get2DSceneRuntimeProfile",
         "get3DSceneRuntimeProfile",
@@ -6384,6 +6386,7 @@
         "SpriteRendererRectState",
         "SpriteRendererSizeInput",
         "SpriteRendererVec2Input",
+        "TilemapActorConfig",
         "UIHostBillboardMode",
         "UIHostConfig",
         "UIHostRenderMode"
@@ -6503,6 +6506,47 @@
             "SpriteRendererRectState",
             "SpriteRendererSizeInput",
             "SpriteRendererVec2Input"
+          ]
+        },
+        {
+          "path": "@axrone/scene-2d/tilemap",
+          "exports": [
+            "SCENE_TILEMAP_BUILT_IN_MANIFEST",
+            "TILEMAP_SCENE_BUILT_IN_MANIFESTS",
+            "TilemapAgent",
+            "TilemapCollider2D",
+            "TilemapInstanceSource",
+            "TilemapRenderRuntime",
+            "TilemapRenderer",
+            "TilemapRuntime",
+            "TilemapRuntimeSet",
+            "createTilemapActor",
+            "createTilemapAgentSystem",
+            "createTilemapPagingPostSystem",
+            "createTilemapPagingPreSystem",
+            "createTilemapRenderComposition",
+            "createTilemapSceneRegistry",
+            "createTilemapSceneRegistryFromBuiltInManifests",
+            "createTilesetFrameTable",
+            "getTilemapSceneBuiltInRegistrySource",
+            "resolveTilemapCameraRect"
+          ],
+          "typeExports": [
+            "SceneTilemapRenderRuntimeLike",
+            "TilemapActorConfig",
+            "TilemapAgentConfig",
+            "TilemapCameraRectProvider",
+            "TilemapCollider2DConfig",
+            "TilemapInstanceSourceOptions",
+            "TilemapLayerOverride",
+            "TilemapLayerView",
+            "TilemapRenderParams",
+            "TilemapRenderRuntimeOptions",
+            "TilemapRendererConfig",
+            "TilemapRendererTint",
+            "TilemapRuntimeConfig",
+            "TilemapRuntimeSnapshot",
+            "TilesetFrameTable"
           ]
         },
         {
@@ -7467,6 +7511,7 @@
         "SCENE_RENDER_CAPABILITIES_ALL",
         "SCENE_RUNTIME_CORE_BUILT_IN_MANIFEST",
         "SCENE_RUNTIME_PROFILER_PHASES",
+        "SCENE_TILEMAP_BUILT_IN_MANIFEST",
         "SCENE_UI_BUILT_IN_MANIFEST",
         "SceneActorLifecycleRunner",
         "SceneActorRuntime",
@@ -7622,7 +7667,15 @@
         "SpriteAnimator",
         "SpriteMask",
         "SpriteRenderer",
+        "TILEMAP_SCENE_BUILT_IN_MANIFESTS",
         "Terrain",
+        "TilemapAgent",
+        "TilemapCollider2D",
+        "TilemapInstanceSource",
+        "TilemapRenderRuntime",
+        "TilemapRenderer",
+        "TilemapRuntime",
+        "TilemapRuntimeSet",
         "TrailRenderer",
         "UIHost",
         "bindAnimationStreamingBridge",
@@ -7656,6 +7709,12 @@
         "createSprite2DShaderDefinition",
         "createTerrainFoliageShaderDefinition",
         "createTerrainSplatShaderDefinition",
+        "createTilemapAgentSystem",
+        "createTilemapPagingPostSystem",
+        "createTilemapPagingPreSystem",
+        "createTilemapSceneRegistry",
+        "createTilemapSceneRegistryFromBuiltInManifests",
+        "createTilesetFrameTable",
         "decodeSceneValue",
         "encodeSceneValue",
         "generateSceneShaderVariantKey",
@@ -7668,6 +7727,7 @@
         "getMixedSceneRuntimeProfile",
         "getSceneComponentTypeName",
         "getSceneUIWidgetRefResolver",
+        "getTilemapSceneBuiltInRegistrySource",
         "normalizeSceneTextureBinding",
         "requireRegisteredComponent",
         "resolveCameraVerticalFieldOfViewRadians",
@@ -7685,6 +7745,7 @@
         "resolveSceneSkyLight",
         "resolveSceneSurface",
         "resolveSurfaceFeatures",
+        "resolveTilemapCameraRect",
         "selectSceneCamera",
         "setSceneUIWidgetRefResolver"
       ],
@@ -7899,6 +7960,7 @@
         "SceneTextureResource",
         "SceneTextureResourceHandle",
         "SceneTextureSourceDefinition",
+        "SceneTilemapRenderRuntimeLike",
         "SceneUIWidgetRef",
         "SceneUIWidgetRefResolver",
         "SceneUniformValue",
@@ -7920,6 +7982,19 @@
         "SpriteRendererSizeInput",
         "SpriteRendererVec2Input",
         "TerrainConfig",
+        "TilemapAgentConfig",
+        "TilemapCameraRectProvider",
+        "TilemapCollider2DConfig",
+        "TilemapInstanceSourceOptions",
+        "TilemapLayerOverride",
+        "TilemapLayerView",
+        "TilemapRenderParams",
+        "TilemapRenderRuntimeOptions",
+        "TilemapRendererConfig",
+        "TilemapRendererTint",
+        "TilemapRuntimeConfig",
+        "TilemapRuntimeSnapshot",
+        "TilesetFrameTable",
         "TrailAlignment",
         "TrailRendererConfig",
         "TrailRendererGradientStop",
@@ -8631,6 +8706,44 @@
             "SpriteRendererRectState",
             "SpriteRendererSizeInput",
             "SpriteRendererVec2Input"
+          ]
+        },
+        {
+          "path": "@axrone/scene-runtime/scene-tilemap",
+          "exports": [
+            "SCENE_TILEMAP_BUILT_IN_MANIFEST",
+            "TILEMAP_SCENE_BUILT_IN_MANIFESTS",
+            "TilemapAgent",
+            "TilemapCollider2D",
+            "TilemapInstanceSource",
+            "TilemapRenderRuntime",
+            "TilemapRenderer",
+            "TilemapRuntime",
+            "TilemapRuntimeSet",
+            "createTilemapAgentSystem",
+            "createTilemapPagingPostSystem",
+            "createTilemapPagingPreSystem",
+            "createTilemapSceneRegistry",
+            "createTilemapSceneRegistryFromBuiltInManifests",
+            "createTilesetFrameTable",
+            "getTilemapSceneBuiltInRegistrySource",
+            "resolveTilemapCameraRect"
+          ],
+          "typeExports": [
+            "SceneTilemapRenderRuntimeLike",
+            "TilemapAgentConfig",
+            "TilemapCameraRectProvider",
+            "TilemapCollider2DConfig",
+            "TilemapInstanceSourceOptions",
+            "TilemapLayerOverride",
+            "TilemapLayerView",
+            "TilemapRenderParams",
+            "TilemapRenderRuntimeOptions",
+            "TilemapRendererConfig",
+            "TilemapRendererTint",
+            "TilemapRuntimeConfig",
+            "TilemapRuntimeSnapshot",
+            "TilesetFrameTable"
           ]
         },
         {
@@ -11411,6 +11524,18 @@
     },
     {
       "kind": "Terrain",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "kind": "TilemapAgent",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "kind": "TilemapCollider2D",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "kind": "TilemapRenderer",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -19802,14 +19927,54 @@
       "kind": "const"
     },
     {
+      "name": "createTilemapActor",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "createTilemapAgentSystem",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "createTilemapAssetDefinition",
       "package": "@axrone/asset-tilemap",
       "kind": "const"
     },
     {
+      "name": "createTilemapPagingPostSystem",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "createTilemapPagingPreSystem",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "createTilemapRenderComposition",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "createTilemapSceneRegistry",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "createTilemapSceneRegistryFromBuiltInManifests",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "createTilesetDefinition",
       "package": "@axrone/asset-tilemap",
       "kind": "const"
+    },
+    {
+      "name": "createTilesetFrameTable",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "createTorus",
@@ -23114,6 +23279,11 @@
     {
       "name": "getTextureTypeForFormat",
       "package": "@axrone/render-webgl2",
+      "kind": "unknown"
+    },
+    {
+      "name": "getTilemapSceneBuiltInRegistrySource",
+      "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
     {
@@ -34287,6 +34457,11 @@
       "kind": "unknown"
     },
     {
+      "name": "resolveTilemapCameraRect",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "resolveUIFrame",
       "package": "@axrone/ui",
       "kind": "unknown"
@@ -34810,6 +34985,11 @@
       "name": "SCENE_RUNTIME_PROFILER_PHASES",
       "package": "@axrone/scene-runtime",
       "kind": "const"
+    },
+    {
+      "name": "SCENE_TILEMAP_BUILT_IN_MANIFEST",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "SCENE_UI_BUILT_IN_MANIFEST",
@@ -38172,6 +38352,11 @@
       "kind": "unknown"
     },
     {
+      "name": "SceneTilemapRenderRuntimeLike",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
       "name": "SceneUIOverlayHandle",
       "package": "@axrone/ui-webgl2",
       "kind": "interface"
@@ -40932,6 +41117,26 @@
       "kind": "const"
     },
     {
+      "name": "TILEMAP_SCENE_BUILT_IN_MANIFESTS",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapActorConfig",
+      "package": "@axrone/scene-2d",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapAgent",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapAgentConfig",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "TilemapAssetDefinition",
       "package": "@axrone/asset-tilemap",
       "kind": "interface"
@@ -40972,6 +41177,11 @@
       "kind": "class"
     },
     {
+      "name": "TilemapCameraRectProvider",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "tilemapChunkAssetKey",
       "package": "@axrone/asset-tilemap",
       "kind": "const"
@@ -40980,6 +41190,16 @@
       "name": "TilemapChunkAssetReference",
       "package": "@axrone/asset-tilemap",
       "kind": "interface"
+    },
+    {
+      "name": "TilemapCollider2D",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapCollider2DConfig",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "TilemapEngine",
@@ -41027,6 +41247,26 @@
       "kind": "type"
     },
     {
+      "name": "TilemapInstanceSource",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapInstanceSourceOptions",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapLayerOverride",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapLayerView",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
       "name": "TilemapMetricsCounters",
       "package": "@axrone/tilemap",
       "kind": "unknown"
@@ -41044,6 +41284,56 @@
     {
       "name": "TilemapProfilerSinkOptions",
       "package": "@axrone/tilemap",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRenderer",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRendererConfig",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRendererTint",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRenderParams",
+      "package": "@axrone/scene-runtime",
+      "kind": "interface"
+    },
+    {
+      "name": "TilemapRenderRuntime",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRenderRuntimeOptions",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRuntime",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRuntimeConfig",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRuntimeSet",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
+    },
+    {
+      "name": "TilemapRuntimeSnapshot",
+      "package": "@axrone/scene-runtime",
       "kind": "unknown"
     },
     {
@@ -41070,6 +41360,11 @@
       "name": "TilesetDefinition",
       "package": "@axrone/asset-tilemap",
       "kind": "interface"
+    },
+    {
+      "name": "TilesetFrameTable",
+      "package": "@axrone/scene-runtime",
+      "kind": "unknown"
     },
     {
       "name": "tilesetJsonCodec",
@@ -47417,16 +47712,64 @@
       "package": "@axrone/asset-tilemap"
     },
     {
+      "name": "createTilemapActor",
+      "kind": "const",
+      "code": "declare const createTilemapActor: <R extends ComponentRegistry = Record<string, never>>(scene: Scene2D<R>, config?: TilemapActorConfig) => _axrone_ecs_runtime.Actor<_axrone_ecs_runtime.World<R & _axrone_scene_runtime.SceneBuiltInRegistry>, readonly _axrone_ecs_runtime.ComponentType[]>;",
+      "package": "@axrone/scene-2d"
+    },
+    {
+      "name": "createTilemapAgentSystem",
+      "kind": "const",
+      "code": "declare const createTilemapAgentSystem: (_runtimes: TilemapRuntimeSet) => System<ComponentRegistry, typeof emptyQuery>;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "createTilemapAssetDefinition",
       "kind": "const",
       "code": "declare const createTilemapAssetDefinition: (input: unknown) => Result<TilemapAssetDefinition, TilemapAssetError>;",
       "package": "@axrone/asset-tilemap"
     },
     {
+      "name": "createTilemapPagingPostSystem",
+      "kind": "const",
+      "code": "declare const createTilemapPagingPostSystem: (runtimes: TilemapRuntimeSet, camera: TilemapCameraRectProvider) => System<ComponentRegistry, typeof emptyQuery>;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "createTilemapPagingPreSystem",
+      "kind": "const",
+      "code": "declare const createTilemapPagingPreSystem: (runtimes: TilemapRuntimeSet, camera: TilemapCameraRectProvider) => System<ComponentRegistry, typeof emptyQuery>;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "createTilemapRenderComposition",
+      "kind": "const",
+      "code": "declare const createTilemapRenderComposition: <R extends ComponentRegistry = Record<string, never>>(runtimes: () => readonly SceneTilemapRenderRuntimeLike[]) => SceneRuntimeComposition<R>;",
+      "package": "@axrone/scene-2d"
+    },
+    {
+      "name": "createTilemapSceneRegistry",
+      "kind": "const",
+      "code": "declare const createTilemapSceneRegistry: <R extends ComponentRegistry = Record<string, never>>(options?: SceneRegistryBuilderOptions<R>) => SceneRegistry<R>;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "createTilemapSceneRegistryFromBuiltInManifests",
+      "kind": "const",
+      "code": "declare const createTilemapSceneRegistryFromBuiltInManifests: <R extends ComponentRegistry = Record<string, never>>(options?: SceneManifestRegistryBuilderOptions<R>) => SceneRegistry<R>;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "createTilesetDefinition",
       "kind": "const",
       "code": "declare const createTilesetDefinition: (input: unknown) => Result<TilesetDefinition, TilemapAssetError>;",
       "package": "@axrone/asset-tilemap"
+    },
+    {
+      "name": "createTilesetFrameTable",
+      "kind": "const",
+      "code": "declare const createTilesetFrameTable: (tileset: TilesetDefinition) => TilesetFrameTable;",
+      "package": "@axrone/scene-runtime"
     },
     {
       "name": "createTorus",
@@ -49593,6 +49936,12 @@
       "kind": "const",
       "code": "declare const getTextureTypeForFormat: (gl: WebGL2RenderingContext, format: GLTextureFormat) => GLenum;",
       "package": "@axrone/render-webgl2"
+    },
+    {
+      "name": "getTilemapSceneBuiltInRegistrySource",
+      "kind": "const",
+      "code": "declare const getTilemapSceneBuiltInRegistrySource: () => SceneBuiltInRegistrySource;",
+      "package": "@axrone/scene-runtime"
     },
     {
       "name": "getToggleIsOn",
@@ -53933,6 +54282,12 @@
       "package": "@axrone/ui"
     },
     {
+      "name": "resolveTilemapCameraRect",
+      "kind": "const",
+      "code": "declare const resolveTilemapCameraRect: (cameraFrame: SceneCameraFrameState | null, viewportWidth: number, viewportHeight: number) => WorldRect | null;",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "resolveUIFrame",
       "kind": "const",
       "code": "declare const resolveUIFrame: <TPayload>(producer: UIFrameProducer<TPayload>, viewport: Readonly<SizeLike>) => UIFrame<TPayload> | null;",
@@ -54254,6 +54609,12 @@
       "name": "SCENE_RUNTIME_PROFILER_PHASES",
       "kind": "const",
       "code": "declare const SCENE_RUNTIME_PROFILER_PHASES: readonly [\"preUpdate\", \"fixedUpdate\", \"update\", \"postUpdate\", \"render\"];",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "SCENE_TILEMAP_BUILT_IN_MANIFEST",
+      "kind": "const",
+      "code": "declare const SCENE_TILEMAP_BUILT_IN_MANIFEST: SceneBuiltInManifest<readonly [\"TilemapRenderer\", \"TilemapCollider2D\", \"TilemapAgent\"]>;",
       "package": "@axrone/scene-runtime"
     },
     {
@@ -55877,6 +56238,18 @@
       "package": "@axrone/tilemap"
     },
     {
+      "name": "TILEMAP_SCENE_BUILT_IN_MANIFESTS",
+      "kind": "const",
+      "code": "declare const TILEMAP_SCENE_BUILT_IN_MANIFESTS: readonly SceneBuiltInManifest[];",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "TilemapAgent",
+      "kind": "class",
+      "code": "declare class TilemapAgent extends Component { constructor(config?: TilemapAgentConfig); get mapId(): string; set mapId(value: string); get speed(): number; set speed(value: number); get pathRequestId(): string | null; get moving(): boolean; get waypointCount(): number; get waypointIndex(): number;…",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "tilemapAssetError",
       "kind": "const",
       "code": "declare const tilemapAssetError: (code: TilemapAssetErrorCode, message: string, options?: TilemapAssetErrorOptions) => TilemapAssetError;",
@@ -55913,6 +56286,12 @@
       "package": "@axrone/asset-tilemap"
     },
     {
+      "name": "TilemapCollider2D",
+      "kind": "class",
+      "code": "declare class TilemapCollider2D extends Component { constructor(config?: TilemapCollider2DConfig); get mapId(): string; set mapId(value: string); get collisionLayer(): string; set collisionLayer(value: string); get oneWay(): boolean; set oneWay(value: boolean); serialize(): Record<string, unknown>;…",
+      "package": "@axrone/scene-runtime"
+    },
+    {
       "name": "TilemapEngine",
       "kind": "class",
       "code": "declare class TilemapEngine<L extends readonly LayerSpec[] = readonly LayerSpec[]> implements Disposable { constructor(options: TilemapEngineOptions<L>); get projection(): Readonly<ProjectionSpec>; get layers(): readonly Readonly<LayerSpec>[]; get chunkShift(): ValidChunkShift; get chunkSize(): num…",
@@ -55935,6 +56314,36 @@
       "kind": "class",
       "code": "declare class TilemapFault extends Error { constructor(message: string, code?: TilemapErrorCode, details?: Readonly<Record<string, unknown>>); … }",
       "package": "@axrone/tilemap"
+    },
+    {
+      "name": "TilemapInstanceSource",
+      "kind": "class",
+      "code": "declare class TilemapInstanceSource { constructor(options: TilemapInstanceSourceOptions); get drawCount(): number; get groupRanges(): Int32Array; get groupTextureOffsets(): Int32Array; get groupTextureIds(): readonly string[]; get groupCount(): number; get textureId(): string | null; get transformD…",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "TilemapRenderer",
+      "kind": "class",
+      "code": "declare class TilemapRenderer extends Component { constructor(config?: TilemapRendererConfig); get mapId(): string; set mapId(value: string); get tilesetId(): string; set tilesetId(value: string); get visibleLayers(): readonly string[] | null; set visibleLayers(value: readonly string[] | null); get…",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "TilemapRenderRuntime",
+      "kind": "class",
+      "code": "declare class TilemapRenderRuntime implements SceneTilemapRenderRuntimeLike { constructor(options: TilemapRenderRuntimeOptions); get diagnostic(): string | null; get source(): TilemapInstanceSource | null; prepare(cameraRect: WorldRect): TilemapInstanceSource | null; setTileset(tilesetId: string | …",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "TilemapRuntime",
+      "kind": "class",
+      "code": "declare class TilemapRuntime { get revision(): number; get layerOverrides(): readonly TilemapLayerOverride[]; get pendingChunkLoads(): number; setLayerOverride(name: string, override: Omit<TilemapLayerOverride, 'name'>): void; write(layer: string | number, gridX: number, gridY: number, word: Parame…",
+      "package": "@axrone/scene-runtime"
+    },
+    {
+      "name": "TilemapRuntimeSet",
+      "kind": "class",
+      "code": "declare class TilemapRuntimeSet { constructor(database: AssetDatabase<AssetTilemapSchema>); get size(): number; get(mapId: string): TilemapRuntime | undefined; require(mapId: string): TilemapRuntime; load(config: TilemapRuntimeConfig): Promise<Result<TilemapRuntime, TilemapAssetError>>; preUpdate(c…",
+      "package": "@axrone/scene-runtime"
     },
     {
       "name": "TILESET_FORMAT_VERSION",
