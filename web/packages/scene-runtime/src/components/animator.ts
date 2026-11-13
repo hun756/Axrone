@@ -102,6 +102,12 @@ export interface AnimatorConfig {
      * on a fixed step; the render phase then blends the previous and current poses.
      */
     readonly interpolateOnRender?: boolean;
+    /**
+     * Ordered joint ids of the skin this animator drives. When present the rig is
+     * built from this list instead of the scene node scan, so joint order and
+     * rest pose match the skin.
+     */
+    readonly skinJointNodeIds?: readonly string[];
     readonly updateMode?: AnimatorUpdateMode;
     readonly cullingMode?: AnimatorCullingMode;
 }
@@ -191,6 +197,7 @@ export class Animator extends Component {
     private _applyRootMotionEnabled: boolean;
     private _rootMotionConsumer: AnimatorRootMotionConsumer | null = null;
     private _interpolateOnRender: boolean = false;
+    private _skinJointNodeIds: readonly string[] = [];
     private _updateMode: AnimatorUpdateMode;
     private _cullingMode: AnimatorCullingMode;
     private readonly _tempVec3 = new Vec3();
@@ -209,6 +216,7 @@ export class Animator extends Component {
         this._applyRootMotionEnabled = config.applyRootMotion ?? true;
         this._rootMotionConsumer = config.rootMotionConsumer ?? null;
         this._interpolateOnRender = config.interpolateOnRender ?? false;
+        this._skinJointNodeIds = Object.freeze([...(config.skinJointNodeIds ?? [])]);
         this._updateMode = normalizeAnimatorUpdateMode(config.updateMode);
         this._cullingMode = normalizeAnimatorCullingMode(config.cullingMode);
         this._applyConfig(config);
@@ -626,6 +634,7 @@ export class Animator extends Component {
             time: this._time,
             applyRootMotion: this._applyRootMotionEnabled,
             interpolateOnRender: this._interpolateOnRender,
+            skinJointNodeIds: this._skinJointNodeIds,
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
         };
@@ -641,6 +650,7 @@ export class Animator extends Component {
             time: this._time,
             applyRootMotion: this._applyRootMotionEnabled,
             interpolateOnRender: this._interpolateOnRender,
+            skinJointNodeIds: this._skinJointNodeIds,
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
             profile: controller?.profile ?? null,
@@ -670,6 +680,9 @@ export class Animator extends Component {
             applyRootMotion: typeof data.applyRootMotion === 'boolean' ? data.applyRootMotion : undefined,
             interpolateOnRender:
                 typeof data.interpolateOnRender === 'boolean' ? data.interpolateOnRender : undefined,
+            skinJointNodeIds: Array.isArray(data.skinJointNodeIds)
+                ? data.skinJointNodeIds.filter((id: unknown): id is string => typeof id === 'string')
+                : undefined,
             updateMode: typeof data.updateMode === 'string' ? normalizeAnimatorUpdateMode(data.updateMode) : undefined,
             cullingMode:
                 typeof data.cullingMode === 'string'
@@ -781,28 +794,36 @@ export class Animator extends Component {
             return null;
         }
 
-        const bones = [...this._resolvedTargets.entries()]
-            .filter(([, target]) => Boolean(target.transform))
-            .map(([nodeId, target]) => ({
-                name: nodeId,
-                parent: target.parentNodeId ?? null,
-                translation: [
-                    target.transform!.position.x,
-                    target.transform!.position.y,
-                    target.transform!.position.z,
-                ] as const,
-                rotation: [
-                    target.transform!.rotation.x,
-                    target.transform!.rotation.y,
-                    target.transform!.rotation.z,
-                    target.transform!.rotation.w,
-                ] as const,
-                scale: [
-                    target.transform!.scale.x,
-                    target.transform!.scale.y,
-                    target.transform!.scale.z,
-                ] as const,
-            }));
+        const boneEntries =
+            this._skinJointNodeIds.length > 0
+                ? this._skinJointNodeIds.flatMap((nodeId) => {
+                      const target = this._resolvedTargets.get(nodeId);
+                      return target?.transform ? ([[nodeId, target]] as const) : [];
+                  })
+                : [...this._resolvedTargets.entries()].filter(([, target]) =>
+                      Boolean(target.transform)
+                  );
+
+        const bones = boneEntries.map(([nodeId, target]) => ({
+            name: nodeId,
+            parent: target.parentNodeId ?? null,
+            translation: [
+                target.transform!.position.x,
+                target.transform!.position.y,
+                target.transform!.position.z,
+            ] as const,
+            rotation: [
+                target.transform!.rotation.x,
+                target.transform!.rotation.y,
+                target.transform!.rotation.z,
+                target.transform!.rotation.w,
+            ] as const,
+            scale: [
+                target.transform!.scale.x,
+                target.transform!.scale.y,
+                target.transform!.scale.z,
+            ] as const,
+        }));
 
         if (bones.length === 0) {
             this._controller = null;
