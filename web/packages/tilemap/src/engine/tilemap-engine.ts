@@ -375,6 +375,43 @@ export class TilemapEngine<
         return ok(asChunkKey(this.#packChunk(chunkX, chunkY)));
     }
 
+    /** Exports one resident chunk, or `null` when it is not loaded. */
+    exportSnapshot(
+        chunkX: number,
+        chunkY: number
+    ): Result<ChunkSnapshot | null, TilemapError> {
+        if (!isChunkCoordinateInRange(chunkX, chunkY)) {
+            return err(this.#coordinateError(chunkX, chunkY));
+        }
+        return this.#store.exportSnapshot(
+            asChunkKey(this.#packChunk(chunkX, chunkY))
+        );
+    }
+
+    /** Applies a detached snapshot without going through the pager. */
+    importSnapshot(
+        snapshot: ChunkSnapshot,
+        options: { readonly force?: boolean } = {}
+    ): Result<void, TilemapError> {
+        if (this.#closed) return err(this.#closedError());
+        return this.#store.importSnapshot(snapshot, options);
+    }
+
+    /** Every dirty chunk as a detached snapshot, in eviction order. */
+    exportDirtySnapshots(): Result<readonly ChunkSnapshot[], TilemapError> {
+        if (this.#closed) return err(this.#closedError());
+        const snapshots: ChunkSnapshot[] = [];
+        for (const entry of this.#store.listDirty()) {
+            const snapshot = this.#store.exportSnapshot(entry.key);
+            if (snapshot.isErr()) {
+                return err(snapshot.expectErr('dirty snapshot'));
+            }
+            const value = snapshot.get();
+            if (value !== null) snapshots.push(value);
+        }
+        return ok(snapshots);
+    }
+
     /** Loads one chunk from the pager. `false` means it was already resident. */
     async loadChunk(
         chunkX: number,

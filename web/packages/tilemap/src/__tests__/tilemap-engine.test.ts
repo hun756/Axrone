@@ -477,3 +477,27 @@ describe('TilemapEngine lifecycle', () => {
         expect(TilemapErrorCode.OPERATION_ABORTED).toBe('OPERATION_ABORTED');
     });
 });
+    it('exports and reapplies detached chunk snapshots', () => {
+        const engine = createEngine();
+        engine.write('ground', 3, 4, word(9));
+        engine.write('walls', 3, 4, word(10));
+        const snapshot = engine.exportSnapshot(0, 0).get();
+        expect(snapshot).not.toBeNull();
+        expect(engine.exportDirtySnapshots().get()).toHaveLength(1);
+
+        const restored = createEngine();
+        expect(restored.importSnapshot(snapshot!).isOk()).toBe(true);
+        expect(restored.getTile('ground', 3, 4)).toBe(word(9));
+        expect(restored.getTile('walls', 3, 4)).toBe(word(10));
+        expect(restored.exportDirtySnapshots().get()).toHaveLength(0);
+        engine.dispose();
+        restored.dispose();
+    });
+
+    it('rejects snapshots with the wrong geometry on import', () => {
+        const engine = createEngine();
+        expect(
+            engine.importSnapshot(makeSnapshot(0, 0, 4)).isErr()
+        ).toBe(true);
+        engine.dispose();
+    });
