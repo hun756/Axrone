@@ -154,7 +154,11 @@ public sealed class AnimationController : IDisposable
 
         int sequence = ++_montageSequence;
         var machine = new StateMachineInstance(
-            [new AnimationState(new StateId($"montage:{clip.Id}:{sequence}"), new ClipMotionNode(clip) { IsLooping = options.Loop })],
+            [new AnimationState(new StateId($"montage:{clip.Id}:{sequence}"), new ClipMotionNode(clip) { IsLooping = options.Loop })
+            {
+                // The montage speed drives the clip, not just the fade timeline.
+                Speed = MathF.Max(MathF.Abs(options.Speed), 1e-3f),
+            }],
             Array.Empty<StateTransition>(),
             0);
         var layer = new AnimationLayer(new LayerId($"montage:{clip.Id}:{sequence}"), machine)

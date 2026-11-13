@@ -187,9 +187,41 @@ public class ControllerTests
     }
 
     [Fact]
-    public void Montage_EventsReachTheControllerSink()
+    public void Montage_SpeedDrivesClipPlayback()
     {
         Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = BaseController(rig, parameters);
+        AnimationMontage montage = controller.PlayMontage(
+            SlideClip(10.0f),
+            new AnimationMontageOptions(FadeInSeconds: 0.0f, Speed: 2.0f));
+
+        controller.Update(0.25f, new List<ClipEvent>(), out _, out _);
+
+        montage.NormalizedTime.Should().BeApproximately(0.5f, 1e-3f);
+        controller.CurrentFrame.ReadTranslations()[1].X.Should().BeApproximately(5.0f, 1e-3f);
+    }
+
+    [Fact]
+    public void Montage_LoopWrapsNormalizedTime()
+    {
+        Rig rig = TwoBone();
+        var parameters = new ParameterStore(Params());
+        using var controller = BaseController(rig, parameters);
+        AnimationMontage montage = controller.PlayMontage(
+            SlideClip(10.0f),
+            new AnimationMontageOptions(FadeInSeconds: 0.0f, Loop: true));
+
+        controller.Update(1.25f, new List<ClipEvent>(), out _, out _);
+
+        montage.Status.Should().Be(AnimationMontageStatus.Playing);
+        montage.NormalizedTime.Should().BeApproximately(0.25f, 1e-3f);
+        controller.ActiveMontageCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Montage_EventsReachTheControllerSink()
+    {        Rig rig = TwoBone();
         var parameters = new ParameterStore(Params());
         using var controller = BaseController(rig, parameters);
         var clip = new AnimationClip(

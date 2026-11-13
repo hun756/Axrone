@@ -69,10 +69,25 @@ public sealed class AnimationMontage
     /// <summary>Current lifecycle state.</summary>
     public AnimationMontageStatus Status { get; private set; }
 
-    /// <summary>Normalized playhead in the unit interval.</summary>
-    public float NormalizedTime => _durationSeconds <= AnimationConstants.SoaEpsilon
-        ? 1.0f
-        : FastMath.Clamp01(_elapsedSeconds / _durationSeconds);
+    /// <summary>Normalized playhead in the unit interval; wraps for a looping montage.</summary>
+    public float NormalizedTime
+    {
+        get
+        {
+            if (_durationSeconds <= AnimationConstants.SoaEpsilon)
+            {
+                return 1.0f;
+            }
+
+            float ratio = _elapsedSeconds / _durationSeconds;
+            if (_loop)
+            {
+                ratio -= MathF.Floor(ratio);
+            }
+
+            return FastMath.Clamp01(ratio);
+        }
+    }
 
     /// <summary>Current layer weight after fades.</summary>
     public float Weight => Layer.Weight;
