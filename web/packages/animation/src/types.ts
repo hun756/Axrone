@@ -14,7 +14,7 @@ export type AnimationInterpolation = 'LINEAR' | 'STEP' | 'CUBICSPLINE';
 export type AnimationLayerBlendMode = 'override' | 'additive';
 export type AnimationTransitionOperator = '<' | '<=' | '>' | '>=' | '==' | '!=';
 export type AnimationParameterKind = 'float' | 'int' | 'bool' | 'trigger';
-export type AnimationIkSolver = 'fabrik' | 'ccd';
+export type AnimationIkSolver = 'fabrik' | 'ccd' | 'twoBone' | 'aim';
 export type AnimationTransitionEasing = 'linear' | 'smoothStep' | 'easeIn' | 'easeOut' | 'easeInOut';
 export type AnimationRetargetTranslationMode = 'none' | 'absolute' | 'scaled';
 export type AnimationRetargetRotationMode = 'copy' | 'offset';
@@ -309,6 +309,20 @@ export interface AnimationIkJobDefinition {
     readonly maxIterations?: number;
     readonly weight?: number;
     readonly preserveTipRotation?: boolean;
+    /** World-space point the two-bone mid joint bends toward. */
+    readonly polePosition?: AnimationVector3Tuple;
+    /** Bone whose world position selects the two-bone bend plane. */
+    readonly poleBone?: string;
+    /** Minimum interior angle at the two-bone root, in degrees. */
+    readonly minBendDegrees?: number;
+    /** Maximum interior angle at the two-bone root, in degrees. */
+    readonly maxBendDegrees?: number;
+    /** Twist around the root-to-target axis, in degrees. */
+    readonly twistDegrees?: number;
+    /** World up used by the aim solver to remove roll. */
+    readonly aimUp?: AnimationVector3Tuple;
+    /** Maximum turn of the aim solver, in degrees. */
+    readonly maxAimAngleDegrees?: number;
 }
 
 export interface AnimationIkLayerDefinition {
