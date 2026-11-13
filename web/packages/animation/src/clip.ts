@@ -67,7 +67,7 @@ const findFrameIndex = (times: Float32Array, time: number): number => {
     }
     const lastIndex = times.length - 1;
     if (time >= times[lastIndex]!) {
-        return Math.max(0, lastIndex - 1);
+        return lastIndex;
     }
 
     let low = 0;
@@ -96,7 +96,7 @@ const resolveTrackStride = (track: AnimationTrackDefinition, times: Float32Array
     readonly sampleStride: number;
 } => {
     const keyframeCount = track.keyframeCount ?? times.length;
-    if (!Number.isInteger(keyframeCount) || keyframeCount <= 0) {
+    if (!Number.isInteger(keyframeCount) || keyframeCount < 0) {
         throw new AnimationValidationError(`Animation track '${track.target}/${track.path}' has invalid keyframeCount`);
     }
     if (times.length !== keyframeCount) {
@@ -104,6 +104,26 @@ const resolveTrackStride = (track: AnimationTrackDefinition, times: Float32Array
             `Animation track '${track.target}/${track.path}' times length does not match keyframeCount`
         );
     }
+
+    let previousTime = Number.NEGATIVE_INFINITY;
+    for (let timeIndex = 0; timeIndex < times.length; timeIndex += 1) {
+        const keyTime = times[timeIndex]!;
+        if (!Number.isFinite(keyTime) || keyTime < previousTime) {
+            throw new AnimationValidationError(
+                `Animation track '${track.target}/${track.path}' has a non-finite or descending key time at index ${timeIndex}`
+            );
+        }
+        previousTime = keyTime;
+    }
+
+    if (keyframeCount === 0) {
+        return {
+            keyframeCount: 0,
+            valueComponentCount: 0,
+            sampleStride: 0,
+        };
+    }
+
     const interpolation = resolveInterpolationMode(track.interpolation);
     const sampleStride =
         track.sampleStride ??
@@ -151,6 +171,9 @@ const sampleTrack = (
     out: Float32Array,
     outOffset: number
 ): void => {
+    if (track.keyframeCount === 0) {
+        return;
+    }
     const frameIndex = findFrameIndex(track.times, time);
     const nextIndex = Math.min(track.keyframeCount - 1, frameIndex + 1);
     const startTime = track.times[frameIndex] ?? 0;
@@ -560,6 +583,7 @@ export class AnimationClip {
         const rotationTracks: AnimationBoneTrack[] = [];
         const scaleTracks: AnimationBoneTrack[] = [];
         const curveTracks: AnimationCurveTrack[] = [];
+        const seenTracks = new Set<string>();
         let resolvedDuration =
             typeof definition.duration === 'number' && Number.isFinite(definition.duration)
                 ? definition.duration
@@ -578,6 +602,13 @@ export class AnimationClip {
                 times,
                 values
             );
+            const trackKey = `${track.path}:${track.target}`;
+            if (seenTracks.has(trackKey)) {
+                throw new AnimationValidationError(
+                    `Animation clip '${definition.id}' declares duplicate track '${track.target}/${track.path}'`
+                );
+            }
+            seenTracks.add(trackKey);
             resolvedDuration = Math.max(resolvedDuration, times[times.length - 1] ?? 0);
             const baseTrack = Object.freeze({
                 targetIndex: track.path === 'weights' ? -1 : this._rig.indexOfBone(track.target),
