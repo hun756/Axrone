@@ -173,16 +173,16 @@ function extractAdditiveRootDelta(
 }
 
 interface RootDeltaContext {
-    readonly previousNormalizedTime: number;
-    readonly currentNormalizedTime: number;
-    readonly loop: boolean;
-    readonly rootBoneIndex: number;
-    readonly rig: AnimationRig;
-    readonly parameters: AnimationParameterStore;
-    readonly outTranslation: Float32Array;
-    readonly outRotation: Float32Array;
-    readonly context: AnimationMotionEvaluationContext;
-    readonly depth: number;
+    previousNormalizedTime: number;
+    currentNormalizedTime: number;
+    loop: boolean;
+    rootBoneIndex: number;
+    rig: AnimationRig;
+    parameters: AnimationParameterStore;
+    outTranslation: Float32Array;
+    outRotation: Float32Array;
+    context: AnimationMotionEvaluationContext;
+    depth: number;
 }
 
 const rootDeltaVisitor: BlendMotionVisitor<RootDeltaContext, void> = {
@@ -192,6 +192,8 @@ const rootDeltaVisitor: BlendMotionVisitor<RootDeltaContext, void> = {
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: RootDeltaContext) => extractDirectRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: RootDeltaContext) => extractAdditiveRootDelta(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.rootBoneIndex, ctx.rig, ctx.parameters, ctx.outTranslation, ctx.outRotation, ctx.context, ctx.depth),
 };
+
+let rootDeltaContext: RootDeltaContext | null = null;
 
 export const extractMotionRootDelta = (
     motion: AnimationCompiledMotion,
@@ -206,16 +208,30 @@ export const extractMotionRootDelta = (
     context: AnimationMotionEvaluationContext,
     depth: number = 0
 ): void => {
-    dispatchMotion(motion, rootDeltaVisitor, {
-        previousNormalizedTime,
-        currentNormalizedTime,
-        loop,
-        rootBoneIndex,
-        rig,
-        parameters,
-        outTranslation,
-        outRotation,
-        context,
-        depth,
-    });
+    if (rootDeltaContext === null) {
+        rootDeltaContext = {
+            previousNormalizedTime,
+            currentNormalizedTime,
+            loop,
+            rootBoneIndex,
+            rig,
+            parameters,
+            outTranslation,
+            outRotation,
+            context,
+            depth,
+        };
+    } else {
+        rootDeltaContext.previousNormalizedTime = previousNormalizedTime;
+        rootDeltaContext.currentNormalizedTime = currentNormalizedTime;
+        rootDeltaContext.loop = loop;
+        rootDeltaContext.rootBoneIndex = rootBoneIndex;
+        rootDeltaContext.rig = rig;
+        rootDeltaContext.parameters = parameters;
+        rootDeltaContext.outTranslation = outTranslation;
+        rootDeltaContext.outRotation = outRotation;
+        rootDeltaContext.context = context;
+        rootDeltaContext.depth = depth;
+    }
+    dispatchMotion(motion, rootDeltaVisitor, rootDeltaContext);
 };

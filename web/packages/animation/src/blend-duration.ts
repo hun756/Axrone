@@ -1,4 +1,4 @@
-import type { AnimationParameterStore } from './parameters';
+import { AnimationParameterStore } from './parameters';
 import type {
     AnimationCompiledMotion,
     AnimationCompiledClipMotion,
@@ -79,9 +79,9 @@ function resolveAdditiveDuration(motion: AnimationCompiledAdditiveMotion, parame
 const _durationScratch = new BlendScratchContext();
 
 interface DurationContext {
-    readonly parameters: AnimationParameterStore;
-    readonly depth: number;
-    readonly blendScratch: BlendScratchContext;
+    parameters: AnimationParameterStore;
+    depth: number;
+    blendScratch: BlendScratchContext;
 }
 
 const durationVisitor: BlendMotionVisitor<DurationContext, number> = {
@@ -92,8 +92,21 @@ const durationVisitor: BlendMotionVisitor<DurationContext, number> = {
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: DurationContext) => resolveAdditiveDuration(motion, ctx.parameters, ctx.depth),
 };
 
+// One mutable context per visitor: the recursion reads every field it needs from
+// the call arguments before descending, so a shared context stays allocation
+// free without the per-node object literals.
+const durationContext: DurationContext = {
+    parameters: new AnimationParameterStore([]),
+    depth: 0,
+    blendScratch: _durationScratch,
+};
+
 export const resolveMotionDuration = (
     motion: AnimationCompiledMotion,
     parameters: AnimationParameterStore,
     depth: number = 0
-): number => dispatchMotion(motion, durationVisitor, { parameters, depth, blendScratch: _durationScratch });
+): number => {
+    durationContext.parameters = parameters;
+    durationContext.depth = depth;
+    return dispatchMotion(motion, durationVisitor, durationContext);
+};

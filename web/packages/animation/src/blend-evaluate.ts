@@ -136,11 +136,11 @@ function evaluateAdditiveMotion(
 }
 
 interface EvaluateContext {
-    readonly normalizedTime: number;
-    readonly context: AnimationMotionEvaluationContext;
-    readonly out: AnimationFrame;
-    readonly loop: boolean;
-    readonly depth: number;
+    normalizedTime: number;
+    context: AnimationMotionEvaluationContext;
+    out: AnimationFrame;
+    loop: boolean;
+    depth: number;
 }
 
 const evaluateVisitor: BlendMotionVisitor<EvaluateContext, AnimationFrame> = {
@@ -151,6 +151,8 @@ const evaluateVisitor: BlendMotionVisitor<EvaluateContext, AnimationFrame> = {
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: EvaluateContext) => evaluateAdditiveMotion(motion, ctx.normalizedTime, ctx.context, ctx.out, ctx.loop, ctx.depth),
 };
 
+let evaluateContext: EvaluateContext | null = null;
+
 export const evaluateMotion = (
     motion: AnimationCompiledMotion,
     normalizedTime: number,
@@ -158,4 +160,15 @@ export const evaluateMotion = (
     out: AnimationFrame,
     loop: boolean = true,
     depth: number = 0
-): AnimationFrame => dispatchMotion(motion, evaluateVisitor, { normalizedTime, context, out, loop, depth });
+): AnimationFrame => {
+    if (evaluateContext === null) {
+        evaluateContext = { normalizedTime, context, out, loop, depth };
+    } else {
+        evaluateContext.normalizedTime = normalizedTime;
+        evaluateContext.context = context;
+        evaluateContext.out = out;
+        evaluateContext.loop = loop;
+        evaluateContext.depth = depth;
+    }
+    return dispatchMotion(motion, evaluateVisitor, evaluateContext);
+};

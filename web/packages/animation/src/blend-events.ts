@@ -132,17 +132,17 @@ function collectAdditiveEvents(
 const _eventWeights: number[] = [];
 
 interface EventContext {
-    readonly previousNormalizedTime: number;
-    readonly currentNormalizedTime: number;
-    readonly loop: boolean;
-    readonly parameters: AnimationParameterStore;
-    readonly resolvedLayerWeight: number;
-    readonly resolvedMotionWeight: number;
-    readonly layerId: string;
-    readonly stateId: string;
-    readonly out: AnimationControllerEvent[];
-    readonly depth: number;
-    readonly weights: number[];
+    previousNormalizedTime: number;
+    currentNormalizedTime: number;
+    loop: boolean;
+    parameters: AnimationParameterStore;
+    resolvedLayerWeight: number;
+    resolvedMotionWeight: number;
+    layerId: string;
+    stateId: string;
+    out: AnimationControllerEvent[];
+    depth: number;
+    weights: number[];
 }
 
 const eventVisitor: BlendMotionVisitor<EventContext, void> = {
@@ -152,6 +152,8 @@ const eventVisitor: BlendMotionVisitor<EventContext, void> = {
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: EventContext) => collectDirectEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: EventContext) => collectAdditiveEvents(motion, ctx.previousNormalizedTime, ctx.currentNormalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
 };
+
+let eventContext: EventContext | null = null;
 
 export const collectMotionEvents = (
     motion: AnimationCompiledMotion,
@@ -171,18 +173,32 @@ export const collectMotionEvents = (
     if (resolvedLayerWeight <= 0 || resolvedMotionWeight <= 0) {
         return out;
     }
-    dispatchMotion(motion, eventVisitor, {
-        previousNormalizedTime,
-        currentNormalizedTime,
-        loop,
-        parameters,
-        resolvedLayerWeight,
-        resolvedMotionWeight,
-        layerId,
-        stateId,
-        out,
-        depth,
-        weights: _eventWeights,
-    });
+    if (eventContext === null) {
+        eventContext = {
+            previousNormalizedTime,
+            currentNormalizedTime,
+            loop,
+            parameters,
+            resolvedLayerWeight,
+            resolvedMotionWeight,
+            layerId,
+            stateId,
+            out,
+            depth,
+            weights: _eventWeights,
+        };
+    } else {
+        eventContext.previousNormalizedTime = previousNormalizedTime;
+        eventContext.currentNormalizedTime = currentNormalizedTime;
+        eventContext.loop = loop;
+        eventContext.parameters = parameters;
+        eventContext.resolvedLayerWeight = resolvedLayerWeight;
+        eventContext.resolvedMotionWeight = resolvedMotionWeight;
+        eventContext.layerId = layerId;
+        eventContext.stateId = stateId;
+        eventContext.out = out;
+        eventContext.depth = depth;
+    }
+    dispatchMotion(motion, eventVisitor, eventContext);
     return out;
 };

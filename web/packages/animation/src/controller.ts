@@ -58,6 +58,33 @@ export interface AnimationControllerUpdateResult {
     readonly profile: AnimationControllerProfile;
 }
 
+interface MutableUpdateResult {
+    frame: AnimationFrame;
+    rootMotion: AnimationRootMotionDelta;
+    events: readonly AnimationControllerEvent[];
+    activeClips: readonly AnimationControllerClipActivity[];
+    profile: AnimationControllerProfile;
+}
+
+interface MutableLayerProfile {
+    layerId: string;
+    stateId: string;
+    normalizedTime: number;
+    weight: number;
+    transitioning: boolean;
+    transitionProgress?: number;
+}
+
+interface MutableProfile {
+    evaluationTimeMs: number;
+    sampledTrackCount: number;
+    activeClipCount: number;
+    emittedEventCount: number;
+    rootMotionTranslationMagnitude: number;
+    rootMotionRotationW: number;
+    activeLayers: MutableLayerProfile[];
+}
+
 const now = (): number =>
     typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
@@ -122,7 +149,14 @@ export class AnimationController<
     private readonly _activeClipScratch: AnimationControllerClipActivity[] = [];
     private _events: readonly AnimationControllerEvent[] = [];
     private _activeClips: readonly AnimationControllerClipActivity[] = [];
-    private _profile: AnimationControllerProfile = {
+    private readonly _rootMotionTranslationTuple: [number, number, number] = [0, 0, 0];
+    private readonly _rootMotionRotationTuple: [number, number, number, number] = [0, 0, 0, 1];
+    private readonly _rootMotionDelta: AnimationRootMotionDelta = {
+        translation: this._rootMotionTranslationTuple,
+        rotation: this._rootMotionRotationTuple,
+    };
+    private readonly _activeLayerProfiles: MutableLayerProfile[] = [];
+    private readonly _profileState: MutableProfile = {
         evaluationTimeMs: 0,
         sampledTrackCount: 0,
         activeClipCount: 0,
@@ -131,6 +165,8 @@ export class AnimationController<
         rootMotionRotationW: 1,
         activeLayers: [],
     };
+    private _updateResult: MutableUpdateResult | null = null;
+    private readonly _transitionLabelCache = new Map<string, Map<string, string>>();
 
     constructor(definition: AnimationControllerDefinition<TParameters>) {
         this.rig = new AnimationRig(definition.rig);
@@ -208,19 +244,16 @@ export class AnimationController<
     }
 
     get rootMotion(): AnimationRootMotionDelta {
-        return {
-            translation: [
-                this._rootMotionTranslation[0],
-                this._rootMotionTranslation[1],
-                this._rootMotionTranslation[2],
-            ],
-            rotation: [
-                this._rootMotionRotation[0],
-                this._rootMotionRotation[1],
-                this._rootMotionRotation[2],
-                this._rootMotionRotation[3],
-            ],
-        };
+        const translation = this._rootMotionTranslationTuple;
+        translation[0] = this._rootMotionTranslation[0]!;
+        translation[1] = this._rootMotionTranslation[1]!;
+        translation[2] = this._rootMotionTranslation[2]!;
+        const rotation = this._rootMotionRotationTuple;
+        rotation[0] = this._rootMotionRotation[0]!;
+        rotation[1] = this._rootMotionRotation[1]!;
+        rotation[2] = this._rootMotionRotation[2]!;
+        rotation[3] = this._rootMotionRotation[3]!;
+        return this._rootMotionDelta;
     }
 
     get events(): readonly AnimationControllerEvent[] {
@@ -232,7 +265,7 @@ export class AnimationController<
     }
 
     get profile(): AnimationControllerProfile {
-        return this._profile;
+        return this._profileState;
     }
 
     update(deltaSeconds: number): AnimationControllerUpdateResult {
@@ -261,13 +294,23 @@ export class AnimationController<
             commitLayerRuntime(this._layerRuntimes[layerIndex]!);
         }
         this._updateProfile(now() - startTime);
-        return {
-            frame: this.currentFrame,
-            rootMotion: this.rootMotion,
-            events: this.events,
-            activeClips: this.activeClips,
-            profile: this.profile,
-        };
+        const rootMotion = this.rootMotion;
+        if (this._updateResult === null) {
+            this._updateResult = {
+                frame: this.currentFrame,
+                rootMotion,
+                events: this.events,
+                activeClips: this.activeClips,
+                profile: this.profile,
+            };
+        } else {
+            this._updateResult.frame = this.currentFrame;
+            this._updateResult.rootMotion = rootMotion;
+            this._updateResult.events = this.events;
+            this._updateResult.activeClips = this.activeClips;
+            this._updateResult.profile = this.profile;
+        }
+        return this._updateResult;
     }
 
     evaluate(): AnimationFrame {
@@ -501,32 +544,39 @@ export class AnimationController<
     }
 
     private _updateProfile(evaluationTimeMs: number): void {
-        const activeLayers: AnimationControllerLayerProfile[] = [];
+        const profiles = this._activeLayerProfiles;
+        while (profiles.length < this._layers.length) {
+            profiles.push({
+                layerId: '',
+                stateId: '',
+                normalizedTime: 0,
+                weight: 0,
+                transitioning: false,
+            });
+        }
         for (let index = 0; index < this._layers.length; index += 1) {
             const layer = this._layers[index]!;
             const runtime = this._layerRuntimes[index]!;
+            const profile = profiles[index]!;
             if (!runtime.transition) {
                 const state = layer.machine.states[runtime.currentStateIndex]!;
-                activeLayers.push({
-                    layerId: layer.id,
-                    stateId: state.id,
-                    normalizedTime: runtime.currentNormalizedTime,
-                    weight: this._layerWeights[index] ?? 1,
-                    transitioning: false,
-                });
+                profile.layerId = layer.id;
+                profile.stateId = state.id;
+                profile.normalizedTime = runtime.currentNormalizedTime;
+                profile.weight = this._layerWeights[index] ?? 1;
+                profile.transitioning = false;
+                delete profile.transitionProgress;
                 continue;
             }
 
             const sourceState = layer.machine.states[runtime.transition.sourceStateIndex]!;
             const targetState = layer.machine.states[runtime.transition.targetStateIndex]!;
-            activeLayers.push({
-                layerId: layer.id,
-                stateId: `${sourceState.id}->${targetState.id}`,
-                normalizedTime: runtime.transition.targetNormalizedTime,
-                weight: this._layerWeights[index] ?? 1,
-                transitioning: true,
-                transitionProgress: runtime.transition.progress,
-            });
+            profile.layerId = layer.id;
+            profile.stateId = this._transitionLabel(sourceState.id, targetState.id);
+            profile.normalizedTime = runtime.transition.targetNormalizedTime;
+            profile.weight = this._layerWeights[index] ?? 1;
+            profile.transitioning = true;
+            profile.transitionProgress = runtime.transition.progress;
         }
 
         const sampledTrackCount = this._layers.reduce((sum, layer, index) => {
@@ -544,18 +594,30 @@ export class AnimationController<
             );
         }, 0);
 
-        this._profile = {
-            evaluationTimeMs,
-            sampledTrackCount,
-            activeClipCount: this._activeClips.length,
-            emittedEventCount: this._events.length,
-            rootMotionTranslationMagnitude: Math.hypot(
-                this._rootMotionTranslation[0],
-                this._rootMotionTranslation[1],
-                this._rootMotionTranslation[2]
-            ),
-            rootMotionRotationW: this._rootMotionRotation[3] ?? 1,
-            activeLayers,
-        };
+        this._profileState.evaluationTimeMs = evaluationTimeMs;
+        this._profileState.sampledTrackCount = sampledTrackCount;
+        this._profileState.activeClipCount = this._activeClips.length;
+        this._profileState.emittedEventCount = this._events.length;
+        this._profileState.rootMotionTranslationMagnitude = Math.hypot(
+            this._rootMotionTranslation[0],
+            this._rootMotionTranslation[1],
+            this._rootMotionTranslation[2]
+        );
+        this._profileState.rootMotionRotationW = this._rootMotionRotation[3] ?? 1;
+        this._profileState.activeLayers = profiles;
+    }
+
+    private _transitionLabel(sourceId: string, targetId: string): string {
+        let inner = this._transitionLabelCache.get(sourceId);
+        if (inner === undefined) {
+            inner = new Map<string, string>();
+            this._transitionLabelCache.set(sourceId, inner);
+        }
+        let label = inner.get(targetId);
+        if (label === undefined) {
+            label = `${sourceId}->${targetId}`;
+            inner.set(targetId, label);
+        }
+        return label;
     }
 }

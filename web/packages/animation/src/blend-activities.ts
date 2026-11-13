@@ -121,16 +121,16 @@ function collectAdditiveActivity(
 const _activityScratch = new BlendScratchContext();
 
 interface ActivityContext {
-    readonly normalizedTime: number;
-    readonly loop: boolean;
-    readonly parameters: AnimationParameterStore;
-    readonly resolvedLayerWeight: number;
-    readonly resolvedMotionWeight: number;
-    readonly layerId: string;
-    readonly stateId: string;
-    readonly out: AnimationControllerClipActivity[];
-    readonly depth: number;
-    readonly blendScratch: BlendScratchContext;
+    normalizedTime: number;
+    loop: boolean;
+    parameters: AnimationParameterStore;
+    resolvedLayerWeight: number;
+    resolvedMotionWeight: number;
+    layerId: string;
+    stateId: string;
+    out: AnimationControllerClipActivity[];
+    depth: number;
+    blendScratch: BlendScratchContext;
 }
 
 const activityVisitor: BlendMotionVisitor<ActivityContext, void> = {
@@ -140,6 +140,8 @@ const activityVisitor: BlendMotionVisitor<ActivityContext, void> = {
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: ActivityContext) => collectDirectActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: ActivityContext) => collectAdditiveActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
 };
+
+let activityContext: ActivityContext | null = null;
 
 export const collectMotionClipActivities = (
     motion: AnimationCompiledMotion,
@@ -158,17 +160,30 @@ export const collectMotionClipActivities = (
     if (resolvedLayerWeight <= 0 || resolvedMotionWeight <= 0) {
         return out;
     }
-    dispatchMotion(motion, activityVisitor, {
-        normalizedTime,
-        loop,
-        parameters,
-        resolvedLayerWeight,
-        resolvedMotionWeight,
-        layerId,
-        stateId,
-        out,
-        depth,
-        blendScratch: _activityScratch,
-    });
+    if (activityContext === null) {
+        activityContext = {
+            normalizedTime,
+            loop,
+            parameters,
+            resolvedLayerWeight,
+            resolvedMotionWeight,
+            layerId,
+            stateId,
+            out,
+            depth,
+            blendScratch: _activityScratch,
+        };
+    } else {
+        activityContext.normalizedTime = normalizedTime;
+        activityContext.loop = loop;
+        activityContext.parameters = parameters;
+        activityContext.resolvedLayerWeight = resolvedLayerWeight;
+        activityContext.resolvedMotionWeight = resolvedMotionWeight;
+        activityContext.layerId = layerId;
+        activityContext.stateId = stateId;
+        activityContext.out = out;
+        activityContext.depth = depth;
+    }
+    dispatchMotion(motion, activityVisitor, activityContext);
     return out;
 };
