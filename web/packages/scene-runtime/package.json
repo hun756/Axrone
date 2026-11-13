@@ -138,6 +138,11 @@
             "types": "./dist/scene-2d-lean-composition.d.ts",
             "import": "./dist/scene-2d-lean-composition.mjs",
             "require": "./dist/scene-2d-lean-composition.js"
+        },
+        "./scene-tilemap": {
+            "types": "./dist/scene-tilemap.d.ts",
+            "import": "./dist/scene-tilemap.mjs",
+            "require": "./dist/scene-tilemap.js"
         }
     },
     "scripts": {
