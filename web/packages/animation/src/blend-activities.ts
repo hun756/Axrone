@@ -9,6 +9,7 @@ import type {
 } from './blend-types';
 import type { AnimationControllerClipActivity } from './types';
 import { dispatchMotion } from './blend-visitor';
+import { BlendScratchContext } from './blend-scratch';
 import type { BlendMotionVisitor } from './blend-types';
 import {
     resolveParameterScalar,
@@ -70,7 +71,7 @@ function collectBlend2DActivity(
     depth: number,
     weights: number[]
 ): void {
-    computeBlend2DWeights(resolveParameterScalar(parameters, motion.parameterX), resolveParameterScalar(parameters, motion.parameterY), motion.children, weights);
+    computeBlend2DWeights(resolveParameterScalar(parameters, motion.parameterX), resolveParameterScalar(parameters, motion.parameterY), motion.children, weights, motion.triangles);
     for (let index = 0; index < motion.children.length; index += 1) {
         const childWeight = weights[index] ?? 0;
         if (childWeight <= 0) continue;
@@ -117,7 +118,7 @@ function collectAdditiveActivity(
     }
 }
 
-const _activityWeights: number[] = [];
+const _activityScratch = new BlendScratchContext();
 
 interface ActivityContext {
     readonly normalizedTime: number;
@@ -129,13 +130,13 @@ interface ActivityContext {
     readonly stateId: string;
     readonly out: AnimationControllerClipActivity[];
     readonly depth: number;
-    readonly weights: number[];
+    readonly blendScratch: BlendScratchContext;
 }
 
 const activityVisitor: BlendMotionVisitor<ActivityContext, void> = {
     visitClip: (motion: AnimationCompiledClipMotion, ctx: ActivityContext) => collectClipActivity(motion, ctx.normalizedTime, ctx.loop, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out),
     visitBlend1d: (motion: AnimationCompiledBlend1DMotion, ctx: ActivityContext) => collectBlend1DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
-    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: ActivityContext) => collectBlend2DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth, ctx.weights),
+    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: ActivityContext) => collectBlend2DActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth, ctx.blendScratch.acquireBlend2DWeights(ctx.depth, motion.children.length)),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: ActivityContext) => collectDirectActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: ActivityContext) => collectAdditiveActivity(motion, ctx.normalizedTime, ctx.loop, ctx.parameters, ctx.resolvedLayerWeight, ctx.resolvedMotionWeight, ctx.layerId, ctx.stateId, ctx.out, ctx.depth),
 };
@@ -167,7 +168,7 @@ export const collectMotionClipActivities = (
         stateId,
         out,
         depth,
-        weights: _activityWeights,
+        blendScratch: _activityScratch,
     });
     return out;
 };

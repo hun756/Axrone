@@ -9,6 +9,7 @@ import type {
 } from './blend-types';
 import { BLEND_EPSILON } from './blend-types';
 import { dispatchMotion } from './blend-visitor';
+import { BlendScratchContext } from './blend-scratch';
 import type { BlendMotionVisitor } from './blend-types';
 import {
     resolveParameterScalar,
@@ -35,16 +36,23 @@ function resolveBlend1DDuration(motion: AnimationCompiledBlend1DMotion, paramete
     );
 }
 
-function resolveBlend2DDuration(motion: AnimationCompiledBlend2DMotion, parameters: AnimationParameterStore, depth: number, weights: number[]): number {
+function resolveBlend2DDuration(
+    motion: AnimationCompiledBlend2DMotion,
+    parameters: AnimationParameterStore,
+    depth: number,
+    weights: number[]
+): number {
     computeBlend2DWeights(
         resolveParameterScalar(parameters, motion.parameterX),
         resolveParameterScalar(parameters, motion.parameterY),
         motion.children,
-        weights
+        weights,
+        motion.triangles
     );
     let total = 0;
     for (let index = 0; index < motion.children.length; index += 1) {
-        total += resolveMotionDuration(motion.children[index]!.motion, parameters, depth + 1) * weights[index]!;
+        const childWeight = weights[index] ?? 0;
+        total += resolveMotionDuration(motion.children[index]!.motion, parameters, depth + 1) * childWeight;
     }
     return total;
 }
@@ -68,18 +76,18 @@ function resolveAdditiveDuration(motion: AnimationCompiledAdditiveMotion, parame
     return resolveMotionDuration(motion.base, parameters, depth + 1);
 }
 
-const _durationWeights: number[] = [];
+const _durationScratch = new BlendScratchContext();
 
 interface DurationContext {
     readonly parameters: AnimationParameterStore;
     readonly depth: number;
-    readonly weights: number[];
+    readonly blendScratch: BlendScratchContext;
 }
 
 const durationVisitor: BlendMotionVisitor<DurationContext, number> = {
     visitClip: (motion: AnimationCompiledClipMotion, ctx: DurationContext) => resolveClipDuration(motion, ctx.parameters),
     visitBlend1d: (motion: AnimationCompiledBlend1DMotion, ctx: DurationContext) => resolveBlend1DDuration(motion, ctx.parameters, ctx.depth),
-    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: DurationContext) => resolveBlend2DDuration(motion, ctx.parameters, ctx.depth, ctx.weights),
+    visitBlend2d: (motion: AnimationCompiledBlend2DMotion, ctx: DurationContext) => resolveBlend2DDuration(motion, ctx.parameters, ctx.depth, ctx.blendScratch.acquireBlend2DWeights(ctx.depth, motion.children.length)),
     visitDirect: (motion: AnimationCompiledDirectMotion, ctx: DurationContext) => resolveDirectDuration(motion, ctx.parameters, ctx.depth),
     visitAdditive: (motion: AnimationCompiledAdditiveMotion, ctx: DurationContext) => resolveAdditiveDuration(motion, ctx.parameters, ctx.depth),
 };
@@ -88,4 +96,4 @@ export const resolveMotionDuration = (
     motion: AnimationCompiledMotion,
     parameters: AnimationParameterStore,
     depth: number = 0
-): number => dispatchMotion(motion, durationVisitor, { parameters, depth, weights: _durationWeights });
+): number => dispatchMotion(motion, durationVisitor, { parameters, depth, blendScratch: _durationScratch });
