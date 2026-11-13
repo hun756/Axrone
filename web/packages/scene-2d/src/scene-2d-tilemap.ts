@@ -3,9 +3,11 @@ import type { ActorConfig } from '@axrone/ecs-runtime';
 import {
     TilemapCollider2D,
     TilemapRenderer,
+    type SceneTilemapRenderRuntimeLike,
     type TilemapCollider2DConfig,
     type TilemapRendererConfig,
 } from '@axrone/scene-runtime/scene-tilemap';
+import type { SceneRuntimeComposition } from '@axrone/scene-runtime';
 import { requireRegisteredComponent } from '@axrone/scene-runtime/scene-capability-guard';
 import type { Scene2D } from './scene-2d';
 
@@ -14,6 +16,15 @@ export interface TilemapActorConfig {
     readonly renderer?: TilemapRendererConfig;
     readonly collider?: TilemapCollider2DConfig;
 }
+
+/** Composition fragment that opts a scene into tilemap rendering. */
+export const createTilemapRenderComposition = <
+    R extends ComponentRegistry = Record<string, never>,
+>(
+    runtimes: () => readonly SceneTilemapRenderRuntimeLike[]
+): SceneRuntimeComposition<R> => ({
+    createTilemapRuntimes: runtimes,
+});
 
 /**
  * Opt-in tilemap actor helper. Mirrors `createSpriteActor`: the components must
