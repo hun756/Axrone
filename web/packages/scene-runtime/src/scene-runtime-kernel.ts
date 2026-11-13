@@ -451,6 +451,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             deltaSeconds: deltaTime / 1000,
             viewportWidth: this.canvas.width,
             viewportHeight: this.canvas.height,
+            alpha: this.loop.interpolationAlpha,
         });
     }
 

@@ -4,6 +4,7 @@ import type { LightingUniformValueMap } from '@axrone/lighting';
 import { Vec3, Vec4 } from '@axrone/numeric';
 import type { Actor, Transform } from '@axrone/ecs-runtime';
 import { selectSceneCamera } from '../camera-selector';
+import { Animator } from '../components/animator';
 import { SceneCameraFrameStateCollector } from '../camera-frame-state';
 import { SceneDrawExecutionContextCache } from './draw-execution-context';
 import { SceneDrawExecutor } from './draw-executor';
@@ -88,6 +89,8 @@ export interface SceneRenderRuntimeParams {
     readonly deltaSeconds: number;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
+    /** Interpolation factor between the previous and current fixed step. */
+    readonly alpha?: number;
 }
 
 export class SceneRenderRuntime {
@@ -365,6 +368,14 @@ export class SceneRenderRuntime {
         this._frameMaterialRevision = this._options.resources.materials.revision;
         this._frameShaderRevision = this._options.resources.shaders.revision;
         const actors = this._options.getActors();
+        if (params.alpha !== undefined && params.alpha > 0) {
+            for (let index = 0; index < actors.length; index += 1) {
+                const animator = actors[index]!.getComponent(Animator);
+                if (animator?.interpolateOnRender) {
+                    animator.applyInterpolatedPose(params.alpha);
+                }
+            }
+        }
         const camera = selectSceneCamera(actors);
         const cameraFrame = this._cameraFrameCollector.collect(
             camera,

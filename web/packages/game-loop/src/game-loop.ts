@@ -358,6 +358,15 @@ export class GameLoop<TState> implements GameLoopController<TState> {
         return this._fixedDelta;
     }
 
+    /**
+     * Interpolation factor of the current render phase: 0 is the previous fixed
+     * step, 1 is the current one. Consumers that render between fixed steps use
+     * it to interpolate their state.
+     */
+    get interpolationAlpha(): number {
+        return this._renderContext.alpha;
+    }
+
     get maxDelta(): number {
         return this._maxDelta;
     }

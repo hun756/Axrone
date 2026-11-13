@@ -97,6 +97,11 @@ export interface AnimatorConfig {
     readonly time?: number;
     readonly applyRootMotion?: boolean;
     readonly rootMotionConsumer?: AnimatorRootMotionConsumer;
+    /**
+     * Opt-in render-phase interpolation. Enable it when the host ticks animation
+     * on a fixed step; the render phase then blends the previous and current poses.
+     */
+    readonly interpolateOnRender?: boolean;
     readonly updateMode?: AnimatorUpdateMode;
     readonly cullingMode?: AnimatorCullingMode;
 }
@@ -185,6 +190,7 @@ export class Animator extends Component {
     private _time: number;
     private _applyRootMotionEnabled: boolean;
     private _rootMotionConsumer: AnimatorRootMotionConsumer | null = null;
+    private _interpolateOnRender: boolean = false;
     private _updateMode: AnimatorUpdateMode;
     private _cullingMode: AnimatorCullingMode;
     private readonly _tempVec3 = new Vec3();
@@ -202,6 +208,7 @@ export class Animator extends Component {
         this._time = Number.isFinite(config.time ?? 0) ? Math.max(0, config.time ?? 0) : 0;
         this._applyRootMotionEnabled = config.applyRootMotion ?? true;
         this._rootMotionConsumer = config.rootMotionConsumer ?? null;
+        this._interpolateOnRender = config.interpolateOnRender ?? false;
         this._updateMode = normalizeAnimatorUpdateMode(config.updateMode);
         this._cullingMode = normalizeAnimatorCullingMode(config.cullingMode);
         this._applyConfig(config);
@@ -298,6 +305,15 @@ export class Animator extends Component {
 
     get rootMotionConsumer(): AnimatorRootMotionConsumer | null {
         return this._rootMotionConsumer;
+    }
+
+    /** Whether the render phase blends the previous and current animation poses. */
+    get interpolateOnRender(): boolean {
+        return this._interpolateOnRender;
+    }
+
+    set interpolateOnRender(value: boolean) {
+        this._interpolateOnRender = value;
     }
 
     set rootMotionConsumer(value: AnimatorRootMotionConsumer | null) {
@@ -609,6 +625,7 @@ export class Animator extends Component {
             speed: this._speed,
             time: this._time,
             applyRootMotion: this._applyRootMotionEnabled,
+            interpolateOnRender: this._interpolateOnRender,
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
         };
@@ -623,6 +640,7 @@ export class Animator extends Component {
             speed: this._speed,
             time: this._time,
             applyRootMotion: this._applyRootMotionEnabled,
+            interpolateOnRender: this._interpolateOnRender,
             updateMode: this._updateMode,
             cullingMode: this._cullingMode,
             profile: controller?.profile ?? null,
@@ -650,6 +668,8 @@ export class Animator extends Component {
             speed: typeof data.speed === 'number' ? data.speed : undefined,
             time: typeof data.time === 'number' ? data.time : undefined,
             applyRootMotion: typeof data.applyRootMotion === 'boolean' ? data.applyRootMotion : undefined,
+            interpolateOnRender:
+                typeof data.interpolateOnRender === 'boolean' ? data.interpolateOnRender : undefined,
             updateMode: typeof data.updateMode === 'string' ? normalizeAnimatorUpdateMode(data.updateMode) : undefined,
             cullingMode:
                 typeof data.cullingMode === 'string'
@@ -1274,6 +1294,19 @@ export class Animator extends Component {
                 );
             }
         }
+    }
+
+    /**
+     * Applies the pose interpolated between the previous and the current fixed
+     * step. The render phase calls this with the frame alpha so a fixed-step
+     * simulation does not judder on a faster display.
+     */
+    applyInterpolatedPose(alpha: number): void {
+        const controller = this._ensureController();
+        if (!controller) {
+            return;
+        }
+        this._applyFrame(controller.sampleInterpolatedPose(alpha));
     }
 
     private _applyFrame(frame: AnimationFrame): void {
