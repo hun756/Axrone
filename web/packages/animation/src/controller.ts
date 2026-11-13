@@ -1,7 +1,8 @@
 import { createAnimationClips, AnimationClip } from './clip';
 import { AnimationScratchPool, BlendScratchContext, resolveMotionDuration, type AnimationMotionEvaluationContext } from './blend-tree';
-import { AnimationStateMachineError, AnimationValidationError } from './errors';
+import { AnimationStateMachineError, AnimationResolutionError, AnimationValidationError } from './errors';
 import { AnimationIkLayer } from './ik';
+import { AnimationMontage, type AnimationMontageOptions } from './montage';
 import { AnimationParameterStore } from './parameters';
 import {
     AnimationCurveLayout,
@@ -138,9 +139,9 @@ export class AnimationController<
     private readonly _restFrame: AnimationFrame;
     private readonly _scratchPool: AnimationScratchPool;
     private readonly _blendScratch: BlendScratchContext;
-    private readonly _layers: readonly AnimationCompiledLayer[];
-    private readonly _layerRuntimes: AnimationLayerRuntime[];
-    private readonly _layerWeights: Float32Array;
+    private _layers: AnimationCompiledLayer[];
+    private _layerRuntimes: AnimationLayerRuntime[];
+    private _layerWeights: number[];
     private readonly _evaluationContext: AnimationMotionEvaluationContext;
     private readonly _rootMotionTranslation = new Float32Array(3);
     private readonly _rootMotionRotation = new Float32Array([0, 0, 0, 1]);
@@ -170,6 +171,8 @@ export class AnimationController<
     };
     private _updateResult: MutableUpdateResult | null = null;
     private readonly _transitionLabelCache = new Map<string, Map<string, string>>();
+    private readonly _montages: AnimationMontage[] = [];
+    private _montageSequence = 0;
 
     constructor(definition: AnimationControllerDefinition<TParameters>) {
         this.rig = new AnimationRig(definition.rig);
@@ -189,26 +192,24 @@ export class AnimationController<
             scratch: this._scratchPool,
             blendScratch: this._blendScratch,
         };
-        this._layers = Object.freeze(
-            definition.layers.map((layer) => {
-                const mask = layer.boneMask
-                    ? layer.boneMask.reduce((accumulator, boneName) => {
-                          accumulator.set(this.rig.indexOfBone(boneName), true);
-                          return accumulator;
-                      }, new AnimationMask(this.rig.boneCount, false))
-                    : null;
-                return Object.freeze({
-                    id: String(layer.id),
-                    mode: layer.mode ?? 'override',
-                    machine: compileStateMachine(layer.stateMachine, this.clips),
-                    mask,
-                    ikLayers: Object.freeze(
-                        (layer.ikLayers ?? []).map((ikLayer) => new AnimationIkLayer(this.rig, ikLayer))
-                    ),
-                    syncSourceIndex: -1,
-                } satisfies AnimationCompiledLayer);
-            })
-        );
+        this._layers = definition.layers.map((layer) => {
+            const mask = layer.boneMask
+                ? layer.boneMask.reduce((accumulator, boneName) => {
+                      accumulator.set(this.rig.indexOfBone(boneName), true);
+                      return accumulator;
+                  }, new AnimationMask(this.rig.boneCount, false))
+                : null;
+            return Object.freeze({
+                id: String(layer.id),
+                mode: layer.mode ?? 'override',
+                machine: compileStateMachine(layer.stateMachine, this.clips),
+                mask,
+                ikLayers: Object.freeze(
+                    (layer.ikLayers ?? []).map((ikLayer) => new AnimationIkLayer(this.rig, ikLayer))
+                ),
+                syncSourceIndex: -1,
+            } satisfies AnimationCompiledLayer);
+        });
         if (this._layers.length === 0) {
             throw new AnimationValidationError('Animation controllers require at least one layer');
         }
@@ -216,30 +217,25 @@ export class AnimationController<
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             this._layerIndexById.set(this._layers[layerIndex]!.id, layerIndex);
         }
-        this._layers = Object.freeze(
-            this._layers.map((layer, layerIndex) => {
-                const syncSourceId = definition.layers[layerIndex]?.syncSourceLayerId;
-                if (syncSourceId === undefined) {
-                    return layer;
-                }
-                const resolved = String(syncSourceId);
-                if (resolved === layer.id) {
-                    throw new AnimationValidationError(`Animation layer '${layer.id}' cannot sync to itself`);
-                }
-                const syncSourceIndex = this._layerIndexById.get(resolved);
-                if (syncSourceIndex === undefined) {
-                    throw new AnimationValidationError(
-                        `Animation layer '${layer.id}' syncs to unknown layer '${resolved}'`
-                    );
-                }
-                return Object.freeze({ ...layer, syncSourceIndex });
-            })
-        );
+        this._layers = this._layers.map((layer, layerIndex) => {
+            const syncSourceId = definition.layers[layerIndex]?.syncSourceLayerId;
+            if (syncSourceId === undefined) {
+                return layer;
+            }
+            const resolved = String(syncSourceId);
+            if (resolved === layer.id) {
+                throw new AnimationValidationError(`Animation layer '${layer.id}' cannot sync to itself`);
+            }
+            const syncSourceIndex = this._layerIndexById.get(resolved);
+            if (syncSourceIndex === undefined) {
+                throw new AnimationValidationError(
+                    `Animation layer '${layer.id}' syncs to unknown layer '${resolved}'`
+                );
+            }
+            return Object.freeze({ ...layer, syncSourceIndex });
+        });
         this._layerRuntimes = this._layers.map((layer) => createLayerRuntime(layer.machine));
-        this._layerWeights = new Float32Array(this._layers.length);
-        for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
-            this._layerWeights[layerIndex] = definition.layers[layerIndex]?.weight ?? 1;
-        }
+        this._layerWeights = this._layers.map((_, layerIndex) => definition.layers[layerIndex]?.weight ?? 1);
         this._rootMotionConfig = definition.rootMotion ?? null;
         this._rootMotionBoneIndex =
             this._rootMotionConfig && typeof this._rootMotionConfig.bone === 'string'
@@ -273,10 +269,97 @@ export class AnimationController<
         return this._profileState;
     }
 
+    /** Montages the controller owns, including finished ones awaiting release. */
+    get montages(): readonly AnimationMontage[] {
+        return this._montages;
+    }
+
+    /**
+     * Plays a clip as an authored one-shot layer. The montage owns a dedicated
+     * controller layer, fades in and out, and is released automatically when it
+     * completes; events still reach the controller's normal sink.
+     */
+    playMontage(clipId: string, options: AnimationMontageOptions = {}): AnimationMontage {
+        const resolvedClipId = String(clipId);
+        const clip = this.clips.get(resolvedClipId);
+        if (!clip) {
+            throw new AnimationResolutionError(`Unknown animation clip '${resolvedClipId}'`, resolvedClipId);
+        }
+
+        if (options.replaceExisting ?? true) {
+            this.stopAllMontages();
+        }
+
+        const sequence = ++this._montageSequence;
+        const stateId = `montage:${clip.id}:${sequence}`;
+        const speed = Math.max(Math.abs(options.speed ?? 1), 1e-3);
+        const machine = compileStateMachine(
+            {
+                entryState: stateId,
+                states: [
+                    {
+                        id: stateId,
+                        motion: { kind: 'clip', clipId: clip.id },
+                        loop: options.loop ?? false,
+                        speed,
+                    },
+                ],
+            },
+            this.clips
+        );
+        const mask = options.boneMask
+            ? options.boneMask.reduce((accumulator, boneName) => {
+                  accumulator.set(this.rig.indexOfBone(boneName), true);
+                  return accumulator;
+              }, new AnimationMask(this.rig.boneCount, false))
+            : null;
+        const layer: AnimationCompiledLayer = Object.freeze({
+            id: stateId,
+            mode: options.mode ?? 'override',
+            machine,
+            mask,
+            ikLayers: Object.freeze([]) as readonly AnimationIkLayer[],
+            syncSourceIndex: -1,
+        });
+
+        this._layers.push(layer);
+        this._layerRuntimes.push(createLayerRuntime(machine));
+        this._layerWeights.push(0);
+        this._layerIndexById.set(stateId, this._layers.length - 1);
+
+        const montage = new AnimationMontage(
+            stateId,
+            clip.id,
+            clip.duration,
+            Math.max(0, options.fadeInSeconds ?? 0.1),
+            Math.max(0, options.fadeOutSeconds ?? 0.1),
+            speed,
+            options.loop ?? false
+        );
+        this._montages.push(montage);
+        this.evaluate();
+        return montage;
+    }
+
+    /** Stops a montage; its layer is released on the next update. */
+    stopMontage(montage: AnimationMontage): this {
+        montage.stop();
+        return this;
+    }
+
+    /** Stops every playing montage. */
+    stopAllMontages(): this {
+        for (let index = 0; index < this._montages.length; index += 1) {
+            this._montages[index]!.stop();
+        }
+        return this;
+    }
+
     update(deltaSeconds: number): AnimationControllerUpdateResult {
         const startTime = now();
         this._previousFrame.pose.copyFrom(this.currentFrame.pose);
         this._previousFrame.curves.copyFrom(this.currentFrame.curves);
+        this._advanceMontages(Math.max(0, deltaSeconds));
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             const layer = this._layers[layerIndex]!;
             if (layer.syncSourceIndex >= 0) {
@@ -300,6 +383,7 @@ export class AnimationController<
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             commitLayerRuntime(this._layerRuntimes[layerIndex]!);
         }
+        this._releaseFinishedMontages();
         this._updateProfile(now() - startTime);
         const rootMotion = this.rootMotion;
         if (this._updateResult === null) {
@@ -433,6 +517,62 @@ export class AnimationController<
             throw new AnimationStateMachineError(`Unknown animation layer '${resolvedId}'`);
         }
         return layerIndex;
+    }
+
+    private _advanceMontages(deltaSeconds: number): void {
+        if (this._montages.length === 0) {
+            return;
+        }
+        for (let index = 0; index < this._montages.length; index += 1) {
+            const montage = this._montages[index]!;
+            montage.advance(deltaSeconds);
+            const layerIndex = this._layerIndexById.get(montage.layerId);
+            if (layerIndex !== undefined) {
+                this._layerWeights[layerIndex] = montage.weight;
+            }
+        }
+    }
+
+    private _releaseFinishedMontages(): void {
+        if (this._montages.length === 0) {
+            return;
+        }
+
+        let write = 0;
+        for (let read = 0; read < this._montages.length; read += 1) {
+            const montage = this._montages[read]!;
+            if (montage.removeRequested) {
+                this._removeLayer(montage.layerId);
+                continue;
+            }
+            this._montages[write] = montage;
+            write += 1;
+        }
+        this._montages.length = write;
+    }
+
+    private _removeLayer(layerId: string): void {
+        const layerIndex = this._layerIndexById.get(layerId);
+        if (layerIndex === undefined) {
+            return;
+        }
+
+        this._layers.splice(layerIndex, 1);
+        this._layerRuntimes.splice(layerIndex, 1);
+        this._layerWeights.splice(layerIndex, 1);
+        this._layerIndexById.delete(layerId);
+
+        // Every layer after the removed one shifts down; a layer that synced
+        // to the removed one loses its source instead of pointing at a stranger.
+        for (let index = layerIndex; index < this._layers.length; index += 1) {
+            const layer = this._layers[index]!;
+            this._layerIndexById.set(layer.id, index);
+            if (layer.syncSourceIndex === layerIndex) {
+                this._layers[index] = Object.freeze({ ...layer, syncSourceIndex: -1 });
+            } else if (layer.syncSourceIndex > layerIndex) {
+                this._layers[index] = Object.freeze({ ...layer, syncSourceIndex: layer.syncSourceIndex - 1 });
+            }
+        }
     }
 
     private _composeCurrentFrame(updateRootMotion: boolean): void {
@@ -614,6 +754,7 @@ export class AnimationController<
                 transitioning: false,
             });
         }
+        profiles.length = this._layers.length;
         for (let index = 0; index < this._layers.length; index += 1) {
             const layer = this._layers[index]!;
             const runtime = this._layerRuntimes[index]!;

@@ -11,6 +11,7 @@ export * from './grounding';
 export * from './ik';
 export * from './motion-matching';
 export * from './motion-matching-node';
+export * from './montage';
 export * from './optimization';
 export * from './parameters';
 export * from './physics-pose';
