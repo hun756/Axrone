@@ -581,6 +581,9 @@ export type SceneBuiltInRegistry = {
     readonly OrbitCameraController: typeof OrbitCameraController;
     readonly FollowCameraController: typeof FollowCameraController;
     readonly UIHost: typeof import('./components/ui-host').UIHost;
+    readonly TilemapRenderer: typeof import('./components/tilemap-renderer').TilemapRenderer;
+    readonly TilemapCollider2D: typeof import('./components/tilemap-collider-2d').TilemapCollider2D;
+    readonly TilemapAgent: typeof import('./components/tilemap-agent').TilemapAgent;
 };
 
 export type SceneRegistry<R extends ComponentRegistry = Record<string, never>> = R &

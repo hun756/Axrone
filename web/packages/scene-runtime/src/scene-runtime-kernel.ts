@@ -7,6 +7,7 @@ import { SceneActorLifecycleRunner } from './actor-lifecycle-runner';
 import { SceneComponentCatalog } from './component-catalog';
 import { createSceneLoopSystems } from './loop-bridge';
 import type { SceneBatchRuntimeFactory } from './rendering/batch-runtime-contract';
+import type { SceneTilemapRenderRuntimeLike } from './rendering/tilemap-render-runtime';
 import { SceneRenderRuntime } from './rendering/scene-render-runtime';
 import { resolveSceneSurface } from './scene-surface-resolver';
 import type { SceneLoopState, SceneOptions, SceneRegistry } from './types';
@@ -105,6 +106,12 @@ export interface SceneRuntimeComposition<
      * batch component chains stay out of their module graphs.
      */
     readonly createRenderBatchRuntimes?: SceneBatchRuntimeFactory;
+    /**
+     * Optional tilemap draw sources, forwarded to `SceneRenderRuntime`.
+     * Supplying this is the opt-in switch; the kernel never imports the
+     * tilemap package itself.
+     */
+    readonly createTilemapRuntimes?: () => readonly SceneTilemapRenderRuntimeLike[];
     /**
      * Builds the physics bridges the resolved profile needs. The kernel calls
      * this once after the ECS world exists and never imports a physics package.
@@ -239,6 +246,7 @@ export class SceneRuntimeKernel<R extends ComponentRegistry = Record<string, nev
             stateCache: ctx.state,
             instancing: sceneOptions.instancing,
             batchRuntimes: sceneOptions.composition?.createRenderBatchRuntimes,
+            tilemapRuntimes: sceneOptions.composition?.createTilemapRuntimes,
             getActors: () => this.world.getAllActors(),
             createMeshResource: (definition) => this.assets.createMeshResource(definition),
             disposeMesh: (mesh) => this.assets.disposeMesh(mesh),

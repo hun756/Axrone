@@ -138,6 +138,11 @@
             "types": "./dist/scene-2d-lean-composition.d.ts",
             "import": "./dist/scene-2d-lean-composition.mjs",
             "require": "./dist/scene-2d-lean-composition.js"
+        },
+        "./scene-tilemap": {
+            "types": "./dist/scene-tilemap.d.ts",
+            "import": "./dist/scene-tilemap.mjs",
+            "require": "./dist/scene-tilemap.js"
         }
     },
     "scripts": {
@@ -148,6 +153,7 @@
     "dependencies": {
         "@axrone/animation": "^0.1.0",
         "@axrone/asset-2d": "^0.1.0",
+        "@axrone/asset-tilemap": "^0.1.0",
         "@axrone/ecs-runtime": "^0.1.0",
         "@axrone/game-loop": "^0.1.0",
         "@axrone/geometry": "^0.1.0",
@@ -166,6 +172,7 @@
         "@axrone/render-webgl2": "^0.1.0",
         "@axrone/scene-prefab": "^0.1.0",
         "@axrone/terrain": "^0.1.0",
+        "@axrone/tilemap": "^0.1.0",
         "@axrone/utility": "^0.0.1"
     }
 }

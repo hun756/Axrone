@@ -32,6 +32,8 @@ import {
 import { SceneSkinningUniformBinder } from '../skinning-uniform-binder';
 import type { SceneBatchRuntimeFactory } from './batch-runtime-contract';
 import { SceneInstancedMeshRuntime } from './scene-instanced-mesh-runtime';
+import { resolveTilemapCameraRect } from './tilemap-render-item-collector';
+import type { SceneTilemapRenderRuntimeLike } from './tilemap-render-runtime';
 import type { SceneMeshResource } from '../mesh-registry';
 import type {
     SceneInstancingMode,
@@ -81,6 +83,11 @@ export interface SceneRenderRuntimeOptions {
      * whose runtime is absent. Mesh and instanced-mesh draws are unaffected.
      */
     readonly batchRuntimes?: SceneBatchRuntimeFactory;
+    /**
+     * Optional opt-in tilemap draw sources. They are rendered after the batch
+     * families for each pass through the shared sprite instance renderer.
+     */
+    readonly tilemapRuntimes?: () => readonly SceneTilemapRenderRuntimeLike[];
 }
 
 export interface SceneRenderRuntimeParams {
@@ -517,9 +524,27 @@ export class SceneRenderRuntime {
                 },
             });
 
+            const tilemapRuntimes = this._options.tilemapRuntimes?.() ?? [];
+            if (tilemapRuntimes.length > 0 && cameraFrame !== null) {
+                const cameraRect = resolveTilemapCameraRect(
+                    cameraFrame,
+                    params.viewportWidth,
+                    params.viewportHeight
+                );
+                if (cameraRect !== null) {
+                    for (const runtime of tilemapRuntimes) {
+                        runtime.render({
+                            renderPass,
+                            cameraFrame,
+                            frameState: renderFrame,
+                            cameraRect,
+                        });
+                    }
+                }
+            }
+
             planningCachedPassCount += 1;
-            planningRenderListCacheHit = planningRenderListCacheHit && renderListCacheHit;
-            planningPrimitiveCacheHit =
+            planningRenderListCacheHit = planningRenderListCacheHit && renderListCacheHit;            planningPrimitiveCacheHit =
                 planningPrimitiveCacheHit && (meshPlanning.primitiveCacheHit ?? false);
 
             planningPassCount += meshPlanning.passCount;

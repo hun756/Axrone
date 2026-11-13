@@ -38,5 +38,6 @@ export default createMultiEntryConfig({
         // lean 2D entry injects the sprite family only.
         'scene-batch-runtimes': 'src/scene-batch-runtimes.ts',
         'scene-2d-lean-composition': 'src/scene-2d-lean-composition.ts',
+        'scene-tilemap': 'src/scene-tilemap.ts',
     },
 });
