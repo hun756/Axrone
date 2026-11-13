@@ -126,6 +126,7 @@ export type {
 	AnimatorTrackConfig,
 } from './components/animator';
 export { Animator } from './components/animator';
+export { SceneRagdollPoseSource } from './components/ragdoll-pose-source';
 
 export type {
 	CompiledRenderShaderEffect,

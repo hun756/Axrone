@@ -962,6 +962,11 @@ export class Animator extends Component {
                     this._motionContainsClip(motion.base, clipId) ||
                     this._motionContainsClip(motion.additive, clipId)
                 );
+            case 'motionMatching':
+                // The database selects a clip at runtime; no static reference.
+                return false;
+            default:
+                return false;
         }
     }
 
@@ -1328,6 +1333,24 @@ export class Animator extends Component {
             return;
         }
         this._applyFrame(controller.sampleInterpolatedPose(alpha));
+    }
+
+    /** Controller the animator drives, if one could be built. */
+    get controller(): AnimationController | null {
+        return this._ensureController();
+    }
+
+    /**
+     * Writes the current animation pose to the scene transforms again. A
+     * physics pose source calls this after blending its world pose into the
+     * controller frame.
+     */
+    applyCurrentPose(): void {
+        const controller = this._ensureController();
+        if (!controller) {
+            return;
+        }
+        this._applyFrame(controller.currentFrame);
     }
 
     private _applyFrame(frame: AnimationFrame): void {
