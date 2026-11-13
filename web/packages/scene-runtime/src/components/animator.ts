@@ -33,6 +33,7 @@ import { Component } from '@axrone/ecs-runtime';
 import { script } from '@axrone/ecs-runtime';
 import { MeshRenderer } from './mesh-renderer';
 import { PrefabNodeBinding } from '@axrone/scene-prefab';
+import { resolveAnimationClipAssets } from '../scene-animation-clip-assets';
 
 export interface AnimatorTrackConfig {
     readonly targetNodeId?: string;
@@ -86,6 +87,12 @@ const normalizeAnimatorCullingMode = (value: unknown): AnimatorCullingMode =>
 
 export interface AnimatorConfig {
     readonly clips?: readonly AnimatorClipConfig[];
+    /**
+     * Addressable clip asset ids resolved through the clip asset library. A
+     * document stores these instead of embedding keyframes, so scene size stays
+     * flat when many prefabs share one clip set.
+     */
+    readonly clipAssetIds?: readonly string[];
     readonly parameters?: readonly AnimationParameterDefinition[];
     readonly layers?: readonly AnimationLayerDefinition[];
     readonly rootMotion?: AnimationRootMotionDefinition | null;
@@ -178,6 +185,8 @@ const normalizeClipDefinitions = (
 })
 export class Animator extends Component {
     private _clipDefinitions: readonly AnimationClipDefinition[] = Object.freeze([]);
+    private _inlineClipDefinitions: readonly AnimationClipDefinition[] = Object.freeze([]);
+    private _clipAssetIds: readonly string[] = Object.freeze([]);
     private _parameterDefinitions: readonly AnimationParameterDefinition[] = Object.freeze([]);
     private _layerDefinitions: readonly AnimationLayerDefinition[] | null = null;
     private _rootMotion: AnimationRootMotionDefinition | null = null;
@@ -603,7 +612,7 @@ export class Animator extends Component {
 
     override serialize(): Record<string, unknown> {
         return {
-            clips: this._clipDefinitions.map((clip) => ({
+            clips: this._inlineClipDefinitions.map((clip) => ({
                 id: clip.id,
                 duration: clip.duration,
                 ...(clip.events ? { events: cloneSerializable(clip.events) } : {}),
@@ -623,6 +632,7 @@ export class Animator extends Component {
                     values: cloneSerializable(track.values),
                 })),
             })),
+            ...(this._clipAssetIds.length > 0 ? { clipAssetIds: [...this._clipAssetIds] } : {}),
             parameters: cloneSerializable(this._parameterDefinitions),
             layers: this._layerDefinitions ? cloneSerializable(this._layerDefinitions) : null,
             rootMotion: this._rootMotion ? cloneSerializable(this._rootMotion) : null,
@@ -664,6 +674,9 @@ export class Animator extends Component {
     override deserialize(data: Record<string, any>): void {
         this._applyConfig({
             clips: Array.isArray(data.clips) ? data.clips : [],
+            clipAssetIds: Array.isArray(data.clipAssetIds)
+                ? data.clipAssetIds.filter((id: unknown): id is string => typeof id === 'string')
+                : undefined,
             parameters: Array.isArray(data.parameters) ? data.parameters : [],
             layers: Array.isArray(data.layers) ? data.layers : undefined,
             rootMotion: isRecord(data.rootMotion) && typeof data.rootMotion.bone === 'string'
@@ -692,7 +705,16 @@ export class Animator extends Component {
     }
 
     private _applyConfig(config: AnimatorConfig): void {
-        this._clipDefinitions = normalizeClipDefinitions(config.clips);
+        this._inlineClipDefinitions = normalizeClipDefinitions(config.clips);
+        this._clipAssetIds = Object.freeze(
+            (config.clipAssetIds ?? []).filter(
+                (id): id is string => typeof id === 'string' && id.length > 0
+            )
+        );
+        this._clipDefinitions = Object.freeze([
+            ...this._inlineClipDefinitions,
+            ...normalizeClipDefinitions(resolveAnimationClipAssets(this._clipAssetIds)),
+        ]);
         this._parameterDefinitions = Object.freeze(
             (config.parameters ?? []).filter(
                 (entry): entry is AnimationParameterDefinition =>

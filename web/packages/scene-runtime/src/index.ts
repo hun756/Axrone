@@ -127,6 +127,15 @@ export type {
 } from './components/animator';
 export { Animator } from './components/animator';
 export { SceneRagdollPoseSource } from './components/ragdoll-pose-source';
+export {
+	SceneAnimationClipAssetLibrary,
+	sceneAnimationClipAssets,
+	resolveAnimationClipAssets,
+} from './scene-animation-clip-assets';
+export type {
+	SceneAnimationClipAsset,
+	AnimatorClipAssetReference,
+} from './scene-animation-clip-assets';
 
 export type {
 	CompiledRenderShaderEffect,
