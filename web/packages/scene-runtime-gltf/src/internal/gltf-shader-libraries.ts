@@ -1,18 +1,23 @@
-export const MAX_GLTF_SKIN_JOINTS = 128;
+// WebGL2 guarantees 256 vertex uniform vectors; a mat4 costs four, so the
+// joint array must leave room for the model, view, projection and light uniforms.
+export const MAX_GLTF_SKIN_JOINTS = 48;
 
 export const GLTF_SHADER_LIBRARIES = Object.freeze([
     {
         id: 'gltf.skinning',
         code: [
+            'int skinIndex(int joint) {',
+            '    return clamp(joint, 0, u_SkinJointCount - 1);',
+            '}',
             'mat4 resolveSkinMatrix() {',
             '    if (!u_Skinning || u_SkinJointCount <= 0) {',
             '        return mat4(1.0);',
             '    }',
             '    mat4 skin = mat4(0.0);',
-            '    skin += u_JointMatrices[int(a_Joints0.x)] * a_Weights0.x;',
-            '    skin += u_JointMatrices[int(a_Joints0.y)] * a_Weights0.y;',
-            '    skin += u_JointMatrices[int(a_Joints0.z)] * a_Weights0.z;',
-            '    skin += u_JointMatrices[int(a_Joints0.w)] * a_Weights0.w;',
+            '    skin += u_JointMatrices[skinIndex(int(a_Joints0.x))] * a_Weights0.x;',
+            '    skin += u_JointMatrices[skinIndex(int(a_Joints0.y))] * a_Weights0.y;',
+            '    skin += u_JointMatrices[skinIndex(int(a_Joints0.z))] * a_Weights0.z;',
+            '    skin += u_JointMatrices[skinIndex(int(a_Joints0.w))] * a_Weights0.w;',
             '    return skin;',
             '}',
         ],

@@ -185,7 +185,10 @@ export class SceneRenderRuntime {
         this._frameUniformBinder = new SceneFrameUniformBinder(this._uniformWriter);
         this._lightingUniformBinder = new SceneLightingUniformBinder(this._uniformWriter);
         this._fogUniformBinder = new SceneFogUniformBinder(this._uniformWriter);
-        this._skinningUniformBinder = new SceneSkinningUniformBinder(this._uniformWriter);
+        this._skinningUniformBinder = new SceneSkinningUniformBinder(
+            this._uniformWriter,
+            this._options.gl
+        );
         this._fogState = _options.fog ?? DEFAULT_SCENE_FOG_STATE;
         this._morphMeshRuntime = new SceneMorphMeshRuntime({
             gl: _options.gl,

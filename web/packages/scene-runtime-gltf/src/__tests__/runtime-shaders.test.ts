@@ -10,6 +10,7 @@ import {
     resolveGltfRuntimeShaderId,
 } from '@axrone/scene-runtime-gltf';
 import { GLTF_TOON_SHADER_EFFECT, resolveGltfShaderDefinition } from '../internal/runtime-shaders';
+import { MAX_GLTF_SKIN_JOINTS } from '../internal/gltf-shader-libraries';
 import { GLTF_TOON_SHADER_EFFECT as GLTF_TOON_SHADER_EFFECT_FROM_TOON_MODULE } from '../internal/gltf-shader-effects-toon';
 import { GLTF_PBR_SHADER_EFFECT as GLTF_PBR_SHADER_EFFECT_FROM_PBR_MODULE } from '../internal/gltf-shader-effects-pbr';
 import { GLTF_UNLIT_SHADER_EFFECT as GLTF_UNLIT_SHADER_EFFECT_FROM_UNLIT_MODULE } from '../internal/gltf-shader-effects-unlit';
@@ -39,7 +40,8 @@ describe('scene-runtime glTF shader effects', () => {
         expect(
             definition.effect?.properties?.find((property) => property.name === 'u_JointMatrices')
                 ?.arrayLength
-        ).toBe(128);
+        ).toBe(MAX_GLTF_SKIN_JOINTS);
+        expect(MAX_GLTF_SKIN_JOINTS * 4).toBeLessThanOrEqual(192);
         expect(
             definition.effect?.properties?.find((property) => property.name === 'u_DirectionalLightDirection')
                 ?.arrayLength
