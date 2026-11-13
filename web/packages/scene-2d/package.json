@@ -39,6 +39,11 @@
             "import": "./dist/lean.mjs",
             "require": "./dist/lean.js"
         },
+        "./tilemap": {
+            "types": "./dist/tilemap.d.ts",
+            "import": "./dist/tilemap.mjs",
+            "require": "./dist/tilemap.js"
+        },
         "./errors": {
             "types": "./dist/errors.d.ts",
             "import": "./dist/errors.mjs",
@@ -51,8 +56,10 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@axrone/asset-tilemap": "^0.1.0",
         "@axrone/ecs-runtime": "^0.1.0",
         "@axrone/numeric": "^0.0.1",
-        "@axrone/scene-runtime": "^0.1.0"
+        "@axrone/scene-runtime": "^0.1.0",
+        "@axrone/tilemap": "^0.1.0"
     }
 }
