@@ -132,6 +132,9 @@ export class AnimationController<
     readonly clips: ReadonlyMap<string, AnimationClip>;
     readonly currentFrame: AnimationFrame;
 
+    private readonly _previousFrame: AnimationFrame;
+    private readonly _interpolatedFrame: AnimationFrame;
+
     private readonly _restFrame: AnimationFrame;
     private readonly _scratchPool: AnimationScratchPool;
     private readonly _blendScratch: BlendScratchContext;
@@ -175,6 +178,8 @@ export class AnimationController<
         this.clips = createAnimationClips(definition.clips, this.rig, this.curveLayout);
         this._restFrame = new AnimationFrame(this.rig, this.curveLayout);
         this.currentFrame = new AnimationFrame(this.rig, this.curveLayout);
+        this._previousFrame = new AnimationFrame(this.rig, this.curveLayout);
+        this._interpolatedFrame = new AnimationFrame(this.rig, this.curveLayout);
         this._scratchPool = new AnimationScratchPool(this.rig, this.curveLayout, this._restFrame.curves.values);
         this._blendScratch = new BlendScratchContext();
         this._evaluationContext = {
@@ -270,6 +275,8 @@ export class AnimationController<
 
     update(deltaSeconds: number): AnimationControllerUpdateResult {
         const startTime = now();
+        this._previousFrame.pose.copyFrom(this.currentFrame.pose);
+        this._previousFrame.curves.copyFrom(this.currentFrame.curves);
         for (let layerIndex = 0; layerIndex < this._layers.length; layerIndex += 1) {
             const layer = this._layers[layerIndex]!;
             if (layer.syncSourceIndex >= 0) {
@@ -318,6 +325,59 @@ export class AnimationController<
         this._composeCurrentFrame(false);
         this._updateProfile(now() - startTime);
         return this.currentFrame;
+    }
+
+    /**
+     * Samples the pose between the previous and the current step. The render
+     * phase uses this to remove the judder between fixed steps; alpha 0 selects
+     * the previous pose, alpha 1 the current one.
+     */
+    sampleInterpolatedPose(alpha: number): AnimationFrame {
+        const t = Math.max(0, Math.min(1, Number.isFinite(alpha) ? alpha : 0));
+        const previous = this._previousFrame.pose;
+        const current = this.currentFrame.pose;
+        const out = this._interpolatedFrame.pose;
+
+        for (let bone = 0; bone < current.boneCount; bone += 1) {
+            const translationOffset = bone * 3;
+            const rotationOffset = bone * 4;
+            out.translations[translationOffset] =
+                previous.translations[translationOffset]! +
+                (current.translations[translationOffset]! - previous.translations[translationOffset]!) * t;
+            out.translations[translationOffset + 1] =
+                previous.translations[translationOffset + 1]! +
+                (current.translations[translationOffset + 1]! - previous.translations[translationOffset + 1]!) * t;
+            out.translations[translationOffset + 2] =
+                previous.translations[translationOffset + 2]! +
+                (current.translations[translationOffset + 2]! - previous.translations[translationOffset + 2]!) * t;
+            out.scales[translationOffset] =
+                previous.scales[translationOffset]! +
+                (current.scales[translationOffset]! - previous.scales[translationOffset]!) * t;
+            out.scales[translationOffset + 1] =
+                previous.scales[translationOffset + 1]! +
+                (current.scales[translationOffset + 1]! - previous.scales[translationOffset + 1]!) * t;
+            out.scales[translationOffset + 2] =
+                previous.scales[translationOffset + 2]! +
+                (current.scales[translationOffset + 2]! - previous.scales[translationOffset + 2]!) * t;
+            SoaQuatBuffer.quatSlerp(
+                out.rotations,
+                rotationOffset,
+                previous.rotations,
+                rotationOffset,
+                current.rotations,
+                rotationOffset,
+                t
+            );
+        }
+
+        const previousCurves = this._previousFrame.curves.values;
+        const currentCurves = this.currentFrame.curves.values;
+        const outCurves = this._interpolatedFrame.curves.values;
+        for (let index = 0; index < outCurves.length; index += 1) {
+            outCurves[index] = previousCurves[index]! + (currentCurves[index]! - previousCurves[index]!) * t;
+        }
+
+        return this._interpolatedFrame;
     }
 
     play(stateId: string, layerId: string | undefined = this._layers[0]!.id): this {
