@@ -58,6 +58,7 @@ export interface AnimatorClipConfig {
     readonly streaming?: AnimationClipStreamingDefinition;
 }
 
+export type AnimatorRootMotionConsumer = (delta: AnimationRootMotionDelta) => void;
 export type AnimatorUpdateMode = 'Normal' | 'Animate Physics' | 'Unscaled Time';
 export type AnimatorCullingMode = 'Always Animate' | 'Cull Update Transforms' | 'Cull Completely';
 
@@ -95,6 +96,7 @@ export interface AnimatorConfig {
     readonly speed?: number;
     readonly time?: number;
     readonly applyRootMotion?: boolean;
+    readonly rootMotionConsumer?: AnimatorRootMotionConsumer;
     readonly updateMode?: AnimatorUpdateMode;
     readonly cullingMode?: AnimatorCullingMode;
 }
@@ -182,6 +184,7 @@ export class Animator extends Component {
     private _speed: number;
     private _time: number;
     private _applyRootMotionEnabled: boolean;
+    private _rootMotionConsumer: AnimatorRootMotionConsumer | null = null;
     private _updateMode: AnimatorUpdateMode;
     private _cullingMode: AnimatorCullingMode;
     private readonly _tempVec3 = new Vec3();
@@ -198,6 +201,7 @@ export class Animator extends Component {
         this._speed = Number.isFinite(config.speed ?? 1) ? config.speed ?? 1 : 1;
         this._time = Number.isFinite(config.time ?? 0) ? Math.max(0, config.time ?? 0) : 0;
         this._applyRootMotionEnabled = config.applyRootMotion ?? true;
+        this._rootMotionConsumer = config.rootMotionConsumer ?? null;
         this._updateMode = normalizeAnimatorUpdateMode(config.updateMode);
         this._cullingMode = normalizeAnimatorCullingMode(config.cullingMode);
         this._applyConfig(config);
@@ -290,6 +294,14 @@ export class Animator extends Component {
         this._streamingScheduler = null;
         this._streamingSnapshot = null;
         this._pendingStreamingRequests = Object.freeze([]);
+    }
+
+    get rootMotionConsumer(): AnimatorRootMotionConsumer | null {
+        return this._rootMotionConsumer;
+    }
+
+    set rootMotionConsumer(value: AnimatorRootMotionConsumer | null) {
+        this._rootMotionConsumer = value;
     }
 
     get updateMode(): AnimatorUpdateMode {
@@ -664,6 +676,9 @@ export class Animator extends Component {
         this._speed = Number.isFinite(config.speed ?? this._speed) ? config.speed ?? this._speed : 1;
         this._time = Number.isFinite(config.time ?? this._time) ? Math.max(0, config.time ?? this._time) : 0;
         this._applyRootMotionEnabled = config.applyRootMotion ?? this._applyRootMotionEnabled;
+        if (config.rootMotionConsumer !== undefined) {
+            this._rootMotionConsumer = config.rootMotionConsumer;
+        }
         this._updateMode =
             config.updateMode !== undefined
                 ? normalizeAnimatorUpdateMode(config.updateMode)
@@ -1302,6 +1317,10 @@ export class Animator extends Component {
     }
 
     private _applyRootMotion(rootMotion: AnimationRootMotionDelta): void {
+        if (this._rootMotionConsumer) {
+            this._rootMotionConsumer(rootMotion);
+            return;
+        }
         const transform = this.transform as Transform | undefined;
         if (!transform) {
             return;
