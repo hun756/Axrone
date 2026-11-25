@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { UIPointerEvent, UIKeyEvent } from '../types';
+import type { UIPointerEvent, UIKeyEvent, WidgetFocusPolicyInput, WidgetId } from '../types';
 import { disposeWidget } from './internals';
 
 /**
@@ -47,11 +47,11 @@ export interface StatefulControlUtils<S extends StatefulControlState> {
     /** The control's state (same reference as config.state). */
     readonly state: S;
     /** Syncs enabled/interactive/focusable on the root widget to !state.disabled. */
-    syncDisabled: (root: number, focusOverride?: Record<string, unknown>) => void;
+    syncDisabled: (root: WidgetId, focusOverride?: WidgetFocusPolicyInput | Record<string, unknown>) => void;
     /** Clears hovered + pressed, syncs disabled, calls apply. */
-    setDisabled: (disabled: boolean, root: number, focusOverride?: Record<string, unknown>) => void;
+    setDisabled: (disabled: boolean, root: WidgetId, focusOverride?: WidgetFocusPolicyInput | Record<string, unknown>) => void;
     /** Disposes the root widget. */
-    dispose: (root: number) => void;
+    dispose: (root: WidgetId) => void;
     /** The resolved handlers (with defaults for focus/blur). */
     readonly handlers: StatefulHandlers;
 }
@@ -67,7 +67,7 @@ export interface StatefulControlUtils<S extends StatefulControlState> {
  * Each control supplies its own initial state, apply function, and event handlers.
  */
 export const createStatefulControl = <S extends StatefulControlState>(
-    runtime: UIRuntime<unknown>,
+    runtime: UIRuntime<any>,
     config: StatefulControlConfig<S>,
 ): StatefulControlUtils<S> => {
     const { state, apply } = config;
@@ -89,7 +89,7 @@ export const createStatefulControl = <S extends StatefulControlState>(
         blur: config.handlers?.blur ?? defaultBlur,
     };
 
-    const syncDisabled = (root: number, focusOverride?: Record<string, unknown>): void => {
+    const syncDisabled = (root: WidgetId, focusOverride?: WidgetFocusPolicyInput | Record<string, unknown>): void => {
         runtime.updateWidget(root, {
             enabled: !state.disabled,
             interactive: !state.disabled,
@@ -100,7 +100,7 @@ export const createStatefulControl = <S extends StatefulControlState>(
         });
     };
 
-    const setDisabled = (disabled: boolean, root: number, focusOverride?: Record<string, unknown>): void => {
+    const setDisabled = (disabled: boolean, root: WidgetId, focusOverride?: WidgetFocusPolicyInput | Record<string, unknown>): void => {
         state.disabled = disabled;
         state.pressed = false;
         state.hovered = false;
@@ -108,7 +108,7 @@ export const createStatefulControl = <S extends StatefulControlState>(
         apply();
     };
 
-    const dispose = (root: number): void => {
+    const dispose = (root: WidgetId): void => {
         disposeWidget(runtime, root);
     };
 

@@ -1,4 +1,5 @@
 import type { UIRuntime } from '../runtime';
+import type { WidgetId } from '../types';
 import type { UIScrollViewHandle, UIScrollViewOptions } from './types';
 import { clamp } from '@axrone/numeric';
 import { attachToParent, disposeWidget } from './internals';
@@ -20,8 +21,8 @@ const SCROLL_PAGE_STEP = 64;
 type ScrollbarAxis = 'vertical' | 'horizontal';
 
 interface ScrollbarResult {
-    readonly track: number;
-    readonly thumb: number;
+    readonly track: WidgetId;
+    readonly thumb: WidgetId;
     readonly setDragging: (dragging: boolean) => void;
     readonly isDragging: () => boolean;
     readonly startDrag: (pointerCoord: number, scrollCoord: number) => void;
@@ -34,6 +35,8 @@ const createScrollbar = <TRuntime>(
     state: { scrollX: number; scrollY: number; disabled: boolean },
     cancelMomentum: () => void,
     applyOffsets: () => void,
+    root: WidgetId,
+    content: WidgetId,
 ): ScrollbarResult => {
     const isVertical = axis === 'vertical';
     let dragging = false;
@@ -326,10 +329,10 @@ export const createUIScrollView = <TRuntime>(
     let lastShowH: boolean | null = null;
 
     // Scrollbar track/thumb widgets (assigned after factory creation)
-    let scrollbarTrackV: number;
-    let scrollbarThumbV: number;
-    let scrollbarTrackH: number;
-    let scrollbarThumbH: number;
+    let scrollbarTrackV: WidgetId;
+    let scrollbarThumbV: WidgetId;
+    let scrollbarTrackH: WidgetId;
+    let scrollbarThumbH: WidgetId;
 
     const applyOffsets = (): void => {
         if (state.disabled !== lastDisabled) {
@@ -424,8 +427,8 @@ export const createUIScrollView = <TRuntime>(
     };
 
     // Create scrollbars using the factory (after applyOffsets is defined)
-    const verticalScrollbar = createScrollbar(runtime, 'vertical', state, cancelMomentum, applyOffsets);
-    const horizontalScrollbar = createScrollbar(runtime, 'horizontal', state, cancelMomentum, applyOffsets);
+    const verticalScrollbar = createScrollbar(runtime, 'vertical', state, cancelMomentum, applyOffsets, root, content);
+    const horizontalScrollbar = createScrollbar(runtime, 'horizontal', state, cancelMomentum, applyOffsets, root, content);
     scrollbarTrackV = verticalScrollbar.track;
     scrollbarThumbV = verticalScrollbar.thumb;
     scrollbarTrackH = horizontalScrollbar.track;

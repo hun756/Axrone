@@ -189,9 +189,15 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     // text must remain batched to draw AFTER all quads in the
                     // same clip region. Flushing text before quads causes the
                     // quads to overdraw the text (invisible labels on fills).
-                    if (this.quadBatch.activeClip !== (command.clip ?? null) && !Rect.equals(this.quadBatch.activeClip, command.clip)) {
+                    const nextClip = command.clip ?? null;
+                    const activeClip = this.quadBatch.activeClip;
+                    const clipsMatch =
+                        activeClip === null || nextClip === null
+                            ? activeClip === nextClip
+                            : Rect.equals(activeClip, nextClip);
+                    if (!clipsMatch) {
                         this.quadBatch.flush(frame.viewportHeight, this.renderHost);
-                        this.quadBatch.setActiveClip(command.clip ?? null);
+                        this.quadBatch.setActiveClip(nextClip);
                     }
                     this.quadBatch.push(command, frame.viewportHeight, this.renderHost);
                     continue;
@@ -230,9 +236,14 @@ export class WebGL2UIRenderer<TPayload = unknown> implements UIFrameSink<TPayloa
                     }
                     // NOTE: Do NOT flush text here — strokes share the quad
                     // pipeline and text must draw after them.
-                    if (!this.quadBatch.activeClip || !Rect.equals(this.quadBatch.activeClip, command.clip)) {
+                    const nextClip = command.clip ?? null;
+                    const activeClip = this.quadBatch.activeClip;
+                    const clipsMatch =
+                        activeClip !== null &&
+                        (nextClip === null ? false : Rect.equals(activeClip, nextClip));
+                    if (!clipsMatch) {
                         this.quadBatch.flush(frame.viewportHeight, this.renderHost);
-                        this.quadBatch.setActiveClip(command.clip ?? null);
+                        this.quadBatch.setActiveClip(nextClip);
                     }
                     this.quadBatch.pushStroke(command, frame.viewportHeight, this.renderHost);
                     continue;

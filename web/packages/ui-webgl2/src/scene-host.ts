@@ -27,7 +27,7 @@ let nextWorldHostSystemId = 1;
  * to input in builds. The Editor preview calls its own equivalent; this covers
  * the runtime/build path.
  */
-const registerBuiltinWidgetControllers = (runtime: UIRuntime<unknown>): void => {
+const registerBuiltinWidgetControllers = <TPayload>(runtime: UIRuntime<TPayload>): void => {
     type RegistryEntry = Parameters<typeof runtime.registry.register>[0];
     const controllers: readonly RegistryEntry[] = [
         buttonFeedbackController as RegistryEntry,

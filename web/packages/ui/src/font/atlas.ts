@@ -147,7 +147,7 @@ export class GlyphAtlas {
                 cursorX: 0,
                 cursorY: 0,
                 rowHeight: 0,
-                entries: new Map<string, GlyphAtlasEntry>(),
+                entries: new Map<number, GlyphAtlasEntry>(),
                 lastAccess: 0,
             };
             for (const entry of pageSnapshot.entries) {
@@ -226,7 +226,7 @@ export class GlyphAtlas {
             cursorX: 0,
             cursorY: 0,
             rowHeight: 0,
-            entries: new Map<string, GlyphAtlasEntry>(),
+            entries: new Map<number, GlyphAtlasEntry>(),
             lastAccess: this.frameCounter,
         };
         this.nextPageId += 1;

@@ -1,5 +1,5 @@
 import type { UIRuntime } from '../runtime';
-import type { ColorHexString, UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
+import type { ColorHexString, ColorInput, UIInputEvent, UIImageSource, WidgetId, WidgetImageInput, WidgetStrokeData } from '../types';
 import type { WidgetController, WidgetControllerContext } from '../widget';
 import { animateWidgetColor, Easing, type UIAnimationHandle } from './animation';
 import { asString, asNumber, asBoolean, asRecord, isValidImageSource, toImageSource, extractSourceInput, type ImageSourceInput } from './internals';
@@ -111,7 +111,7 @@ const resolveVisualState = (
 const DEFAULT_STATES: Readonly<Record<CheckboxVisualState, string>> = Object.freeze({
     normal: '#334155ff',
     hover: '#475569ff',
-    checked: defaultUIControlTheme.accentColor,
+    checked: asString(defaultUIControlTheme.accentColor) || '#3b82f6ff',
     disabled: '#1e293bff',
 });
 
@@ -295,7 +295,7 @@ const applyBoxVisuals = (context: CheckboxContext): boolean => {
             // cancelled mid-flight animation starts from where the
             // widget truly is, not from a stale target.
             const currentStyle = runtime.getWidgetStyleInput(box);
-            const fromColor = (asString(currentStyle?.background) || state.previousBoxColor) as `#${string}`;
+            const fromColor = (asString(currentStyle?.background) || (typeof state.previousBoxColor === 'string' ? state.previousBoxColor : '')) as `#${string}`;
             state.boxAnimation = animateWidgetColor(
                 runtime,
                 box,
