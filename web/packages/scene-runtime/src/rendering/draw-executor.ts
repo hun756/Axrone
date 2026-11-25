@@ -12,6 +12,8 @@ import type { SceneRenderPassResource } from './render-pass-registry';
 import type { SceneRenderStateApplier } from './render-state-applier';
 import type { SceneShaderResource } from '../shader-registry';
 import type { SceneFrameUniformBinder } from '../frame-uniform-binder';
+import type { SceneExternalUniformBinder } from '../external-uniform-binder';
+import { resolveSceneMeshObjectBounds } from '../scene-mesh-bounds';
 import type { SceneLightingUniformBinder } from '../lighting-uniform-binder';
 import type { SceneFogUniformBinder } from '../fog-uniform-binder';
 import type {
@@ -39,6 +41,9 @@ export interface SceneDrawExecutorContext {
     readonly frame: number;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
+    /** Size of the render target this pass rasterizes into (offscreen or canvas). */
+    readonly renderTargetWidth: number;
+    readonly renderTargetHeight: number;
 }
 
 interface SceneDrawExecutorResources {
@@ -75,6 +80,10 @@ interface SceneDrawExecutorDependencies {
         'apply' | 'resolvePrimitiveMode' | 'resolvePrimitiveTopology'
     >;
     readonly frameUniformBinder: Pick<SceneFrameUniformBinder, 'apply'>;
+    readonly externalUniformBinder: Pick<
+        SceneExternalUniformBinder,
+        'applyFrame' | 'applyObjectBounds'
+    >;
     readonly lightingUniformBinder: Pick<SceneLightingUniformBinder, 'apply'>;
     readonly fogUniformBinder: Pick<SceneFogUniformBinder, 'apply'>;
     readonly skinningUniformBinder: Pick<SceneSkinningUniformBinder, 'apply'>;
@@ -124,6 +133,10 @@ interface SceneShaderUniformState {
     fogWritten: boolean;
     declaresMvp: boolean;
     declaresSkinning: boolean;
+    declaresFrameExternals: boolean;
+    declaresObjectBounds: boolean;
+    renderTargetWidth: number;
+    renderTargetHeight: number;
 }
 
 const createShaderUniformState = (shader: SceneShaderResource): SceneShaderUniformState => ({
@@ -139,6 +152,15 @@ const createShaderUniformState = (shader: SceneShaderResource): SceneShaderUnifo
         shader.uniformLocations.has('u_Skinning') ||
         shader.uniformLocations.has('u_SkinJointCount') ||
         shader.uniformLocations.has('u_JointMatrices'),
+    declaresFrameExternals:
+        shader.uniformLocations.has('_RenderTargetSize') ||
+        shader.uniformLocations.has('_MainLightDirection') ||
+        shader.uniformLocations.has('_MainLightColor'),
+    declaresObjectBounds:
+        shader.uniformLocations.has('_ObjectBoundsCenter') ||
+        shader.uniformLocations.has('_ObjectBoundsSize'),
+    renderTargetWidth: 0,
+    renderTargetHeight: 0,
 });
 
 export class SceneDrawExecutor {
@@ -304,6 +326,8 @@ export class SceneDrawExecutor {
             );
         });
 
+        this._applyObjectBounds(shader, item, uniformState);
+
         const primitiveMode =
             this._dependencies.renderStateApplier.resolvePrimitiveMode?.(mesh.mode, materialPass) ??
             mesh.mode;
@@ -423,17 +447,23 @@ export class SceneDrawExecutor {
 
         // Frame-scoped uniforms are only valid while the camera, lighting and
         // fog inputs are unchanged. A new camera frame object (or explicit
-        // frame change) resets every group.
+        // frame change) resets every group. The active render target can also
+        // change mid-frame (offscreen passes), which invalidates the external
+        // frame group even when nothing else moved.
         if (
             state.frame !== context.frame ||
             state.cameraFrame !== context.cameraFrame ||
             state.lightingValues !== context.lightingValues ||
-            state.fog !== context.fog
+            state.fog !== context.fog ||
+            state.renderTargetWidth !== context.renderTargetWidth ||
+            state.renderTargetHeight !== context.renderTargetHeight
         ) {
             state.frame = context.frame;
             state.cameraFrame = context.cameraFrame;
             state.lightingValues = context.lightingValues;
             state.fog = context.fog;
+            state.renderTargetWidth = context.renderTargetWidth;
+            state.renderTargetHeight = context.renderTargetHeight;
             state.lightingWrittenFlag = 0;
             state.frameUniformsWritten = false;
             state.fogWritten = false;
@@ -469,6 +499,14 @@ export class SceneDrawExecutor {
                 viewportWidth: context.viewportWidth,
                 viewportHeight: context.viewportHeight,
             });
+            if (state.declaresFrameExternals) {
+                this._dependencies.externalUniformBinder.applyFrame(
+                    shader,
+                    context.renderTargetWidth,
+                    context.renderTargetHeight,
+                    context.lighting
+                );
+            }
             state.frameUniformsWritten = true;
             return;
         }
@@ -483,6 +521,32 @@ export class SceneDrawExecutor {
             );
             this._dependencies.uniformWriter.write(shader, 'u_MVP', this._mvpScratch);
         }
+    }
+
+    /**
+     * Publishes the drawn mesh's object-space AABB. Runs after the author-uniform
+     * loops so a stale material value can never shadow the engine value, and it
+     * cannot ride the `frameUniformsWritten` short-circuit because every item in
+     * a frame draws a different mesh.
+     */
+    private _applyObjectBounds(
+        shader: SceneShaderResource,
+        item: SceneRenderItem,
+        state: SceneShaderUniformState
+    ): void {
+        if (!state.declaresObjectBounds) {
+            return;
+        }
+
+        const meshId = item.renderer.meshId;
+        if (meshId === null) {
+            return;
+        }
+
+        this._dependencies.externalUniformBinder.applyObjectBounds(
+            shader,
+            resolveSceneMeshObjectBounds(this._dependencies.resources.meshes.getDefinition(meshId))
+        );
     }
 
     /**

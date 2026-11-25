@@ -109,6 +109,8 @@ const createContext = (): SceneDrawExecutorContext => {
         frame: 1,
         viewportWidth: 800,
         viewportHeight: 600,
+        renderTargetWidth: 800,
+        renderTargetHeight: 600,
     };
 };
 
@@ -174,6 +176,7 @@ const createHarness = () => {
             resolvePrimitiveTopology: () => 'triangles',
         },
         frameUniformBinder: { apply: vi.fn() },
+        externalUniformBinder: { applyFrame: vi.fn(), applyObjectBounds: vi.fn() },
         lightingUniformBinder: { apply: vi.fn() },
         fogUniformBinder: { apply: vi.fn() },
         skinningUniformBinder: { apply: vi.fn() },

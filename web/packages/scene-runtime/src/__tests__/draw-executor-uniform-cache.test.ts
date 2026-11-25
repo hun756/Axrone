@@ -99,12 +99,15 @@ const createContext = (frame: number): SceneDrawExecutorContext => {
         frame,
         viewportWidth: 800,
         viewportHeight: 600,
+        renderTargetWidth: 800,
+        renderTargetHeight: 600,
     };
 };
 
 const createHarness = (options: {
     uniforms?: readonly string[];
     textured?: boolean;
+    meshDefinition?: unknown;
 }) => {
     const shader = createShader(
         options.uniforms ?? [
@@ -128,6 +131,8 @@ const createHarness = (options: {
     } as unknown as WebGL2RenderingContext;
     const write = vi.fn();
     const frameUniformApply = vi.fn();
+    const externalApplyFrame = vi.fn();
+    const externalApplyObjectBounds = vi.fn();
     const lightingApply = vi.fn();
     const fogApply = vi.fn();
     const skinningApply = vi.fn();
@@ -153,7 +158,7 @@ const createHarness = (options: {
             },
             meshes: {
                 get: () => mesh,
-                getDefinition: () => undefined,
+                getDefinition: () => options.meshDefinition,
             },
             shaders: {
                 get: (id: string) => (id === shader.id ? shader : undefined),
@@ -172,6 +177,10 @@ const createHarness = (options: {
             resolvePrimitiveTopology: () => 'triangles',
         },
         frameUniformBinder: { apply: frameUniformApply },
+        externalUniformBinder: {
+            applyFrame: externalApplyFrame,
+            applyObjectBounds: externalApplyObjectBounds,
+        },
         lightingUniformBinder: { apply: lightingApply },
         fogUniformBinder: { apply: fogApply },
         skinningUniformBinder: { apply: skinningApply },
@@ -191,6 +200,8 @@ const createHarness = (options: {
         drawElements,
         write,
         frameUniformApply,
+        externalApplyFrame,
+        externalApplyObjectBounds,
         lightingApply,
         fogApply,
         skinningApply,
@@ -333,5 +344,71 @@ describe('SceneDrawExecutor uniform caching', () => {
         harness.executor.execute(createItem(renderer), context, frameState);
 
         expect(harness.skinningApply).toHaveBeenCalledTimes(2);
+    });
+
+    it('feeds frame externals only once per shader per frame', () => {
+        const harness = createHarness({ uniforms: ['u_Model', '_MainLightDirection'] });
+        const frameState = new SceneRenderFrameState().begin(1);
+        const context = createContext(1);
+        const renderer = createRenderer(true);
+
+        harness.executor.execute(createItem(renderer), context, frameState);
+        harness.executor.execute(createItem(renderer), context, frameState);
+        harness.executor.execute(createItem(renderer), context, frameState);
+
+        // Shares the frameUniformsWritten short-circuit: one applyFrame per frame.
+        expect(harness.externalApplyFrame).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the external frame binder when the shader declares none of them', () => {
+        const harness = createHarness({ uniforms: ['u_Model', 'u_View'] });
+        const frameState = new SceneRenderFrameState().begin(1);
+        const context = createContext(1);
+        const renderer = createRenderer(true);
+
+        harness.executor.execute(createItem(renderer), context, frameState);
+
+        expect(harness.externalApplyFrame).not.toHaveBeenCalled();
+    });
+
+    it('writes object bounds on EVERY draw of a repeated shader', () => {
+        const meshDefinition = {
+            id: 'mesh/test',
+            vertices: new Float32Array([1, -2, 0, 3, 2, 1]),
+            attributes: [
+                { semantic: 'position', componentCount: 3, offset: 0, stride: 12 },
+            ],
+        };
+        const harness = createHarness({
+            uniforms: ['u_Model', '_ObjectBoundsCenter', '_ObjectBoundsSize'],
+            meshDefinition,
+        });
+        const frameState = new SceneRenderFrameState().begin(1);
+        const context = createContext(1);
+
+        // Two DIFFERENT items share one shader within the same frame.
+        harness.executor.execute(createItem(createRenderer(true)), context, frameState);
+        harness.executor.execute(createItem(createRenderer(true)), context, frameState);
+
+        // Bounds are per-draw, so they must not hide behind frameUniformsWritten.
+        expect(harness.externalApplyObjectBounds).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips object-bounds resolution when the shader does not declare them', () => {
+        const harness = createHarness({
+            uniforms: ['u_Model'],
+            meshDefinition: {
+                id: 'mesh/test',
+                vertices: new Float32Array([0, 0, 0]),
+                attributes: [{ semantic: 'position', componentCount: 3, offset: 0, stride: 12 }],
+            },
+        });
+        const frameState = new SceneRenderFrameState().begin(1);
+        const context = createContext(1);
+        const renderer = createRenderer(true);
+
+        harness.executor.execute(createItem(renderer), context, frameState);
+
+        expect(harness.externalApplyObjectBounds).not.toHaveBeenCalled();
     });
 });

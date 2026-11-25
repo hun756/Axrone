@@ -21,6 +21,7 @@ import type {
 import type { SceneUniformWriteTarget } from '../uniform-writer';
 import type { SceneLightingUniformBinder } from '../lighting-uniform-binder';
 import type { SceneFogUniformBinder } from '../fog-uniform-binder';
+import type { SceneExternalUniformBinder } from '../external-uniform-binder';
 import type { SceneLightingState } from '../lighting-collector';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import type { SceneFogState } from '../fog-state';
@@ -51,6 +52,8 @@ export interface SceneInstancedMeshRuntimeOptions {
     readonly uniformWriter: SceneUniformWriteTarget;
     readonly lightingUniformBinder: Pick<SceneLightingUniformBinder, 'apply'>;
     readonly fogUniformBinder: Pick<SceneFogUniformBinder, 'apply'>;
+    /** Optional so existing constructions keep compiling; feeds frame externals. */
+    readonly externalUniformBinder?: Pick<SceneExternalUniformBinder, 'applyFrame'>;
     readonly materialTextureBinder: Pick<SceneMaterialTextureBinder, 'bind' | 'unbind'>;
     readonly textureUniformSetter: SceneMaterialTextureUniformSetter;
     /**
@@ -77,6 +80,8 @@ export interface SceneInstancedPlanParams {
     readonly deltaSeconds: number;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
+    readonly renderTargetWidth?: number;
+    readonly renderTargetHeight?: number;
     readonly frameState: SceneRenderFrameState;
     /**
      * True when the scene's render-item list cache reported a hit: the item
@@ -452,6 +457,8 @@ export class SceneInstancedMeshRuntime {
             readonly deltaSeconds: number;
             readonly viewportWidth: number;
             readonly viewportHeight: number;
+            readonly renderTargetWidth?: number;
+            readonly renderTargetHeight?: number;
             readonly frameState: SceneRenderFrameState;
         }
     ): number {
@@ -981,6 +988,8 @@ export class SceneInstancedMeshRuntime {
             readonly deltaSeconds: number;
             readonly viewportWidth: number;
             readonly viewportHeight: number;
+            readonly renderTargetWidth?: number;
+            readonly renderTargetHeight?: number;
             readonly frameState: SceneRenderFrameState;
         }
     ): void {
@@ -1014,6 +1023,25 @@ export class SceneInstancedMeshRuntime {
         }
         if (shader.uniformLocations.has('u_FogEnabled')) {
             this._options.fogUniformBinder.apply(shader, params.fog);
+        }
+
+        // Frame externals (_RenderTargetSize/_MainLight*) are per-frame and safe
+        // to feed here. Object bounds are intentionally NOT fed on the instanced
+        // path: one draw covers many transforms, so a single per-object AABB
+        // would be wrong for every instance but one.
+        const externalUniformBinder = this._options.externalUniformBinder;
+        if (
+            externalUniformBinder &&
+            (shader.uniformLocations.has('_RenderTargetSize') ||
+                shader.uniformLocations.has('_MainLightDirection') ||
+                shader.uniformLocations.has('_MainLightColor'))
+        ) {
+            externalUniformBinder.applyFrame(
+                shader,
+                params.renderTargetWidth ?? params.viewportWidth,
+                params.renderTargetHeight ?? params.viewportHeight,
+                params.lighting
+            );
         }
 
         for (const [name, value] of group.material.uniforms) {

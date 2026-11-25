@@ -98,6 +98,8 @@ const createContext = (
         frame,
         viewportWidth: 800,
         viewportHeight: 600,
+        renderTargetWidth: 800,
+        renderTargetHeight: 600,
     };
 };
 
@@ -149,6 +151,7 @@ const createHarness = (options: {
             resolvePrimitiveTopology: () => 'triangles',
         },
         frameUniformBinder: { apply: vi.fn() },
+        externalUniformBinder: { applyFrame: vi.fn(), applyObjectBounds: vi.fn() },
         lightingUniformBinder: { apply: vi.fn() },
         fogUniformBinder: { apply: vi.fn() },
         skinningUniformBinder: { apply: vi.fn() },

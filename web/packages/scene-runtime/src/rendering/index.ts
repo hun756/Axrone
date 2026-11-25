@@ -11,6 +11,11 @@
 export { SceneDrawExecutionContextCache } from './draw-execution-context';
 export type { SceneDrawExecutorContext } from './draw-executor';
 export { SceneDrawExecutor } from './draw-executor';
+export {
+    SCENE_EXTERNAL_FRAME_UNIFORM_NAMES,
+    SCENE_OBJECT_BOUNDS_UNIFORM_NAMES,
+    SceneExternalUniformBinder,
+} from '../external-uniform-binder';
 export { createRenderCacheCameraKey } from './render-cache-key';
 export type { RenderCacheViewport } from './render-cache-key';
 export { SceneRenderFrameState } from './render-frame-state';

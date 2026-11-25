@@ -20,6 +20,8 @@ export class SceneDrawExecutionContextCache {
         frame: 0,
         viewportWidth: 0,
         viewportHeight: 0,
+        renderTargetWidth: 0,
+        renderTargetHeight: 0,
     };
 
     prepare(context: SceneDrawExecutorContext): SceneDrawExecutorContext {
@@ -33,6 +35,8 @@ export class SceneDrawExecutionContextCache {
         this._context.frame = context.frame;
         this._context.viewportWidth = context.viewportWidth;
         this._context.viewportHeight = context.viewportHeight;
+        this._context.renderTargetWidth = context.renderTargetWidth;
+        this._context.renderTargetHeight = context.renderTargetHeight;
         return this._context;
     }
 }

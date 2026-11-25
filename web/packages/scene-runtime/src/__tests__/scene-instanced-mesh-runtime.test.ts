@@ -194,16 +194,21 @@ void main() { o_Color = u_Color; }`,
     blend: false,
 });
 
-const createInstancedShader = (id: string, instanceColor: boolean): SceneInstancedShaderResource =>
+const createInstancedShader = (
+    id: string,
+    instanceColor: boolean,
+    extraUniforms: readonly string[] = []
+): SceneInstancedShaderResource =>
     ({
         id: `${id}#instanced`,
         program: { kind: 'program' },
         uniformLocations: new Map([
             ['u_View', { name: 'u_View' }],
             ['u_Projection', { name: 'u_Projection' }],
+            ...extraUniforms.map((name) => [name, { name }] as const),
         ]),
         uniformTypes: new Map(),
-        uniformNames: ['u_View', 'u_Projection'],
+        uniformNames: ['u_View', 'u_Projection', ...extraUniforms],
         attributeNames: {
             position: 'a_Position',
             normal: 'a_Normal',
@@ -230,6 +235,10 @@ const createRenderPass = (): SceneRenderPassResource =>
 const createHarness = (options?: {
     blendedShaders?: ReadonlySet<string>;
     unsupportedShaders?: ReadonlySet<string>;
+    /** Uniform names the derived instanced program declares (drives binder gating). */
+    shaderUniforms?: readonly string[];
+    /** Omit to keep the runtime constructed without an external uniform binder. */
+    externalUniformBinder?: { applyFrame: ReturnType<typeof vi.fn>; applyObjectBounds: ReturnType<typeof vi.fn> };
 }) => {
     const materials = new Map<string, SceneMaterialResource>([
         ['material:unlit', createMaterial('material:unlit', 'shader:unlit')],
@@ -260,6 +269,9 @@ const createHarness = (options?: {
         uniformWriter: { write: vi.fn() },
         lightingUniformBinder: { apply: vi.fn() },
         fogUniformBinder: { apply: vi.fn() },
+        ...(options?.externalUniformBinder
+            ? { externalUniformBinder: options.externalUniformBinder }
+            : {}),
         materialTextureBinder: { bind: vi.fn(() => []), unbind: vi.fn() },
         textureUniformSetter: vi.fn(),
         compileProgram: (_gl, definition) => {
@@ -268,7 +280,8 @@ const createHarness = (options?: {
             }
             return createInstancedShader(
                 definition.id,
-                definition.fragmentSource.includes('u_Color')
+                definition.fragmentSource.includes('u_Color'),
+                options?.shaderUniforms ?? []
             );
         },
     });
@@ -316,7 +329,10 @@ const createHarness = (options?: {
         meshResource,
         renderStateApply,
         blendChecks,
-        draw: (plan: ReturnType<SceneInstancedMeshRuntime['build']>) =>
+        draw: (
+            plan: ReturnType<SceneInstancedMeshRuntime['build']>,
+            overrides?: Partial<SceneInstancedPlanParams>
+        ) =>
             runtime.draw(plan, {
                 renderPass: pass,
                 cameraFrame: {} as SceneInstancedPlanParams['cameraFrame'],
@@ -328,6 +344,7 @@ const createHarness = (options?: {
                 viewportWidth: 800,
                 viewportHeight: 600,
                 frameState,
+                ...overrides,
             }),
     };
 };
@@ -652,6 +669,114 @@ describe('SceneInstancedMeshRuntime pass-level shader override', () => {
 
         const mainPlan = harness.build([toonItem()], { renderPass: mainPass });
         expect(mainPlan.groupCount).toBe(1);
+    });
+});
+
+describe('SceneInstancedMeshRuntime frame externals', () => {
+    const twoItems = () => [
+        createItem(createFakeRenderer({}), createFakeTransform(1)),
+        createItem(createFakeRenderer({}), createFakeTransform(2)),
+    ];
+
+    const createExternalHarness = (shaderUniforms: readonly string[]) => {
+        const externalUniformBinder = { applyFrame: vi.fn(), applyObjectBounds: vi.fn() };
+        const harness = createHarness({ shaderUniforms, externalUniformBinder });
+        return { harness, externalUniformBinder };
+    };
+
+    it('feeds applyFrame with the render target size when the shader declares _MainLightColor', () => {
+        const { harness, externalUniformBinder } = createExternalHarness(['_MainLightColor']);
+
+        harness.draw(harness.build(twoItems()), {
+            renderTargetWidth: 512,
+            renderTargetHeight: 256,
+        });
+
+        expect(externalUniformBinder.applyFrame).toHaveBeenCalledTimes(1);
+        const [shader, width, height, lighting] = externalUniformBinder.applyFrame.mock.calls[0]!;
+        // The instanced program (not the source shader) receives the feed.
+        expect((shader as { id: string }).id).toContain('#instanced');
+        expect(width).toBe(512);
+        expect(height).toBe(256);
+        // The frame's lighting state is forwarded untouched.
+        expect(lighting).toBeDefined();
+        expect(externalUniformBinder.applyObjectBounds).not.toHaveBeenCalled();
+    });
+
+    it('feeds applyFrame for a shader declaring only _RenderTargetSize', () => {
+        const { harness, externalUniformBinder } = createExternalHarness(['_RenderTargetSize']);
+
+        harness.draw(harness.build(twoItems()), {
+            renderTargetWidth: 320,
+            renderTargetHeight: 200,
+        });
+
+        expect(externalUniformBinder.applyFrame).toHaveBeenCalledTimes(1);
+        expect(externalUniformBinder.applyFrame.mock.calls[0]![1]).toBe(320);
+        expect(externalUniformBinder.applyFrame.mock.calls[0]![2]).toBe(200);
+    });
+
+    it('falls back to the viewport when no render target size was supplied', () => {
+        const { harness, externalUniformBinder } = createExternalHarness(['_MainLightDirection']);
+
+        // `renderTargetWidth/Height` are optional on the draw params (a direct
+        // caller that predates them must keep working).
+        harness.draw(harness.build(twoItems()));
+
+        expect(externalUniformBinder.applyFrame).toHaveBeenCalledTimes(1);
+        expect(externalUniformBinder.applyFrame.mock.calls[0]![1]).toBe(800);
+        expect(externalUniformBinder.applyFrame.mock.calls[0]![2]).toBe(600);
+    });
+
+    it('never feeds object bounds on the instanced path', () => {
+        // One instanced draw spans many transforms, so a single per-object AABB
+        // would be wrong for every instance but one — even when the program
+        // declares both bounds uniforms.
+        const { harness, externalUniformBinder } = createExternalHarness([
+            '_ObjectBoundsCenter',
+            '_ObjectBoundsSize',
+            '_MainLightColor',
+        ]);
+
+        harness.draw(harness.build(twoItems()), {
+            renderTargetWidth: 512,
+            renderTargetHeight: 256,
+        });
+
+        expect(externalUniformBinder.applyObjectBounds).not.toHaveBeenCalled();
+        // Declaring only bounds uniforms must not unlock the frame group either.
+        const boundsOnly = createExternalHarness(['_ObjectBoundsCenter', '_ObjectBoundsSize']);
+        boundsOnly.harness.draw(boundsOnly.harness.build(twoItems()));
+        expect(boundsOnly.externalUniformBinder.applyFrame).not.toHaveBeenCalled();
+        expect(boundsOnly.externalUniformBinder.applyObjectBounds).not.toHaveBeenCalled();
+    });
+
+    it('skips the external feed entirely when the shader declares none of them', () => {
+        const { harness, externalUniformBinder } = createExternalHarness(['u_View']);
+
+        harness.draw(harness.build(twoItems()), {
+            renderTargetWidth: 512,
+            renderTargetHeight: 256,
+        });
+
+        expect(externalUniformBinder.applyFrame).not.toHaveBeenCalled();
+        expect(externalUniformBinder.applyObjectBounds).not.toHaveBeenCalled();
+        // The group still drew — gating must not drop geometry.
+        expect(harness.state.drawElementsInstanced).toHaveLength(1);
+    });
+
+    it('survives a runtime built without an external uniform binder', () => {
+        // `externalUniformBinder` is optional in the options contract, so a
+        // declared-externals shader must not crash the instanced draw.
+        const harness = createHarness({ shaderUniforms: ['_MainLightColor', '_RenderTargetSize'] });
+
+        expect(() =>
+            harness.draw(harness.build(twoItems()), {
+                renderTargetWidth: 512,
+                renderTargetHeight: 256,
+            })
+        ).not.toThrow();
+        expect(harness.state.drawElementsInstanced).toHaveLength(1);
     });
 });
 
