@@ -85,6 +85,14 @@ export { selectSceneCamera } from './camera-selector';
 export type { SceneFrameUniformContext } from './frame-uniform-binder';
 export { SceneFrameUniformBinder } from './frame-uniform-binder';
 
+export {
+    SCENE_EXTERNAL_FRAME_UNIFORM_NAMES,
+    SCENE_OBJECT_BOUNDS_UNIFORM_NAMES,
+    SceneExternalUniformBinder,
+} from './external-uniform-binder';
+export type { SceneMeshObjectBounds } from './scene-mesh-bounds';
+export { resolveSceneMeshObjectBounds } from './scene-mesh-bounds';
+
 export type { SceneLoopBridgeHost } from './loop-bridge';
 export { createSceneLoopSystems } from './loop-bridge';
 

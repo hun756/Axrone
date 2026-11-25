@@ -15,7 +15,9 @@ import {
     SSS_BLUR_PASS_ID,
     SSS_BLUR_TEXTURE_ID,
 } from './scene-framebuffer-passes';
+import type { SceneFramebufferTextureBindings } from './scene-offscreen-framebuffer-passes';
 import { SceneFrameUniformBinder } from '../frame-uniform-binder';
+import { SceneExternalUniformBinder } from '../external-uniform-binder';
 import { SceneFogUniformBinder } from '../fog-uniform-binder';
 import { DEFAULT_SCENE_FOG_STATE, type SceneFogState } from '../fog-state';
 import { SceneLightingCollector } from '../lighting-collector';
@@ -140,6 +142,7 @@ export class SceneRenderRuntime {
     private readonly _renderStateApplier: SceneRenderStateApplier;
     private readonly _uniformWriter: SceneUniformWriter;
     private readonly _frameUniformBinder: SceneFrameUniformBinder;
+    private readonly _externalUniformBinder: SceneExternalUniformBinder;
     private readonly _lightingUniformBinder: SceneLightingUniformBinder;
     private readonly _fogUniformBinder: SceneFogUniformBinder;
     private readonly _skinningUniformBinder: SceneSkinningUniformBinder;
@@ -198,6 +201,12 @@ export class SceneRenderRuntime {
     private _optionalPassRevision = Number.NaN;
     private _optionalPassIds: ReadonlySet<string> = EMPTY_OPTIONAL_MATERIAL_PASSES;
     private _framebufferTextureKey = '';
+    /**
+     * Active render target size for the frame, resolved once from the offscreen
+     * colour target (or the canvas viewport). Retained and mutated in place so
+     * the per-frame path allocates nothing.
+     */
+    private readonly _renderTargetSize = { width: 0, height: 0 };
     private _framePassSource: readonly SceneRenderPassResource[] | null = null;
     private _framePasses: readonly SceneRenderPassResource[] | null = null;
 
@@ -215,6 +224,7 @@ export class SceneRenderRuntime {
         this._renderStateApplier = new SceneRenderStateApplier(_options.gl);
         this._uniformWriter = new SceneUniformWriter(_options.gl);
         this._frameUniformBinder = new SceneFrameUniformBinder(this._uniformWriter);
+        this._externalUniformBinder = new SceneExternalUniformBinder(this._uniformWriter);
         this._lightingUniformBinder = new SceneLightingUniformBinder(this._uniformWriter);
         this._fogUniformBinder = new SceneFogUniformBinder(this._uniformWriter);
         this._skinningUniformBinder = new SceneSkinningUniformBinder(
@@ -233,6 +243,7 @@ export class SceneRenderRuntime {
             morphMeshRuntime: this._morphMeshRuntime,
             renderStateApplier: this._renderStateApplier,
             frameUniformBinder: this._frameUniformBinder,
+            externalUniformBinder: this._externalUniformBinder,
             lightingUniformBinder: this._lightingUniformBinder,
             fogUniformBinder: this._fogUniformBinder,
             skinningUniformBinder: this._skinningUniformBinder,
@@ -265,6 +276,7 @@ export class SceneRenderRuntime {
                       uniformWriter: this._uniformWriter,
                       lightingUniformBinder: this._lightingUniformBinder,
                       fogUniformBinder: this._fogUniformBinder,
+                      externalUniformBinder: this._externalUniformBinder,
                       materialTextureBinder: this._materialTextureBinder,
                       textureUniformSetter: this._textureUniformSetter,
                       // The instanced path binds its own group textures; the
@@ -418,14 +430,36 @@ export class SceneRenderRuntime {
     }
 
     /**
+     * Resolves the size of the target the screen-space passes sample. When an
+     * offscreen scene-colour copy exists it is the real render target; otherwise
+     * draws go straight to the canvas, so the viewport dimensions apply. Mutates
+     * the retained `_renderTargetSize` in place — no per-frame allocation.
+     */
+    private _resolveRenderTargetSize(
+        bindings: SceneFramebufferTextureBindings | null,
+        params: SceneRenderRuntimeParams
+    ): void {
+        const sceneColor = bindings?.sceneColorTexture;
+        if (sceneColor && sceneColor.width > 0 && sceneColor.height > 0) {
+            this._renderTargetSize.width = sceneColor.width;
+            this._renderTargetSize.height = sceneColor.height;
+            return;
+        }
+
+        this._renderTargetSize.width = params.viewportWidth;
+        this._renderTargetSize.height = params.viewportHeight;
+    }
+
+    /**
      * Publishes the offscreen scene-colour copy and subsurface blur targets into
      * the texture registry under their well-known ids, so a gated material's
      * `_SceneColorTexture` / `_SubsurfaceBlurTexture` slot resolves to the real
      * target instead of falling back to the material's own textures. Targets are
      * persistent, so this runs only when the set or resolution actually changed.
      */
-    private _syncFramebufferTextures(): void {
-        const bindings = this._renderPipeline.framebufferTextureBindings;
+    private _syncFramebufferTextures(
+        bindings: SceneFramebufferTextureBindings | null
+    ): void {
         const sceneColor = bindings?.sceneColorTexture ?? null;
         const sssBlur = bindings?.sssBlurTexture ?? null;
         const key = `${sceneColor === null ? 0 : sceneColor.width}x${
@@ -624,7 +658,12 @@ export class SceneRenderRuntime {
         if (renderPasses.length === 0) {
             return;
         }
-        this._syncFramebufferTextures();
+        // Read the framebuffer bindings once per frame — the getter allocates a
+        // small object, so both the texture sync and the render-target size
+        // resolution share one snapshot.
+        const framebufferBindings = this._renderPipeline.framebufferTextureBindings;
+        this._resolveRenderTargetSize(framebufferBindings, params);
+        this._syncFramebufferTextures(framebufferBindings);
         this._options.gl.viewport(0, 0, params.viewportWidth, params.viewportHeight);
 
         let planningPassCount = 0;
@@ -663,6 +702,8 @@ export class SceneRenderRuntime {
                 frame: params.frame,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                renderTargetWidth: this._renderTargetSize.width,
+                renderTargetHeight: this._renderTargetSize.height,
             });
 
             const materialRevision = this._options.resources.materials.revision;

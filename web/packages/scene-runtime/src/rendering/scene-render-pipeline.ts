@@ -604,6 +604,8 @@ export class SceneRenderPipeline {
                 deltaSeconds: params.deltaSeconds,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                renderTargetWidth: params.drawContext.renderTargetWidth,
+                renderTargetHeight: params.drawContext.renderTargetHeight,
                 frameState: params.frameState,
                 stable: params.renderListCacheHit === true,
                 materialRevision: params.materialRevision ?? -1,
@@ -622,6 +624,8 @@ export class SceneRenderPipeline {
                 deltaSeconds: params.deltaSeconds,
                 viewportWidth: params.viewportWidth,
                 viewportHeight: params.viewportHeight,
+                renderTargetWidth: params.drawContext.renderTargetWidth,
+                renderTargetHeight: params.drawContext.renderTargetHeight,
                 frameState: params.frameState,
             };
         }
