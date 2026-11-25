@@ -205,6 +205,67 @@ export const createSharedObjectProperties = (): readonly RenderShaderPropertyDef
         scope: 'object',
         inspector: HIDDEN_INSPECTOR,
     },
+    // Stage 5 external uniforms with object scope: they describe the drawn mesh,
+    // so they live next to `u_Model` and reach both stages that transform it.
+    {
+        name: '_ObjectBoundsCenter',
+        type: 'vec3',
+        stages: ['vertex', 'fragment'],
+        scope: 'object',
+        defaultValue: [0, 0, 0],
+        inspector: HIDDEN_INSPECTOR,
+    },
+    {
+        name: '_ObjectBoundsSize',
+        type: 'vec3',
+        stages: ['vertex', 'fragment'],
+        scope: 'object',
+        defaultValue: [1, 1, 1],
+        inspector: HIDDEN_INSPECTOR,
+    },
+];
+
+/**
+ * Stage 5 engine-supplied globals (`MATERIAL_EXTERNAL_UNIFORMS_V2` in
+ * render-core). Their values are written by the renderer, never by a material,
+ * so every effect declares them exactly once through this factory.
+ */
+export const createEngineGlobalProperties = (): readonly RenderShaderPropertyDefinition[] => [
+    {
+        name: '_RenderTargetSize',
+        type: 'vec2',
+        stages: ['fragment'],
+        scope: 'system',
+        defaultValue: [1, 1],
+        inspector: HIDDEN_INSPECTOR,
+    },
+    {
+        name: '_MainLightDirection',
+        type: 'vec3',
+        stages: ['vertex', 'fragment'],
+        scope: 'frame',
+        defaultValue: [0, 1, 0],
+        inspector: HIDDEN_INSPECTOR,
+    },
+    {
+        name: '_MainLightColor',
+        type: 'vec3',
+        stages: ['vertex', 'fragment'],
+        scope: 'frame',
+        defaultValue: [1, 1, 1],
+        inspector: HIDDEN_INSPECTOR,
+    },
+];
+
+/**
+ * The single splice point for the stock pbr/unlit/toon effects, which each build
+ * their property list inline. Every one of them must go through here so the
+ * Stage 5 external uniforms are declared exactly once per effect: a second
+ * declaration of the same name with different text throws `conflicting-uniform`.
+ */
+export const createStockSharedProperties = (): readonly RenderShaderPropertyDefinition[] => [
+    ...createSharedObjectProperties(),
+    ...createEngineGlobalProperties(),
 ];
 
 export const createSharedAlphaProperties = (): readonly RenderShaderPropertyDefinition[] => [

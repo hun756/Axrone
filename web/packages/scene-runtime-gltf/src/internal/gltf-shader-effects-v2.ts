@@ -11,7 +11,7 @@ import {
     MAX_GLTF_POINT_LIGHTS,
     createLightingProperties,
     createSharedAlphaProperties,
-    createSharedObjectProperties,
+    createStockSharedProperties,
     createSurfaceTextureProperties,
 } from './gltf-shader-properties';
 
@@ -97,7 +97,7 @@ const cameraAndSystemProperties = (): readonly RenderShaderPropertyDefinition[] 
 ];
 
 const commonSurfaceProperties = (): readonly RenderShaderPropertyDefinition[] => [
-    ...createSharedObjectProperties(),
+    ...createStockSharedProperties(),
     ...cameraAndSystemProperties(),
     ...createLightingProperties(),
     vec4Prop('_BaseColorFactor', [1, 1, 1, 1]),
@@ -315,7 +315,10 @@ export const createGltfFoliageShaderEffect = (id: string): RenderShaderEffectDef
         ],
         standardVertexMain([
             'float swayPhase = localPosition.y * _WindTurbulence + localPosition.x * 0.6 + u_Time * _WindSpeed;',
-            'float heightWeight = clamp(localPosition.y, 0.0, 2.0);',
+            // Rest-pose height against the mesh's own box: skinned/morphed vertices
+            // have already moved by this point, so a_Position keeps the profile stable.
+            'float boundsBottom = _ObjectBoundsCenter.y - _ObjectBoundsSize.y * 0.5;',
+            'float heightWeight = clamp((a_Position.y - boundsBottom) / max(_ObjectBoundsSize.y, 0.001), 0.0, 1.0) * _ObjectBoundsSize.y;',
             'localPosition.x += sin(swayPhase) * _WindStrength * heightWeight;',
             'localPosition.z += cos(swayPhase * 0.8) * _WindStrength * 0.5 * heightWeight;',
         ]),
@@ -466,15 +469,6 @@ const screenSpaceSamplerProp = (
     },
 });
 
-const renderTargetSizeProp = (): RenderShaderPropertyDefinition => ({
-    name: '_RenderTargetSize',
-    type: 'vec2',
-    stages: ['fragment'],
-    scope: 'system',
-    defaultValue: [1, 1],
-    inspector: HIDDEN_INSPECTOR,
-});
-
 /**
  * Transmissive draw. The background comes from the frame's resolved scene
  * colour copy; `_BaseColorTexture` never feeds it. Sampling the copy instead of
@@ -491,13 +485,14 @@ export const createGltfRefractionCopyShaderEffect = (
             floatProp('_IorFactor', 1.5),
             floatProp('_ThicknessFactor', 0.2),
             floatProp('_RefractionScale', 0.04),
-            renderTargetSizeProp(),
             screenSpaceSamplerProp('_SceneColorTexture', 'Scene Color (offscreen copy)'),
         ],
         standardVertexMain(),
         [
             'vec2 screenUV = gl_FragCoord.xy / max(_RenderTargetSize, vec2(1.0));',
             'vec3 N = normalize(v_WorldNormal);',
+            'vec3 V = normalize(u_CameraPosition - v_WorldPosition);',
+            'vec3 mainLightDir = normalize(_MainLightDirection);',
             'float ior = max(_IorFactor, 1.001);',
             'float parallax = clamp(_ThicknessFactor, 0.0, 4.0) * (1.0 - 1.0 / ior);',
             'vec2 offset = N.xy * parallax * max(_RefractionScale, 0.0);',
@@ -505,6 +500,8 @@ export const createGltfRefractionCopyShaderEffect = (
             'float transmission = clamp(_TransmissionFactor, 0.0, 1.0);',
             'vec3 tint = _BaseColorFactor.rgb;',
             'vec3 color = mix(sceneColor.rgb * tint, sceneColor.rgb, 1.0 - transmission);',
+            'vec3 glintHalf = normalize(mainLightDir + V);',
+            'color += pow(max(dot(N, glintHalf), 0.0), 48.0) * _MainLightColor * 0.15;',
             'color += _EmissiveFactor * _EmissiveIntensity;',
             'o_Color = vec4(linearToSrgb(color), clamp(_BaseColorFactor.a * (1.0 - transmission * 0.25), 0.0, 1.0));',
         ],
@@ -525,7 +522,6 @@ export const createGltfSssBlurShaderEffect = (id: string): RenderShaderEffectDef
             vec3Prop('_SubsurfaceColorFactor', [1, 0.8, 0.6]),
             floatProp('_SubsurfaceThickness', 1),
             floatProp('_SubsurfacePower', 2.5),
-            renderTargetSizeProp(),
             screenSpaceSamplerProp('_SubsurfaceBlurTexture', 'Subsurface Blur (offscreen)'),
         ],
         standardVertexMain(),
@@ -537,8 +533,8 @@ export const createGltfSssBlurShaderEffect = (id: string): RenderShaderEffectDef
             'vec3 albedo = _BaseColorFactor.rgb;',
             'vec3 scattered = pow(max(blurred, vec3(0.0)), vec3(max(_SubsurfacePower, 0.1))) *',
             '    _SubsurfaceColorFactor * albedo * thickness;',
-            'vec3 lightFacing = max(dot(normalize(v_WorldNormal), normalize(u_CameraPosition - v_WorldPosition)), 0.0);',
-            'vec3 direct = albedo * (0.2 + 0.8 * lightFacing);',
+            'float lightFacing = max(dot(normalize(v_WorldNormal), normalize(_MainLightDirection)), 0.0);',
+            'vec3 direct = albedo * (0.2 + 0.8 * lightFacing * _MainLightColor);',
             'vec3 color = mix(direct, direct * 0.35 + scattered, factor);',
             'color += _EmissiveFactor * _EmissiveIntensity;',
             'o_Color = vec4(linearToSrgb(color), _BaseColorFactor.a);',

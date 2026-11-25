@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compileRenderShaderEffect } from '@axrone/render-core/shader-effect';
 import {
     BUILTIN_MATERIAL_MODELS_V2,
+    MATERIAL_EXTERNAL_UNIFORMS_V2,
     getMaterialModelDefinitionV2,
 } from '@axrone/render-core/material-contract-v2';
 import {
@@ -121,6 +122,144 @@ describe('V2 shader effects compilation and contract parity', () => {
             cull: false,
             blend: true,
         });
+    });
+});
+
+const EXTERNAL_UNIFORM_NAMES = MATERIAL_EXTERNAL_UNIFORMS_V2.map((uniform) => uniform.name);
+
+const countOccurrences = (source: string, needle: string): number =>
+    source.split(needle).length - 1;
+
+describe('Stage 5 external uniform declarations', () => {
+    const engineEffects = [
+        ['gltf/pbr', GLTF_PBR_SHADER_EFFECT],
+        ['gltf/unlit', GLTF_UNLIT_SHADER_EFFECT],
+        ['gltf/toon', GLTF_TOON_SHADER_EFFECT],
+        ['gltf/toon-outline', GLTF_TOON_OUTLINE_SHADER_EFFECT],
+        ['gltf/hair', GLTF_HAIR_SHADER_EFFECT],
+        ['gltf/cloth', GLTF_CLOTH_SHADER_EFFECT],
+        ['gltf/water', GLTF_WATER_SHADER_EFFECT],
+        ['gltf/foliage', GLTF_FOLIAGE_SHADER_EFFECT],
+        ['gltf/particle', GLTF_PARTICLE_SHADER_EFFECT],
+        ['gltf/decal', GLTF_DECAL_SHADER_EFFECT],
+        ['post-process/contract', POST_PROCESS_CONTRACT_SHADER_EFFECT],
+        ['gltf/volume', GLTF_VOLUME_SHADER_EFFECT],
+        ['gltf/refraction-copy', GLTF_REFRACTION_COPY_SHADER_EFFECT],
+        ['gltf/sss-blur', GLTF_SSS_BLUR_SHADER_EFFECT],
+    ] as const;
+
+    it.each(engineEffects)('%s declares all five Stage 5 external uniforms', (_id, effect) => {
+        const compiled = compileRenderShaderEffect(effect);
+        for (const name of EXTERNAL_UNIFORM_NAMES) {
+            expect(compiled.uniformNames, `${_id} missing ${name}`).toContain(name);
+        }
+    });
+
+    it('emits the Stage 5 declarations into generated GLSL without an output slot collision', () => {
+        const bindingKeys = new Set<string>();
+        for (const model of BUILTIN_MATERIAL_MODELS_V2) {
+            for (const slot of model.outputSlots) {
+                if (slot.bindingKey) {
+                    bindingKeys.add(slot.bindingKey);
+                }
+            }
+        }
+
+        for (const uniform of MATERIAL_EXTERNAL_UNIFORMS_V2) {
+            expect(bindingKeys.has(uniform.name), `${uniform.name} is an author knob`).toBe(false);
+        }
+
+        for (const [id, effect] of engineEffects) {
+            const compiled = compileRenderShaderEffect(effect);
+            expect(
+                compiled.fragmentSource,
+                `${id} fragment lacks the Stage 5 declarations`
+            ).toContain('uniform vec2 _RenderTargetSize;');
+            expect(compiled.fragmentSource).toContain('uniform vec3 _MainLightDirection;');
+            expect(compiled.fragmentSource).toContain('uniform vec3 _MainLightColor;');
+            expect(compiled.fragmentSource).toContain('uniform vec3 _ObjectBoundsCenter;');
+            expect(compiled.fragmentSource).toContain('uniform vec3 _ObjectBoundsSize;');
+            expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsCenter;');
+            expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsSize;');
+        }
+    });
+
+    it('declares _RenderTargetSize exactly once per effect', () => {
+        for (const [id, effect] of engineEffects) {
+            const compiled = compileRenderShaderEffect(effect);
+            expect(
+                countOccurrences(compiled.fragmentSource, 'uniform vec2 _RenderTargetSize;'),
+                `${id} duplicate declaration`
+            ).toBe(1);
+            // `stages: ['fragment']` only: the system-scoped target size must not leak
+            // into the vertex stage where nothing samples it.
+            expect(
+                countOccurrences(compiled.vertexSource, 'uniform vec2 _RenderTargetSize;'),
+                `${id} vertex leak`
+            ).toBe(0);
+            expect(effect.properties.filter((property) => property.name === '_RenderTargetSize')).toHaveLength(1);
+        }
+    });
+
+    it('feeds the foliage vertex stage every Stage 5 uniform that reaches a vertex', () => {
+        const compiled = compileRenderShaderEffect(GLTF_FOLIAGE_SHADER_EFFECT);
+        expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsCenter;');
+        expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsSize;');
+        expect(compiled.vertexSource).toContain('uniform vec3 _MainLightDirection;');
+        expect(compiled.vertexSource).toContain('uniform vec3 _MainLightColor;');
+    });
+
+    it('normalises foliage wind sway by object bounds in the vertex stage', () => {
+        const compiled = compileRenderShaderEffect(GLTF_FOLIAGE_SHADER_EFFECT);
+        expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsCenter;');
+        expect(compiled.vertexSource).toContain('uniform vec3 _ObjectBoundsSize;');
+        expect(compiled.vertexSource).toContain(
+            'float boundsBottom = _ObjectBoundsCenter.y - _ObjectBoundsSize.y * 0.5;'
+        );
+        expect(compiled.vertexSource).toContain(
+            'float heightWeight = clamp((a_Position.y - boundsBottom) / max(_ObjectBoundsSize.y, 0.001), 0.0, 1.0) * _ObjectBoundsSize.y;'
+        );
+        // Skinned/morphed positions must not normalise against the rest-pose box.
+        expect(compiled.vertexSource).not.toContain(
+            'clamp((localPosition.y - boundsBottom)'
+        );
+        // Regression guard: the old magic-number clamp must not come back.
+        expect(compiled.vertexSource).not.toContain('clamp(localPosition.y, 0.0, 2.0)');
+        expect(compiled.vertexSource).toContain(
+            'localPosition.x += sin(swayPhase) * _WindStrength * heightWeight;'
+        );
+        expect(compiled.vertexSource).toContain(
+            'localPosition.z += cos(swayPhase * 0.8) * _WindStrength * 0.5 * heightWeight;'
+        );
+    });
+
+    it('lights sss and refraction from the real main light uniforms', () => {
+        const sss = compileRenderShaderEffect(GLTF_SSS_BLUR_SHADER_EFFECT);
+        expect(sss.fragmentSource).toContain(
+            'float lightFacing = max(dot(normalize(v_WorldNormal), normalize(_MainLightDirection)), 0.0);'
+        );
+        // GLSL has no implicit float->vec3 conversion: the pre-Stage-5 scalar
+        // `dot()` result stored in a vec3 made this shader uncompilable.
+        expect(sss.fragmentSource).not.toContain('vec3 lightFacing');
+        expect(sss.fragmentSource).toContain(
+            'vec3 direct = albedo * (0.2 + 0.8 * lightFacing * _MainLightColor);'
+        );
+        // The 0.2 ambient floor must stay unlit: scaling it by the main light
+        // brightens shadowed areas whenever intensity rises.
+        expect(sss.fragmentSource).not.toContain(
+            '(0.2 + 0.8 * lightFacing) * _MainLightColor'
+        );
+        expect(sss.fragmentSource).not.toContain(
+            'normalize(u_CameraPosition - v_WorldPosition)), 0.0);'
+        );
+
+        const refraction = compileRenderShaderEffect(GLTF_REFRACTION_COPY_SHADER_EFFECT);
+        expect(refraction.fragmentSource).toContain(
+            'vec3 mainLightDir = normalize(_MainLightDirection);'
+        );
+        expect(refraction.fragmentSource).toContain(
+            'color += pow(max(dot(N, glintHalf), 0.0), 48.0) * _MainLightColor * 0.15;'
+        );
     });
 });
 

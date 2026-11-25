@@ -8,8 +8,8 @@ import {
     MAX_GLTF_SPOT_LIGHTS,
     createLightingProperties,
     createSharedAlphaProperties,
-    createSharedObjectProperties,
     createSharedSurfaceFactorProperties,
+    createStockSharedProperties,
     createSurfaceTextureProperties,
 } from './gltf-shader-properties';
 
@@ -36,7 +36,7 @@ export const createGltfPbrShaderEffect = (id: string): RenderShaderEffectDefinit
         { name: 'v_WorldTangent', type: 'vec4' },
     ],
     properties: [
-        ...createSharedObjectProperties(),
+        ...createStockSharedProperties(),
         {
             name: 'u_ReceiveLighting',
             type: 'bool',

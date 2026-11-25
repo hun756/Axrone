@@ -12,7 +12,7 @@ import {
     MAX_GLTF_POINT_LIGHTS,
     createLightingProperties,
     createSharedAlphaProperties,
-    createSharedObjectProperties,
+    createStockSharedProperties,
     createSurfaceTextureProperties,
 } from './gltf-shader-properties';
 
@@ -249,7 +249,7 @@ export const createGltfToonShaderEffect = (id: string): RenderShaderEffectDefini
         { name: 'v_WorldTangent', type: 'vec4' },
     ],
     properties: [
-        ...createSharedObjectProperties(),
+        ...createStockSharedProperties(),
         {
             name: 'u_ReceiveLighting',
             type: 'bool',
@@ -472,7 +472,7 @@ export const createGltfToonOutlineShaderEffect = (id: string): RenderShaderEffec
         { name: 'v_WorldNormal', type: 'vec3' },
     ],
     properties: [
-        ...createSharedObjectProperties(),
+        ...createStockSharedProperties(),
         {
             name: '_BaseColorFactor',
             type: 'vec4',

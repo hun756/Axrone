@@ -3,8 +3,8 @@ import { GLTF_SHADER_LIBRARIES } from './gltf-shader-libraries';
 import {
     HIDDEN_INSPECTOR,
     createSharedAlphaProperties,
-    createSharedObjectProperties,
     createSharedSurfaceFactorProperties,
+    createStockSharedProperties,
     createSurfaceTextureProperties,
 } from './gltf-shader-properties';
 
@@ -27,7 +27,7 @@ export const createGltfUnlitShaderEffect = (id: string): RenderShaderEffectDefin
         { name: 'v_WorldPosition', type: 'vec3' },
     ],
     properties: [
-        ...createSharedObjectProperties(),
+        ...createStockSharedProperties(),
         {
             name: 'u_CameraPosition',
             type: 'vec3',
