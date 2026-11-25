@@ -1,0 +1,10 @@
+packages:
+  - 'packages/*'
+
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+
+allowBuilds:
+  esbuild: true
+  msw: true
+  nx: true

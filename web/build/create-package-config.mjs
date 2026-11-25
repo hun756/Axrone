@@ -11,6 +11,7 @@ import peerDepsExternal from 'rollup-plugin-peer-deps-external';
 const buildDir = path.dirname(fileURLToPath(import.meta.url));
 const workspaceDir = path.resolve(buildDir, '..');
 const defaultTsconfigPath = path.join(workspaceDir, 'tsconfig.build.json');
+const dtsPrebuildRoot = path.join(workspaceDir, '.dts-build');
 
 const builtinModuleIds = new Set([
     ...builtinModules,
@@ -31,6 +32,17 @@ const createExternalMatcher = (packageDir, packageJson, additionalExternalIds) =
     // dist). Resolved files outside this package's directory therefore must
     // stay external too.
     const realPackageDir = fs.realpathSync(packageDir);
+    const packageDtsDir = path.join(dtsPrebuildRoot, path.basename(packageDir));
+    let realPackageDtsDir = packageDtsDir;
+    try {
+        realPackageDtsDir = fs.realpathSync(packageDtsDir);
+    } catch {
+        // Prebuilt .dts-build/<pkg> directory may not exist for single-package builds.
+    }
+    const isInsideDir = (baseDir, targetPath) => {
+        const relative = path.relative(baseDir, targetPath);
+        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+    };
     const isInsideOwnPackage = (resolvedId) => {
         let realResolved;
         try {
@@ -38,8 +50,7 @@ const createExternalMatcher = (packageDir, packageJson, additionalExternalIds) =
         } catch {
             realResolved = resolvedId;
         }
-        const relative = path.relative(realPackageDir, realResolved);
-        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+        return isInsideDir(realPackageDir, realResolved) || isInsideDir(realPackageDtsDir, realResolved);
     };
 
     return (id) => {
@@ -334,6 +345,19 @@ export const createMultiEntryConfig = ({
     const distDir = path.join(packageDir, 'dist');
     const isExternal = createExternalMatcher(packageDir, packageJson, external);
 
+    const packageDtsDir = path.join(dtsPrebuildRoot, path.basename(packageDir));
+    const resolveDtsEntryInput = (relativePath) => {
+        const prebuiltDts = path.join(packageDtsDir, relativePath.replace(/\.tsx?$/i, '.d.ts'));
+        return fs.existsSync(prebuiltDts) ? prebuiltDts : path.join(packageDir, relativePath);
+    };
+    const toPackageRelativeSourcePath = (resolvedId) => {
+        const dtsRelative = path.relative(packageDtsDir, resolvedId).replace(/\\/g, '/');
+        if (dtsRelative !== '' && !dtsRelative.startsWith('..') && !path.isAbsolute(dtsRelative)) {
+            return dtsRelative.replace(/\.d\.ts$/i, '.ts');
+        }
+        return path.relative(packageDir, resolvedId).replace(/\\/g, '/');
+    };
+
     const jsInput = {};
     for (const [name, relativePath] of Object.entries(entries)) {
         jsInput[name] = path.join(packageDir, relativePath);
@@ -437,7 +461,7 @@ export const createMultiEntryConfig = ({
             ],
         },
         ...Object.entries(entries).map(([name, relativePath]) => ({
-            input: path.join(packageDir, relativePath),
+            input: resolveDtsEntryInput(relativePath),
             external: isExternal,
             output: {
                 file: path.join(distDir, `${name}.d.ts`),
@@ -452,6 +476,14 @@ export const createMultiEntryConfig = ({
 
                     const normalizedWorkspace = workspaceDir.replace(/\\/g, '/');
                     const normalizedId = id.replace(/\\/g, '/');
+                    const dtsPrefix = `${dtsPrebuildRoot.replace(/\\/g, '/')}/`;
+                    if (normalizedId.startsWith(dtsPrefix)) {
+                        const remainder = normalizedId.slice(dtsPrefix.length);
+                        const packageDirName = remainder.split('/')[0];
+                        if (packageDirName) {
+                            return `@axrone/${packageDirName}`;
+                        }
+                    }
                     const prefix = `${normalizedWorkspace}/packages/`;
                     if (normalizedId.startsWith(prefix)) {
                         const remainder = normalizedId.slice(prefix.length);
@@ -494,9 +526,8 @@ export const createMultiEntryConfig = ({
                                 const resolvedId =
                                     typeof resolved === 'string' ? resolved : resolved?.id;
                                 if (resolvedId) {
-                                    const relative = path
-                                        .relative(packageDir, resolvedId)
-                                        .replace(/\\/g, '/');
+                                    const relative = toPackageRelativeSourcePath(resolvedId);
+                                    const resolvedSourceId = path.join(packageDir, relative);
                                     const entryName = entryNamesByRelativePath.get(relative);
                                     if (entryName) {
                                         return {
@@ -511,7 +542,7 @@ export const createMultiEntryConfig = ({
                                     if (name !== 'index') {
                                         const clauseNames = entryGraphs
                                             .get(name)
-                                            ?.namesByModule.get(resolvedId);
+                                            ?.namesByModule.get(resolvedSourceId);
                                         if (clauseNames && clauseNames.size > 0) {
                                             if (
                                                 barrelInlinedSurface &&
@@ -527,7 +558,7 @@ export const createMultiEntryConfig = ({
                                                 };
                                             }
                                             const ownerEntry = findCanonicalOwnerEntry(
-                                                resolvedId,
+                                                resolvedSourceId,
                                                 clauseNames
                                             );
                                             if (ownerEntry && ownerEntry !== name) {

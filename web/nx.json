@@ -2,8 +2,15 @@
     "$schema": "./node_modules/nx/schemas/nx-schema.json",
     "namedInputs": {
         "default": ["{projectRoot}/**/*", "sharedGlobals"],
+        "production": [
+            "default",
+            "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+            "!{projectRoot}/**/__tests__/**/*",
+            "!{projectRoot}/**/*.md"
+        ],
         "sharedGlobals": [
             "{workspaceRoot}/build/**/*",
+            "{workspaceRoot}/tsconfig.json",
             "{workspaceRoot}/tsconfig.build.json"
         ]
     },
@@ -18,6 +25,7 @@
     },
     "targetDefaults": {
         "build": {
+            "inputs": ["production", "^production"],
             "outputs": ["{projectRoot}/dist"],
             "dependsOn": ["^build"]
         },

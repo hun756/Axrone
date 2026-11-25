@@ -20,6 +20,7 @@ export default defineConfig({
             'packages/**/*.browser.{test,spec}.{js,ts}',
             'packages/**/renderer/**/*.{test,spec}.{js,ts}',
         ],
+        exclude: ['**/node_modules/**', '**/dist/**', '**/.dts-build/**'],
     },
     resolve: {
         alias: workspaceAliases,

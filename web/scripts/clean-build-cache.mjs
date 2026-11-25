@@ -31,6 +31,12 @@ if (removeDir(nxCacheDir)) {
     cleaned++;
 }
 
+const dtsPrebuildDir = path.join(workspaceDir, '.dts-build');
+if (removeDir(dtsPrebuildDir)) {
+    console.log('  Removed .dts-build');
+    cleaned++;
+}
+
 const legacyCacheDirPatterns = ['.rpt2_cache', '.rts2_cache_cjs', '.rts2_cache_es', '.rts2_cache_umd'];
 
 if (fs.existsSync(packagesDir)) {
