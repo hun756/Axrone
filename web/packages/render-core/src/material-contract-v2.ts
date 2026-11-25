@@ -1602,3 +1602,164 @@ export const validateBuiltinMaterialModelsV2 = (): MaterialContractValidationRes
 
     return { valid: errors.length === 0, errors };
 };
+
+/**
+ * Which pass owns the value of an engine-supplied uniform: `frame` uniforms
+ * hold one value for the whole frame (shared by every draw), `object` uniforms
+ * are rewritten for every draw item.
+ */
+export type MaterialExternalUniformScopeV2 = 'frame' | 'object';
+
+export type MaterialExternalUniformValueTypeV2 = Extract<MaterialSlotValueType, 'vec2' | 'vec3'>;
+
+/**
+ * A shader input whose value comes from the renderer rather than from a
+ * material. Output slots describe what an author can tune; external uniforms
+ * describe what the engine guarantees to feed, so a generated shader can
+ * sample them without the author declaring or binding a value themselves.
+ */
+export interface MaterialExternalUniformDefinitionV2 {
+    readonly name: string;
+    readonly label: string;
+    readonly valueType: MaterialExternalUniformValueTypeV2;
+    readonly scope: MaterialExternalUniformScopeV2;
+    readonly semantic: string;
+    readonly stages: readonly MaterialStageId[];
+    readonly defaultValue: readonly number[];
+    readonly provider: string;
+    readonly description: string;
+}
+
+const FRAGMENT_ONLY_STAGES: readonly MaterialStageId[] = Object.freeze(['fragment']);
+const VERTEX_AND_FRAGMENT_STAGES: readonly MaterialStageId[] = Object.freeze([
+    'vertex',
+    'fragment',
+]);
+
+const EXTERNAL_UNIFORM_COMPONENT_COUNT: Readonly<
+    Record<MaterialExternalUniformValueTypeV2, number>
+> = Object.freeze({ vec2: 2, vec3: 3 });
+
+export const MATERIAL_EXTERNAL_UNIFORM_RENDER_TARGET_SIZE = '_RenderTargetSize';
+export const MATERIAL_EXTERNAL_UNIFORM_OBJECT_BOUNDS_CENTER = '_ObjectBoundsCenter';
+export const MATERIAL_EXTERNAL_UNIFORM_OBJECT_BOUNDS_SIZE = '_ObjectBoundsSize';
+export const MATERIAL_EXTERNAL_UNIFORM_MAIN_LIGHT_DIRECTION = '_MainLightDirection';
+export const MATERIAL_EXTERNAL_UNIFORM_MAIN_LIGHT_COLOR = '_MainLightColor';
+
+export const MATERIAL_EXTERNAL_UNIFORMS_V2: readonly MaterialExternalUniformDefinitionV2[] =
+    Object.freeze([
+        Object.freeze({
+            name: MATERIAL_EXTERNAL_UNIFORM_RENDER_TARGET_SIZE,
+            label: 'Render Target Size',
+            valueType: 'vec2' as const,
+            scope: 'frame' as const,
+            semantic: 'screen.renderTargetSize',
+            stages: FRAGMENT_ONLY_STAGES,
+            defaultValue: Object.freeze([1, 1]),
+            provider: 'scene-runtime: SceneExternalUniformBinder.applyFrame',
+            description:
+                'Width and height in pixels of the render target the draw is currently rasterizing into. Screen-space effects divide gl_FragCoord by it to recover normalised UVs.',
+        }),
+        Object.freeze({
+            name: MATERIAL_EXTERNAL_UNIFORM_MAIN_LIGHT_DIRECTION,
+            label: 'Main Light Direction',
+            valueType: 'vec3' as const,
+            scope: 'frame' as const,
+            semantic: 'lighting.mainLightDirection',
+            stages: VERTEX_AND_FRAGMENT_STAGES,
+            defaultValue: Object.freeze([0, 1, 0]),
+            provider: 'scene-runtime: SceneExternalUniformBinder.applyFrame',
+            description:
+                'Normalised direction from the shaded surface toward the primary directional light, so dot(normal, _MainLightDirection) is a ready NdotL. Falls back to (0, 1, 0) while the frame has no directional light.',
+        }),
+        Object.freeze({
+            name: MATERIAL_EXTERNAL_UNIFORM_MAIN_LIGHT_COLOR,
+            label: 'Main Light Color',
+            valueType: 'vec3' as const,
+            scope: 'frame' as const,
+            semantic: 'lighting.mainLightColor',
+            stages: VERTEX_AND_FRAGMENT_STAGES,
+            defaultValue: Object.freeze([1, 1, 1]),
+            provider: 'scene-runtime: SceneExternalUniformBinder.applyFrame',
+            description:
+                'Linear colour of the primary directional light premultiplied by its intensity. Falls back to (1, 1, 1) while the frame has no directional light.',
+        }),
+        Object.freeze({
+            name: MATERIAL_EXTERNAL_UNIFORM_OBJECT_BOUNDS_CENTER,
+            label: 'Object Bounds Center',
+            valueType: 'vec3' as const,
+            scope: 'object' as const,
+            semantic: 'object.boundsCenter',
+            stages: VERTEX_AND_FRAGMENT_STAGES,
+            defaultValue: Object.freeze([0, 0, 0]),
+            provider: 'scene-runtime: SceneExternalUniformBinder.applyObjectBounds',
+            description:
+                'Centre of the drawn mesh axis-aligned bounding box in object space, so it can be combined with a_Position or a pre-transform localPosition. Stays at the default when the mesh publishes no bounds.',
+        }),
+        Object.freeze({
+            name: MATERIAL_EXTERNAL_UNIFORM_OBJECT_BOUNDS_SIZE,
+            label: 'Object Bounds Size',
+            valueType: 'vec3' as const,
+            scope: 'object' as const,
+            semantic: 'object.boundsSize',
+            stages: VERTEX_AND_FRAGMENT_STAGES,
+            defaultValue: Object.freeze([1, 1, 1]),
+            provider: 'scene-runtime: SceneExternalUniformBinder.applyObjectBounds',
+            description:
+                'Edge lengths of the drawn mesh axis-aligned bounding box in object space. A unit default keeps size-normalised effects meaningful for meshes without bounds.',
+        }),
+    ]);
+
+const MATERIAL_EXTERNAL_UNIFORMS_BY_NAME_V2: ReadonlyMap<
+    string,
+    MaterialExternalUniformDefinitionV2
+> = new Map<string, MaterialExternalUniformDefinitionV2>(
+    MATERIAL_EXTERNAL_UNIFORMS_V2.map((uniform) => [uniform.name, uniform])
+);
+
+export const listMaterialExternalUniformsV2 = (
+    scope?: MaterialExternalUniformScopeV2
+): readonly MaterialExternalUniformDefinitionV2[] =>
+    scope === undefined
+        ? MATERIAL_EXTERNAL_UNIFORMS_V2
+        : MATERIAL_EXTERNAL_UNIFORMS_V2.filter((uniform) => uniform.scope === scope);
+
+export const getMaterialExternalUniformV2 = (
+    name: string
+): MaterialExternalUniformDefinitionV2 | undefined =>
+    MATERIAL_EXTERNAL_UNIFORMS_BY_NAME_V2.get(name);
+
+export const isMaterialExternalUniformNameV2 = (name: string): boolean =>
+    MATERIAL_EXTERNAL_UNIFORMS_BY_NAME_V2.has(name);
+
+export const listMaterialExternalUniformNamesV2 = (): readonly string[] =>
+    MATERIAL_EXTERNAL_UNIFORMS_V2.map((uniform) => uniform.name);
+
+export const validateMaterialExternalUniformsV2 = (): MaterialContractValidationResult => {
+    const errors: string[] = [];
+    const seen = new Set<string>();
+
+    for (const uniform of MATERIAL_EXTERNAL_UNIFORMS_V2) {
+        if (!uniform.name.startsWith('_')) {
+            errors.push(`external uniform ${uniform.name} must start with '_'`);
+        }
+        if (seen.has(uniform.name)) {
+            errors.push(`duplicate external uniform ${uniform.name}`);
+        }
+        seen.add(uniform.name);
+        if (!isMaterialSlotValueTypeV2(uniform.valueType)) {
+            errors.push(`external uniform ${uniform.name} has an unsupported value type`);
+        }
+        if (uniform.defaultValue.length !== EXTERNAL_UNIFORM_COMPONENT_COUNT[uniform.valueType]) {
+            errors.push(`external uniform ${uniform.name} default width does not match its type`);
+        }
+        if (uniform.stages.length === 0) {
+            errors.push(`external uniform ${uniform.name} must reach at least one stage`);
+        }
+        if (uniform.provider.length === 0) {
+            errors.push(`external uniform ${uniform.name} must name its runtime provider`);
+        }
+    }
+
+    return { valid: errors.length === 0, errors };
+};
