@@ -1,11 +1,11 @@
 import { Vec3 } from '@axrone/numeric';
-import { type EntityId } from '@axrone/ecs-runtime';
+import { type Entity } from '@axrone/ecs-runtime';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { LODGroup } from '../components/lod-group';
 import { MeshRenderer } from '../components/mesh-renderer';
 
 export interface SceneLodEvaluateParams {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
 }
 
@@ -189,7 +189,7 @@ export class SceneLodEvaluator {
      * LOD levels, not just the active level. This determines which
      * MeshRenderers are under LOD control.
      */
-    private _collectAllLodReferencedRendererIds(entities: readonly EntityId[]): Set<string> {
+    private _collectAllLodReferencedRendererIds(entities: readonly Entity[]): Set<string> {
         const referencedIds = new Set<string>();
 
         for (const entity of entities) {

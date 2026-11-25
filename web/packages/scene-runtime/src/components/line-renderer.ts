@@ -414,10 +414,10 @@ export class LineRenderer extends Component {
             patch.widthCurve = data.widthCurve;
         }
         if (Array.isArray(data.startColor) && data.startColor.length === 4) {
-            patch.startColor = data.startColor;
+            patch.startColor = data.startColor as [number, number, number, number];
         }
         if (Array.isArray(data.endColor) && data.endColor.length === 4) {
-            patch.endColor = data.endColor;
+            patch.endColor = data.endColor as [number, number, number, number];
         }
         if (Array.isArray(data.colorGradient)) {
             patch.colorGradient = data.colorGradient;
@@ -429,13 +429,13 @@ export class LineRenderer extends Component {
             patch.endCapVertices = data.endCapVertices;
         }
         if (typeof data.textureMode === 'string') {
-            patch.textureMode = data.textureMode;
+            patch.textureMode = data.textureMode as LineTextureMode;
         }
         if (typeof data.alignment === 'string') {
-            patch.alignment = data.alignment;
+            patch.alignment = data.alignment as LineAlignment;
         }
         if (Array.isArray(data.textureScale) && data.textureScale.length === 2) {
-            patch.textureScale = data.textureScale;
+            patch.textureScale = data.textureScale as [number, number];
         }
         if (typeof data.shadowCasting === 'boolean') {
             patch.shadowCasting = data.shadowCasting;

@@ -18,7 +18,7 @@ export class SceneSnapshotFacade<
 
     createPrefab(
         id: string,
-        entities: readonly EntityId[] = this.world.getAllEntities()
+        entities: readonly Entity[] = this.world.getAllEntities()
     ): ScenePrefabDefinition {
         this.assertNotDisposed();
         return this._kernel.snapshots.createPrefab(id, entities);
@@ -27,7 +27,7 @@ export class SceneSnapshotFacade<
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options: ScenePrefabInstantiateOptions = {}
-    ): readonly EntityId[] {
+    ): readonly Entity[] {
         this.assertNotDisposed();
         return this._kernel.snapshots.instantiatePrefab(prefab, options);
     }
@@ -40,7 +40,7 @@ export class SceneSnapshotFacade<
     async loadScene(
         snapshot: SceneSnapshot,
         options: SceneSnapshotLoadOptions = {}
-    ): Promise<readonly EntityId[]> {
+    ): Promise<readonly Entity[]> {
         this.assertNotDisposed();
         return await this._kernel.snapshots.loadScene(snapshot, options);
     }

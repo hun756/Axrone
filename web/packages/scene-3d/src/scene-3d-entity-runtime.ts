@@ -1,6 +1,6 @@
 import {
     Transform,
-    type EntityId,
+    Entity,
     type EntityConfig,
     type ComponentConstructor,
 } from '@axrone/ecs-runtime';
@@ -26,7 +26,7 @@ interface SceneEntityBatchEntry {
 }
 
 interface Scene3DActorRuntimeHost<R extends ComponentRegistry = Record<string, never>> {
-    createEntity(config?: EntityConfig): EntityId<World<SceneRegistry<R>>>;
+    createEntity(config?: EntityConfig): Entity<World<SceneRegistry<R>>>;
     createEntitiesWithComponents(
         configs: readonly SceneEntityBatchEntry[],
         profiling?: SceneProfilerProbe
@@ -49,7 +49,7 @@ export interface SceneRenderableEntityCreateOptions {
 export interface SceneRenderableEntityInstance<
     R extends ComponentRegistry = Record<string, never>,
 > {
-    readonly entity: EntityId<World<SceneRegistry<R>>>;
+    readonly entity: Entity<World<SceneRegistry<R>>>;
     readonly transform: Transform;
     readonly renderer: MeshRenderer;
 }
@@ -64,7 +64,7 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
     createCameraEntity(
         entityConfig: EntityConfig = {},
         cameraConfig: CameraConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         requireRegisteredComponent(
             this._entities,
             Camera,
@@ -78,7 +78,7 @@ export class Scene3DActorRuntime<R extends ComponentRegistry = Record<string, ne
     createRenderableEntity(
         entityConfig: EntityConfig = {},
         rendererConfig: MeshRendererConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         requireRegisteredComponent(
             this._entities,
             MeshRenderer,

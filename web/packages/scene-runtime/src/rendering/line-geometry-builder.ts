@@ -1,6 +1,6 @@
 import { Vec3, Vec4, Mat4 } from '@axrone/numeric';
-import type { LineTextureMode, LineAlignment } from './components/line-renderer';
-import type { TrailAlignment, TrailTextureMode } from './components/trail-renderer';
+import type { LineTextureMode, LineAlignment } from '../components/line-renderer';
+import type { TrailAlignment, TrailTextureMode } from '../components/trail-renderer';
 
 /**
  * Packed vertex layout (9 floats / 36 bytes):

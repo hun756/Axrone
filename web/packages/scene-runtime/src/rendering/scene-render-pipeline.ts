@@ -1,4 +1,4 @@
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { RenderPipeline } from '@axrone/render-core';
 import type {
     AnyPostProcessEffect,
@@ -58,7 +58,7 @@ import type {
 } from '../types';
 
 export interface SceneRenderPipelineParams {
-    readonly entities?: readonly EntityId[];
+    readonly entities?: readonly Entity[];
     readonly frame: number;
     readonly deltaSeconds: number;
     readonly viewportWidth: number;

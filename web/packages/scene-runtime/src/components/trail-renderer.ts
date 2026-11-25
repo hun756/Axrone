@@ -480,13 +480,13 @@ export class TrailRenderer extends Component {
             patch.colorGradient = data.colorGradient;
         }
         if (typeof data.textureMode === 'string') {
-            patch.textureMode = data.textureMode;
+            patch.textureMode = data.textureMode as TrailTextureMode;
         }
         if (typeof data.alignment === 'string') {
-            patch.alignment = data.alignment;
+            patch.alignment = data.alignment as TrailAlignment;
         }
         if (Array.isArray(data.textureScale) && data.textureScale.length === 2) {
-            patch.textureScale = data.textureScale;
+            patch.textureScale = data.textureScale as [number, number];
         }
         if (typeof data.shadowCasting === 'boolean') {
             patch.shadowCasting = data.shadowCasting;

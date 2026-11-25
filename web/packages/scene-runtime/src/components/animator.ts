@@ -962,7 +962,7 @@ export class Animator extends Component {
     private _resolveStateIdForClip(clipId: string): string {
         for (const layer of this._layerDefinitions ?? []) {
             for (const state of layer.stateMachine.states) {
-                if (this._motionContainsClip(state.motion, clipId)) {
+                if (state.motion && this._motionContainsClip(state.motion, clipId)) {
                     return state.id;
                 }
             }

@@ -1,5 +1,5 @@
 import { Mat4, Vec4 } from '@axrone/numeric';
-import { Transform, type EntityId } from '@axrone/ecs-runtime';
+import { Transform, type Entity } from '@axrone/ecs-runtime';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { LineRenderer } from '../components/line-renderer';
 import { TrailRenderer } from '../components/trail-renderer';
@@ -26,7 +26,7 @@ export interface SceneLineBatchRuntimeOptions {
 }
 
 export interface SceneLineBatchRuntimeRenderParams {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
     readonly frameState: SceneRenderFrameState;
 }
@@ -46,12 +46,12 @@ const EMPTY_STATS: SceneLineBatchRuntimeRenderStats = Object.freeze({
 });
 
 interface LineSubject {
-    readonly entity: EntityId;
+    readonly entity: Entity;
     readonly renderer: LineRenderer;
 }
 
 interface TrailSubject {
-    readonly entity: EntityId;
+    readonly entity: Entity;
     readonly renderer: TrailRenderer;
 }
 

@@ -1,4 +1,4 @@
-import type { EntityId, Transform } from '@axrone/ecs-runtime';
+import type { Entity, Transform } from '@axrone/ecs-runtime';
 import { Transform as TransformComponent } from '@axrone/ecs-runtime';
 import type { RenderPrimitiveInstance } from '@axrone/render-core/types';
 import type { SceneCameraFrameState } from '../camera-frame-state';
@@ -19,7 +19,7 @@ export interface SceneRenderListCacheParams {
     readonly rendererPassId: string;
     /** Pass resource identity — re-registering a pass replaces the object. */
     readonly renderPass: object;
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
     readonly viewportWidth: number;
     readonly viewportHeight: number;
@@ -37,7 +37,7 @@ export interface SceneRenderListCacheResult {
 
 interface SceneRenderListCacheEntry extends SceneRenderListCacheResult {
     hit: boolean;
-    entitysRef: readonly EntityId[] | null;
+    entitysRef: readonly Entity[] | null;
     renderPassRef: object | null;
     cameraKey: string | null;
     viewportWidth: number;
@@ -46,7 +46,7 @@ interface SceneRenderListCacheEntry extends SceneRenderListCacheResult {
     meshRevision: number;
     shaderRevision: number;
     registeredEntityCount: number;
-    entityRefs: EntityId[];
+    entityRefs: Entity[];
     transforms: (Transform | null)[];
     renderers: (MeshRenderer | null)[];
     entityRevisions: Uint32Array;
@@ -174,7 +174,7 @@ export class SceneRenderListCache {
         return true;
     }
 
-    private _snapshotEntities(entry: SceneRenderListCacheEntry, entities: readonly EntityId[]): void {
+    private _snapshotEntities(entry: SceneRenderListCacheEntry, entities: readonly Entity[]): void {
         const count = entities.length;
         entry.entityRevisions = growUint32(entry.entityRevisions, count);
         entry.transformRevisions = growUint32(entry.transformRevisions, count);

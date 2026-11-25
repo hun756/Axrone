@@ -42,8 +42,8 @@ class TestWeapon extends Component {
     @property({ type: 'string' })
     public weaponName = 'Sword';
 
-    @property({ type: EntityId })
-    public targetEntity: EntityId | null = null;
+    @property({ type: Entity })
+    public targetEntity: Entity | null = null;
 
     @property({ type: Transform })
     public targetTransform: Transform | null = null;
@@ -51,8 +51,8 @@ class TestWeapon extends Component {
 
 @script({ scriptName: 'TestFollowTarget' })
 class TestFollowTarget extends Component {
-    @property({ type: EntityId })
-    public leader: EntityId | null = null;
+    @property({ type: Entity })
+    public leader: Entity | null = null;
 
     @property({ type: Transform })
     public leaderTransform: Transform | null = null;

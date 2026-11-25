@@ -6,7 +6,7 @@ import {
     LightSortMode,
 } from '@axrone/lighting';
 import type { LightingSelectionState } from '@axrone/lighting';
-import type { EntityId, Transform } from '@axrone/ecs-runtime';
+import type { Entity, Transform } from '@axrone/ecs-runtime';
 import { DirectionalLight } from './components/directional-light';
 import { PointLight } from './components/point-light';
 import { SpotLight } from './components/spot-light';
@@ -50,7 +50,7 @@ export class SceneLightingCollector {
     }
 
     collect(
-        entities: readonly EntityId[],
+        entities: readonly Entity[],
         ambientBase: Readonly<Vec3>,
         skyLightBase: Readonly<Vec3> = Vec3.ZERO,
         groundLightBase: Readonly<Vec3> = Vec3.ZERO,

@@ -1,11 +1,11 @@
 import type { CameraFrustum } from '@axrone/geometry';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { SpriteRenderer } from '../components/sprite-renderer';
 
 export interface SceneSpriteRenderItem {
-    entity: EntityId;
+    entity: Entity;
     transform: Transform;
     renderer: SpriteRenderer;
     sequence: number;
@@ -27,7 +27,7 @@ export class SceneSpriteRenderItemCollector {
     };
 
     collect(
-        entities: readonly EntityId[],
+        entities: readonly Entity[],
         passId: string,
         options: SceneSpriteRenderItemCollectOptions = {}
     ): readonly SceneSpriteRenderItem[] {

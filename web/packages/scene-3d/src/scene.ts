@@ -37,7 +37,7 @@ export class Scene<R extends ComponentRegistry = Record<string, never>> extends 
     createCameraEntity(
         entityConfig: EntityConfig = {},
         cameraConfig: CameraConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         this.assertNotDisposed();
         return this._entitys3d.createCameraEntity(entityConfig, cameraConfig);
     }
@@ -45,7 +45,7 @@ export class Scene<R extends ComponentRegistry = Record<string, never>> extends 
     createRenderableEntity(
         entityConfig: EntityConfig = {},
         rendererConfig: MeshRendererConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         this.assertNotDisposed();
         return this._entitys3d.createRenderableEntity(entityConfig, rendererConfig);
     }

@@ -1,6 +1,6 @@
 import type { BoundingSphere } from '@axrone/geometry';
 import type { Mat4, Quat, Vec2, Vec3, Vec4 } from '@axrone/numeric';
-import type { EntityId, EntityConfig } from '@axrone/ecs-runtime';
+import type { Entity, EntityConfig } from '@axrone/ecs-runtime';
 import type { World } from '@axrone/ecs-runtime';
 import type { ComponentConstructor, ComponentRegistry } from '@axrone/ecs-runtime';
 import type { System, SystemQuery } from '@axrone/ecs-runtime';
@@ -592,9 +592,17 @@ export type SceneBuiltInRegistry = {
     readonly DirectionalLight: typeof DirectionalLight;
     readonly PointLight: typeof PointLight;
     readonly SpotLight: typeof SpotLight;
+    readonly AreaLight: typeof import('./components/area-light').AreaLight;
+    readonly ReflectionProbe: typeof import('./components/reflection-probe').ReflectionProbe;
+    readonly LODGroup: typeof import('./components/lod-group').LODGroup;
+    readonly BillboardRenderer: typeof import('./components/billboard-renderer').BillboardRenderer;
     readonly Terrain: typeof Terrain;
     readonly OrbitCameraController: typeof OrbitCameraController;
     readonly FollowCameraController: typeof FollowCameraController;
+    readonly LineRenderer: typeof import('./components/line-renderer').LineRenderer;
+    readonly TrailRenderer: typeof import('./components/trail-renderer').TrailRenderer;
+    readonly ParticleSystem: typeof import('./components/particle-system').ParticleSystem;
+    readonly PathAgent: typeof import('./components/path-agent').PathAgent;
     readonly UIHost: typeof import('./components/ui-host').UIHost;
     readonly TilemapRenderer: typeof import('./components/tilemap-renderer').TilemapRenderer;
     readonly TilemapCollider2D: typeof import('./components/tilemap-collider-2d').TilemapCollider2D;
@@ -665,7 +673,7 @@ export interface SceneRenderStats {
 }
 
 export interface SceneEntityFactory<R extends ComponentRegistry = Record<string, never>> {
-    createEntity(config?: EntityConfig): EntityId<World<SceneRegistry<R>>>;
+    createEntity(config?: EntityConfig): Entity<World<SceneRegistry<R>>>;
 }
 
 export interface SceneLifecycle<R extends ComponentRegistry = Record<string, never>>
@@ -705,16 +713,16 @@ export interface SceneTextureHost {
 }
 
 export interface SceneSerializationHost {
-    createPrefab(id: string, entities?: readonly EntityId[]): ScenePrefabDefinition;
+    createPrefab(id: string, entities?: readonly Entity[]): ScenePrefabDefinition;
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options?: ScenePrefabInstantiateOptions
-    ): readonly EntityId[];
+    ): readonly Entity[];
     serializeScene(): SceneSnapshot;
     loadScene(
         snapshot: SceneSnapshot,
         options?: SceneSnapshotLoadOptions
-    ): Promise<readonly EntityId[]>;
+    ): Promise<readonly Entity[]>;
 }
 
 export interface SceneRenderPassHost {

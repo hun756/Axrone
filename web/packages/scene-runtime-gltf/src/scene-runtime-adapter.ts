@@ -1,4 +1,4 @@
-import type { EntityId, ComponentRegistry } from '@axrone/ecs-runtime';
+import type { Entity, ComponentRegistry } from '@axrone/ecs-runtime';
 import type {
     AssetDatabase,
     AssetSelector,
@@ -16,7 +16,7 @@ export interface LoadGltfSceneIntoSceneOptions
         Pick<SceneSnapshotLoadOptions, 'clearExisting' | 'componentArgsResolver' | 'namePrefix'> {}
 
 export interface LoadGltfSceneIntoSceneResult extends GltfSceneSnapshotResult {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
 }
 
 export const loadGltfSceneIntoScene = async <R extends ComponentRegistry = Record<string, never>>(

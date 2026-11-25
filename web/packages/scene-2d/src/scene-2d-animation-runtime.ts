@@ -1,5 +1,5 @@
 import type {
-    EntityId,
+    Entity,
     EntityConfig,
     ComponentRegistry,
 } from '@axrone/ecs-runtime';
@@ -29,12 +29,12 @@ export interface Scene2DAnimationRuntime<
         entityConfig: EntityConfig,
         spriteConfig: SpriteRendererConfig,
         animatorConfig: SpriteAnimatorConfig
-    ): EntityId<World<SceneRegistry<R>>>;
+    ): Entity<World<SceneRegistry<R>>>;
 
     createMaskEntity(
         entityConfig: EntityConfig,
         maskConfig: SpriteMaskConfig
-    ): EntityId<World<SceneRegistry<R>>>;
+    ): Entity<World<SceneRegistry<R>>>;
 }
 
 export const createScene2DAnimationRuntime = <

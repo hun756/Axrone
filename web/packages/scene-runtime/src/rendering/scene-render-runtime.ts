@@ -2,7 +2,7 @@ import type { IGLStateCache } from '@axrone/render-webgl2';
 import { createLightingUniformValueMap } from '@axrone/lighting';
 import type { LightingUniformValueMap } from '@axrone/lighting';
 import { Vec3, Vec4 } from '@axrone/numeric';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { MeshRenderer } from '../components/mesh-renderer';
 import { selectSceneCamera } from '../camera-selector';
 import { Animator } from '../components/animator';
@@ -57,7 +57,7 @@ import type {
 } from '../types';
 import { SceneUniformWriter } from '../uniform-writer';
 
-const EMPTY_ACTORS: readonly EntityId[] = Object.freeze([]);
+const EMPTY_ACTORS: readonly Entity[] = Object.freeze([]);
 const EMPTY_RENDER_ITEMS: readonly SceneRenderItem[] = Object.freeze([]);
 const OUTLINE_MATERIAL_PASS_ID = 'outline';
 const EMPTY_OPTIONAL_MATERIAL_PASSES: ReadonlySet<string> = new Set<string>();
@@ -75,7 +75,7 @@ export interface SceneRenderRuntimeOptions {
     readonly skyLight: Vec3;
     readonly groundLight: Vec3;
     readonly defaultClearColor: Vec4;
-    readonly getEntitys: () => readonly EntityId[];
+    readonly getEntitys: () => readonly Entity[];
     readonly createMeshResource: (definition: SceneMeshDefinition) => SceneMeshResource;
     readonly disposeMesh: (mesh: SceneMeshResource) => void;
     readonly applyMissingVertexAttributeDefaults: (mesh: SceneMeshResource) => void;
@@ -484,7 +484,7 @@ export class SceneRenderRuntime {
                 },
                 {
                     id: SCENE_COLOR_COPY_TEXTURE_ID,
-                    texture: sceneColor,
+                    texture: sceneColor as unknown as Parameters<typeof textures.register>[1]['texture'],
                     width: sceneColor.width,
                     height: sceneColor.height,
                     samplerId: null,
@@ -505,7 +505,7 @@ export class SceneRenderRuntime {
                 },
                 {
                     id: SSS_BLUR_TEXTURE_ID,
-                    texture: sssBlur,
+                    texture: sssBlur as unknown as Parameters<typeof textures.register>[1]['texture'],
                     width: sssBlur.width,
                     height: sssBlur.height,
                     samplerId: null,
@@ -599,7 +599,7 @@ export class SceneRenderRuntime {
     }
 
     private _resolveLighting(
-        entities: readonly EntityId[],
+        entities: readonly Entity[],
         cameraPosition: Readonly<Vec3> | undefined
     ): SceneLightingState {
         if (this._capabilities.lights) {

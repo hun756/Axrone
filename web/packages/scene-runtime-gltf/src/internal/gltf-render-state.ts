@@ -239,53 +239,54 @@ export const createGltfRuntimeMaterialPasses = (
                   }
                 : {}),
         },
-        ...(outlineEnabled
-            ? [
-                  {
-                      id: 'outline',
-                      phase: 'outline',
-                      shaderId: outlineShaderId,
-                      primitive: 'triangle-list',
-                      rasterizerState: {
-                          cullMode: 'front',
-                          frontFace: 'ccw',
-                      },
-                      depthStencilState: {
-                          depthTest: true,
-                          depthWrite: true,
-                          depthFunc: 'less',
-                      },
-                      blendState: {
-                          targets: [
-                              {
-                                  blend: false,
-                              },
-                          ],
-                      },
-                  },
-              ]
-            : []),
-        ...(refractionCopyEnabled
-            ? [
-                  createSurfaceEffectMaterialPass(
-                      REFRACTION_COPY_PASS_ID,
-                      REFRACTION_COPY_PASS_PHASE,
-                      toSurfaceEffectShaderId(REFRACTION_COPY_SHADER_ID, shaderId),
-                      cullMode
-                  ),
-              ]
-            : []),
-        ...(sssBlurEnabled
-            ? [
-                  createSurfaceEffectMaterialPass(
-                      SSS_BLUR_PASS_ID,
-                      SSS_BLUR_PASS_PHASE,
-                      toSurfaceEffectShaderId(SSS_BLUR_SHADER_ID, shaderId),
-                      cullMode
-                  ),
-              ]
-            : []),
     ];
+
+    if (outlineEnabled) {
+        passes.push({
+            id: 'outline',
+            phase: 'outline',
+            shaderId: outlineShaderId,
+            primitive: 'triangle-list',
+            rasterizerState: {
+                cullMode: 'front',
+                frontFace: 'ccw',
+            },
+            depthStencilState: {
+                depthTest: true,
+                depthWrite: true,
+                depthFunc: 'less',
+            },
+            blendState: {
+                targets: [
+                    {
+                        blend: false,
+                    },
+                ],
+            },
+        });
+    }
+
+    if (refractionCopyEnabled) {
+        passes.push(
+            createSurfaceEffectMaterialPass(
+                REFRACTION_COPY_PASS_ID,
+                REFRACTION_COPY_PASS_PHASE,
+                toSurfaceEffectShaderId(REFRACTION_COPY_SHADER_ID, shaderId),
+                cullMode
+            )
+        );
+    }
+
+    if (sssBlurEnabled) {
+        passes.push(
+            createSurfaceEffectMaterialPass(
+                SSS_BLUR_PASS_ID,
+                SSS_BLUR_PASS_PHASE,
+                toSurfaceEffectShaderId(SSS_BLUR_SHADER_ID, shaderId),
+                cullMode
+            )
+        );
+    }
 
     return Object.freeze(passes);
 };

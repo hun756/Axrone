@@ -1,5 +1,5 @@
 import { Mat4, Vec3 } from '@axrone/numeric';
-import { Transform, type EntityId } from '@axrone/ecs-runtime';
+import { Transform, type Entity } from '@axrone/ecs-runtime';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { BillboardRenderer } from '../components/billboard-renderer';
 import { SceneMeshError } from '../errors';
@@ -19,7 +19,7 @@ export interface SceneBillboardBatchRuntimeOptions {
 }
 
 export interface SceneBillboardBatchRuntimeRenderParams {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
     readonly frameState: SceneRenderFrameState;
 }
@@ -95,7 +95,7 @@ const resolveBillboardModeValue = (mode: string): number => {
 };
 
 interface BillboardSubject {
-    readonly entity: EntityId;
+    readonly entity: Entity;
     readonly renderer: BillboardRenderer;
 }
 
@@ -325,8 +325,8 @@ export class SceneBillboardBatchRuntime {
             const viewLen = Vec3.len(_scratchViewDir);
             if (viewLen < 1e-6) {
                 // Billboard at camera position, use default orientation
-                right.set(1, 0, 0);
-                up.set(0, 1, 0);
+                right.x = 1; right.y = 0; right.z = 0;
+                up.x = 0; up.y = 1; up.z = 0;
             } else {
                 Vec3.normalize(_scratchViewDir, _scratchViewDir);
 
@@ -335,7 +335,7 @@ export class SceneBillboardBatchRuntime {
                 const rightLen = Vec3.len(_scratchRight);
                 if (rightLen < 1e-6) {
                     // viewDir is parallel to Vec3.UP, pick arbitrary right
-                    right.set(1, 0, 0);
+                    right.x = 1; right.y = 0; right.z = 0;
                 } else {
                     Vec3.normalize(_scratchRight, _scratchRight);
                 }
@@ -349,7 +349,7 @@ export class SceneBillboardBatchRuntime {
             _scratchViewDir.y = 0;
             const viewDirYLen = Vec3.len(_scratchViewDir);
             if (viewDirYLen < 1e-6) {
-                right.set(1, 0, 0);
+                right.x = 1; right.y = 0; right.z = 0;
             } else {
                 Vec3.normalize(_scratchViewDir, _scratchViewDir);
 
@@ -357,17 +357,17 @@ export class SceneBillboardBatchRuntime {
                 Vec3.cross(Vec3.UP, _scratchViewDir, _scratchRight);
                 const rightLen = Vec3.len(_scratchRight);
                 if (rightLen < 1e-6) {
-                    right.set(1, 0, 0);
+                    right.x = 1; right.y = 0; right.z = 0;
                 } else {
                     Vec3.normalize(_scratchRight, _scratchRight);
                 }
             }
             // Up is always world up for cylindrical
-            up.set(0, 1, 0);
+            up.x = 0; up.y = 1; up.z = 0;
         } else {
             // Velocity-oriented: use identity orientation (local axes)
-            right.set(1, 0, 0);
-            up.set(0, 1, 0);
+            right.x = 1; right.y = 0; right.z = 0;
+            up.x = 0; up.y = 1; up.z = 0;
         }
 
         // Compute adjusted UVs

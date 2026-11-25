@@ -1,9 +1,9 @@
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 
 type SceneEntityLifecyclePhase = 'fixedUpdate' | 'update' | 'lateUpdate';
 
 export interface SceneEntityLifecycleRunnerOptions {
-    readonly getEntitys: () => readonly EntityId[];
+    readonly getEntitys: () => readonly Entity[];
 }
 
 export class SceneEntityLifecycleRunner {

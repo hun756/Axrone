@@ -1,5 +1,5 @@
 import type { BoundingSphere, CameraFrustum } from '@axrone/geometry';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { Transform } from '@axrone/ecs-runtime';
 import { Vec3 } from '@axrone/numeric';
 import { MeshRenderer } from '../components/mesh-renderer';
@@ -90,7 +90,7 @@ export class SceneRenderItemCollector {
     };
 
     collect(
-        entities: readonly EntityId[],
+        entities: readonly Entity[],
         passId: string,
         sortOptions: SceneRenderItemSortOptions = {}
     ): readonly SceneRenderItem[] {

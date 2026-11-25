@@ -327,13 +327,13 @@ export class LODGroup extends Component {
         const patch: MutableLODConfig = {};
 
         if (Array.isArray(data.localReferencePoint) && data.localReferencePoint.length === 3) {
-            patch.localReferencePoint = data.localReferencePoint;
+            patch.localReferencePoint = data.localReferencePoint as [number, number, number];
         }
         if (typeof data.size === 'number') {
             patch.size = data.size;
         }
         if (typeof data.fadeMode === 'string') {
-            patch.fadeMode = data.fadeMode;
+            patch.fadeMode = data.fadeMode as LODGroupConfig['fadeMode'];
         }
         if (typeof data.animateCrossFading === 'boolean') {
             patch.animateCrossFading = data.animateCrossFading;

@@ -1,5 +1,5 @@
 import { Vec4 } from '@axrone/numeric';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { SceneSnapshotLoader } from './scene-snapshot-loader';
 import type {
     ScenePrefabDefinition,
@@ -10,11 +10,11 @@ import type {
 } from './types';
 
 export interface SceneSnapshotEntityHost {
-    createPrefab(id: string, entities?: readonly EntityId[]): ScenePrefabDefinition;
+    createPrefab(id: string, entities?: readonly Entity[]): ScenePrefabDefinition;
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options?: ScenePrefabInstantiateOptions
-    ): readonly EntityId[];
+    ): readonly Entity[];
     destroyAllEntities(): void;
 }
 
@@ -94,14 +94,14 @@ export class SceneSnapshotRuntime {
         }
     }
 
-    createPrefab(id: string, entities?: readonly EntityId[]): ScenePrefabDefinition {
+    createPrefab(id: string, entities?: readonly Entity[]): ScenePrefabDefinition {
         return this._options.entities.createPrefab(id, entities);
     }
 
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options: ScenePrefabInstantiateOptions = {}
-    ): readonly EntityId[] {
+    ): readonly Entity[] {
         return this._options.entities.instantiatePrefab(prefab, options);
     }
 
@@ -116,7 +116,7 @@ export class SceneSnapshotRuntime {
     async loadScene(
         snapshot: SceneSnapshot,
         options: SceneSnapshotLoadOptions = {}
-    ): Promise<readonly EntityId[]> {
+    ): Promise<readonly Entity[]> {
         return await this._loader.load(snapshot, options);
     }
 }

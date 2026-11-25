@@ -1,4 +1,4 @@
-import { Hierarchy, Transform, type EntityId, type RenderMutationClock } from '@axrone/ecs-runtime';
+import { Hierarchy, Transform, type Entity, type RenderMutationClock } from '@axrone/ecs-runtime';
 import { Mat4, Vec3 } from '@axrone/numeric';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { SpriteMask } from '../components/sprite-mask';
@@ -20,12 +20,12 @@ const DEFAULT_TEXTURE_SLOT_BUDGET = 16;
  * used to decide whether transform/static streams must be rewritten.
  */
 interface SceneSpriteInstanceEntry {
-    entity: EntityId;
+    entity: Entity;
     transform: Transform;
     renderer: SpriteRenderer;
     hierarchy: Hierarchy | null;
     /** Non-self ancestors, only when the sprite is parented. */
-    ancestors: EntityId[] | null;
+    ancestors: Entity[] | null;
     ancestorsRevision: number[];
     isRoot: boolean;
     textureId: string;
@@ -63,7 +63,7 @@ interface SceneSpriteInstanceEntry {
  * component lookups, whether any of them became renderable again.
  */
 interface SceneSpriteInstanceExcludedEntry {
-    entity: EntityId;
+    entity: Entity;
     transform: Transform | null;
     renderer: SpriteRenderer | null;
     entityRevision: number;
@@ -75,7 +75,7 @@ export type SceneSpriteInstanceSyncStatus = 'ready' | 'empty' | 'ineligible';
 type SceneSpriteInstanceReclassify = 'ok' | 'ineligible';
 
 const createEntry = (): SceneSpriteInstanceEntry => ({
-    entity: null as unknown as EntityId,
+    entity: null as unknown as Entity,
     transform: null as unknown as Transform,
     renderer: null as unknown as SpriteRenderer,
     hierarchy: null,
@@ -144,7 +144,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
     private _groupCount = 0;
     private _groupCapacity = 0;
     private _passId = '';
-    private _entitysRef: readonly EntityId[] | null = null;
+    private _entitysRef: readonly Entity[] | null = null;
     private _registeredEntityCount = -1;
     private _empty = false;
     private _needsRebuild = true;
@@ -157,7 +157,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
     private _worldClock: RenderMutationClock | null = null;
     /** Clock value at the end of the last completed refresh. */
     private _worldRevision = -1;
-    private _ineligibleEntitiesRef: readonly EntityId[] | null = null;
+    private _ineligibleEntitiesRef: readonly Entity[] | null = null;
     private _ineligibleEntityCount = -1;
     private _ineligiblePassId = '';
     private _ineligible = false;
@@ -270,7 +270,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
      * ineligibility is scoped to the exact entity array + pass so a scene that
      * needs the general path does not get rescanned every frame.
      */
-    sync(entities: readonly EntityId[], passId: string): SceneSpriteInstanceSyncStatus {
+    sync(entities: readonly Entity[], passId: string): SceneSpriteInstanceSyncStatus {
         if (
             this._ineligible &&
             this._ineligibleEntitiesRef === entities &&
@@ -515,7 +515,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
         this._hasCameraMatrix = false;
     }
 
-    private _build(entities: readonly EntityId[], passId: string): SceneSpriteInstanceSyncStatus {
+    private _build(entities: readonly Entity[], passId: string): SceneSpriteInstanceSyncStatus {
         this._passId = passId;
         this._entitysRef = entities;
         this._registeredEntityCount = entities.length;
@@ -654,8 +654,8 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
      * front instead of risking an unmasked frame.
      */
     private _resolveMaskChain(
-        entity: EntityId
-    ): { isRoot: boolean; ancestors: EntityId[] | null } | null {
+        entity: Entity
+    ): { isRoot: boolean; ancestors: Entity[] | null } | null {
         if (entity.getComponent(SpriteMask)) {
             return null;
         }
@@ -667,8 +667,8 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
             return { isRoot: true, ancestors: null };
         }
 
-        const ancestors: EntityId[] = [];
-        let current: EntityId | undefined = firstParent;
+        const ancestors: Entity[] = [];
+        let current: Entity | undefined = firstParent;
         while (current) {
             if (current.getComponent(SpriteMask)) {
                 return null;
@@ -682,7 +682,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
 
     private _recordExcluded(
         count: number,
-        entity: EntityId,
+        entity: Entity,
         transform: Transform | null,
         renderer: SpriteRenderer | null
     ): number {
@@ -690,7 +690,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
         let entry = excluded[count];
         if (!entry) {
             entry = {
-                entity: null as unknown as EntityId,
+                entity: null as unknown as Entity,
                 transform: null,
                 renderer: null,
                 entityRevision: -1,
@@ -1139,7 +1139,7 @@ export class SceneSpriteInstanceRegistry implements SceneSpriteInstanceDrawView 
  * entities have no world clock; the registry then keeps the conservative
  * full-sweep behaviour instead of skipping work it cannot prove unnecessary.
  */
-const resolveRenderMutationClock = (entity: EntityId | undefined): RenderMutationClock | null => {
+const resolveRenderMutationClock = (entity: Entity | undefined): RenderMutationClock | null => {
     if (!entity) {
         return null;
     }
@@ -1151,7 +1151,7 @@ const resolveRenderMutationClock = (entity: EntityId | undefined): RenderMutatio
 };
 
 /** Resolves the world-registered Hierarchy type (falls back to the core class). */
-const resolveHierarchyType = (entity: EntityId | undefined): typeof Hierarchy | null => {
+const resolveHierarchyType = (entity: Entity | undefined): typeof Hierarchy | null => {
     const registry = entity
         ? (entity.world as unknown as { registry?: Record<string, unknown> } | undefined)?.registry
         : undefined;

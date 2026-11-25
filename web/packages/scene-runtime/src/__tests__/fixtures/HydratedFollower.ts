@@ -5,8 +5,8 @@ import { Vec3 } from '@axrone/numeric';
 	scriptName: 'HydratedFollower',
 })
 export class HydratedFollower extends Component {
-	@property({ type: EntityId })
-	public targetEntity: EntityId | null = null;
+	@property({ type: Entity })
+	public targetEntity: Entity | null = null;
 
 	@property({ type: Transform })
 	public targetTransform: Transform | null = null;

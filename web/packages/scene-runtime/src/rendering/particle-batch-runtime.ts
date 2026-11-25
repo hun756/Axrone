@@ -1,5 +1,5 @@
 import { Mat4 } from '@axrone/numeric';
-import { Transform, type EntityId } from '@axrone/ecs-runtime';
+import { Transform, type Entity } from '@axrone/ecs-runtime';
 import type { SceneCameraFrameState } from '../camera-frame-state';
 import { ParticleSystem } from '../components/particle-system';
 import type { ParticleRenderData } from '../components/particle-system';
@@ -39,7 +39,7 @@ export interface SceneParticleBatchRuntimeOptions {
 }
 
 export interface SceneParticleBatchRuntimeRenderParams {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
     readonly frameState: SceneRenderFrameState;
     readonly viewportWidth: number;
@@ -57,7 +57,7 @@ const EMPTY_STATS: SceneParticleBatchRuntimeRenderStats = Object.freeze({
 });
 
 interface SceneParticleRenderSubject {
-    readonly entity: EntityId;
+    readonly entity: Entity;
     readonly system: ParticleSystem;
 }
 

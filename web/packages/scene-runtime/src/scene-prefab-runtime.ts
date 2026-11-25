@@ -38,8 +38,8 @@ import type { ScenePrefabInstantiateOptions } from './types';
 
 interface ScenePrefabHost {
     readonly componentCatalog: SceneComponentTypeResolver;
-    createEntity(config: EntityConfig): EntityId;
-    getAllEntities(): readonly EntityId[];
+    createEntity(config: EntityConfig): Entity;
+    getAllEntities(): readonly Entity[];
 }
 
 const EDITOR_SCRIPT_METADATA_KEYS = new Set([
@@ -200,7 +200,7 @@ const normalizePropertyTypeId = (
         return undefined;
     }
 
-    if (type === EntityId) {
+    if (type === Entity) {
         return 'entity';
     }
 
@@ -312,7 +312,7 @@ export class ScenePrefabRuntime {
 
     createPrefab(
         id: string,
-        entities: readonly EntityId[] = this._host.getAllEntities()
+        entities: readonly Entity[] = this._host.getAllEntities()
     ): ScenePrefabDefinition {
         return {
             id,
@@ -324,17 +324,17 @@ export class ScenePrefabRuntime {
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options: ScenePrefabInstantiateOptions = {}
-    ): readonly EntityId[] {
+    ): readonly Entity[] {
         const resolvedPrefab = this._resolvePrefab(prefab, options);
-        const createdEntities: EntityId[] = [];
-        const createdByNodeId = new Map<string, EntityId>();
+        const createdEntities: Entity[] = [];
+        const createdByNodeId = new Map<string, Entity>();
         const instanceId = createPrefabInstanceId();
         const pendingComponentHydration: Array<{
-            readonly entity: EntityId;
+            readonly entity: Entity;
             readonly components: readonly SceneComponentSnapshot[];
         }> = [];
         const pendingHierarchyLinks: Array<{
-            readonly entity: EntityId;
+            readonly entity: Entity;
             readonly parentNodeId?: string | null;
         }> = [];
 
@@ -430,7 +430,7 @@ export class ScenePrefabRuntime {
         }
     }
 
-    private _createEntitySnapshot(entity: EntityId, prefabId: string): SceneEntitySnapshot {
+    private _createEntitySnapshot(entity: Entity, prefabId: string): SceneEntitySnapshot {
         const binding = entity.getComponent(PrefabNodeBinding);
         const hierarchy = entity.getComponent(Hierarchy);
         const components = entity
@@ -494,7 +494,7 @@ export class ScenePrefabRuntime {
     }
 
     private _instantiateComponent(
-        entity: EntityId,
+        entity: Entity,
         snapshot: SceneComponentSnapshot,
         options: ScenePrefabInstantiateOptions,
     ): Component {
@@ -521,8 +521,8 @@ export class ScenePrefabRuntime {
     private _applyComponentData(
         component: Component,
         snapshot: SceneComponentSnapshot,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[]
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[]
     ): void {
         const componentType = component.constructor as ComponentConstructor;
         const decoded = decodeSceneValue(snapshot.data);
@@ -600,8 +600,8 @@ export class ScenePrefabRuntime {
         componentType: ComponentConstructor,
         component: Component,
         decoded: Record<string, unknown>,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): Record<string, unknown> {
         const propertyMetadata = getComponentPropertyMetadata(componentType as any);
         if (propertyMetadata.length === 0) {
@@ -674,8 +674,8 @@ export class ScenePrefabRuntime {
     private _resolveComponentReferenceFields(
         component: Component,
         values: Record<string, unknown>,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): Record<string, unknown> {
         let resolvedValues = values;
 
@@ -710,8 +710,8 @@ export class ScenePrefabRuntime {
     private _findRigidbodyReference(
         component: Component,
         referenceId: string,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): Component | null {
         const preferSpatial = isJoint3DLike(component);
         const matchesDimension = (candidate: Component): boolean =>
@@ -748,8 +748,8 @@ export class ScenePrefabRuntime {
     private _findJointReference(
         component: Component,
         referenceId: string,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): Component | null {
         const preferSpatial = isJoint3DLike(component);
         const matchesDimension = (candidate: Component): boolean =>
@@ -782,9 +782,9 @@ export class ScenePrefabRuntime {
 
     private _findComponentById(
         componentId: string,
-        createdEntities: readonly EntityId[],
+        createdEntities: readonly Entity[],
     ): Component | null {
-        const entitySets: readonly (readonly EntityId[])[] = [createdEntities, this._host.getAllEntities()];
+        const entitySets: readonly (readonly Entity[])[] = [createdEntities, this._host.getAllEntities()];
 
         for (const entities of entitySets) {
             for (const entity of entities) {
@@ -810,8 +810,8 @@ export class ScenePrefabRuntime {
      * hook only decides how early a scene settles, not whether it does.
      */
     private _reconcileDeferredPhysicsReferences(
-        createdEntities: readonly EntityId[],
-        createdByNodeId: ReadonlyMap<string, EntityId>,
+        createdEntities: readonly Entity[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
     ): void {
         for (let pass = 0; pass < 2; pass += 1) {
             const gearPass = pass === 1;
@@ -844,8 +844,8 @@ export class ScenePrefabRuntime {
 
     private _reconcileJoint(
         joint: Component,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): boolean {
         const pendingBodyRef = readPendingBodyReference(joint);
         if (pendingBodyRef !== null) {
@@ -894,8 +894,8 @@ export class ScenePrefabRuntime {
         component: Component,
         metadata: PropertyMetadata,
         value: unknown,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): unknown {
         const currentValue = (component as unknown as Record<string, unknown>)[metadata.propertyKey];
         const fallbackValue = currentValue ?? metadata.defaultValue;
@@ -955,8 +955,8 @@ export class ScenePrefabRuntime {
         component: Component,
         propertyKey: string,
         value: unknown,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
     ): unknown {
         const currentValue = (component as unknown as Record<string, unknown>)[propertyKey];
         const normalizedKey = propertyKey.toLowerCase();
@@ -1011,10 +1011,10 @@ export class ScenePrefabRuntime {
 
     private _resolveEntityReference(
         value: unknown,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
-    ): EntityId | undefined {
-        if (value instanceof EntityId) {
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
+    ): Entity | undefined {
+        if (value instanceof Entity) {
             return value;
         }
 
@@ -1043,9 +1043,9 @@ export class ScenePrefabRuntime {
 
     private _findEntityByReferenceTarget(
         target: string,
-        createdByNodeId: ReadonlyMap<string, EntityId>,
-        createdEntities: readonly EntityId[],
-    ): EntityId | undefined {
+        createdByNodeId: ReadonlyMap<string, Entity>,
+        createdEntities: readonly Entity[],
+    ): Entity | undefined {
         return (
             createdByNodeId.get(target) ??
             createdEntities.find((entity) => entity.id === target) ??
@@ -1061,8 +1061,8 @@ export class ScenePrefabRuntime {
 
     private _findEntityByComponentId(
         componentId: string,
-        createdEntities: readonly EntityId[],
-    ): EntityId | undefined {
+        createdEntities: readonly Entity[],
+    ): Entity | undefined {
         const entitySets = [createdEntities, this._host.getAllEntities()];
 
         for (const entities of entitySets) {

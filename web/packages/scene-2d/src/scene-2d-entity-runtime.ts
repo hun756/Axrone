@@ -3,7 +3,7 @@ import {
     Hierarchy,
     Transform,
     runWithinCreationBatch,
-    type EntityId,
+    type Entity,
     type EntityComponentEntry,
     type EntityConfig,
 } from '@axrone/ecs-runtime';
@@ -156,7 +156,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
     createCameraEntity(
         entityConfig: EntityConfig = {},
         cameraConfig: CameraConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         requireRegisteredComponent(
             this._entities,
             Camera,
@@ -188,7 +188,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
     createSpriteEntity(
         entityConfig: EntityConfig = {},
         spriteConfig: SpriteRendererConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         requireRegisteredComponent(
             this._entities,
             SpriteRenderer,
@@ -309,7 +309,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
     private _createSpriteEntitiesIncremental(
         configs: readonly Scene2DBulkSpriteConfig[]
     ): readonly Entity<World<SceneRegistry<R>>>[] {
-        const entities = new Array<EntityId<World<SceneRegistry<R>>>>(configs.length);
+        const entities = new Array<Entity<World<SceneRegistry<R>>>>(configs.length);
 
         for (let index = 0; index < configs.length; index += 1) {
             const config = configs[index]!;
@@ -330,7 +330,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
         entityConfig: EntityConfig = {},
         spriteConfig: SpriteRendererConfig = {},
         animatorConfig: SpriteAnimatorConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         const animation = this._animation;
         if (!animation) {
             throw new SceneCapabilityError(
@@ -347,7 +347,7 @@ export class Scene2DActorRuntime<R extends ComponentRegistry = Record<string, ne
     createMaskEntity(
         entityConfig: EntityConfig = {},
         maskConfig: SpriteMaskConfig = {}
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         const animation = this._animation;
         if (!animation) {
             throw new SceneCapabilityError(

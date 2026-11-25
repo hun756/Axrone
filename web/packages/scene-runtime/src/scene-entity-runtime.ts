@@ -100,7 +100,7 @@ export class SceneEntityRuntime<R extends ComponentRegistry = Record<string, nev
         return this._world.batchStructureChanges(callback);
     }
 
-    createEntity(config: EntityConfig = {}): EntityId<World<SceneRegistry<R>>> {
+    createEntity(config: EntityConfig = {}): Entity<World<SceneRegistry<R>>> {
         return new Entity(this._world, config);
     }
 
@@ -182,7 +182,7 @@ export class SceneEntityRuntime<R extends ComponentRegistry = Record<string, nev
             readonly type: ComponentConstructor;
             readonly args?: readonly unknown[];
         }[] = []
-    ): EntityId<World<SceneRegistry<R>>> {
+    ): Entity<World<SceneRegistry<R>>> {
         return this.createEntitiesWithComponents([
             {
                 entityConfig: config,
@@ -193,7 +193,7 @@ export class SceneEntityRuntime<R extends ComponentRegistry = Record<string, nev
 
     createPrefab(
         id: string,
-        entities: readonly EntityId[] = this._world.getAllEntities()
+        entities: readonly Entity[] = this._world.getAllEntities()
     ): ScenePrefabDefinition {
         return this._prefabs.createPrefab(id, entities);
     }
@@ -201,7 +201,7 @@ export class SceneEntityRuntime<R extends ComponentRegistry = Record<string, nev
     instantiatePrefab(
         prefab: ScenePrefabDefinition,
         options: ScenePrefabInstantiateOptions = {}
-    ): readonly EntityId[] {
+    ): readonly Entity[] {
         return this._prefabs.instantiatePrefab(prefab, options);
     }
 

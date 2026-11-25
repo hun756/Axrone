@@ -1,4 +1,4 @@
-import { Transform, type EntityId } from '@axrone/ecs-runtime';
+import { Transform, type Entity } from '@axrone/ecs-runtime';
 import { Rect } from '@axrone/numeric';
 import { transformPoint2D } from '@axrone/render-core';
 import {
@@ -94,7 +94,7 @@ interface SceneResolvedSpriteMaskState {
  * and never retain the builder's `Render2DSpriteBatchBuildResult`.
  */
 interface SceneSpriteMaskCacheSignature {
-    readonly entity: EntityId;
+    readonly entity: Entity;
     readonly mask: SpriteMask;
     readonly transform: Transform;
     readonly entityRevision: number;
@@ -103,7 +103,7 @@ interface SceneSpriteMaskCacheSignature {
 }
 
 interface SceneSpriteBatchCacheEntry {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly entityRevisions: Uint32Array;
     readonly transformRevisions: Uint32Array;
     readonly rendererRevisions: Uint32Array;
@@ -154,7 +154,7 @@ export interface SceneSpriteBatchRuntimeOptions {
 }
 
 export interface SceneSpriteBatchRuntimeRenderParams {
-    readonly entities: readonly EntityId[];
+    readonly entities: readonly Entity[];
     readonly cameraFrame: SceneCameraFrameState;
     readonly renderPass: SceneRenderPassResource;
     readonly frameState: SceneRenderFrameState;
@@ -571,7 +571,7 @@ export class SceneSpriteBatchRuntime {
     }
 
     private _collectMaskSignatures(
-        entities: readonly EntityId[]
+        entities: readonly Entity[]
     ): SceneSpriteMaskCacheSignature[] | null {
         const signatures: SceneSpriteMaskCacheSignature[] = [];
         for (let index = 0; index < entities.length; index += 1) {
@@ -598,7 +598,7 @@ export class SceneSpriteBatchRuntime {
 
     private _matchesEntitySignatures(
         entry: SceneSpriteBatchCacheEntry,
-        entities: readonly EntityId[],
+        entities: readonly Entity[],
         passId: string
     ): boolean {
         if (entry.registeredEntityCount !== entities.length) {
@@ -1418,14 +1418,14 @@ export class SceneSpriteBatchRuntime {
     }
 
     private _resolveMaskState(
-        entity: EntityId,
+        entity: Entity,
         cameraFrame: SceneCameraFrameState,
         viewportWidth: number,
         viewportHeight: number
     ): SceneResolvedSpriteMaskState | null {
         let clipRect: Render2DRectLike | undefined;
         let shapeMask: Render2DSpriteMask | undefined;
-        let current: EntityId | undefined = entity;
+        let current: Entity | undefined = entity;
 
         while (current) {
             const mask = current.getComponent(SpriteMask);

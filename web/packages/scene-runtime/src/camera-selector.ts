@@ -1,7 +1,7 @@
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { Camera } from './components/camera';
 
-export const selectSceneCamera = (entities: readonly EntityId[]): Camera | undefined => {
+export const selectSceneCamera = (entities: readonly Entity[]): Camera | undefined => {
     let fallback: Camera | undefined;
 
     for (const entity of entities) {

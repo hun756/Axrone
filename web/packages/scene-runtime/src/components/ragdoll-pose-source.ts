@@ -1,11 +1,11 @@
 import { blendWorldPose } from '@axrone/animation';
 import { Transform } from '@axrone/ecs-runtime';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import type { Animator } from './animator';
 
 interface SceneRagdollBinding {
     readonly animator: Animator;
-    readonly boneEntities: readonly EntityId[];
+    readonly boneEntities: readonly Entity[];
     readonly positions: Float32Array;
     readonly rotations: Float32Array;
     captured: boolean;
@@ -37,7 +37,7 @@ export class SceneRagdollPoseSource {
      * Binds bone entities in rig order. The array length must equal the rig's
      * bone count at apply time; rebinding replaces the previous mapping.
      */
-    bind(animator: Animator, boneEntities: readonly EntityId[]): void {
+    bind(animator: Animator, boneEntities: readonly Entity[]): void {
         const controller = animator.controller;
         if (!controller) {
             throw new Error('Cannot bind a ragdoll to an animator without a controller');

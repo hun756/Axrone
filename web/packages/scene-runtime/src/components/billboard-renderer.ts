@@ -301,7 +301,7 @@ export class BillboardRenderer extends Component {
             patch.textureId = data.textureId;
         }
         if (typeof data.mode === 'string') {
-            patch.mode = data.mode;
+            patch.mode = data.mode as BillboardMode;
         }
         if (typeof data.width === 'number') {
             patch.width = data.width;
@@ -310,7 +310,7 @@ export class BillboardRenderer extends Component {
             patch.height = data.height;
         }
         if (Array.isArray(data.pivot) && data.pivot.length === 3) {
-            patch.pivot = data.pivot;
+            patch.pivot = data.pivot as [number, number, number];
         }
         if (typeof data.screenSpace === 'boolean') {
             patch.screenSpace = data.screenSpace;
@@ -325,7 +325,7 @@ export class BillboardRenderer extends Component {
             patch.alphaTest = data.alphaTest;
         }
         if (Array.isArray(data.color) && data.color.length === 3) {
-            patch.color = data.color;
+            patch.color = data.color as [number, number, number];
         }
         if (typeof data.opacity === 'number') {
             patch.opacity = data.opacity;
@@ -337,7 +337,7 @@ export class BillboardRenderer extends Component {
             patch.flipY = data.flipY;
         }
         if (Array.isArray(data.uvRect) && data.uvRect.length === 4) {
-            patch.uvRect = data.uvRect;
+            patch.uvRect = data.uvRect as [number, number, number, number];
         }
 
         this._applyConfig(patch);

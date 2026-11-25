@@ -489,7 +489,7 @@ export class PathAgent extends Component {
             patch.areaMask = data.areaMask;
         }
         if (typeof data.obstacleAvoidanceQuality === 'string') {
-            patch.obstacleAvoidanceQuality = data.obstacleAvoidanceQuality;
+            patch.obstacleAvoidanceQuality = data.obstacleAvoidanceQuality as PathAgentObstacleAvoidanceQuality;
         }
         if (typeof data.avoidancePriority === 'number') {
             patch.avoidancePriority = data.avoidancePriority;

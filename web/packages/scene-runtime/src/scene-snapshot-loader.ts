@@ -1,5 +1,5 @@
 import { Vec4 } from '@axrone/numeric';
-import type { EntityId } from '@axrone/ecs-runtime';
+import type { Entity } from '@axrone/ecs-runtime';
 import { SceneLifecycleError } from './errors';
 import type {
     ScenePrefabDefinition,
@@ -22,7 +22,7 @@ export interface SceneSnapshotLoaderOptions {
     readonly instantiatePrefab: (
         prefab: ScenePrefabDefinition,
         options: SceneSnapshotLoadOptions
-    ) => readonly EntityId[];
+    ) => readonly Entity[];
 }
 
 export class SceneSnapshotLoader {
@@ -31,7 +31,7 @@ export class SceneSnapshotLoader {
     async load(
         snapshot: SceneSnapshot,
         options: SceneSnapshotLoadOptions = {}
-    ): Promise<readonly EntityId[]> {
+    ): Promise<readonly Entity[]> {
         if (snapshot.version !== 1) {
             throw new SceneLifecycleError(
                 `Unsupported scene snapshot version '${snapshot.version}'`

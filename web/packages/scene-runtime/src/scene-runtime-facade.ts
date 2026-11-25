@@ -60,7 +60,7 @@ export class SceneRuntimeFacade<R extends ComponentRegistry = Record<string, nev
         return this._kernel.entities.getRegisteredComponentNames();
     }
 
-    createEntity(config: EntityConfig = {}): EntityId<World<RuntimeRegistry<R>>> {
+    createEntity(config: EntityConfig = {}): Entity<World<RuntimeRegistry<R>>> {
         this.assertNotDisposed();
         return this._kernel.entities.createEntity(config);
     }
