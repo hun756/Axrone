@@ -16,6 +16,7 @@ const FNV_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'FNV-1a 32-bit non-cryptographic hash (Fowler-Noll-Voy)',
 };
 
@@ -90,7 +91,7 @@ abstract class Fnv1a32Base extends HasherBase<Hash32> {
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 
@@ -225,6 +226,7 @@ const FNV64_METADATA: HashAlgorithmMetadata = {
     seedable: true,
     keyed: false,
     cryptographicallySecure: false,
+    async: false,
     description: 'FNV-1a 64-bit non-cryptographic hash (u32-lane)',
 };
 
@@ -406,7 +408,7 @@ export class Fnv1a64 extends HasherBase<Hash64> {
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 

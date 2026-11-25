@@ -218,7 +218,7 @@ export class AudioClipStore<TSchema extends AudioAssetSchema = AudioAssetSchema>
         const frameLength = data.channelData[0]?.length ?? 0;
         const buffer = this.#context.createBuffer(data.channelData.length, frameLength, data.sampleRate);
         data.channelData.forEach((channel, index) => {
-            buffer.copyToChannel(channel, index);
+            buffer.copyToChannel(channel as Float32Array<ArrayBuffer>, index);
         });
         return buffer;
     }

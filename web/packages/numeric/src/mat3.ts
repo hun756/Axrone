@@ -75,7 +75,7 @@ export class Mat3 implements IMat3Like<number[]>, ICloneable<Mat3>, Equatable {
 
     static copy<T extends IMat3Like, V extends IMat3Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            const outData = (out as IMutableMat3).data;
+            const outData = (out as unknown as IMutableMat3).data;
             for (let i = 0; i < 9; i++) outData[i] = source.data[i];
             return out;
         }
@@ -163,7 +163,7 @@ export class Mat3 implements IMat3Like<number[]>, ICloneable<Mat3>, Equatable {
         TMatA extends IMat3Like,
         TMatB extends IMat3Like,
         TOut extends IMat3Like | undefined = undefined,
-    >(a: Readonly<TMatA>, b: Readonly<TMatB>, out?: TOut): MatrixOperationReturnType<TOut, TMatA, TMatB> {
+    >(a: Readonly<TMatA>, b: Readonly<TMatB>, out?: TOut): MatrixOperationReturnType<TOut, TMatA> {
         const a00 = a.data[0],
             a01 = a.data[1],
             a02 = a.data[2];
@@ -199,7 +199,7 @@ export class Mat3 implements IMat3Like<number[]>, ICloneable<Mat3>, Equatable {
             outData[7] = a20 * b01 + a21 * b11 + a22 * b21;
             outData[8] = a20 * b02 + a21 * b12 + a22 * b22;
 
-            return out as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            return out as MatrixOperationReturnType<TOut, TMatA>;
         } else {
             return new Mat3([
                 a00 * b00 + a01 * b10 + a02 * b20,
@@ -213,7 +213,7 @@ export class Mat3 implements IMat3Like<number[]>, ICloneable<Mat3>, Equatable {
                 a20 * b00 + a21 * b10 + a22 * b20,
                 a20 * b01 + a21 * b11 + a22 * b21,
                 a20 * b02 + a21 * b12 + a22 * b22,
-            ]) as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            ]) as MatrixOperationReturnType<TOut, TMatA>;
         }
     }
 

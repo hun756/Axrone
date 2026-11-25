@@ -69,7 +69,7 @@ export class Mat4 implements IMat4Like<number[]>, ICloneable<Mat4>, Equatable {
 
     static copy<T extends IMat4Like, V extends IMat4Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            const outData = (out as IMutableMat4).data;
+            const outData = (out as unknown as IMutableMat4).data;
             for (let i = 0; i < 16; i++) outData[i] = source.data[i];
             return out;
         }
@@ -216,7 +216,7 @@ export class Mat4 implements IMat4Like<number[]>, ICloneable<Mat4>, Equatable {
         a: Readonly<TMatA>,
         b: Readonly<TMatB>,
         out?: TOut
-    ): MatrixOperationReturnType<TOut, TMatA, TMatB> {
+    ): MatrixOperationReturnType<TOut, TMatA> {
         const a00 = a.data[0],
             a01 = a.data[1],
             a02 = a.data[2],
@@ -274,7 +274,7 @@ export class Mat4 implements IMat4Like<number[]>, ICloneable<Mat4>, Equatable {
             outData[14] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
             outData[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
 
-            return out as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            return out as MatrixOperationReturnType<TOut, TMatA>;
         } else {
             return new Mat4([
                 a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30,
@@ -296,7 +296,7 @@ export class Mat4 implements IMat4Like<number[]>, ICloneable<Mat4>, Equatable {
                 a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31,
                 a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32,
                 a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33,
-            ]) as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            ]) as MatrixOperationReturnType<TOut, TMatA>;
         }
     }
 

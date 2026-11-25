@@ -2,6 +2,7 @@ import { EMPTY_ARRAY, DEFAULT_SAMPLER_ID, DEFAULT_MATERIAL_KEY_SUFFIX, DEFAULT_M
 import type { AnimationClipMetadataIndex } from './internal/gltf-animation-types';
 import { maybeFreeze, sanitizeName, ensureArray, accessorComponentCount } from './internal/gltf-utils';
 import { inferTextureFormat } from './internal/gltf-texture';
+import type { AssetKind } from '@axrone/asset-core';
 import type {
     AssetImportDiagnostic,
     AssetImportResult,
@@ -859,7 +860,7 @@ export const createGltfImporter = <
                     [...document.textureKeys, ...document.materialKeys, ...document.meshKeys, ...document.skinKeys, ...document.animationKeys, ...sceneEntries.map((scene) => scene.prefabKey)]),
                 additional: Object.freeze(additional),
                 diagnostics: Object.freeze(diagnostics),
-            }) as AssetImportResult<TSchema>;
+            }) as AssetImportResult<TSchema, Extract<'gltf.document', AssetKind<TSchema>>>;
         },
     };
 

@@ -205,7 +205,7 @@ export class InputSystem<TSchema extends InputActionSchema = InputActionSchema>
     /** @internal */ public _sequence = 0;
     /** @internal */ public _disposed = false;
     /** @internal */ public _rebindToken = 0;
-    /** @internal */ public _activeRebinding?: ActiveRebinding<TSchema>;
+    /** @internal */ public _activeRebinding: ActiveRebinding<TSchema> | undefined = undefined;
     /** @internal */ public _hasGamepadBindings = false;
 
     constructor(options: InputSystemOptions<TSchema>) {

@@ -302,9 +302,10 @@ export const attachInputBrowserTarget = (
                 requestPointerLock();
             }
 
-            if (typeof (event.target as Element)?.setPointerCapture === 'function' && event.pointerId !== undefined) {
+            const pointerId = 'pointerId' in event && typeof event.pointerId === 'number' ? event.pointerId : undefined;
+            if (typeof (event.target as Element)?.setPointerCapture === 'function' && pointerId !== undefined) {
                 try {
-                    (event.target as Element).setPointerCapture(event.pointerId);
+                    (event.target as Element).setPointerCapture(pointerId);
                 } catch {
                     // Pointer capture may fail if already captured or invalid pointer
                 }

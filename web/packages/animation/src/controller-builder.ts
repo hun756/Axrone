@@ -42,7 +42,7 @@ import type {
 
 export type AnimationMotionInput = AnimationMotionDefinition | AnimationMotionBuilder;
 export type AnimationTransitionInput = AnimationTransitionDefinition | AnimationTransitionBuilder;
-export type AnimationStateInput = AnimationStateDefinition | AnimationStateBuilder;
+export type AnimationStateInput = AnimationStateDefinition | AnimationStateBuilder<any>;
 export type AnimationStateMachineInput = AnimationStateMachineDefinition | AnimationStateMachineBuilder;
 export type AnimationIkLayerInput = AnimationIkLayerDefinition | AnimationIkLayerBuilder;
 export type AnimationLayerInput = AnimationLayerDefinition | AnimationLayerBuilder;
@@ -308,11 +308,11 @@ export class AnimationStateMachineBuilder<
     group(
         id: string,
         childMachine: AnimationStateMachineInput,
-        configure?: (state: AnimationStateBuilder) => AnimationStateBuilder
+        configure?: (state: AnimationStateBuilder<'id' | 'childMachine'>) => AnimationStateBuilder<'id' | 'childMachine'>
     ): AnimationStateMachineBuilder<'entryState' | 'states'> {
         let stateBuilder = new AnimationStateBuilder(id).withChildMachine(childMachine);
         if (configure) {
-            stateBuilder = configure(stateBuilder) as AnimationStateBuilder;
+            stateBuilder = configure(stateBuilder);
         }
         return this.addState(stateBuilder);
     }
@@ -485,7 +485,7 @@ export const createAnimationState = (
 export const createAnimationGroupState = (
     id: string,
     childMachine: AnimationStateMachineInput
-): AnimationStateBuilder => new AnimationStateBuilder(id).withChildMachine(childMachine);
+): AnimationStateBuilder<'id' | 'childMachine'> => new AnimationStateBuilder(id).withChildMachine(childMachine);
 
 export const createAnimationStateBehaviour = (
     phase: AnimationStateBehaviourPhase,

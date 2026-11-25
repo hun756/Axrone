@@ -372,7 +372,7 @@ const decodeDracoPrimitive = async (
     }
 
     const compressedBytes = await runtime.resolveBufferView(extension.bufferView);
-    const decoderModule = await loadDracoDecoderModule(runtime);
+    const decoderModule = (await loadDracoDecoderModule(runtime)) as any;
     const decoderBuffer = new decoderModule.DecoderBuffer();
     const decoder = new decoderModule.Decoder();
     const mesh = new decoderModule.Mesh();
@@ -888,7 +888,7 @@ export const buildMeshDefinition = async (
     return {
         definition: Object.freeze({
             id: '',
-            vertices,
+            vertices: vertices as BufferSource,
             attributes: Object.freeze(attributes),
             ...(resolved.morphTargets.length > 0
                 ? {

@@ -235,6 +235,19 @@ export class BufferView<T extends keyof TypedArrayMap> implements IReadableBuffe
         return new BufferView(sliced, this.arrayType);
     }
 
+    subarray(begin?: number, end?: number): Uint8Array {
+        const startIndex = begin ?? 0;
+        const endIndex = end ?? this.limit;
+
+        if (startIndex < 0 || endIndex > this.limit || startIndex > endIndex) {
+            throw new RangeError('Invalid subarray bounds');
+        }
+
+        const byteBegin = startIndex * this.bytesPerElement;
+        const byteEnd = endIndex * this.bytesPerElement;
+        return this.buffer.subarray(byteBegin, byteEnd);
+    }
+
     toTypedArray(): TypedArrayMap[T] {
         const ArrayConstructor = this.getTypedArrayConstructor();
         const arrayBuffer = this.buffer.getBuffer();

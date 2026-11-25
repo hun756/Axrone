@@ -307,7 +307,11 @@ export class Buffer implements IBuffer {
         if (offset === 0 && dataSize === this.#byteLength) {
             // Full buffer replacement — snapshot the entire data
             const copy = new ArrayBuffer(dataSize);
-            new Uint8Array(copy).set(new Uint8Array(isBufferData(data) ? data.buffer ?? data : data));
+            new Uint8Array(copy).set(
+                ArrayBuffer.isView(data)
+                    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+                    : new Uint8Array(data)
+            );
             this.#lastData = copy;
         }
 

@@ -99,7 +99,7 @@ export class RaycastSystem2D {
         };
 
         const result = this._raycaster.raycast(query, predicate);
-        this._statistics.recordRaycast(result.hasHit, 1);
+        this._statistics.recordRaycast(result.hasHit);
 
         return result.hits;
     }
@@ -286,7 +286,7 @@ export class RaycastSystem3D {
         };
 
         const result = this._raycaster.raycast(query, predicate);
-        this._statistics.recordRaycast(result.hasHit, 1);
+        this._statistics.recordRaycast(result.hasHit);
 
         return result.hits;
     }

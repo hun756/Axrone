@@ -159,7 +159,7 @@ const decompress = async (
             format === 'gzip' ? 'gzip' : 'deflate'
         );
         const writer = stream.writable.getWriter();
-        await writer.write(bytes);
+        await writer.write(bytes as BufferSource);
         await writer.close();
         const reader = stream.readable.getReader();
         const chunks: Uint8Array[] = [];

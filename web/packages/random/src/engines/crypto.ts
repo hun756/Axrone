@@ -93,7 +93,7 @@ export class CryptoEngine implements IRandomEngine {
 
     private refillBuffer = (): void => {
         if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-            crypto.getRandomValues(this.buffer);
+            crypto.getRandomValues(this.buffer as Uint8Array<ArrayBuffer>);
         } else {
             const seedArray = new BigInt64Array(4);
             seedArray[0] = BigInt(Date.now()) + this.counter;

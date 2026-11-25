@@ -96,7 +96,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends Ha
     protected abstract getOutputSize(): number;
     protected abstract convertResult(bytes: Uint8Array): H;
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new HashAlreadyFinalizedError(`${this.algorithm}: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
@@ -176,7 +176,7 @@ abstract class WebCryptoHasher<H extends Hash256 | Hash512 | Hash128> extends Ha
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 

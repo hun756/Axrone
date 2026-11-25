@@ -43,7 +43,7 @@ export class Murmur3_32 extends HasherBase<Hash32> {
         return this._totalLen;
     }
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new HashAlreadyFinalizedError(`Murmur3_32: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
@@ -131,7 +131,7 @@ export class Murmur3_32 extends HasherBase<Hash32> {
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
         if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-            return this.updateBytes(value as unknown as ArrayLike<number>);
+            return this._updateBuffer(value);
         }
         return this;
     }
@@ -271,7 +271,7 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
         return this._totalLen;
     }
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new HashAlreadyFinalizedError(`Murmur2_64: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
@@ -370,7 +370,7 @@ export class Murmur2_64 extends HasherBase<import('../types').Hash64> {
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 

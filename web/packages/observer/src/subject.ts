@@ -940,7 +940,7 @@ export class Subject<T = any> implements ISubject<T> {
     }
 
     protected _enqueueBufferedValue(observer: ObserverRecord<T, any>, data: unknown): void {
-        observer.buffer?.push(data as TDispatch);
+        observer.buffer?.push(data as any);
         observer.notificationBuffer?.add(createNotificationData(this.id, 'update', data));
 
         if (observer.buffer?.isFull) {

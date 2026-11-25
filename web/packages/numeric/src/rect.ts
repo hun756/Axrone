@@ -1,5 +1,5 @@
 import { Comparer, CompareResult, EqualityComparer, Equatable, ICloneable } from '@axrone/utility';
-import { Fnv1a32, HashValue, IHashable, IHasher } from '@axrone/hash';
+import { Fnv1a32, Hash32, HashValue, IHashable, IHasher } from '@axrone/hash';
 import { EPSILON } from './common';
 import { clamp01 } from './clamp';
 
@@ -54,10 +54,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         const height = Number(arr[offset + 3]);
 
         if (out) {
-            (out as Rect).x = x;
-            (out as Rect).y = y;
-            (out as Rect).width = width;
-            (out as Rect).height = height;
+            (out as unknown as Rect).x = x;
+            (out as unknown as Rect).y = y;
+            (out as unknown as Rect).width = width;
+            (out as unknown as Rect).height = height;
             return out;
         }
 
@@ -70,10 +70,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
 
     static copy<T extends IRectLike, V extends IRectLike>(source: Readonly<T>, out?: V): V {
         if (out) {
-            (out as Rect).x = source.x;
-            (out as Rect).y = source.y;
-            (out as Rect).width = source.width;
-            (out as Rect).height = source.height;
+            (out as unknown as Rect).x = source.x;
+            (out as unknown as Rect).y = source.y;
+            (out as unknown as Rect).width = source.width;
+            (out as unknown as Rect).height = source.height;
             return out;
         }
         return { x: source.x, y: source.y, width: source.width, height: source.height } as V;
@@ -134,7 +134,7 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         );
     }
 
-    getHashCode(): number {
+    getHashCode(): Hash32 {
         return Rect._hasher
             .reset()
             .updateF32(this.x)
@@ -153,7 +153,7 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
     }
 
     static equals<T extends IRectLike, U extends IRectLike>(a: Readonly<T>, b: Readonly<U>): boolean {
-        if (a === b) return true;
+        if ((a as IRectLike) === (b as IRectLike)) return true;
         if (!a || !b) return false;
 
         return (
@@ -191,10 +191,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         const height = bottom - y;
 
         if (out) {
-            (out as Rect).x = x;
-            (out as Rect).y = y;
-            (out as Rect).width = width;
-            (out as Rect).height = height;
+            (out as unknown as Rect).x = x;
+            (out as unknown as Rect).y = y;
+            (out as unknown as Rect).width = width;
+            (out as unknown as Rect).height = height;
             return out;
         }
 
@@ -224,10 +224,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         const height = bottom - y;
 
         if (out) {
-            (out as Rect).x = x;
-            (out as Rect).y = y;
-            (out as Rect).width = width;
-            (out as Rect).height = height;
+            (out as unknown as Rect).x = x;
+            (out as unknown as Rect).y = y;
+            (out as unknown as Rect).width = width;
+            (out as unknown as Rect).height = height;
             return out;
         }
 
@@ -264,10 +264,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         out?: V
     ): Rect | V {
         if (out) {
-            (out as Rect).x = rect.x * sx;
-            (out as Rect).y = rect.y * sy;
-            (out as Rect).width = rect.width * sx;
-            (out as Rect).height = rect.height * sy;
+            (out as unknown as Rect).x = rect.x * sx;
+            (out as unknown as Rect).y = rect.y * sy;
+            (out as unknown as Rect).width = rect.width * sx;
+            (out as unknown as Rect).height = rect.height * sy;
             return out;
         }
 
@@ -300,10 +300,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         const height = Math.max(0, bottom - y);
 
         if (out) {
-            (out as Rect).x = x;
-            (out as Rect).y = y;
-            (out as Rect).width = width;
-            (out as Rect).height = height;
+            (out as unknown as Rect).x = x;
+            (out as unknown as Rect).y = y;
+            (out as unknown as Rect).width = width;
+            (out as unknown as Rect).height = height;
             return out;
         }
 
@@ -314,10 +314,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
     static normalize<T extends IRectLike, V extends IRectLike>(rect: Readonly<T>, out: V): V;
     static normalize<T extends IRectLike, V extends IRectLike>(rect: Readonly<T>, out?: V): Rect | V {
         if (out) {
-            (out as Rect).x = clamp01(rect.x);
-            (out as Rect).y = clamp01(rect.y);
-            (out as Rect).width = clamp01(rect.width);
-            (out as Rect).height = clamp01(rect.height);
+            (out as unknown as Rect).x = clamp01(rect.x);
+            (out as unknown as Rect).y = clamp01(rect.y);
+            (out as unknown as Rect).width = clamp01(rect.width);
+            (out as unknown as Rect).height = clamp01(rect.height);
             return out;
         }
 
@@ -347,10 +347,10 @@ export class Rect implements IRectLike, ICloneable<Rect>, Equatable, IHashable {
         const height = a.height + (b.height - a.height) * t;
 
         if (out) {
-            (out as Rect).x = x;
-            (out as Rect).y = y;
-            (out as Rect).width = width;
-            (out as Rect).height = height;
+            (out as unknown as Rect).x = x;
+            (out as unknown as Rect).y = y;
+            (out as unknown as Rect).width = width;
+            (out as unknown as Rect).height = height;
             return out;
         }
 

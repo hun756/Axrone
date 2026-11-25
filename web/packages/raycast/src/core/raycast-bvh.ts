@@ -555,4 +555,4 @@ export class BoundingVolumeHierarchy {
     }
 }
 
-export { BVHPrimitive };
+export type { BVHPrimitive };

@@ -30,6 +30,17 @@ export abstract class HasherBase<H extends HashValue> implements IHasher<H> {
         if (this._finalized) throw new HashAlreadyFinalizedError(`${this.algorithm}: cannot update after digest()`);
     }
 
+    protected _updateBuffer(value: ArrayBuffer | ArrayBufferView): this {
+        if (value instanceof ArrayBuffer) {
+            return this.updateBytes(new Uint8Array(value));
+        }
+        return this.updateBytes(
+            value instanceof Uint8Array
+                ? value
+                : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        );
+    }
+
     // ── Core abstract methods each algorithm must implement ──────────────
 
     abstract updateBytes(bytes: BytesLike, offset?: number, length?: number): this;

@@ -398,7 +398,9 @@ export class Render2DSpriteBatchBuilder {
             if (
                 !lastSource ||
                 !areSourcesEqual(lastSource, submission.source) ||
-                !Rect.equals(lastClipRect, submissionClipRect) ||
+                (lastClipRect === null || submissionClipRect === null
+                    ? lastClipRect !== submissionClipRect
+                    : !Rect.equals(lastClipRect, submissionClipRect)) ||
                 !areMasksEqual(lastMask, submission.mask ?? null) ||
                 this._batches[batchIndex]!.quadCount + submissionQuadCount > this._maxBatchQuads
             ) {

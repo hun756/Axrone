@@ -220,7 +220,7 @@ export const defineShaderEffect = (
  */
 export const serializeShaderEffectToJson = (
     effect: RenderShaderEffectDefinition
-): Record<string, unknown> => deepClone(effect) as Record<string, unknown>;
+): Record<string, unknown> => deepClone(effect) as unknown as Record<string, unknown>;
 
 /** Declare a shader keyword (variant switch). */
 export const keyword = (

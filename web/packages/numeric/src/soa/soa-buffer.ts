@@ -1,4 +1,5 @@
-export type { SoaBufferOptions } from './soa-common';
+import type { SoaBufferOptions } from './soa-common';
+export type { SoaBufferOptions };
 
 const SYMBOL_DISPOSE: typeof Symbol.dispose =
     (Symbol as { dispose?: typeof Symbol.dispose }).dispose ??

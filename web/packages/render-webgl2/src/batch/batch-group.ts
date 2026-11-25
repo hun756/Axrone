@@ -171,13 +171,13 @@ export class BatchGroup implements IBatchGroup {
         }
 
         this.matrixBuffer.bind();
-        this.matrixBuffer.update(matrixData);
+        this.matrixBuffer.update(matrixData as BufferSource);
 
         this.colorBuffer.bind();
-        this.colorBuffer.update(colorData);
+        this.colorBuffer.update(colorData as BufferSource);
 
         this.customBuffer.bind();
-        this.customBuffer.update(customData);
+        this.customBuffer.update(customData as BufferSource);
 
         this.needsUpdate = false;
     }

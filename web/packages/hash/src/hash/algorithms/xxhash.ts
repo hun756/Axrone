@@ -55,7 +55,7 @@ export class XxHash32 extends HasherBase<Hash32> {
         return this._totalLen;
     }
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new HashAlreadyFinalizedError(`XxHash32: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
@@ -182,7 +182,7 @@ export class XxHash32 extends HasherBase<Hash32> {
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 
@@ -374,7 +374,7 @@ export class XxHash64 extends HasherBase<Hash64> {
         return this._totalLen;
     }
 
-    private _checkFinalized(): void {
+    protected override _checkFinalized(): void {
         if (this._finalized) throw new HashAlreadyFinalizedError(`XxHash64: cannot update after digest() (algorithm=${this.algorithm})`);
     }
 
@@ -523,7 +523,7 @@ export class XxHash64 extends HasherBase<Hash64> {
         if (typeof value === 'bigint') return this.updateI64(value);
         if (typeof value === 'string') return this.updateString(value);
         if (typeof value === 'boolean') return this.updateBoolean(value);
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this.updateBytes(value as unknown as ArrayLike<number>);
+        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return this._updateBuffer(value);
         return this;
     }
 

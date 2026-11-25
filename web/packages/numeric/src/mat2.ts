@@ -53,7 +53,7 @@ export class Mat2 implements IMat2Like<number[]>, ICloneable<Mat2>, Equatable {
 
     static copy<T extends IMat2Like, V extends IMat2Like>(source: Readonly<T>, out?: V): V {
         if (out) {
-            const outData = (out as IMutableMat2).data;
+            const outData = (out as unknown as IMutableMat2).data;
             for (let i = 0; i < 4; i++) outData[i] = source.data[i];
             return out;
         }
@@ -120,7 +120,7 @@ export class Mat2 implements IMat2Like<number[]>, ICloneable<Mat2>, Equatable {
         a: Readonly<TMatA>,
         b: Readonly<TMatB>,
         out?: TOut
-    ): MatrixOperationReturnType<TOut, TMatA, TMatB> {
+    ): MatrixOperationReturnType<TOut, TMatA> {
         const a00 = a.data[0],
             a01 = a.data[1];
         const a10 = a.data[2],
@@ -139,14 +139,14 @@ export class Mat2 implements IMat2Like<number[]>, ICloneable<Mat2>, Equatable {
             outData[2] = a10 * b00 + a11 * b10;
             outData[3] = a10 * b01 + a11 * b11;
 
-            return out as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            return out as MatrixOperationReturnType<TOut, TMatA>;
         } else {
             return new Mat2([
                 a00 * b00 + a01 * b10,
                 a00 * b01 + a01 * b11,
                 a10 * b00 + a11 * b10,
                 a10 * b01 + a11 * b11,
-            ]) as MatrixOperationReturnType<TOut, TMatA, TMatB>;
+            ]) as MatrixOperationReturnType<TOut, TMatA>;
         }
     }
 
