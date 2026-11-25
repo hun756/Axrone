@@ -76,13 +76,13 @@ export class ContactManager2D implements Disposable {
      * Reusable mutable sensor Stay event — 0 allocation per step.
      * Listeners MUST NOT retain references beyond the callback invocation.
      */
-    private _staySensorEvent: ISensorEvent2D | null = null;
+    private _staySensorEvent: { -readonly [K in keyof ISensorEvent2D]: ISensorEvent2D[K] } | null = null;
 
     /**
      * Reusable mutable collision Stay event — 0 allocation per step.
      * Listeners MUST NOT retain references beyond the callback invocation.
      */
-    private _stayCollisionEvent: ICollisionEvent2D | null = null;
+    private _stayCollisionEvent: { -readonly [K in keyof ICollisionEvent2D]: ICollisionEvent2D[K] } | null = null;
 
     constructor(maxContacts: number = 4096) {
         this._maxContacts = maxContacts;

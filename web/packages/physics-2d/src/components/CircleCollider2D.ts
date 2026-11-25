@@ -1,4 +1,5 @@
 import { script } from '@axrone/ecs-runtime/decorators';
+import type { Density, Friction, Restitution } from '@axrone/physics-core';
 import { Collider2D } from './collider2d';
 import { finiteOr } from '../core/physics-world-2d-helpers';
 
@@ -37,9 +38,9 @@ export class CircleCollider2D extends Collider2D {
             center: { x: this._offset.x, y: this._offset.y },
             radius: this._radius,
             material: {
-                friction: this._material.friction,
-                restitution: this._material.restitution,
-                density: this._material.density,
+                friction: this._material.friction as Friction,
+                restitution: this._material.restitution as Restitution,
+                density: this._material.density as Density,
             },
             isSensor: this._isTrigger,
             filter: this._collisionFilter,

@@ -1,4 +1,4 @@
-import type { World, Actor } from '@axrone/ecs-runtime';
+import type { World, Entity } from '@axrone/ecs-runtime';
 import {
     Rigidbody3D,
     Collider3D,
@@ -99,7 +99,7 @@ export interface WasmPhysicsBridge3DOptions {
 // ---------------------------------------------------------------------------
 
 type AnyWorld = World<any>;
-type AnyActor = Actor<AnyWorld>;
+type AnyActor = Entity<AnyWorld>;
 
 /**
  * Compute a deterministic, order-independent pair key from two body IDs.
@@ -323,7 +323,7 @@ export class WasmPhysicsBridge3D
     // -----------------------------------------------------------------------
 
     private _initializeNewComponents(): void {
-        const actors = this._ecsWorld.getAllActors();
+        const actors = this._ecsWorld.getAllEntities();
 
         for (const actor of actors) {
             if (!actor.active || actor.isDestroyed) continue;
@@ -382,7 +382,7 @@ export class WasmPhysicsBridge3D
     }
 
     private _getCollidersFromActor(
-        actor: ReturnType<AnyWorld['getAllActors']>[number],
+        actor: ReturnType<AnyWorld['getAllEntities']>[number],
     ): Collider3D[] {
         const result: Collider3D[] = [];
         for (const component of actor.getAllComponents()) {
@@ -394,7 +394,7 @@ export class WasmPhysicsBridge3D
     }
 
     private _getJointsFromActor(
-        actor: ReturnType<AnyWorld['getAllActors']>[number],
+        actor: ReturnType<AnyWorld['getAllEntities']>[number],
     ): Joint3D[] {
         const result: Joint3D[] = [];
         for (const component of actor.getAllComponents()) {

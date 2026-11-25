@@ -294,7 +294,7 @@ export class ShapeManager2D implements Disposable {
         return metadata.material;
     }
 
-    getShapeFilter(shapeId: ShapeId): ICollisionFilter {
+    getShapeFilter(shapeId: ShapeId): ShapeData['filter'] {
         const metadata = this._shapeMetadata.get(shapeId);
         if (!metadata) {
             throw new ShapeError(`Shape ${shapeId} not found`, 'SHAPE_NOT_FOUND', { shapeId });

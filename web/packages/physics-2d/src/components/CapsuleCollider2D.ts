@@ -1,4 +1,5 @@
 import { script } from '@axrone/ecs-runtime/decorators';
+import type { Density, Friction, Restitution } from '@axrone/physics-core';
 import { Collider2D } from './collider2d';
 import { finiteOr } from '../core/physics-world-2d-helpers';
 
@@ -57,24 +58,15 @@ export class CapsuleCollider2D extends Collider2D {
         this._physicsWorld = this.getPhysicsWorld();
         if (!this._physicsWorld) return;
 
-        const halfLength = this._length * 0.5;
-        const p1 =
-            this._direction === 'vertical'
-                ? { x: this._offset.x, y: this._offset.y - halfLength }
-                : { x: this._offset.x - halfLength, y: this._offset.y };
-        const p2 =
-            this._direction === 'vertical'
-                ? { x: this._offset.x, y: this._offset.y + halfLength }
-                : { x: this._offset.x + halfLength, y: this._offset.y };
-
         this._shapeId = this._physicsWorld.createCapsuleShape(this._rigidbody.bodyId, {
-            p1,
-            p2,
+            center: { x: this._offset.x, y: this._offset.y },
+            length: this._length,
             radius: this._radius,
+            rotation: this._direction === 'horizontal' ? Math.PI * 0.5 : 0,
             material: {
-                friction: this._material.friction,
-                restitution: this._material.restitution,
-                density: this._material.density,
+                friction: this._material.friction as Friction,
+                restitution: this._material.restitution as Restitution,
+                density: this._material.density as Density,
             },
             isSensor: this._isTrigger,
             filter: this._collisionFilter,

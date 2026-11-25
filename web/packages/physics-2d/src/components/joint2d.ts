@@ -242,7 +242,7 @@ export abstract class Joint2D extends Component {
             // created before its body. Keep the component and bind once the
             // body exists instead of failing the add.
             console.warn(
-                `[Joint2D] ${this.constructor.name} has no Rigidbody2D on its actor; ` +
+                `[Joint2D] ${this.constructor.name} has no Rigidbody2D on its entity; ` +
                     'the joint stays inactive until one is added.'
             );
         }

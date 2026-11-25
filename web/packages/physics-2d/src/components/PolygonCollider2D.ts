@@ -1,5 +1,6 @@
 import { Vec2 } from '@axrone/numeric';
 import { script } from '@axrone/ecs-runtime/decorators';
+import type { Density, Friction, Restitution } from '@axrone/physics-core';
 import { Collider2D } from './collider2d';
 
 @script({
@@ -54,9 +55,9 @@ export class PolygonCollider2D extends Collider2D {
                 y: v.y + this._offset.y,
             })),
             material: {
-                friction: this._material.friction,
-                restitution: this._material.restitution,
-                density: this._material.density,
+                friction: this._material.friction as Friction,
+                restitution: this._material.restitution as Restitution,
+                density: this._material.density as Density,
             },
             isSensor: this._isTrigger,
             filter: this._collisionFilter,

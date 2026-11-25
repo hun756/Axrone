@@ -623,7 +623,7 @@ describe('Joint2D.tryEnsureConstraint', () => {
 
         const joint = new DistanceJoint2D();
         joint.resolveConnectedBodyRef(bodyB);
-        // No actor attached -> _rigidbodyA cannot be discovered.
+        // No entity attached -> _rigidbodyA cannot be discovered.
         expect(joint.tryEnsureConstraint()).toBe(false);
 
         (joint as any)._rigidbodyA = bodyA;

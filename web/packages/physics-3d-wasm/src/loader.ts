@@ -539,7 +539,7 @@ export function allowedPhysicsImports(imports: readonly WasmImportDescriptor[]):
 }
 
 export async function instantiateWasm(bytes: Uint8Array): Promise<WasmPhysicsExports> {
-    const module = await WebAssembly.compile(bytes);
+    const module = await WebAssembly.compile(bytes as BufferSource);
     return instantiateModule(module);
 }
 
@@ -551,7 +551,7 @@ export async function loadEmbeddedWasm(): Promise<WasmPhysicsExports> {
         if (bytes.byteLength !== WASM_BYTE_LENGTH) {
             throw new Error(`physics wasm length mismatch: ${bytes.byteLength} !== ${WASM_BYTE_LENGTH}`);
         }
-        embeddedModulePromise = WebAssembly.compile(bytes);
+        embeddedModulePromise = WebAssembly.compile(bytes as BufferSource);
     }
 
     return instantiateModule(await embeddedModulePromise);
