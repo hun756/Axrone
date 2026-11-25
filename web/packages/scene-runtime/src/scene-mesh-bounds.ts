@@ -1,37 +1,30 @@
 import type { BoundingSphere } from '@axrone/geometry';
+import { Vec3 } from '@axrone/numeric';
 import type { SceneMeshDefinition } from './types';
 
 const FLOAT_COMPONENT_TYPE = 0x1406;
 
 export type BoundingSphereCenter = Readonly<BoundingSphere>['center'];
 
-export const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
-    Array.isArray(center);
+interface SceneMeshLocalBox {
+    readonly minX: number;
+    readonly minY: number;
+    readonly minZ: number;
+    readonly maxX: number;
+    readonly maxY: number;
+    readonly maxZ: number;
+}
 
-const cloneCenter = (center: Readonly<BoundingSphere>['center']): readonly [number, number, number] =>
-    isBoundingSphereCenterTuple(center) ? [center[0], center[1], center[2]] : [center.x, center.y, center.z];
+const isFiniteNumber = (value: number): boolean => Number.isFinite(value);
 
-export const cloneSceneMeshBounds = (
-    bounds: Readonly<BoundingSphere> | undefined
-): BoundingSphere | undefined => {
-    if (!bounds) {
-        return undefined;
-    }
-
-    return {
-        kind: 'sphere',
-        center: cloneCenter(bounds.center),
-        radius: bounds.radius,
-    };
-};
-
-export const resolveSceneMeshBounds = (
+/**
+ * Scans the mesh's `position` attribute and returns the raw local-space extent.
+ * Shared by both bounds consumers so the sphere and object-box paths can never
+ * drift apart on attribute selection, stride/offset validation or reads.
+ */
+const scanSceneMeshLocalBox = (
     definition: Readonly<SceneMeshDefinition>
-): BoundingSphere | undefined => {
-    if (definition.bounds?.kind === 'sphere') {
-        return cloneSceneMeshBounds(definition.bounds);
-    }
-
+): SceneMeshLocalBox | undefined => {
     const positionAttribute = definition.attributes.find(
         (attribute) =>
             attribute.semantic === 'position' &&
@@ -84,14 +77,119 @@ export const resolveSceneMeshBounds = (
         maxZ = Math.max(maxZ, z);
     }
 
-    const centerX = (minX + maxX) * 0.5;
-    const centerY = (minY + maxY) * 0.5;
-    const centerZ = (minZ + maxZ) * 0.5;
-    const radius = Math.hypot(maxX - centerX, maxY - centerY, maxZ - centerZ);
+    return { minX, minY, minZ, maxX, maxY, maxZ };
+};
+
+export const isBoundingSphereCenterTuple = (center: BoundingSphereCenter): center is readonly [number, number, number] =>
+    Array.isArray(center);
+
+const cloneCenter = (center: Readonly<BoundingSphere>['center']): readonly [number, number, number] =>
+    isBoundingSphereCenterTuple(center) ? [center[0], center[1], center[2]] : [center.x, center.y, center.z];
+
+export const cloneSceneMeshBounds = (
+    bounds: Readonly<BoundingSphere> | undefined
+): BoundingSphere | undefined => {
+    if (!bounds) {
+        return undefined;
+    }
+
+    return {
+        kind: 'sphere',
+        center: cloneCenter(bounds.center),
+        radius: bounds.radius,
+    };
+};
+
+export const resolveSceneMeshBounds = (
+    definition: Readonly<SceneMeshDefinition>
+): BoundingSphere | undefined => {
+    if (definition.bounds?.kind === 'sphere') {
+        return cloneSceneMeshBounds(definition.bounds);
+    }
+
+    const box = scanSceneMeshLocalBox(definition);
+    if (!box) {
+        return undefined;
+    }
+
+    const centerX = (box.minX + box.maxX) * 0.5;
+    const centerY = (box.minY + box.maxY) * 0.5;
+    const centerZ = (box.minZ + box.maxZ) * 0.5;
+    const radius = Math.hypot(box.maxX - centerX, box.maxY - centerY, box.maxZ - centerZ);
 
     return {
         kind: 'sphere',
         center: [centerX, centerY, centerZ],
         radius,
     };
+};
+
+export interface SceneMeshObjectBounds {
+    readonly center: Vec3;
+    readonly size: Vec3;
+}
+
+/**
+ * Keyed by definition identity: retained mesh resources are stable across
+ * draws, so one AABB scan per mesh covers every draw that reuses it.
+ */
+const objectBoundsCache = new WeakMap<object, SceneMeshObjectBounds | undefined>();
+
+const buildObjectBounds = (
+    definition: Readonly<SceneMeshDefinition>
+): SceneMeshObjectBounds | undefined => {
+    const sphere = definition.bounds?.kind === 'sphere' ? definition.bounds : undefined;
+    const box = sphere ? undefined : scanSceneMeshLocalBox(definition);
+
+    if (!box) {
+        if (!sphere) {
+            return undefined;
+        }
+
+        // No usable position stream: fall back to a conservative cube around
+        // the published bounding sphere rather than reporting no bounds at all.
+        const center = cloneCenter(sphere.center);
+        // Edge length, not half-extent — Unity's `_ObjectBoundsSize` convention.
+        const extent = sphere.radius * 2;
+        const bounds: SceneMeshObjectBounds = {
+            center: new Vec3(center[0], center[1], center[2]),
+            size: new Vec3(extent, extent, extent),
+        };
+
+        return isFiniteObjectBounds(bounds) ? bounds : undefined;
+    }
+
+    const bounds: SceneMeshObjectBounds = {
+        center: new Vec3(
+            (box.minX + box.maxX) * 0.5,
+            (box.minY + box.maxY) * 0.5,
+            (box.minZ + box.maxZ) * 0.5
+        ),
+        size: new Vec3(box.maxX - box.minX, box.maxY - box.minY, box.maxZ - box.minZ),
+    };
+
+    return isFiniteObjectBounds(bounds) ? bounds : undefined;
+};
+
+const isFiniteVec3 = (vector: Vec3): boolean =>
+    isFiniteNumber(vector.x) && isFiniteNumber(vector.y) && isFiniteNumber(vector.z);
+
+const isFiniteObjectBounds = (bounds: SceneMeshObjectBounds): boolean =>
+    isFiniteVec3(bounds.center) && isFiniteVec3(bounds.size);
+
+export const resolveSceneMeshObjectBounds = (
+    definition: Readonly<SceneMeshDefinition> | undefined
+): SceneMeshObjectBounds | undefined => {
+    if (!definition) {
+        return undefined;
+    }
+
+    // `has` before `get` so a memoised negative result is not rescanned per draw.
+    if (objectBoundsCache.has(definition)) {
+        return objectBoundsCache.get(definition);
+    }
+
+    const resolved = buildObjectBounds(definition);
+    objectBoundsCache.set(definition, resolved);
+    return resolved;
 };
