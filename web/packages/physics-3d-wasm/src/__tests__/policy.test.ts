@@ -26,7 +26,7 @@ describe("iteration policy", () => {
     });
 
     it("is the default the bridge applies when no iterations are configured", async () => {
-        const ecsWorld = { getAllActors: () => [] } as never;
+        const ecsWorld = { getAllEntities: () => [] } as never;
         const bridge = await WasmPhysicsBridge3D.create(ecsWorld, {});
         try {
             bridge.fixedUpdate({ fixedDelta: DT } as never);

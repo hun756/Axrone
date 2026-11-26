@@ -31,7 +31,7 @@ export type AxroneBootOptions = {
 export type BootSceneFacade = {
     readonly canvas: HTMLCanvasElement;
     readonly world: {
-        getAllActors(): readonly {
+        getAllEntities(): readonly {
             getComponent<T extends ComponentConstructor>(type: T): InstanceType<T> | null;
             getAllComponents(): readonly Component[];
         }[];
@@ -147,7 +147,7 @@ const applyComponentStates = (
     scene: BootSceneFacade,
     statesByNodeId: ReadonlyMap<string, readonly AxroneGameDataComponentState[]>
 ): void => {
-    for (const actor of scene.world.getAllActors()) {
+    for (const actor of scene.world.getAllEntities()) {
         const nodeId = actor.getComponent(PrefabNodeBinding)?.nodeId;
         if (!nodeId) {
             continue;
@@ -179,7 +179,7 @@ const applyCameraSelection = (scene: BootSceneFacade, cameraEntityId: string | n
     let matched = false;
     let fallbackCamera: Camera | null = null;
 
-    for (const actor of scene.world.getAllActors()) {
+    for (const actor of scene.world.getAllEntities()) {
         const camera = actor.getComponent(Camera);
         if (!camera) {
             continue;
@@ -467,7 +467,7 @@ export const createAxroneBoot =
 
                     if (allInstances.length === 0 || !bindingSucceeded) {
                         const hosts: unknown[] = [];
-                        for (const actor of scene.world.getAllActors()) {
+                        for (const actor of scene.world.getAllEntities()) {
                             const uiHost = actor.getComponent(UIHostClass as never);
                             if (uiHost) {
                                 hosts.push(uiHost);
