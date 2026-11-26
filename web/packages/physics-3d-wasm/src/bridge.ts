@@ -1,4 +1,4 @@
-import type { World, Entity } from '@axrone/ecs-runtime';
+import type { World, Entity, EntityId } from '@axrone/ecs-runtime';
 import {
     Rigidbody3D,
     Collider3D,
@@ -99,7 +99,7 @@ export interface WasmPhysicsBridge3DOptions {
 // ---------------------------------------------------------------------------
 
 type AnyWorld = World<any>;
-type AnyActor = Entity<AnyWorld>;
+type AnyEntity = Entity<AnyWorld>;
 
 /**
  * Compute a deterministic, order-independent pair key from two body IDs.
@@ -125,12 +125,12 @@ const MILLISECONDS_PER_SECOND = 1000;
  * the TypeScript `PhysicsWorld3D`.
  *
  * EVENT ASYMMETRY (matches reference bridge exactly):
- * - Collisions dispatch begin/stay/end to BOTH actors in the pair
- * - Sensors dispatch enter/exit to BOTH actors in the pair
+ * - Collisions dispatch begin/stay/end to BOTH entities in the pair
+ * - Sensors dispatch enter/exit to BOTH entities in the pair
  * - onSensorStay is NOT dispatched (the reference bridge omits it)
  *
  * Discovery timing: `beforeUpdate` discovers new components (one frame late).
- * Prune on destroy: `fixedUpdate` sync removes destroyed actors from tracking
+ * Prune on destroy: `fixedUpdate` sync removes destroyed entities from tracking
  * maps.
  */
 export class WasmPhysicsBridge3D
@@ -148,7 +148,7 @@ export class WasmPhysicsBridge3D
     private readonly _initializedJoints = new WeakSet<Joint3D>();
     private readonly _initializedCharacterControllers = new WeakSet<CharacterController>();
     private readonly _bodyIdToComponent = new Map<number, Rigidbody3D>();
-    private readonly _componentToActor = new Map<Rigidbody3D, AnyActor>();
+    private readonly _componentToEntity = new Map<Rigidbody3D, AnyEntity>();
     private readonly _activeContactPairs = new Set<number>();
     private readonly _activeTriggerPairs = new Set<number>();
 
@@ -264,7 +264,7 @@ export class WasmPhysicsBridge3D
     // CompatContactListener — sensor events
     //
     // EVENT ASYMMETRY: onSensorStay is intentionally NOT implemented.
-    // The reference bridge omits it — only Enter/Exit reach actors.
+    // The reference bridge omits it — only Enter/Exit reach entities.
     // -----------------------------------------------------------------------
 
     onSensorEnter(event: CompatSensorEvent): void {
@@ -312,7 +312,7 @@ export class WasmPhysicsBridge3D
         this._disposed = true;
         this._physicsWorld.setContactListener(null);
         this._bodyIdToComponent.clear();
-        this._componentToActor.clear();
+        this._componentToEntity.clear();
         this._activeContactPairs.clear();
         this._activeTriggerPairs.clear();
         this._physicsWorld[Symbol.dispose]();
@@ -323,25 +323,25 @@ export class WasmPhysicsBridge3D
     // -----------------------------------------------------------------------
 
     private _initializeNewComponents(): void {
-        const actors = this._ecsWorld.getAllEntities();
+        const entities = this._ecsWorld.getAllEntities();
 
-        for (const actor of actors) {
-            if (!actor.active || actor.isDestroyed) continue;
+        for (const entity of entities) {
+            if (!entity.active || entity.isDestroyed) continue;
 
             // --- Rigidbody ---
-            const rigidbody = actor.getComponent(Rigidbody3D);
+            const rigidbody = entity.getComponent(Rigidbody3D);
             if (rigidbody && !this._initializedBodies.has(rigidbody)) {
                 rigidbody.initialize(this._physicsWorld);
                 this._initializedBodies.add(rigidbody);
                 this._bodyIdToComponent.set(rigidbody.bodyId, rigidbody);
-                this._componentToActor.set(
+                this._componentToEntity.set(
                     rigidbody,
-                    actor as unknown as AnyActor,
+                    entity as unknown as AnyEntity,
                 );
             }
 
             // --- Colliders ---
-            const colliders = this._getCollidersFromActor(actor);
+            const colliders = this._getCollidersFromEntity(entity);
             for (const collider of colliders) {
                 if (this._initializedColliders.has(collider)) continue;
                 collider.initialize(
@@ -352,7 +352,7 @@ export class WasmPhysicsBridge3D
             }
 
             // --- Joints ---
-            const joints = this._getJointsFromActor(actor);
+            const joints = this._getJointsFromEntity(entity);
             for (const joint of joints) {
                 if (this._initializedJoints.has(joint)) continue;
                 if (!rigidbody) continue;
@@ -368,7 +368,7 @@ export class WasmPhysicsBridge3D
 
             // --- Character Controller ---
             const characterController =
-                actor.getComponent(CharacterController);
+                entity.getComponent(CharacterController);
             if (
                 characterController &&
                 !this._initializedCharacterControllers.has(characterController)
@@ -381,11 +381,11 @@ export class WasmPhysicsBridge3D
         }
     }
 
-    private _getCollidersFromActor(
-        actor: ReturnType<AnyWorld['getAllEntities']>[number],
+    private _getCollidersFromEntity(
+        entity: ReturnType<AnyWorld['getAllEntities']>[number],
     ): Collider3D[] {
         const result: Collider3D[] = [];
-        for (const component of actor.getAllComponents()) {
+        for (const component of entity.getAllComponents()) {
             if (component instanceof Collider3D) {
                 result.push(component);
             }
@@ -393,11 +393,11 @@ export class WasmPhysicsBridge3D
         return result;
     }
 
-    private _getJointsFromActor(
-        actor: ReturnType<AnyWorld['getAllEntities']>[number],
+    private _getJointsFromEntity(
+        entity: ReturnType<AnyWorld['getAllEntities']>[number],
     ): Joint3D[] {
         const result: Joint3D[] = [];
-        for (const component of actor.getAllComponents()) {
+        for (const component of entity.getAllComponents()) {
             if (component instanceof Joint3D) {
                 result.push(component);
             }
@@ -418,20 +418,20 @@ export class WasmPhysicsBridge3D
     // -----------------------------------------------------------------------
 
     /**
-     * Iterate tracked bodies instead of scanning every actor: every
-     * initialized rigidbody is registered in _componentToActor, so this
-     * is O(bodies) rather than O(actors x components) per fixed step.
-     * Entries whose actor died are pruned — the strong maps would
+     * Iterate tracked bodies instead of scanning every entity: every
+     * initialized rigidbody is registered in _componentToEntity, so this
+     * is O(bodies) rather than O(entities x components) per fixed step.
+     * Entries whose entity died are pruned — the strong maps would
      * otherwise retain destroyed bodies until bridge disposal.
      */
     private _syncAllTransforms(): void {
-        for (const [rigidbody, actor] of this._componentToActor) {
-            if (actor.isDestroyed) {
-                this._componentToActor.delete(rigidbody);
+        for (const [rigidbody, entity] of this._componentToEntity) {
+            if (entity.isDestroyed) {
+                this._componentToEntity.delete(rigidbody);
                 this._bodyIdToComponent.delete(rigidbody.bodyId);
                 continue;
             }
-            if (!actor.active) continue;
+            if (!entity.active) continue;
             if (this._initializedBodies.has(rigidbody)) {
                 rigidbody.syncTransformFromWorld();
             }
@@ -450,8 +450,8 @@ export class WasmPhysicsBridge3D
     ): void {
         const method =
             handler === 'onCollisionBegin' ? 'onCollisionEnter' : 'onCollisionStay';
-        this._notifyActor(self, method, other, event);
-        this._notifyActor(other, method, self, event);
+        this._notifyEntity(self, method, other, event);
+        this._notifyEntity(other, method, self, event);
     }
 
     private _dispatchCollisionEndEvent(
@@ -459,8 +459,8 @@ export class WasmPhysicsBridge3D
         other: Rigidbody3D,
         event: CompatCollisionEvent,
     ): void {
-        this._notifyActor(self, 'onCollisionExit', other, event);
-        this._notifyActor(other, 'onCollisionExit', self, event);
+        this._notifyEntity(self, 'onCollisionExit', other, event);
+        this._notifyEntity(other, 'onCollisionExit', self, event);
     }
 
     private _dispatchSensorEvent(
@@ -469,20 +469,20 @@ export class WasmPhysicsBridge3D
         event: CompatSensorEvent,
         handler: 'onSensorEnter' | 'onSensorExit',
     ): void {
-        this._notifySensorActor(self, handler, other, event);
-        this._notifySensorActor(other, handler, self, event);
+        this._notifySensorEntity(self, handler, other, event);
+        this._notifySensorEntity(other, handler, self, event);
     }
 
-    private _notifyActor(
+    private _notifyEntity(
         rigidbody: Rigidbody3D,
         method: 'onCollisionEnter' | 'onCollisionStay' | 'onCollisionExit',
         other: Rigidbody3D,
         event: CompatCollisionEvent,
     ): void {
-        const actor = this._componentToActor.get(rigidbody);
-        if (!actor) return;
+        const entity = this._componentToEntity.get(rigidbody);
+        if (!entity) return;
 
-        for (const component of actor.getAllComponents()) {
+        for (const component of entity.getAllComponents()) {
             const handler = component as unknown as IPhysicsCollisionHandler;
             const fn = handler[method];
             if (typeof fn === 'function') {
@@ -491,16 +491,16 @@ export class WasmPhysicsBridge3D
         }
     }
 
-    private _notifySensorActor(
+    private _notifySensorEntity(
         rigidbody: Rigidbody3D,
         method: 'onSensorEnter' | 'onSensorExit',
         other: Rigidbody3D,
         event: CompatSensorEvent,
     ): void {
-        const actor = this._componentToActor.get(rigidbody);
-        if (!actor) return;
+        const entity = this._componentToEntity.get(rigidbody);
+        if (!entity) return;
 
-        for (const component of actor.getAllComponents()) {
+        for (const component of entity.getAllComponents()) {
             const handler = component as unknown as IPhysicsCollisionHandler;
             const fn = handler[method];
             if (typeof fn === 'function') {

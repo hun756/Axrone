@@ -22,7 +22,7 @@ const createRealLoopHarness = async (options: {
     readonly frameSpacingMs: readonly number[];
     readonly fixedDeltaMs?: number;
 }) => {
-    const ecsWorld = { getAllActors: () => [] };
+    const ecsWorld = { getAllEntities: () => [] };
     const { bridge, system } = await createWasmPhysicsBridge3DSystems(ecsWorld as never, {
         worldConfig: { gravity: { y: GRAVITY_Y } },
     });

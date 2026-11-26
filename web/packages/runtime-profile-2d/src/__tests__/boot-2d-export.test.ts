@@ -167,7 +167,7 @@ describe('export-template 2D component registration parity', () => {
 
 describe('boot 2D physics bridge profile resolution', () => {
     const snapshotWith = (types: string[]) => ({
-        prefab: { actors: [{ components: types.map((type) => ({ type })) }] },
+        prefab: { entities: [{ components: types.map((type) => ({ type })) }] },
     });
 
     it('arms the 2D profile for a 2D-only snapshot', () => {
@@ -214,14 +214,14 @@ describe('boot 2D physics bridge profile resolution', () => {
     });
 });
 
-type FakeActor = {
+type FakeEntity = {
     getComponent: (type: unknown) => unknown;
     getAllComponents: () => readonly unknown[];
 };
 
-const buildFakeScene = (actors: readonly FakeActor[], captured: Record<string, unknown>[]) => ({
+const buildFakeScene = (entities: readonly FakeEntity[], captured: Record<string, unknown>[]) => ({
     canvas: { style: {} as Record<string, string> },
-    world: { getAllActors: () => actors },
+    world: { getAllEntities: () => entities },
     registerComponent: () => undefined,
     loadScene: async () => undefined,
     resize: () => undefined,
@@ -268,7 +268,7 @@ describe('createAxroneBoot 2D wiring', () => {
     it('passes the resolved 2D profile into createScene and applies component enabled states', async () => {
         const rigidbody = { enabled: true, constructor: { name: 'Rigidbody2D' } };
         const animator = { enabled: true, constructor: { name: 'SpriteAnimator' } };
-        const actors: FakeActor[] = [
+        const entities: FakeEntity[] = [
             {
                 getComponent: (type: unknown) =>
                     type === PrefabNodeBinding ? { nodeId: 'node-1' } : null,
@@ -280,7 +280,7 @@ describe('createAxroneBoot 2D wiring', () => {
         const boot = createAxroneBoot({
             createScene: (options) => {
                 captured.push(options);
-                return buildFakeScene(actors, captured) as never;
+                return buildFakeScene(entities, captured) as never;
             },
             engineComponentTypes: [],
         });
@@ -289,7 +289,7 @@ describe('createAxroneBoot 2D wiring', () => {
             container: document.createElement('div'),
             scriptTypes: [],
             data: makeGameData(
-                { prefab: { actors: [{ components: [{ type: 'SpriteRenderer' }, { type: 'Rigidbody2D' }] }] } },
+                { prefab: { entities: [{ components: [{ type: 'SpriteRenderer' }, { type: 'Rigidbody2D' }] }] } },
                 [
                     {
                         nodeId: 'node-1',
@@ -328,7 +328,7 @@ describe('createAxroneBoot 2D wiring', () => {
             container: document.createElement('div'),
             scriptTypes: [],
             data: makeGameData({
-                prefab: { actors: [{ components: [{ type: 'MeshRenderer' }] }] },
+                prefab: { entities: [{ components: [{ type: 'MeshRenderer' }] }] },
             }),
         });
 
